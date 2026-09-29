@@ -43,6 +43,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.cache import patch_cache_control
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html, json_script
 from django.views import View
@@ -99,6 +100,7 @@ from .mixins import (
     EngineerRequiredMixin,
 )
 from .services import request_lifecycle
+from .services.sqr_performance import build_sqr_performance_snapshot
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
@@ -2876,6 +2878,22 @@ def _make_sqr_edit_form(user):
     return form
 
 
+def _sqr_queryset_for_user(user):
+    """Shared Tracker/dashboard read scope; preserve joins and ordering."""
+    queryset = SqrSubmission.objects.select_related(
+        "engineer",
+        "pm_esg_reviewer",
+        "reviewed_by",
+        "assigned_pm",
+        "assigned_sse",
+        "linked_request",
+        "linked_request__account",
+    ).order_by("-created_at", "-pk")
+    if user.role in ENGINEER_ACCESS_ROLES:
+        return queryset.filter(engineer=user)
+    return queryset
+
+
 class SqrListView(LoginRequiredMixin, TemplateView):
     template_name = "hub/sqr.html"
 
@@ -2892,18 +2910,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = SqrSubmission.objects.select_related(
-            "engineer",
-            "pm_esg_reviewer",
-            "reviewed_by",
-            "assigned_pm",
-            "assigned_sse",
-            "linked_request",
-            "linked_request__account",
-        ).order_by("-created_at", "-pk")
-        if self.request.user.role in ENGINEER_ACCESS_ROLES:
-            return queryset.filter(engineer=self.request.user)
-        return queryset
+        return _sqr_queryset_for_user(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -3539,6 +3546,28 @@ class NotificationToastDataView(LoginRequiredMixin, View):
                 "has_more": has_more,
             }
         )
+
+
+class SqrPerformanceDataView(LoginRequiredMixin, View):
+    """Lazy, authorized snapshot; never builds Tracker/Reports context."""
+
+    http_method_names = ["get"]
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.role not in ADMIN_PANEL_ROLES:
+            response = JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
+        else:
+            response = super().dispatch(request, *args, **kwargs)
+        patch_cache_control(response, private=True, no_store=True)
+        return response
+
+    def get(self, request, *args, **kwargs):
+        fetched_at = timezone.now()
+        return JsonResponse(build_sqr_performance_snapshot(
+            _sqr_queryset_for_user(request.user),
+            today=timezone.localdate(fetched_at),
+            fetched_at=fetched_at,
+        ))
 
 
 class SqrReportsDataView(LoginRequiredMixin, View):

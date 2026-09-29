@@ -3,7 +3,10 @@
 {% block title %}SQR &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=16">
+<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=18">
+{% if is_pm and active_sqr_tab != 'reports' %}
+<script src="{% static 'js/sqr-performance.js' %}?v=2" defer></script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -22,19 +25,19 @@
                             <i class="bi {% if active_sqr_tab == 'reports' %}bi-table{% else %}bi-bar-chart-line-fill{% endif %} me-1"></i>{% if active_sqr_tab == 'reports' %}To SQR Tracker{% else %}To Reports{% endif %}
                         </a>
                         {% if active_sqr_tab != 'reports' %}
-                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search">
+                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only>
                             <div class="mgmt-search-box sqr-toolbar-search-box" role="search" aria-label="Search SQR records">
                                 <i class="bi bi-search mgmt-search-icon"></i>
                                 <input type="text" id="sqr-header-search" class="mgmt-search-input" placeholder="Search SQR..." autocomplete="off" aria-label="Search SQR records">
                                 <span class="mgmt-result-badge" id="sqr-header-count-badge" role="status" aria-live="polite">0 total</span>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle">
+                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only>
                             <i class="bi bi-funnel-fill me-1"></i>Filter
                         </button>
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-outline-success lg-btn lg-btn--ghost" id="sqr-export-choice-btn">
-                            <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+                            <i class="bi bi-file-earmark-excel me-1"></i>Export Tracker / Reports
                         </button>
                     {% endif %}
                     {% if is_admin and sqr_import_form %}
@@ -55,9 +58,14 @@
                     <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="tracker" aria-pressed="true">
                         <i class="bi bi-table me-1"></i>SQR Tracker
                     </button>
+                    {% if is_pm %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="performance" aria-pressed="false">
+                        <i class="bi bi-speedometer2 me-1"></i>Project Performance Tracking
+                    </button>
+                    {% endif %}
                 </div>
             </div>
-            <div class="collapse" id="sqr-table-filter-panel">
+            <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only>
                 <div class="sqr-filter-toolbar">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                         <div>
@@ -176,7 +184,7 @@
             </div>
             {% endif %}
             {# Summary badges — clickable filters #}
-            <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-badge-filters"
+            <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-badge-filters" data-sqr-tracker-only
                  data-default-my-assigned="{% if default_my_assigned_filter %}1{% else %}0{% endif %}"
                  data-current-user-id="{{ sqr_current_user_id|default:'' }}">
                 <button type="button" class="badge bg-secondary-subtle text-secondary border border-secondary-subtle sqr-badge-filter" data-sqr-filter="">Total: {{ proposal_counts.total }}</button>
@@ -544,6 +552,10 @@
         {% comment %}No lg-enter here: animating/compositing a card that wraps
            the whole 43-column table stalls first paint.{% endcomment %}
         <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker">
+            <div id="sqr-pm-tracker-focus" class="sqr-pm-focus-notice" hidden>
+                <span id="sqr-pm-tracker-focus-label" role="status"></span>
+                <button type="button" id="sqr-pm-tracker-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
+            </div>
             <div class="sqr-tracker-wrap" tabindex="0" role="region" aria-label="SQR tracker table; scroll horizontally for more columns">
                 <table class="sqr-tracker table-hover">
                     <caption class="visually-hidden">Service Quotation Request tracker</caption>
@@ -1034,6 +1046,9 @@
                 </table>
             </div>
         </div>
+        {% if is_pm %}
+        {% include "hub/partials/sqr_performance.html" %}
+        {% endif %}
         {% endif %}
 
     </div>
@@ -1670,6 +1685,7 @@
                 })
                 .then(function (result) {
                     if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Unable to restore this history entry.');
+                    document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
                     window.location.reload();
                 })
                 .catch(function (error) {
@@ -2755,6 +2771,8 @@
         if (typeof window.refreshSqrReports === 'function') {
             window.refreshSqrReports();
         }
+        // Shared by save and undo: the dashboard always reads fresh Tracker data.
+        document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
     }
 
     var undoToastTimer = null;
@@ -3123,12 +3141,15 @@
     var buttons = document.querySelectorAll('[data-sqr-view-button]');
     var panels = document.querySelectorAll('[data-sqr-view-panel]');
     if (!buttons.length || !panels.length) return;
+    var trackerControls = Array.from(document.querySelectorAll('[data-sqr-tracker-only]')).map(function (element) {
+        return {element: element, wasHidden: element.hidden};
+    });
 
     function setView(viewName) {
-        // Retired views ('esg', 'performance') fall back to 'tracker'.
-        var activeView = 'tracker';
+        // Retired views ('esg') fall back to 'tracker'.
         var available = {};
         panels.forEach(function (panel) { available[panel.dataset.sqrViewPanel] = true; });
+        var activeView = (viewName === 'performance' && available.performance) ? 'performance' : 'tracker';
         if (!available[activeView]) activeView = 'tracker';
         buttons.forEach(function (button) {
             var isActive = button.dataset.sqrViewButton === activeView;
@@ -3139,8 +3160,14 @@
         panels.forEach(function (panel) {
             panel.hidden = panel.dataset.sqrViewPanel !== activeView;
         });
+        trackerControls.forEach(function (control) {
+            // Do not close the Bootstrap collapse or clear any Tracker filters.
+            control.element.hidden = activeView === 'performance' || control.wasHidden;
+        });
+        document.dispatchEvent(new CustomEvent('sqr:performance-view', {detail: {view: activeView}}));
         try { window.localStorage.setItem(storageKey, activeView); } catch (error) {}
     }
+    window.setSqrView = setView;
 
     buttons.forEach(function (button) {
         button.addEventListener('click', function () {
@@ -3183,6 +3210,25 @@
     var billedOnlyCheckbox = document.getElementById('sqr-table-filter-billed-only');
     var resetButton = document.getElementById('sqr-table-filter-reset');
     var resultsMeta = document.getElementById('sqr-filter-results-meta');
+    var focusedProjectPk = '';
+    var focusNotice = document.getElementById('sqr-pm-tracker-focus');
+    var focusLabel = document.getElementById('sqr-pm-tracker-focus-label');
+    var focusDismiss = document.getElementById('sqr-pm-tracker-focus-dismiss');
+    var focusedRow = null;
+    var previousRowTabindex = null;
+
+    function rowProjectPk(row) {
+        var cell = row.querySelector('[data-sqr-pk]');
+        return String(row.dataset.sqrPk || (cell && cell.dataset.sqrPk) || '');
+    }
+
+    function clearFocusedRow() {
+        if (!focusedRow) return;
+        focusedRow.classList.remove('sqr-pm-focused-row');
+        if (previousRowTabindex === null) focusedRow.removeAttribute('tabindex');
+        else focusedRow.setAttribute('tabindex', previousRowTabindex);
+        focusedRow = null;
+    }
 
     function normalizeText(value) {
         return (value || '').toString().trim().toLowerCase();
@@ -3326,6 +3372,7 @@
     function runFilter() {
         filterFrame = 0;
         var activeRows = getActiveTableRows();
+        if (activeRows.panel.dataset && activeRows.panel.dataset.sqrViewPanel === 'performance') return;
         var records = getRowRecords(activeRows.panel, activeRows.rows);
         var query = normalizeText(searchInput && searchInput.value ? searchInput.value : '');
         var statusValue = statusSelect ? statusSelect.value : '';
@@ -3388,6 +3435,9 @@
                 && matchesBilled
                 && matchesQuery;
 
+            // Temporary exact-PK override; all ordinary filter values stay intact.
+            if (focusedProjectPk) isVisible = rowProjectPk(row) === focusedProjectPk;
+
             var nextDisplay = isVisible ? '' : 'none';
             if (row.style.display !== nextDisplay) {
                 row.style.display = nextDisplay;
@@ -3411,6 +3461,49 @@
         }
     }
     window.applySqrTableFilter = applyFilter;
+
+    window.focusSqrTrackerProject = function (pk) {
+        var exactPk = String(pk == null ? '' : pk);
+        if (!/^\d+$/.test(exactPk)) return false;
+        var tracker = document.querySelector('[data-sqr-view-panel="tracker"]');
+        if (!tracker) return false;
+        var target = Array.from(tracker.querySelectorAll('tbody tr')).find(function (row) {
+            return rowProjectPk(row) === exactPk;
+        });
+        if (!target) return false;
+        clearFocusedRow();
+        focusedProjectPk = exactPk;
+        focusedRow = target;
+        previousRowTabindex = target.getAttribute('tabindex');
+        target.setAttribute('tabindex', '-1');
+        target.classList.add('sqr-pm-focused-row');
+        if (focusLabel) focusLabel.textContent = 'Focused project: ' + (target.dataset.sqrRef || 'SQR #' + exactPk) + '. Tracker filters are temporarily bypassed.';
+        if (focusNotice) focusNotice.hidden = false;
+        if (typeof window.setSqrView === 'function') window.setSqrView('tracker');
+        if (rowCache) rowCache.delete(tracker);
+        clearTimeout(searchDebounceTimer);
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        runFilter();
+        target.focus({preventScroll: true});
+        target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'start'});
+        return true;
+    };
+
+    if (focusDismiss) focusDismiss.addEventListener('click', function () {
+        focusedProjectPk = '';
+        clearFocusedRow();
+        if (focusNotice) focusNotice.hidden = true;
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        runFilter();
+        // Restore keyboard position outside a row that may now be filtered out.
+        var trackerButton = document.querySelector('[data-sqr-view-button="tracker"]');
+        if (trackerButton) trackerButton.focus({preventScroll: true});
+    });
+
+    document.addEventListener('sqr:performance-invalidated', function () {
+        rowCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+        applyFilter();
+    });
 
     document.addEventListener('sqr:panel-hydrated', function (event) {
         if (rowCache) rowCache.delete(event.target);

@@ -1,0 +1,144 @@
+{# Read-only lazy shell: all project data is fetched on first visible entry. #}
+<section id="sqr-performance-dashboard" class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance" hidden
+         data-endpoint="{% url 'hub:sqr-performance-data' %}" data-current-user-id="{{ sqr_current_user_id|default:'' }}"
+         data-default-mine="{% if default_my_assigned_filter %}1{% else %}0{% endif %}" aria-labelledby="sqr-pm-title">
+    <header class="sqr-pm-hero">
+        <div>
+            <p class="sqr-pm-eyebrow"><i class="bi bi-activity" aria-hidden="true"></i> Live SQR Tracker data</p>
+            <h2 id="sqr-pm-title">Delivery at a glance</h2>
+            <p class="sqr-pm-lead">Know what needs attention. Keep every project moving.</p>
+            <p class="sqr-pm-meta">Read-only dashboard &middot; Make changes in the SQR Tracker.</p>
+        </div>
+        <div class="sqr-pm-hero-actions">
+            <button type="button" id="sqr-pm-refresh" class="btn btn-outline-primary"><i class="bi bi-arrow-clockwise me-2" aria-hidden="true"></i>Refresh snapshot</button>
+            <span id="sqr-pm-snapshot" class="sqr-pm-meta">Snapshot not retrieved yet</span>
+        </div>
+    </header>
+
+    <section class="sqr-pm-surface sqr-pm-filters" aria-labelledby="sqr-pm-filters-title">
+        <div class="sqr-pm-section-head">
+            <h3 id="sqr-pm-filters-title"><i class="bi bi-sliders me-2" aria-hidden="true"></i>Your portfolio view</h3>
+            <button type="button" id="sqr-pm-reset" class="btn btn-outline-secondary">Reset filters</button>
+        </div>
+        <div class="sqr-pm-filter-grid">
+            <div>
+                <label for="sqr-pm-scope" class="form-label">Scope</label>
+                <select id="sqr-pm-scope" class="form-select"><option value="active">Active delivery</option><option value="all">All SQRs</option></select>
+            </div>
+            <div class="sqr-pm-search-field">
+                <label for="sqr-pm-search" class="form-label">Search projects</label>
+                <input type="search" id="sqr-pm-search" class="form-control" placeholder="SQR, project, customer, PM or updates…" autocomplete="off">
+            </div>
+            <div>
+                <label for="sqr-pm-manager" class="form-label">Effective project manager</label>
+                <select id="sqr-pm-manager" class="form-select"><option value="">All managers</option></select>
+            </div>
+            <div>
+                <label for="sqr-pm-health" class="form-label">Recorded health</label>
+                <select id="sqr-pm-health" class="form-select">
+                    <option value="">All health</option><option value="on_track">On Track</option><option value="at_risk">At Risk</option><option value="off_track">Off Track</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="not_set">Not set</option>
+                </select>
+            </div>
+            <div>
+                <label for="sqr-pm-status" class="form-label">Delivery status</label>
+                <select id="sqr-pm-status" class="form-select">
+                    <option value="">All statuses</option><option value="planning">Planning</option><option value="in_progress">In Progress</option><option value="on_hold">On Hold</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="not_set">Not set</option>
+                </select>
+            </div>
+            <div>
+                <label for="sqr-pm-attention" class="form-label">Attention reason</label>
+                <select id="sqr-pm-attention" class="form-select">
+                    <option value="">All projects</option><option value="attention">Needs attention</option><option value="overdue">Overdue</option><option value="due_soon">Due within 14 days</option><option value="missing_data">Missing delivery data</option><option value="inconsistency">Inconsistent delivery data</option><option value="off_track">Off Track</option><option value="at_risk">At Risk</option><option value="on_hold">On Hold</option>
+                </select>
+            </div>
+        </div>
+        <div class="sqr-pm-filter-footer">
+            <div class="form-check">
+                <input type="checkbox" id="sqr-pm-mine" class="form-check-input"{% if default_my_assigned_filter %} checked{% endif %}>
+                <label for="sqr-pm-mine" class="form-check-label">My assigned only</label>
+            </div>
+            <span id="sqr-pm-count" class="sqr-pm-meta">Open this view to load your portfolio</span>
+        </div>
+    </section>
+
+    <div id="sqr-pm-message" class="sqr-pm-message" role="status" aria-live="polite" aria-atomic="true">Dashboard data loads only when this view is opened.</div>
+    <noscript><p class="sqr-pm-empty">Enable JavaScript to load this dashboard. Project records remain available in the SQR Tracker.</p></noscript>
+    <div id="sqr-pm-empty" class="sqr-pm-empty" hidden></div>
+
+    <div id="sqr-pm-content" hidden>
+        <section class="sqr-pm-kpis" aria-label="Metrics for the current filtered view">
+            <button type="button" class="sqr-pm-kpi" data-pm-filter="" aria-pressed="true">
+                <span class="sqr-pm-kpi-label"><i class="bi bi-grid-1x2" aria-hidden="true"></i>Projects in view</span>
+                <strong data-pm-metric="total">—</strong><span class="sqr-pm-meta">Clear attention filter</span>
+            </button>
+            <button type="button" class="sqr-pm-kpi sqr-pm-kpi--attention" data-pm-filter="attention" aria-pressed="false">
+                <span class="sqr-pm-kpi-label"><i class="bi bi-exclamation-diamond" aria-hidden="true"></i>Needs attention</span>
+                <strong data-pm-metric="attention">—</strong><span class="sqr-pm-meta">Prioritize next actions</span>
+            </button>
+            <button type="button" class="sqr-pm-kpi" data-pm-filter="overdue" aria-pressed="false">
+                <span class="sqr-pm-kpi-label"><i class="bi bi-calendar-x" aria-hidden="true"></i>Overdue</span>
+                <strong data-pm-metric="overdue">—</strong><span class="sqr-pm-meta">Open, past target date</span>
+            </button>
+            <button type="button" class="sqr-pm-kpi" data-pm-filter="due_soon" aria-pressed="false">
+                <span class="sqr-pm-kpi-label"><i class="bi bi-calendar-event" aria-hidden="true"></i>Due next 14 days</span>
+                <strong data-pm-metric="due_soon">—</strong><span class="sqr-pm-meta">Including today</span>
+            </button>
+            <div class="sqr-pm-kpi">
+                <span class="sqr-pm-kpi-label"><i class="bi bi-bar-chart" aria-hidden="true"></i>Reported average</span>
+                <strong data-pm-metric="average">—</strong><span id="sqr-pm-coverage" class="sqr-pm-meta">Known progress only</span>
+            </div>
+            <button type="button" class="sqr-pm-kpi" data-pm-filter="missing_data" aria-pressed="false">
+                <span class="sqr-pm-kpi-label"><i class="bi bi-clipboard-check" aria-hidden="true"></i>Missing delivery data</span>
+                <strong data-pm-metric="missing_data">—</strong><span class="sqr-pm-meta">Complete the picture</span>
+            </button>
+        </section>
+
+        <div class="sqr-pm-action-grid">
+            <section class="sqr-pm-surface" aria-labelledby="sqr-pm-queue-title">
+                <div class="sqr-pm-section-head">
+                    <div><p class="sqr-pm-eyebrow">Start here</p><h3 id="sqr-pm-queue-title">Needs attention</h3><p id="sqr-pm-queue-count" class="sqr-pm-meta"></p></div>
+                    <button type="button" class="btn btn-outline-primary" data-pm-filter="attention" aria-pressed="false">Show all attention <i class="bi bi-arrow-right ms-1" aria-hidden="true"></i></button>
+                </div>
+                <div id="sqr-pm-queue" class="sqr-pm-queue"></div>
+            </section>
+            <section class="sqr-pm-surface" aria-labelledby="sqr-pm-health-title">
+                <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">Recorded, not inferred</p><h3 id="sqr-pm-health-title">Portfolio health</h3></div></div>
+                <p class="sqr-pm-note">Tracker health is kept as reported. Deadline and data alerts are separate.</p>
+                <div id="sqr-pm-health-chart" aria-label="Recorded health distribution"></div>
+            </section>
+        </div>
+
+        <div class="sqr-pm-visual-grid">
+            <section class="sqr-pm-surface" aria-labelledby="sqr-pm-progress-title">
+                <div class="sqr-pm-section-head"><div><h3 id="sqr-pm-progress-title">Reported completion</h3><p id="sqr-pm-progress-count" class="sqr-pm-meta"></p></div><a href="#sqr-pm-directory-title" class="sqr-pm-link">Project directory <i class="bi bi-arrow-down ms-1" aria-hidden="true"></i></a></div>
+                <p class="sqr-pm-note">Current progress, not schedule performance. Unknown progress is not zero.</p>
+                <div id="sqr-pm-progress-chart"></div>
+            </section>
+            <section class="sqr-pm-surface" aria-labelledby="sqr-pm-timeline-title">
+                <div class="sqr-pm-section-head"><div><h3 id="sqr-pm-timeline-title">Next 30 days</h3><p id="sqr-pm-timeline-count" class="sqr-pm-meta"></p></div><i class="bi bi-calendar3 sqr-pm-section-icon" aria-hidden="true"></i></div>
+                <p class="sqr-pm-note">Open delivery target dates, starting today. Overdue projects appear in the attention queue.</p>
+                <div id="sqr-pm-timeline"></div>
+            </section>
+        </div>
+
+        <section class="sqr-pm-surface" aria-labelledby="sqr-pm-directory-title">
+            <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">Explore the detail</p><h3 id="sqr-pm-directory-title" tabindex="-1">Project directory</h3><p class="sqr-pm-meta">Attention first, then target date. Open any project in the Tracker to act.</p></div></div>
+            <div id="sqr-pm-directory" class="sqr-pm-directory"></div>
+            <nav class="sqr-pm-pagination" aria-label="Project directory pages">
+                <button type="button" id="sqr-pm-prev" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous</button>
+                <span id="sqr-pm-page" class="sqr-pm-meta" aria-live="polite">Page 1</span>
+                <button type="button" id="sqr-pm-next" class="btn btn-outline-secondary" disabled>Next<i class="bi bi-chevron-right ms-1" aria-hidden="true"></i></button>
+            </nav>
+        </section>
+    </div>
+
+    <details class="sqr-pm-methodology sqr-pm-details">
+        <summary>How to read this dashboard <span class="sqr-pm-meta">Scope, dates &amp; calculation rules</span></summary>
+        <div class="sqr-pm-methodology-grid">
+            <div><h4>Scope &amp; ownership</h4><p>Active delivery includes won proposals or explicit delivery evidence: status, health, progress (including zero), start or target date. It excludes lost/canceled proposals and terminal delivery evidence: completed/cancelled status or health, actual finish or signed completion. Assignment or notes alone do not qualify. All SQRs includes every record you already have permission to access.</p><p>Effective PM is the assigned PM, falling back to the reviewer when no PM is assigned. My assigned uses that effective owner; a fallback does not resolve a missing assigned PM.</p></div>
+            <div><h4>Dates &amp; attention</h4><p>Dates use the server-local snapshot date, not your browser clock. Overdue means operationally open with a target before today. Due soon includes today through day 14; the timeline includes today through day 30. No target means unknown, not on time. Open 100% progress does not erase an overdue deadline.</p><p>Attention counts each project once: open Off Track, overdue, At Risk, On Hold, due soon, or missing/inconsistent delivery data, prioritized in that order. Delivery candidates missing assigned PM, health, progress, start or target are flagged; ordinary proposals are not. Date order, contradictory terminal signals and completion/progress conflicts are separate inconsistencies.</p></div>
+            <div><h4>Health &amp; completion</h4><p>Health and delivery status are the values recorded in the Tracker; blanks remain Not set. Dates never automatically change health. Updates / risks are recorded notes, not a calculated risk score.</p><p>Average progress is the unweighted mean of known values, bounded to 0–100%, in this filtered view. Unknown values are excluded, not treated as zero; no known values means N/A. Coverage shows known values / projects in view. Terminal records contribute only when included by scope and filters. This is reported completion, not schedule performance or a historical trend.</p></div>
+        </div>
+        <p class="sqr-pm-note">Snapshot time is retrieval time, not the last delivery update. Existing Excel exports cover Tracker / Reports or legacy performance data, not this filtered dashboard.</p>
+    </details>
+</section>

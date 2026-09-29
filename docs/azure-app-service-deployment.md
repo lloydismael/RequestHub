@@ -20,7 +20,7 @@ $env:DOCKER_BUILDKIT=1
 docker images lloydismael12/request-hub --format "{{.Tag}}" | sort
 # Update this to the next unused version.
 # Patch tags are single digit only: v50.0 through v50.9, then v51.0.
-$nextVersion = "v51.0"
+$nextVersion = "v51.1"
 $tag = "lloydismael12/request-hub:$nextVersion"
 docker build --pull --no-cache --build-arg APP_VERSION=$nextVersion -t $tag .
 docker scout cves $tag
