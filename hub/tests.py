@@ -622,7 +622,21 @@ class OutlookThreadingTests(TestCase):
         self.assertEqual(acknowledgement_query["subject"], [f"Re: {self.request_obj.reference_code} · Thread Account"])
         self.assertEqual(closing_query["subject"], acknowledgement_query["subject"])
         self.assertNotIn("Advisory Only", closing_query["subject"][0])
-        self.assertIn("Advisory Only", closing_query["body"][0])
+
+    def test_closing_draft_uses_updated_message_format(self):
+        contexts = self._post_acknowledgement_and_closing_with_captured_contexts()
+        closing_query = self._mailto_query(contexts[1]["mailto_url"])
+        detail_url = f"http://testserver{self.request_obj.get_absolute_url()}"
+
+        self.assertEqual(
+            closing_query["body"][0],
+            "Hello Thread Requestor,\n\n"
+            f"This is to confirm that {self.request_obj.reference_code} has been completed and closed.\n\n"
+            f"Request details: View Request ({detail_url})\n\n"
+            "If additional assistance is needed, please create a new request through www.esgrequesthub.com\n\n"
+            "Thanks,\n"
+            "ESG",
+        )
 
     def test_closing_draft_keeps_requestor_ess_cc_consistent_with_acknowledgement(self):
         contexts = self._post_acknowledgement_and_closing_with_captured_contexts()

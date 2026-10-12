@@ -5675,11 +5675,11 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
 
         body_template = (
             "Hello {requestor_name},\n\n"
-            "Following up on our earlier acknowledgement for {reference}, this is to confirm the request has been fulfilled and is now marked as closed.\n\n"
-            "Advisory Only: Please do not reply to this closed request thread for new support needs.\n\n"
-            "View request details: {detail_url}\n\n"
-            "If you believe further action is required or have additional questions, please submit a new one via Request Hub.\n\n"
-            "Thank you for your cooperation."
+            "This is to confirm that {reference} has been completed and closed.\n\n"
+            "Request details: View Request ({detail_url})\n\n"
+            "If additional assistance is needed, please create a new request through www.esgrequesthub.com\n\n"
+            "Thanks,\n"
+            "ESG"
         )
 
         body = quote(
