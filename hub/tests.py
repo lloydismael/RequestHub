@@ -632,8 +632,8 @@ class OutlookThreadingTests(TestCase):
             closing_query["body"][0],
             "Hello Thread Requestor,\n\n"
             f"This is to confirm that {self.request_obj.reference_code} has been completed and closed.\n\n"
-            f"Request details: View Request ({detail_url})\n\n"
-            "If additional assistance is needed, please create a new request through www.esgrequesthub.com\n\n"
+            f"Request details: {self.request_obj.reference_code} — {detail_url}\n\n"
+            "If additional assistance is needed, please create a new request through https://www.esgrequesthub.com\n\n"
             "Thanks,\n"
             "ESG",
         )
