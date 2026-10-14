@@ -72,8 +72,9 @@ az webapp config appsettings set ^
     DJANGO_SECRET_KEY="$(New-Guid)" ^
     DJANGO_DEBUG="False" ^
     DJANGO_PRIMARY_DOMAIN="esgrequesthub.com" ^
-    DJANGO_ALLOWED_HOSTS="esgrequesthub.com,www.esgrequesthub.com" ^
-    DJANGO_CSRF_TRUSTED_ORIGINS="https://esgrequesthub.com,https://www.esgrequesthub.com" ^
+    DJANGO_PUBLIC_BASE_URL="https://esgrequesthub.com" ^
+    DJANGO_ALLOWED_HOSTS="esgrequesthub.com" ^
+    DJANGO_CSRF_TRUSTED_ORIGINS="https://esgrequesthub.com" ^
     DJANGO_DEFAULT_FROM_EMAIL="ESG Request Hub <no-reply@esgrequesthub.com>" ^
     ACS_EMAIL_CONNECTION_STRING="endpoint=https://esgrequesthub.asiapacific.communication.azure.com/;accesskey=<your-access-key>" ^
     ACS_EMAIL_SENDER="DoNotReply@esgrequesthub.com" ^
@@ -81,15 +82,23 @@ az webapp config appsettings set ^
 ```
 
 - `WEBSITES_PORT` tells App Service which port the container listens on (Gunicorn binds to 8000).
-- `DJANGO_PRIMARY_DOMAIN` is the canonical domain (`esgrequesthub.com`). It accepts a comma-separated list, so during overlap with the old domain use e.g. `esgrequesthub.com,www.esgrequesthub.com,grequesthub.dreadops.site`. Each entry is auto-added to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`.
-- Leave `DJANGO_ALLOWED_HOSTS` empty to rely on the automatic `WEBSITE_HOSTNAME` + `DJANGO_PRIMARY_DOMAIN` detection added in `settings.py`. For apex + www, set it explicitly as above. During overlap, keep the old host in the list; remove it after DNS cutover.
-- Set `DJANGO_CSRF_TRUSTED_ORIGINS` explicitly as above so POSTs from both apex and www pass CSRF. During overlap, also include `https://grequesthub.dreadops.site`.
+- `DJANGO_PRIMARY_DOMAIN` is `esgrequesthub.com`. Each comma-separated entry is auto-added to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS`; do not include retired hosts.
+- `DJANGO_PUBLIC_BASE_URL` controls outbound assignment, SQR notification, and closing email links, including notifications sent without an HTTP request. Use `https://esgrequesthub.com`; do not infer this URL from the incoming host.
+- Set `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` to the apex values above. `WEBSITE_HOSTNAME` remains automatically allowed for Azure health checks. Only add `www` after its DNS, hostname binding, and TLS are verified.
 - When `DJANGO_DEBUG=False`, `DJANGO_SECRET_KEY`, `DB_HOST`, and `DB_PASSWORD` are required or the app fails closed at boot.
 - If you connect to PostgreSQL, provide `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT` values here as well. Django 5.2 requires PostgreSQL 14+.
 - App Service already forwards `X-Forwarded-Proto`; production settings trust `HTTP_X_FORWARDED_PROTO=https`.
 - `ACS_EMAIL_CONNECTION_STRING` should point at the Request Hub Azure Communication Services endpoint `https://esgrequesthub.asiapacific.communication.azure.com`.
-- `ACS_EMAIL_SENDER` must be a verified sender on the `esgrequesthub.com` email domain: `DoNotReply@esgrequesthub.com`. The legacy `DoNotReply@dreadops.site` sender stops working once `dreadops.site` is deleted.
-- Custom domains: bind `esgrequesthub.com` (apex `A` + `TXT` verification) and `www.esgrequesthub.com` (`CNAME` to `<app>.azurewebsites.net`) in App Service, then create/bind App Service Managed Certificates for both. Keep the old hostname bound until overlap verification passes.
+- `ACS_EMAIL_SENDER` must be a verified sender on the `esgrequesthub.com` email domain: `DoNotReply@esgrequesthub.com`.
+- Custom domains: bind `esgrequesthub.com` (apex `A` + `TXT` verification) and its TLS certificate. `www` is optional, not required for notification links.
+
+### Retiring a previous domain
+
+1. Inventory production settings, slots, hostname/TLS bindings, DNS records, ACS linked domains, and other consumers. Save a secure rollback snapshot without putting secrets in the repository.
+2. Deploy the canonical email-link changes and apex settings above. Verify HTTPS, login/CSRF, request submission, assignment, SQR notifications, closing drafts, and actual email delivery before destructive changes.
+3. Remove only the retired application's DNS records (including dedicated verification records), allowing the previous TTL to elapse, then unbind its App Service hostname. Remove its dedicated certificate only after checking that no other binding uses it. Existing bookmarks and historical email links to the retired host will stop working.
+4. Unlink/remove the old ACS email domain only after confirming every consumer uses the verified replacement domain. A parent-domain email resource may serve other applications; preserve it unless its ownership and lack of other consumers are confirmed.
+5. Preserve the primary-domain DNS/TLS/email records, shared ACS service, parent DNS zone, and all application data/history. Recheck the primary URL and sender, monitor errors, and retain the rollback snapshot; rollback requires continued ownership of the retired domain.
 
 ## 4. Optional: Configure Startup Commands
 

@@ -376,7 +376,8 @@ docker compose exec web python manage.py migrate
 | `DJANGO_DEBUG` | `True` for local HTTP development, `False` for production (fail-closed). |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed host names |
 | `DJANGO_PRIMARY_DOMAIN` | Canonical domain(s), comma-separated; auto-added to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` (default `esgrequesthub.com`) |
-| `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins, e.g. `https://esgrequesthub.com,https://www.esgrequesthub.com` |
+| `DJANGO_PUBLIC_BASE_URL` | Absolute base URL for assignment, SQR notification, and closing email links, independent of the incoming host (default `https://esgrequesthub.com`) |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins, e.g. `https://esgrequesthub.com` |
 | `DJANGO_DEFAULT_FROM_EMAIL` | Default from address (default `ESG Request Hub <no-reply@esgrequesthub.com>`) |
 | `DB_NAME` | PostgreSQL database name |
 | `DB_USER` | Database username. Required when `DJANGO_DEBUG` is `False`. |

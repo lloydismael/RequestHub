@@ -626,14 +626,14 @@ class OutlookThreadingTests(TestCase):
     def test_closing_draft_uses_updated_message_format(self):
         contexts = self._post_acknowledgement_and_closing_with_captured_contexts()
         closing_query = self._mailto_query(contexts[1]["mailto_url"])
-        detail_url = f"http://testserver{self.request_obj.get_absolute_url()}"
+        detail_url = f"https://esgrequesthub.com{self.request_obj.get_absolute_url()}"
 
         self.assertEqual(
             closing_query["body"][0],
             "Hello Thread Requestor,\n\n"
             f"This is to confirm that {self.request_obj.reference_code} has been completed and closed.\n\n"
             f"Request details: {self.request_obj.reference_code} — {detail_url}\n\n"
-            "If additional assistance is needed, please create a new request through https://www.esgrequesthub.com\n\n"
+            "If additional assistance is needed, please create a new request through https://esgrequesthub.com\n\n"
             "Thanks,\n"
             "ESG",
         )

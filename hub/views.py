@@ -1083,13 +1083,7 @@ def notify_engineer_assignment_email(
 
     actor_name = actor_user.get_full_name() or actor_user.username or "Request Hub"
     due_display = request_obj.due_date.strftime("%b %d, %Y") if request_obj.due_date else "Not set"
-    detail_url = ""
-
-    if request:
-        try:
-            detail_url = request.build_absolute_uri(request_obj.get_absolute_url())
-        except Exception:
-            detail_url = ""
+    detail_url = f"{settings.PUBLIC_BASE_URL}{request_obj.get_absolute_url()}"
 
     subject = f"[Request Hub] New assignment - {request_obj.reference_code or 'Request'}"
     body_lines = [
@@ -1217,13 +1211,7 @@ def _send_sqr_new_submission_email(
     reviewer_name = reviewer.get_full_name() or reviewer.username
     engineer_name = submission.engineer.get_full_name() or submission.engineer.username
     sqr_path = reverse("hub:sqr")
-    if http_request:
-        try:
-            sqr_url = http_request.build_absolute_uri(sqr_path)
-        except Exception:
-            sqr_url = sqr_path
-    else:
-        sqr_url = sqr_path
+    sqr_url = f"{settings.PUBLIC_BASE_URL}{sqr_path}"
 
     customer_company = (submission.customer_company or "").strip()
     submitted_date = (
@@ -1325,13 +1313,7 @@ def _send_sqr_for_revision_email(
 
     engineer_name = engineer.get_full_name() or engineer.username
     sqr_edit_path = reverse("hub:sqr")
-    if http_request:
-        try:
-            sqr_url = http_request.build_absolute_uri(sqr_edit_path)
-        except Exception:
-            sqr_url = sqr_edit_path
-    else:
-        sqr_url = sqr_edit_path
+    sqr_url = f"{settings.PUBLIC_BASE_URL}{sqr_edit_path}"
 
     review_notes = (submission.review_notes or "").strip()
     customer_company = (submission.customer_company or "").strip()
@@ -5671,13 +5653,13 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
         else:
             description_line = "No description provided."
 
-        detail_url = request.build_absolute_uri(request_obj.get_absolute_url())
+        detail_url = f"{settings.PUBLIC_BASE_URL}{request_obj.get_absolute_url()}"
 
         body_template = (
             "Hello {requestor_name},\n\n"
             "This is to confirm that {reference} has been completed and closed.\n\n"
             "Request details: {reference} — {detail_url}\n\n"
-            "If additional assistance is needed, please create a new request through https://www.esgrequesthub.com\n\n"
+            f"If additional assistance is needed, please create a new request through {settings.PUBLIC_BASE_URL}\n\n"
             "Thanks,\n"
             "ESG"
         )

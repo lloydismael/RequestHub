@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
@@ -19,6 +20,18 @@ elif not SECRET_KEY or SECRET_KEY == "insecure-development-key":
     )
 
 APP_VERSION = os.getenv("APP_VERSION", "dev")
+PUBLIC_BASE_URL = os.getenv("DJANGO_PUBLIC_BASE_URL", "https://esgrequesthub.com").strip().rstrip("/")
+public_url = urlsplit(PUBLIC_BASE_URL)
+if (
+    public_url.scheme not in (("http", "https") if DEBUG else ("https",))
+    or not public_url.hostname
+    or public_url.username is not None
+    or public_url.password is not None
+    or public_url.path
+    or public_url.query
+    or public_url.fragment
+):
+    raise ImproperlyConfigured("DJANGO_PUBLIC_BASE_URL must be an absolute HTTPS origin (HTTP is allowed in DEBUG).")
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 
 primary_domains = [
