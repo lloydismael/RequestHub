@@ -650,6 +650,7 @@ class SqrSubmissionForm(forms.ModelForm):
             "Kevin Pangalangan",
             "Jacqueline Olesco - Tatel",
             "Lorenz Gabriel M. Dasma\u00f1as",
+            "Maria Hilda C. Mallillin",
         ],
         "Dell": [
             "Roberto D. Quiambao Jr.",

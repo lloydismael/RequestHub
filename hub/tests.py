@@ -1418,6 +1418,20 @@ class RequestActivityLogEditModalTests(TestCase):
         self.assertContains(response, f'name="log_id" value="{self.activity_log.pk}"')
 
 
+class SqrSubmissionAccountManagerTests(TestCase):
+    def test_hp_account_manager_is_available_and_accepted(self):
+        name = "Maria Hilda C. Mallillin"
+        form = SqrSubmissionForm()
+        member_map = json.loads(
+            form.fields["customer_company"].widget.attrs["data-member-map"]
+        )
+
+        self.assertIn(name, member_map["HP"])
+        self.assertEqual(sum(name in members for members in member_map.values()), 1)
+        self.assertIn((name, name), form.fields["customer_contact"].choices)
+        self.assertEqual(form.fields["customer_contact"].clean(name), name)
+
+
 class SqrApprovalEmailTemplateTests(TestCase):
     def setUp(self):
         self.engineer = User.objects.create_user(
