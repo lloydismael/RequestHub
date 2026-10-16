@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% load tz %}
 {% block title %}Request {{ request_obj.reference_code }} · Request Hub{% endblock %}
 {% block body_class %}request-detail-page{% endblock %}
@@ -16,6 +17,7 @@
                     {% if status_form %}
                         <form method="post" action="{% url 'hub:request-status' request_obj.pk %}" class="d-flex align-items-center gap-2 flex-wrap">
                             {% csrf_token %}
+                            {% form_editor_extras status_form %}
                             {{ status_form.status }}
                             <div class="d-flex align-items-center gap-2">
                                 <label class="visually-hidden" for="id_end_date">Completed Date</label>
@@ -102,6 +104,7 @@
                 <form method="post">
                     {% csrf_token %}
                     <div class="mb-3">
+                        {% form_editor_extras log_form %}
                         {{ log_form.message.label_tag }}
                         {{ log_form.message }}
                         {% if log_form.message.errors %}

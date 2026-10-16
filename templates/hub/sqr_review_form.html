@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% load tz %}
 {% block title %}Manage {{ object.reference_code }} &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-review-page{% endblock %}
@@ -115,8 +116,9 @@
             </h2>
             <form method="post" novalidate id="sqr-review-form">
                 {% csrf_token %}
-                {% for field in form %}
-                    <div class="mb-3">
+                {% form_editor_token form %}
+                {% for field in form.visible_fields %}
+                    <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
@@ -176,6 +178,7 @@
 
             <form method="post" action="{% url 'hub:sqr-proposal-update' object.pk %}" novalidate>
                 {% csrf_token %}
+                {% form_editor_extras proposal_form %}
                 <div class="row g-3">
                     <div class="col-md-6">
                         {% with field=proposal_form.sse_manhrs %}
@@ -328,6 +331,7 @@
 
             <form id="delivery-form-{{ object.pk }}" method="post" action="{% url 'hub:sqr-delivery-update' object.pk %}" novalidate>
                 {% csrf_token %}
+                {% form_editor_extras delivery_form %}
                 <div class="row g-3">
                     <div class="col-md-6">
                         {% with field=delivery_form.po_pnl_date %}
@@ -490,6 +494,7 @@
             <form method="post" action="{% url 'hub:sqr-revenue-stage-update' object.pk %}" novalidate{% if not revenue_unlocked %} id="revenue-form-locked"{% endif %}>
                 {% csrf_token %}
                 <fieldset{% if not revenue_unlocked %} disabled{% endif %}>
+                {% form_editor_extras revenue_form %}
                 <div class="row g-3">
                     <div class="col-12">
                         {% with field=revenue_form.revenue_remarks %}

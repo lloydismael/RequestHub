@@ -1,0 +1,17 @@
+{% load form_customization %}
+<form class="form-editor-preview" data-editor-preview onsubmit="return false" autocomplete="off">
+<h3 class="h5">{{ schema.title }}</h3>
+{% if schema.description %}<p>{{ schema.description }}</p>{% endif %}
+<div class="row g-3">
+{% for item in preview_fields %}
+    {% ifchanged item.section %}{% if item.section %}<h4 class="h6 col-12 mt-4">{{ item.section }}</h4>{% endif %}{% endifchanged %}
+    <div data-editor-field="{{ item.bound.html_name }}" {% if item.bound|form_editor_initially_hidden %}hidden{% endif %}
+         class="{% if item.width == 'half' %}col-md-6{% else %}col-12{% endif %}">
+        {{ item.bound.label_tag }}
+        {{ item.bound }}
+        {% if item.bound.help_text %}<div class="form-text">{{ item.bound.help_text }}</div>{% endif %}
+    </div>
+{% endfor %}
+</div>
+<p class="small text-muted mt-3">Preview only: this form cannot submit or create records.</p>
+</form>

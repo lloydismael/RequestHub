@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% load tz humanize static %}
 {% block title %}SQR &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-page{% endblock %}
@@ -1219,6 +1220,7 @@
             <form method="post" action="{% url 'hub:sqr-import' %}" enctype="multipart/form-data" id="import-sqr-form">
                 {% csrf_token %}
                 <div class="mb-3">
+                    {% form_editor_extras sqr_import_form %}
                     <label class="form-label fw-semibold" for="{{ sqr_import_form.import_file.id_for_label }}">{{ sqr_import_form.import_file.label }}</label>
                     {{ sqr_import_form.import_file }}
                     {% if sqr_import_form.import_file.help_text %}
@@ -1711,7 +1713,7 @@
     <div class="requestor-modal__backdrop" id="create-sqr-backdrop"></div>
     <div class="requestor-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="create-sqr-title">
         <div class="requestor-modal__header">
-            <h2 class="h5 mb-0" id="create-sqr-title"><i class="bi bi-plus-circle me-2"></i>New SQR Submission</h2>
+            <h2 class="h5 mb-0" id="create-sqr-title"><i class="bi bi-plus-circle me-2"></i>{{ sqr_form.editor_title|default:"New SQR Submission" }}</h2>
             <button type="button" class="btn-close" id="close-sqr-btn" aria-label="Close"></button>
         </div>
         <div class="requestor-modal__body">
@@ -1720,8 +1722,10 @@
                 {% if sqr_form.errors %}
                     <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle me-2"></i>Please resolve the highlighted fields before submitting.</div>
                 {% endif %}
-                {% for field in sqr_form %}
-                    <div class="mb-3">
+                {% if sqr_form.editor_description %}<p class="text-muted">{{ sqr_form.editor_description }}</p>{% endif %}
+                {% form_editor_token sqr_form %}
+                {% for field in sqr_form.visible_fields %}
+                    <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.name == 'customer_name' %}
@@ -1934,8 +1938,9 @@
         <div class="requestor-modal__body">
             <form id="edit-sqr-form" method="post" action="" novalidate>
                 {% csrf_token %}
-                {% for field in sqr_edit_form %}
-                    <div class="mb-3">
+                {% form_editor_token sqr_edit_form %}
+                {% for field in sqr_edit_form.visible_fields %}
+                    <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
@@ -1975,9 +1980,36 @@
             if (el) el.value = (val != null) ? String(val) : '';
         }
 
-        function openEditModal(btn) {
+        async function openEditModal(btn) {
             activeRow = btn.closest('tr');
             editForm.action = btn.dataset.url;
+            editForm.querySelectorAll('[data-form-custom="true"]').forEach(function (input) {
+                var wrapper = input.closest('[data-editor-field]');
+                if (wrapper) wrapper.remove();
+            });
+            editForm.querySelectorAll('[name="_form_version"]').forEach(function (input) { input.remove(); });
+            try {
+                var response = await fetch(btn.dataset.url + '?format=form-editor', {credentials: 'same-origin'});
+                if (!response.ok) throw new Error('Could not load the current form.');
+                var data = await response.json();
+                var editorFields = document.createElement('div');
+                editorFields.className = 'editor-custom-fields';
+                editorFields.innerHTML = data.html;
+                editForm.insertBefore(editorFields, editForm.lastElementChild);
+                Object.keys(data.selectors || {}).forEach(function (name) {
+                    var existing = document.getElementById('edit_' + name);
+                    var container = document.createElement('div');
+                    container.innerHTML = data.selectors[name];
+                    var updated = container.querySelector('select');
+                    if (existing && updated) existing.innerHTML = updated.innerHTML;
+                });
+                var department = document.getElementById('edit_customer_company');
+                if (department && data.member_map) department.dataset.memberMap = data.member_map;
+                document.dispatchEvent(new CustomEvent('form-editor-enhance', {detail: {form: editForm}}));
+            } catch (error) {
+                window.location.assign(btn.dataset.url);
+                return;
+            }
 
             // Set department & rebuild member options with preserved contact
             var deptSel   = document.getElementById('edit_customer_company');
@@ -2081,6 +2113,7 @@
         // Exposed so openEditModal() can call with a preserved contact value
         window.rebuildEditMembers = function (dept, preserve) {
             if (!memberSel) return;
+            try { memberMap = JSON.parse(deptSel.dataset.memberMap || '{}'); } catch (e) {}
             memberSel.innerHTML = '';
             var empty = document.createElement('option');
             empty.value = ''; empty.textContent = '— Select Member —';

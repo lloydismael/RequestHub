@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% block title %}My Profile · Request Hub{% endblock %}
 {% block body_class %}profile-page-shell{% endblock %}
 {% block content %}
@@ -64,15 +65,16 @@
     <form method="post" enctype="multipart/form-data" novalidate class="profile-form-wrap" id="profile-main-form">
         {% csrf_token %}
 
+        {% for hidden in form.editor_hidden_fields %}{{ hidden }}{% endfor %}
         {# Personal Info tab #}
         <div class="profile-panel profile-panel--active" id="profile-panel-info">
             <div class="glass-card profile-card">
                 <h2 class="profile-card__title"><i class="bi bi-person-lines-fill me-2"></i>Personal Information</h2>
                 <div class="row g-3">
-                    {% for field in form %}
+                    {% for field in form.visible_fields %}
                         {% if field.name in "first_name,last_name,email,phone_number,department" %}
                             <div class="col-sm-6">
-                                <label class="form-label profile-label" for="id_{{ field.name }}">
+                                <label class="form-label profile-label" for="{{ field.id_for_label }}">
                                     {{ field.label }}
                                     {% if field.name == "department" and not request.user.role == "admin" %}
                                         <i class="bi bi-lock-fill ms-1 text-secondary" style="font-size:0.75em;" title="Only administrators can edit this field"></i>
@@ -85,6 +87,7 @@
                         {% endif %}
                     {% endfor %}
                 </div>
+                {% include "hub/form_custom_fields.html" with editor_custom_fields=form.editor_custom_fields %}
                 <div class="d-flex gap-2 mt-4">
                     <button class="btn btn-primary" type="submit" name="save_info" value="1">
                         <i class="bi bi-check2 me-1"></i>Save Changes
@@ -109,7 +112,7 @@
                     </div>
                     <div class="profile-avatar-controls">
                         <p class="text-muted small mb-3">Upload a clear photo of yourself. JPG, PNG or GIF, max 5 MB.</p>
-                        {% for field in form %}
+                        {% for field in form.visible_fields %}
                             {% if field.name == "profile_photo" %}
                                 <div class="mb-3">
                                     <label class="form-label profile-label" for="id_profile_photo">Choose new photo</label>
@@ -144,10 +147,10 @@
                     </div>
                 {% endif %}
                 <div class="row g-3">
-                    {% for field in form %}
+                    {% for field in form.visible_fields %}
                         {% if field.name in "current_password,new_password1,new_password2" %}
                             <div class="col-sm-6">
-                                <label class="form-label profile-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                                <label class="form-label profile-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
                                 {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
                                 {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}

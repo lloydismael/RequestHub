@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
@@ -1213,3 +1214,91 @@ class StatusLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.request.reference_code or 'Request'}: {self.author.get_full_name() or self.author.username}"
+
+
+class FormDefinition(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    draft = models.JSONField(default=dict)
+    revision = models.PositiveBigIntegerField(default=0)
+    published_version = models.ForeignKey("FormVersion", null=True, blank=True, on_delete=models.PROTECT, related_name="published_definitions")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        if self.published_version_id and self.published_version.definition_id != self.pk:
+            raise ValidationError("Published version belongs to another form.")
+
+
+class ImmutableFormQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+    def delete(self):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+    def bulk_create(self, objs, *args, **kwargs):
+        if kwargs.get("update_conflicts"):
+            raise ValidationError("Published versions and audit events are immutable.")
+        return super().bulk_create(objs, *args, **kwargs)
+
+
+class ImmutableFormRecord(models.Model):
+    objects = ImmutableFormQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding or (self.pk is not None and type(self).objects.filter(pk=self.pk).exists()):
+            raise ValidationError("Published versions and audit events are immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+
+class FormVersion(ImmutableFormRecord):
+    definition = models.ForeignKey(FormDefinition, on_delete=models.PROTECT, related_name="versions")
+    number = models.PositiveIntegerField()
+    schema = models.JSONField(default=dict)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="form_versions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-number"]
+        constraints = [models.UniqueConstraint(fields=["definition", "number"], name="unique_form_version_number")]
+
+
+class FormAnswerSet(models.Model):
+    definition = models.ForeignKey(FormDefinition, on_delete=models.PROTECT, related_name="answer_sets")
+    content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT)
+    object_id = models.PositiveBigIntegerField()
+    schema_version = models.ForeignKey(FormVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="answer_sets")
+    answers = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["definition", "content_type", "object_id"], name="unique_form_record_answers")]
+
+    def clean(self):
+        from .form_editor import get_form_class
+        model = getattr(getattr(get_form_class(self.definition.key), "_meta", None), "model", None)
+        if model is None or self.content_type.model_class() is not model:
+            raise ValidationError("Record type is not allowed for this form.")
+        if self.schema_version_id and self.schema_version.definition_id != self.definition_id:
+            raise ValidationError("Answer version belongs to another form.")
+
+
+class FormEditorAuditEvent(ImmutableFormRecord):
+    definition = models.ForeignKey(FormDefinition, on_delete=models.PROTECT, related_name="audit_events")
+    action = models.CharField(max_length=20)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="form_editor_events")
+    revision = models.PositiveBigIntegerField()
+    version = models.ForeignKey(FormVersion, null=True, blank=True, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    details = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]

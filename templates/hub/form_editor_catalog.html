@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Form Editor · Request Hub{% endblock %}
+{% block content %}
+<div class="glass-card p-3 mb-3">
+    <a href="{% url 'hub:management' %}?tab=forms" class="btn btn-outline-secondary btn-sm mb-3">Back to Management</a>
+    <h1 class="h4">Form Editor</h1>
+    <p class="text-muted mb-0">Application-wide form presentation. Workflow, security and password fields remain protected.</p>
+</div>
+{% include "hub/form_editor_catalog_items.html" %}
+{% endblock %}

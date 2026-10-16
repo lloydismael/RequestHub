@@ -337,3 +337,9 @@ class UserManagementForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data.get("email")
         return email.strip() if email else email
+
+
+from hub.form_editor_runtime import editable_form
+
+editable_form(ProfileForm)
+editable_form(UserManagementForm)

@@ -2,6 +2,7 @@ import csv
 import base64
 import html
 from django.db import IntegrityError
+from .form_editor_runtime import save_configured_instance
 import json
 import logging
 import mimetypes
@@ -699,7 +700,7 @@ class EngineerActivityLogView(EngineerRequiredMixin, LoginRequiredMixin, Templat
             activity_log.engineer = request.user
             if not activity_log.request_date:
                 activity_log.request_date = timezone.now().date()
-            activity_log.save()
+            save_configured_instance(form, activity_log)
             if instance:
                 messages.success(request, "Activity log updated successfully.")
             else:
@@ -2521,7 +2522,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             req._actor_source = "Dashboard · New Request"
             if request.user.role in ADMIN_PANEL_ROLES:
                 req._allow_capacity_override = True
-            req.save()
+            save_configured_instance(form, req)
             lifecycle_result = request_lifecycle.record_created(
                 req.pk,
                 actor=request.user,
@@ -3407,7 +3408,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                         )
                     else:
                         submission.managed_support_amount = None
-                    submission.save()
+                    save_configured_instance(form, submission)
             except IntegrityError:
                 form.add_error("linked_request", "An SQR already exists for the selected Request ID.")
                 context = self.get_context_data(form=form)
@@ -3587,6 +3588,21 @@ class SqrReportsDataView(LoginRequiredMixin, View):
 
 
 class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
+    def get(self, request, *args, **kwargs):
+        if request.GET.get("format") == "form-editor":
+            self.object = self.get_object()
+            form = self.get_form()
+            form.auto_id = "edit_%s"
+            form._bound_fields_cache = {}
+            html = render_to_string("hub/form_custom_fields.html", {
+                "editor_hidden_fields": [form[name] for name in form.fields if form.fields[name].widget.is_hidden],
+                "editor_custom_fields": [form[name] for name in getattr(form, "editor_custom_keys", [])],
+            }, request=request)
+            selectors = {name: str(form[name]) for name in ("customer_contact", "pm_esg_reviewer") if name in form.fields}
+            member_map = form.fields["customer_company"].widget.attrs.get("data-member-map", "{}")
+            return JsonResponse({"html": html, "selectors": selectors, "member_map": member_map})
+        return super().get(request, *args, **kwargs)
+
     model = SqrSubmission
     form_class = SqrSubmissionForm
     template_name = "hub/sqr_submission_form.html"
@@ -4431,7 +4447,7 @@ class SqrRevenueTrackerUpdateView(LoginRequiredMixin, View):
 
                 if not submission.po_attachment_link:
                     updated_submission.po_attached_at = timezone.now()
-                updated_submission.save()
+                save_configured_instance(form, updated_submission)
                 messages.success(request, f"P.O attached for {submission.reference_code}. Moved to Revenue stage.")
             else:
                 self._flash_form_errors(request, form)
@@ -4551,7 +4567,7 @@ class SqrPerformanceUpdateView(LoginRequiredMixin, View):
                 performance.folder_link = submission.sqr_folder_link or ""
             if not performance.project_manager_id:
                 performance.project_manager = submission.assigned_pm or submission.pm_esg_reviewer
-            performance.save()
+            save_configured_instance(form, performance)
             SqrSubmissionHistory.objects.create(
                 submission=submission,
                 actor=request.user,
@@ -4807,7 +4823,7 @@ class RequestDetailView(LoginRequiredMixin, DetailView):
             log = form.save(commit=False)
             log.request = self.object
             log.author = request.user
-            log.save()
+            save_configured_instance(form, log)
             notify_status_update(log, "Request Detail · Status Update")
             messages.success(request, "Status log saved.")
             return redirect("hub:request-manage-collab", pk=self.object.pk)
@@ -4937,7 +4953,7 @@ class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, Upda
             log = form.save(commit=False)
             log.request = self.object
             log.author = request.user
-            log.save()
+            save_configured_instance(form, log)
             notify_status_update(log, "Admin · Manage Request · Status Update")
             messages.success(request, "Status update posted.")
             return HttpResponseRedirect(self.request.path)
@@ -5236,7 +5252,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             activity_log.account = request_obj.account
             if not activity_log.request_date:
                 activity_log.request_date = timezone.now().date()
-            activity_log.save()
+            save_configured_instance(form, activity_log)
             messages.success(request, "Activity log updated successfully." if instance else "Activity log saved successfully.")
             return redirect("hub:request-manage-collab", pk=request_obj.pk)
 
@@ -5353,7 +5369,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             log = log_form.save(commit=False)
             log.request = request_obj
             log.author = request.user
-            log.save()
+            save_configured_instance(log_form, log)
             source_label = self._source_label("Manage Request · Status Update")
             notify_status_update(log, source_label)
             messages.success(request, "Status update posted.")
@@ -7056,22 +7072,26 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         return page_obj, query
 
     def get(self, request, *args, **kwargs):
+        from .form_editor_views import catalog
+
         self._sync_account_baseline()
         users_page_obj, user_search_query = self._paginate_users(request)
         account_formset = self.account_form_class(queryset=Account.objects.order_by("name"))
         create_user_form = UserManagementForm(prefix="create_user")
         self._prepare_account_formset(account_formset)
-        return render(
-            request,
-            self.template_name,
-            self._build_context(
-                None,
-                account_formset,
-                create_user_form=create_user_form,
-                users_page_obj=users_page_obj,
-                user_search_query=user_search_query,
-            ),
+        context = self._build_context(
+            None,
+            account_formset,
+            create_user_form=create_user_form,
+            users_page_obj=users_page_obj,
+            user_search_query=user_search_query,
         )
+        active_tab = request.GET.get("tab", "users")
+        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "forms"} else "users"
+        context["form_catalog"] = catalog()
+        for user in context["users"]:
+            user.editor_form = UserManagementForm(instance=user)
+        return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
         active_tab = request.POST.get("active_tab", "users")

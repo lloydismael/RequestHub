@@ -11,7 +11,7 @@
 Coordinate engineering work, enforce SLA timelines, and gain operational visibility all from a single web portal.
 
 [![Docker](https://img.shields.io/badge/Docker-lloydismael12%2Frequest--hub-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/lloydismael12/request-hub)
-[![Latest Tag](https://img.shields.io/badge/Latest-v51.4-0ea5e9)](https://hub.docker.com/r/lloydismael12/request-hub/tags)
+[![Latest Tag](https://img.shields.io/badge/Latest-v51.7-0ea5e9)](https://hub.docker.com/r/lloydismael12/request-hub/tags)
 [![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Azure-336791?logo=postgresql)](https://azure.microsoft.com/en-us/products/postgresql/)
@@ -21,12 +21,16 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 ---
 
+## Admin Form Editor
+
+Admin accounts can open **Management → Form Editor** to save and publish form presentation and custom fields, preview changes, and restore prior versions. Core validation and credential controls remain protected. See the [usage and coverage guide](docs/form-editor.md).
+
 ## Latest Release Snapshot
 
-- **Current image tag:** `lloydismael12/request-hub:v51.4`
-- **App version shown in profile:** `v51.4`
+- **Current image tag:** `lloydismael12/request-hub:v51.7`
+- **App version shown in profile:** `v51.7`
 - **Latest update included:**
-      - Mobile view improvements on authenticated pages. Immutable tag only — do not retag `latest`.
+      - Admin form editor and activity-log initialization fix, including current workspace updates. Immutable tag only — do not retag `latest`.
 
 ---
 
@@ -338,7 +342,7 @@ Open `http://127.0.0.1:8000/`
 ### Pull and run from Docker Hub
 
 ```powershell
-docker run --rm -p 127.0.0.1:8000:8000 --env-file .env lloydismael12/request-hub:v51.4
+docker run --rm -p 127.0.0.1:8000:8000 --env-file .env lloydismael12/request-hub:v51.7
 ```
 
 ### Build locally
@@ -346,15 +350,15 @@ docker run --rm -p 127.0.0.1:8000:8000 --env-file .env lloydismael12/request-hub
 ```powershell
 $containers = docker ps --format "{{.ID}} {{.Ports}}" | Where-Object { $_ -match "0\.0\.0\.0:8000->8000/tcp|:::8000->8000/tcp" }
 $containers | ForEach-Object { docker rm -f (($_ -split ' ')[0]) }
-docker build --pull --no-cache --build-arg APP_VERSION=v51.4 -t lloydismael12/request-hub:v51.4 .
-docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -e APP_VERSION=v51.4 lloydismael12/request-hub:v51.4
+docker build --pull --no-cache --build-arg APP_VERSION=v51.7 -t lloydismael12/request-hub:v51.7 .
+docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -e APP_VERSION=v51.7 lloydismael12/request-hub:v51.7
 ```
 
 ### Push to Docker Hub
 
 ```powershell
-docker push lloydismael12/request-hub:v51.4
-# Do not retag or push latest until CVE scans on v51.4 are clean.
+docker push lloydismael12/request-hub:v51.7
+# Do not retag or push latest until CVE scans on v51.7 are clean.
 ```
 
 ### Compose (with local PostgreSQL)
@@ -449,7 +453,7 @@ Full Azure App Service container deployment guide:
 [docs/azure-app-service-deployment.md](docs/azure-app-service-deployment.md)
 
 **Key steps:**
-1. Push image to Docker Hub (`lloydismael12/request-hub:v51.4` or your next release tag). Do not retag `latest` until scans are clean.
+1. Push image to Docker Hub (`lloydismael12/request-hub:v51.7` or your next release tag). Do not retag `latest` until scans are clean.
 2. Set App Service container to the target tag
 3. Configure all environment variables in App Service Configuration (`DJANGO_SECRET_KEY`, `DB_HOST`, `DB_USER`, and `DB_PASSWORD` are required when `DJANGO_DEBUG=False`)
 4. Ensure Azure PostgreSQL Flexible Server firewall allows the App Service outbound IPs

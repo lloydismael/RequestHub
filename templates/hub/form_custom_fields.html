@@ -1,0 +1,14 @@
+{% load form_customization %}
+{% for field in editor_hidden_fields %}{{ field }}{% endfor %}
+{% for field in editor_custom_fields %}
+    {% if field.is_hidden %}
+        {{ field }}
+    {% else %}
+        <div class="mb-3 form-editor-custom-field" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
+        </div>
+    {% endif %}
+{% endfor %}

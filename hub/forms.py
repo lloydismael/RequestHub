@@ -1523,6 +1523,9 @@ class EngineerActivityLogForm(forms.ModelForm):
             request_field.required = True
             if not self.is_bound and not self.instance.pk:
                 request_field.initial = self.bound_request
+        elif self.engineer.pk is None:
+            # Form-editor baselines use an unsaved engineer, with no related requests.
+            related_requests = Request.objects.none()
         else:
             related_requests = Request.objects.filter(
                 Q(engineer=self.engineer) | Q(backup_engineer=self.engineer)
@@ -1757,3 +1760,16 @@ class AccountManagementForm(forms.ModelForm):
         if not name:
             raise forms.ValidationError("Account name cannot be blank.")
         return name
+
+
+from .form_editor_runtime import editable_form
+
+for _editable_class in (
+    RequestForm, RequestAdminForm, SqrSubmissionForm, SqrImportForm,
+    SqrTrackerEditForm, SqrReviewForm, SqrRevenueQuotationForm,
+    SqrRevenueOrderForm, SqrProposalStatusForm, SqrDeliveryForm,
+    SqrPerformanceForm, SqrRevenueForm, RequestStatusForm, StatusLogForm,
+    EngineerActivityLogForm, AdminRequestFilterForm, AccountManagementForm,
+):
+    editable_form(_editable_class)
+del _editable_class
