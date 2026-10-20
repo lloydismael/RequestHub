@@ -2659,7 +2659,11 @@
         if (normalizedValue === null || normalizedValue === undefined) normalizedValue = '';
         normalizedValue = String(normalizedValue);
         cell.dataset.sqrValue = normalizedValue;
-        displayEl.innerHTML = getDisplay(field, normalizedValue, cell);
+        if (field === 'status') {
+            displayEl.innerHTML = getDisplay(field, normalizedValue, cell);
+        } else {
+            displayEl.textContent = getDisplay(field, normalizedValue, cell);
+        }
         cell.classList.add('sqr-saved');
         setTimeout(function() { cell.classList.remove('sqr-saved'); }, 1200);
         var row = cell.closest('tr');
