@@ -78,7 +78,17 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 - **My Profile → Settings** groups account preferences into Appearance, Accessibility, Experience, Performance, and Session cards.
 - Change multiple switches, then choose **Save Changes**. **Discard Changes** restores the saved values; unsuccessful saves keep your selections for retry. Saving reloads the page to apply preferences.
 - Display layout applies immediately to the current device only. Theme changes are saved separately in **Themes**.
-- Admin-only backup and recovery tools appear in a separate card; destructive backup restoration is collapsed until opened and still requires confirmation.
+- Admin-only backup and recovery tools appear in a separate Recovery Center. Uploaded backups must pass validation and impact preview before confirmed replacement.
+
+### Backup & Recovery
+- Administrators can open **My Profile → Settings → Recovery Center** to create and download persisted snapshots, inspect recent recovery activity, and search/recover deleted requests.
+- **Validate & Preview** checks uploaded JSON backups before any replacement. Review current versus incoming record counts, then type **RESTORE** and confirm to proceed. Preview authorization expires and cannot be reused after a completed restore.
+- A verified safety snapshot is saved before replacement. Restoration runs transactionally, verifies results, and resets database sequences; failed replacement leaves current data intact and retains the safety snapshot.
+- New snapshots use a versioned format with integrity metadata. Checksums detect accidental corruption, not authenticity. Use only trusted backups.
+- Application snapshots exclude user accounts, credentials, and media file contents. Existing users referenced by records must still exist. Legacy backups have narrower coverage and may be rejected when replacement would cascade into uncovered records.
+- Stored snapshots share the application database. Download and protect off-host copies separately; scheduling, automatic retention, and external storage are not configured by this feature.
+- Deployment requires `python manage.py migrate` to create snapshot, preview-token, and recovery-event tables, followed by `python manage.py collectstatic --noinput`. Recovery locks related tables during snapshot validation and restoration; large operations can temporarily delay other writes. The default backup/upload limit is 25 MB (`BACKUP_MAX_BYTES` in Django settings).
+- Validation uses a transactional restore rehearsal that is rolled back, so invalid relationships or constraints are discovered without committing hub changes. Both manual and pre-restore safety snapshots must pass this rehearsal.
 
 ### Account Themes
 - Open **My Profile → Themes** (also available from the profile banner or Settings).

@@ -13,15 +13,10 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import TemplateView, UpdateView
 import json
-from collections import defaultdict
-from datetime import datetime, timezone as dt_timezone
-from django.apps import apps
-from django.core import serializers as django_serializers
-from django.db import transaction
 
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
-from hub.mixins import AdminRequiredMixin
+from .recovery_views import BackupDataView, RestoreDataView, recovery_context
 
 from .forms import (
     ProfileForm,
@@ -69,12 +64,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         ctx = super().get_context_data(**kwargs)
         ctx.setdefault("theme_form", ThemeForm(instance=self.request.user))
         if self.request.user.role == User.Roles.ADMIN:
-            from hub.models import Request as HubRequest
-            ctx["deleted_requests"] = (
-                HubRequest.all_objects.filter(is_deleted=True)
-                .select_related("requestor", "engineer", "account")
-                .order_by("-deleted_at")
-            )
+            ctx.update(recovery_context(self.request))
         return ctx
 
     def post(self, request, *args, **kwargs):
@@ -147,99 +137,6 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 # ── Backup / Restore ─────────────────────────────────────────────────────
 
 # Models included in backup (order = save order on restore; delete reversed)
-_BACKUP_MODEL_LABELS = [
-    "hub.account",
-    "hub.request",
-    "hub.sqrsubmission",
-    "hub.requestcommunication",
-    "hub.engineeractivitylog",
-    "hub.statuslog",
-]
-
-
-class BackupDataView(AdminRequiredMixin, View):
-    """GET → download a JSON backup of all hub data."""
-
-    required_role = User.Roles.ADMIN
-
-    def get(self, request):
-        all_objects = []
-        for label in _BACKUP_MODEL_LABELS:
-            model = apps.get_model(label)
-            all_objects.extend(model.objects.all())
-
-        data_json = django_serializers.serialize("json", all_objects, indent=2)
-        payload = {
-            "backup_version": "1",
-            "created_at": datetime.now(dt_timezone.utc).isoformat(),
-            "app": "request-hub",
-            "data": json.loads(data_json),
-        }
-
-        filename = f"request-hub-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-        response = HttpResponse(
-            json.dumps(payload, indent=2),
-            content_type="application/json",
-        )
-        response["Content-Disposition"] = f'attachment; filename="{_safe_download_filename(filename)}"'
-        return response
-
-
-class RestoreDataView(AdminRequiredMixin, View):
-    """POST → restore hub data from an uploaded JSON backup file."""
-
-    required_role = User.Roles.ADMIN
-    _BACK_URL = reverse_lazy("accounts:update")
-
-    def _back(self, request, error=None, success=None):
-        if error:
-            messages.error(request, error)
-        if success:
-            messages.success(request, success)
-        return redirect(str(self._BACK_URL) + "#backup")
-
-    def post(self, request):
-        if request.POST.get("confirm_restore") != "1":
-            return self._back(request, error="You must tick the confirmation checkbox before restoring.")
-
-        backup_file = request.FILES.get("backup_file")
-        if not backup_file:
-            return self._back(request, error="No backup file was uploaded.")
-
-        try:
-            raw = backup_file.read().decode("utf-8")
-            payload = json.loads(raw)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            return self._back(request, error=f"Could not read backup file: {exc}")
-
-        if payload.get("app") != "request-hub" or "data" not in payload:
-            return self._back(request, error="This does not appear to be a valid Request Hub backup file.")
-
-        data_json = json.dumps(payload["data"])
-
-        try:
-            with transaction.atomic():
-                # Delete children first to avoid FK constraint violations
-                for label in reversed(_BACKUP_MODEL_LABELS):
-                    apps.get_model(label).objects.all().delete()
-
-                # Deserialize and group by model so we can save in dependency order
-                grouped = defaultdict(list)
-                for obj in django_serializers.deserialize("json", data_json):
-                    lbl = f"{obj.object._meta.app_label}.{obj.object._meta.model_name}"
-                    grouped[lbl].append(obj)
-
-                for label in _BACKUP_MODEL_LABELS:
-                    for obj in grouped.get(label, []):
-                        obj.save()
-
-        except Exception as exc:  # noqa: BLE001
-            return self._back(request, error=f"Restore failed: {exc}")
-
-        created_at = payload.get("created_at", "unknown date")
-        return self._back(request, success=f"Data restored successfully from backup dated {created_at}.")
-
-
 class LandingView(TemplateView):
 
     def dispatch(self, request, *args, **kwargs):

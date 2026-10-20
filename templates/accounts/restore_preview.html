@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Restore Preview · Request Hub{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=1">{% endblock %}
+{% block content %}
+<div class="glass-card profile-card recovery-panel mx-auto" style="max-width:1000px">
+    <div class="recovery-header"><div><h1 class="h4">Restore Preview</h1><p class="recovery-muted">Review the backup before replacing current hub records.</p></div><a class="btn btn-outline-secondary" href="{% url 'accounts:update' %}#backup">Back to Recovery Center</a></div>
+    {% if validation_error %}<div class="alert alert-danger" role="alert" tabindex="-1" id="validation-error"><h2 class="h6">Backup could not be validated</h2><p>{{ validation_error }}</p><a href="{% url 'accounts:update' %}#backup">Choose another backup file</a></div>{% else %}
+    <div class="recovery-notice">Validation passed. No hub records have been changed. This preview expires; the backup and dependencies will be checked again before restoration.</div>
+    <p class="recovery-muted">Backup date: {{ report.created_at }} · Format: {{ report.version }}</p>
+    {% for warning in report.warnings %}<p class="recovery-notice">{{ warning }}</p>{% endfor %}
+    <div class="table-responsive"><table class="recovery-table"><caption>Record counts before and after replacement</caption><thead><tr><th scope="col">Record type</th><th scope="col">Current</th><th scope="col">In backup</th></tr></thead><tbody>{% for row in report.rows %}<tr><th scope="row">{{ row.label }}</th><td>{{ row.current }}</td><td>{{ row.incoming }}</td></tr>{% endfor %}</tbody></table></div>
+    <details class="settings-danger-zone recovery-section" open><summary>Replace current hub data</summary>
+        <p class="recovery-notice recovery-danger">All records within this backup's coverage will be replaced. A verified safety snapshot must be saved before restoration. Users and media contents are not restored.</p>
+        <form method="post" action="{% url 'accounts:restore' %}" id="restore-confirm-form">
+            {% csrf_token %}<input type="hidden" name="preview_token" value="{{ preview_token }}">
+            <div class="mb-3"><label for="confirmation-phrase" class="form-label">Type RESTORE to confirm replacement</label><input class="form-control" type="text" name="confirmation_phrase" id="confirmation-phrase" required autocomplete="off" pattern="RESTORE"></div>
+            <div class="form-check mb-3"><input type="checkbox" class="form-check-input" name="confirm_restore" value="1" id="confirm_restore" required><label class="form-check-label" for="confirm_restore">I understand current covered records will be replaced with this backup.</label></div>
+            <button type="submit" class="btn btn-danger" id="restore-submit-btn">Create Safety Snapshot &amp; Restore</button>
+            <p class="recovery-progress mt-3" id="restore-progress" role="status" hidden>Creating safety snapshot and restoring… Keep this page open.</p>
+        </form>
+    </details>
+    {% endif %}
+</div>
+<script>
+(function () {
+    const error = document.getElementById('validation-error');
+    if (error) error.focus();
+    const form = document.getElementById('restore-confirm-form');
+    if (form) form.addEventListener('submit', () => { document.getElementById('restore-submit-btn').disabled = true; document.getElementById('restore-progress').hidden = false; });
+}());
+</script>
+{% endblock %}

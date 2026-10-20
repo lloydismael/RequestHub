@@ -158,8 +158,8 @@ class ProfileSmokeTests(TestCase):
             self.assertContains(response, f'aria-describedby="toggle_{name}-help"')
         self.assertContains(response, 'id="settings-discard-btn"')
         self.assertContains(response, "This device only")
-        self.assertContains(response, '<details class="settings-danger-zone">')
-        self.assertContains(response, 'id="confirm_restore"')
+        self.assertContains(response, "Recovery Center")
+        self.assertContains(response, "Validate &amp; Preview")
         self.user.role = User.Roles.REQUESTOR
         self.user.save(update_fields=["role"])
         response = self.client.get(reverse("accounts:update"))

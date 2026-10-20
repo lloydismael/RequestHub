@@ -29,6 +29,42 @@ class StoredFile(models.Model):
         return self.name
 
 
+class BackupSnapshot(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey("User", null=True, on_delete=models.SET_NULL, related_name="backup_snapshots")
+    reason = models.CharField(max_length=255, default="Manual backup")
+    payload = models.JSONField()
+    size = models.PositiveBigIntegerField()
+    checksum = models.CharField(max_length=64)
+    counts = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default="ready")
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class RecoveryEvent(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    actor = models.ForeignKey("User", null=True, on_delete=models.SET_NULL, related_name="recovery_events")
+    snapshot = models.ForeignKey(BackupSnapshot, null=True, blank=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=20)
+    outcome = models.CharField(max_length=20)
+    details = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class RecoveryPreview(models.Model):
+    token = models.UUIDField(default=uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    created_by = models.ForeignKey("User", on_delete=models.CASCADE)
+    snapshot = models.ForeignKey(BackupSnapshot, null=True, blank=True, on_delete=models.SET_NULL)
+    payload = models.JSONField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+
 class User(AbstractUser):
     class Roles(models.TextChoices):
         REQUESTOR = "requestor", "Requestor"

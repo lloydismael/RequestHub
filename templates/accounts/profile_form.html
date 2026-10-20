@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load form_customization static %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=1"><link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=1">{% endblock %}
 {% block title %}My Profile · Request Hub{% endblock %}
 {% block body_class %}profile-page-shell{% endblock %}
 {% block content %}
@@ -267,107 +267,7 @@
         <div class="settings-admin-wrap">
             {# ── Backup & Restore settings (admin only) ─────────────────────────── #}
             {% if request.user.role == 'admin' %}
-            <div class="glass-card profile-card settings-admin-card" id="profile-panel-backup">
-            <h2 class="profile-card__title"><i class="bi bi-archive-fill me-2"></i>Backup &amp; Restore</h2>
-            <p class="text-muted small mb-4">
-                Download a complete snapshot of all requests, SQR submissions, and related records.
-                Use the restore feature to recover data from a previous backup.
-                <strong class="text-warning">Restoring will permanently overwrite all current hub data.</strong>
-            </p>
-
-            {# ── Download Backup ── #}
-            <div class="list-group list-group-flush mb-4">
-                <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3"
-                     style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                    <div>
-                        <div class="fw-semibold"><i class="bi bi-download me-2 text-info"></i>Download Backup</div>
-                        <div class="text-muted small mt-1">
-                            Exports all Requests, SQR Submissions, Activity Logs, and Communications as a single JSON file.
-                            User accounts are <em>not</em> included.
-                        </div>
-                    </div>
-                    <a href="{% url 'accounts:backup' %}" class="btn btn-sm btn-outline-info text-nowrap">
-                        <i class="bi bi-cloud-download me-1"></i>Download
-                    </a>
-                </div>
-            </div>
-
-            {# ── Restore ── #}
-            <details class="settings-danger-zone">
-                <summary><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Restore from Backup <span class="settings-danger-zone__badge">Destructive action</span></summary>
-                <div class="settings-danger-zone__content">
-                <p class="text-muted small mb-3">
-                    Select a <code>.json</code> file previously downloaded from this page.
-                    All existing hub data will be <strong>deleted</strong> and replaced with the backup contents.
-                    This action <strong>cannot be undone</strong>.
-                </p>
-                <form method="post" enctype="multipart/form-data" action="{% url 'accounts:restore' %}" id="restore-form">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="backup_file" class="form-label small fw-semibold">Backup File (.json)</label>
-                        <input type="file" class="form-control form-control-sm" id="backup_file" name="backup_file" accept=".json" required>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="confirm_restore" name="confirm_restore" value="1" required>
-                        <label class="form-check-label small text-danger fw-semibold" for="confirm_restore">
-                            I understand this will permanently overwrite all current data and cannot be undone.
-                        </label>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-danger" id="restore-submit-btn" disabled>
-                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore Data
-                    </button>
-                </form>
-                </div>
-            </details>
-
-            {# ── Restore Deleted Requests ── #}
-            <hr class="my-4" style="border-color:rgba(255,255,255,0.08);">
-            <div class="fw-semibold mb-1"><i class="bi bi-recycle me-2 text-success"></i>Restore Deleted Requests</div>
-            <p class="text-muted small mb-3">
-                Requests soft-deleted from the dashboard are listed below and can be recovered at any time.
-            </p>
-            {% if deleted_requests %}
-            <div class="table-responsive rounded border" style="border-color:rgba(255,255,255,0.1)!important;">
-                <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
-                    <thead style="background:rgba(99,102,241,0.10);">
-                        <tr>
-                            <th class="ps-3">Ref #</th>
-                            <th>Customer</th>
-                            <th>Engagement</th>
-                            <th>Engineer</th>
-                            <th>Status</th>
-                            <th>Deleted</th>
-                            <th class="pe-3"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for req in deleted_requests %}
-                        <tr>
-                            <td class="ps-3 fw-semibold">{{ req.reference_code }}</td>
-                            <td>{{ req.account }}</td>
-                            <td>{{ req.get_engagement_type_display }}</td>
-                            <td>{{ req.engineer.get_full_name|default:req.engineer.username|default:"—" }}</td>
-                            <td><span class="badge bg-secondary">{{ req.get_status_display }}</span></td>
-                            <td class="text-muted">{{ req.deleted_at|date:"M d, Y H:i"|default:"—" }}</td>
-                            <td class="pe-3">
-                                <form method="post" action="{% url 'hub:request-restore' req.pk %}" class="d-inline">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2"
-                                            style="font-size:0.78rem;"
-                                            onclick="return confirm('Restore {{ req.reference_code }}?')">
-                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="text-muted small fst-italic mb-0">No deleted requests to restore.</p>
-            {% endif %}
-            </div>
+            {% include "accounts/_recovery_center.html" %}
             {% endif %}
         </div>
 
@@ -402,14 +302,12 @@
         if (backupSection) backupSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    // Restore form: enable submit only when checkbox is ticked
-    const confirmChk = document.getElementById('confirm_restore');
-    const restoreBtn = document.getElementById('restore-submit-btn');
-    if (confirmChk && restoreBtn) {
-        confirmChk.addEventListener('change', () => {
-            restoreBtn.disabled = !confirmChk.checked;
+    document.querySelectorAll('[data-recovery-submit]').forEach(form => {
+        form.addEventListener('submit', () => {
+            form.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = true; });
+            document.getElementById('recovery-progress').hidden = false;
         });
-    }
+    });
 
     const bannerEditBtn = document.getElementById('banner-edit-btn');
     if (bannerEditBtn) {
