@@ -11,7 +11,7 @@
 Coordinate engineering work, enforce SLA timelines, and gain operational visibility all from a single web portal.
 
 [![Docker](https://img.shields.io/badge/Docker-lloydismael12%2Frequest--hub-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/lloydismael12/request-hub)
-[![Latest Tag](https://img.shields.io/badge/Latest-v50.7-0ea5e9)](https://hub.docker.com/r/lloydismael12/request-hub/tags)
+[![Latest Tag](https://img.shields.io/badge/Latest-v51.9-0ea5e9)](https://hub.docker.com/r/lloydismael12/request-hub/tags)
 [![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Azure-336791?logo=postgresql)](https://azure.microsoft.com/en-us/products/postgresql/)
@@ -21,12 +21,16 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 ---
 
+## Admin Form Editor
+
+Admin accounts can open **Management → Form Editor** to save and publish form presentation and custom fields, preview changes, and restore prior versions. Core validation and credential controls remain protected. See the [usage and coverage guide](docs/form-editor.md).
+
 ## Latest Release Snapshot
 
-- **Current image tag:** `lloydismael12/request-hub:v50.7`
-- **App version shown in profile:** `v50.7`
+- **Current image tag:** `lloydismael12/request-hub:v51.9`
+- **App version shown in profile:** `v51.9`
 - **Latest update included:**
-      - Mobile view improvements on authenticated pages. Immutable tag only — do not retag `latest`.
+      - Admin form editor and activity-log initialization fix, including current workspace updates. Immutable tag only — do not retag `latest`.
 
 ---
 
@@ -63,12 +67,34 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 | 🛠️ **Manage Request** | Admin/PM form for assigning engineers, changing status, and writing updates |
 | 📈 **Reports Operational** | Charts for requestor volume, engineer load, engagement types, product categories |
 | ⏱️ **Reports Activity** | Billable vs non-billable hours, location mix, engineer hour breakdown |
-| 👤 **Profile** | User profile page with avatar, banner gradient, and contact details |
+| 👤 **Profile** | User profile page with avatar, account-wide themes with banner gradients, and contact details |
 | 🔔 **Notifications** | In-app notification center for assignments and workflow events |
 
 ---
 
 ## Features
+
+### Personal Settings
+- **My Profile → Settings** groups account preferences into Appearance, Accessibility, Experience, Performance, and Session cards.
+- Change multiple switches, then choose **Save Changes**. **Discard Changes** restores the saved values; unsuccessful saves keep your selections for retry. Saving reloads the page to apply preferences.
+- Display layout applies immediately to the current device only. Theme changes are saved separately in **Themes**.
+- Admin-only backup and recovery tools appear in a separate Recovery Center. Uploaded backups must pass validation and impact preview before confirmed replacement.
+
+### Backup & Recovery
+- Administrators can open **My Profile → Settings → Recovery Center** to create and download persisted snapshots, inspect recent recovery activity, and search/recover deleted requests.
+- **Validate & Preview** checks uploaded JSON backups before any replacement. Review current versus incoming record counts, then type **RESTORE** and confirm to proceed. Preview authorization expires and cannot be reused after a completed restore.
+- A verified safety snapshot is saved before replacement. Restoration runs transactionally, verifies results, and resets database sequences; failed replacement leaves current data intact and retains the safety snapshot.
+- New snapshots use a versioned format with integrity metadata. Checksums detect accidental corruption, not authenticity. Use only trusted backups.
+- Application snapshots exclude user accounts, credentials, and media file contents. Existing users referenced by records must still exist. Legacy backups have narrower coverage and may be rejected when replacement would cascade into uncovered records.
+- Stored snapshots share the application database. Download and protect off-host copies separately; scheduling, automatic retention, and external storage are not configured by this feature.
+- Deployment requires `python manage.py migrate` to create snapshot, preview-token, and recovery-event tables, followed by `python manage.py collectstatic --noinput`. Recovery locks related tables during snapshot validation and restoration; large operations can temporarily delay other writes. The default backup/upload limit is 25 MB (`BACKUP_MAX_BYTES` in Django settings).
+- Validation uses a transactional restore rehearsal that is rolled back, so invalid relationships or constraints are discovered without committing hub changes. Both manual and pre-restore safety snapshots must pass this rehearsal.
+
+### Account Themes
+- Open **My Profile → Themes** (also available from the profile banner or Settings).
+- Choose Blue, Sunset, Forest, Crimson, Slate, Aurora, Rose, or Teal using mouse or keyboard. Preview updates buttons, highlights, and the profile banner; **Cancel preview** restores the saved theme.
+- **Apply Theme** saves only your account's theme, independently of profile details and settings, and makes it available across devices. The existing light/dark toggle remains unchanged.
+- Existing banner selections become account themes using the existing `banner_gradient` preference; no database migration is needed.
 
 ### 📝 Request Management
 - Create requests with reference codes, priority (Medium / High), engagement type, and product category
@@ -338,7 +364,7 @@ Open `http://127.0.0.1:8000/`
 ### Pull and run from Docker Hub
 
 ```powershell
-docker run --rm -p 127.0.0.1:8000:8000 --env-file .env lloydismael12/request-hub:v50.7
+docker run --rm -p 127.0.0.1:8000:8000 --env-file .env lloydismael12/request-hub:v51.9
 ```
 
 ### Build locally
@@ -346,15 +372,15 @@ docker run --rm -p 127.0.0.1:8000:8000 --env-file .env lloydismael12/request-hub
 ```powershell
 $containers = docker ps --format "{{.ID}} {{.Ports}}" | Where-Object { $_ -match "0\.0\.0\.0:8000->8000/tcp|:::8000->8000/tcp" }
 $containers | ForEach-Object { docker rm -f (($_ -split ' ')[0]) }
-docker build --pull --no-cache --build-arg APP_VERSION=v50.7 -t lloydismael12/request-hub:v50.7 .
-docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -e APP_VERSION=v50.7 lloydismael12/request-hub:v50.7
+docker build --pull --no-cache --build-arg APP_VERSION=v51.9 -t lloydismael12/request-hub:v51.9 .
+docker run --rm -p 127.0.0.1:8000:8000 --env-file .env -e APP_VERSION=v51.9 lloydismael12/request-hub:v51.9
 ```
 
 ### Push to Docker Hub
 
 ```powershell
-docker push lloydismael12/request-hub:v50.7
-# Do not retag or push latest until CVE scans on v50.7 are clean.
+docker push lloydismael12/request-hub:v51.9
+# Do not retag or push latest until CVE scans on v51.9 are clean.
 ```
 
 ### Compose (with local PostgreSQL)
@@ -375,13 +401,17 @@ docker compose exec web python manage.py migrate
 | `DJANGO_SECRET_KEY` | Django secret key. Required when `DJANGO_DEBUG` is `False`; must not be empty or `insecure-development-key`. |
 | `DJANGO_DEBUG` | `True` for local HTTP development, `False` for production (fail-closed). |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed host names |
+| `DJANGO_PRIMARY_DOMAIN` | Canonical domain(s), comma-separated; auto-added to `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` (default `esgrequesthub.com`) |
+| `DJANGO_PUBLIC_BASE_URL` | Absolute base URL for assignment, SQR notification, and closing email links, independent of the incoming host (default `https://esgrequesthub.com`) |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins, e.g. `https://esgrequesthub.com` |
+| `DJANGO_DEFAULT_FROM_EMAIL` | Default from address (default `ESG Request Hub <no-reply@esgrequesthub.com>`) |
 | `DB_NAME` | PostgreSQL database name |
 | `DB_USER` | Database username. Required when `DJANGO_DEBUG` is `False`. |
 | `DB_PASSWORD` | Database password. Required when `DJANGO_DEBUG` is `False`. |
 | `DB_HOST` | Database host (e.g. Azure PostgreSQL hostname). Required when `DJANGO_DEBUG` is `False`. |
 | `DB_PORT` | Database port (default `5432`) |
 | `ACS_EMAIL_CONNECTION_STRING` | Azure Communication Services connection string |
-| `ACS_EMAIL_SENDER` | ACS sender address |
+| `ACS_EMAIL_SENDER` | ACS sender address (verified sender `DoNotReply@esgrequesthub.com`) |
 | `PHILDATA_TENANT_ID` | Microsoft Entra tenant ID |
 | `PHILDATA_CLIENT_ID` | App registration client ID |
 | `PHILDATA_CLIENT_SECRET` | App registration client secret |
@@ -445,7 +475,7 @@ Full Azure App Service container deployment guide:
 [docs/azure-app-service-deployment.md](docs/azure-app-service-deployment.md)
 
 **Key steps:**
-1. Push image to Docker Hub (`lloydismael12/request-hub:v50.7` or your next release tag). Do not retag `latest` until scans are clean.
+1. Push image to Docker Hub (`lloydismael12/request-hub:v51.9` or your next release tag). Do not retag `latest` until scans are clean.
 2. Set App Service container to the target tag
 3. Configure all environment variables in App Service Configuration (`DJANGO_SECRET_KEY`, `DB_HOST`, `DB_USER`, and `DB_PASSWORD` are required when `DJANGO_DEBUG=False`)
 4. Ensure Azure PostgreSQL Flexible Server firewall allows the App Service outbound IPs
@@ -486,5 +516,3 @@ Built and maintained by **Phil-Data Business Systems Inc.**
 Docker Hub [`lloydismael12/request-hub`](https://hub.docker.com/r/lloydismael12/request-hub)
 
 </div>
-
-

@@ -26,7 +26,9 @@ from .views import (
     ReportExportView,
     SqrListView,
     SqrReportsDataView,
+    SqrPerformanceDataView,
     SqrDeliveryUpdateView,
+    SqrPerformanceUpdateView,
     SqrToRevenueView,
     SqrEngineerDeleteView,
     SqrEngineerUpdateView,
@@ -49,6 +51,11 @@ from .views import (
     UserManagementView,
     RequestCollaborativeManageView,
     RequestLifecycleAcknowledgeView,
+)
+
+from .form_editor_views import (
+    FormEditorActionView, FormEditorCatalogView, FormEditorDetailView,
+    FormEditorHistoryView, FormEditorPreviewView, FormEditorPeopleView,
 )
 
 app_name = "hub"
@@ -79,6 +86,7 @@ urlpatterns = [
     path("notifications/<int:pk>/delete/", NotificationDeleteView.as_view(), name="notification-delete"),
     path("notifications/mark-all-read/", NotificationMarkAllReadView.as_view(), name="notification-mark-all-read"),
     path("sqr/", SqrListView.as_view(), name="sqr"),
+    path("sqr/performance-data/", SqrPerformanceDataView.as_view(), name="sqr-performance-data"),
     path("sqr/reports/data/", SqrReportsDataView.as_view(), name="sqr-reports-data"),
     path("sqr/export/", SqrExportView.as_view(), name="sqr-export"),
     path("sqr/import/", SqrImportView.as_view(), name="sqr-import"),
@@ -92,6 +100,7 @@ urlpatterns = [
     path("sqr/<int:pk>/revenue-tracker/", SqrRevenueTrackerUpdateView.as_view(), name="sqr-revenue-update"),
     path("sqr/<int:pk>/proposal/", SqrProposalUpdateView.as_view(), name="sqr-proposal-update"),
     path("sqr/<int:pk>/delivery/", SqrDeliveryUpdateView.as_view(), name="sqr-delivery-update"),
+    path("sqr/<int:pk>/performance/", SqrPerformanceUpdateView.as_view(), name="sqr-performance-update"),
     path("sqr/<int:pk>/to-revenue/", SqrToRevenueView.as_view(), name="sqr-to-revenue"),
     path("sqr/<int:pk>/revenue/", SqrRevenueUpdateView.as_view(), name="sqr-revenue-stage-update"),
     path("sqr/<int:pk>/teams/", SqrTeamsRedirectView.as_view(), name="sqr-teams"),
@@ -100,6 +109,15 @@ urlpatterns = [
     path("sqr/<int:pk>/approval-email/eml/", SqrApprovalEmlDownloadView.as_view(), name="sqr-approval-email-eml"),
     path("sqr/<int:pk>/review/", SqrReviewUpdateView.as_view(), name="sqr-review"),
     path("management/", UserManagementView.as_view(), name="management"),
+    path("management/forms/", FormEditorCatalogView.as_view(), name="form-editor"),
+    path("management/forms/<slug:key>/", FormEditorDetailView.as_view(), name="form-editor-detail"),
+    path("management/forms/<slug:key>/history/", FormEditorHistoryView.as_view(), name="form-editor-history"),
+    path("management/forms/<slug:key>/people/", FormEditorPeopleView.as_view(), name="form-editor-people"),
+    path("management/forms/<slug:key>/preview/", FormEditorPreviewView.as_view(), name="form-editor-preview"),
+    path("management/forms/<slug:key>/draft/", FormEditorActionView.as_view(action="draft"), name="form-editor-draft"),
+    path("management/forms/<slug:key>/publish/", FormEditorActionView.as_view(action="publish"), name="form-editor-publish"),
+    path("management/forms/<slug:key>/rollback/", FormEditorActionView.as_view(action="rollback"), name="form-editor-rollback"),
+    path("management/forms/<slug:key>/reset/", FormEditorActionView.as_view(action="reset"), name="form-editor-reset"),
     path("users/<int:pk>/manage/", UserEditView.as_view(), name="user-edit"),
     path("reports/", RequestReportView.as_view(), name="report"),
     path("reports/export/", ReportExportView.as_view(), name="report-export"),

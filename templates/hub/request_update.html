@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% block body_class %}request-form-page{% endblock %}
 {% load static %}
 {% block title %}Edit Request · Request Hub{% endblock %}
@@ -16,10 +17,11 @@
                         {% endfor %}
                     </datalist>
                 {% endif %}
-                {% for field in form %}
+                {% form_editor_token form %}
+                {% for field in form.visible_fields %}
                     {% if field.name == 'priority' %}
-                        <div class="mb-3" data-priority-group{% if form.engagement_type.value != 'support' %} style="display:none;"{% endif %}>
-                            <label class="form-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                        <div class="mb-3" data-priority-group{% if form.engagement_type.value != 'support' %} style="display:none;"{% endif %} data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             {{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                             {% if field.errors %}
@@ -27,8 +29,8 @@
                             {% endif %}
                         </div>
                     {% else %}
-                        <div class="mb-3">
-                            <label class="form-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                        <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             {{ field }}
                             {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                             {% if field.errors %}

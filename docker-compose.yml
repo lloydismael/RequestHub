@@ -2,11 +2,11 @@ version: "3.9"
 
 services:
   web:
-    image: lloydismael12/request-hub:v50.7
+    image: lloydismael12/request-hub:v51.9
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      - APP_VERSION=v50.7
+      - APP_VERSION=v51.9
     # Host-only secrets. .env is gitignored and dockerignored; never copy it into the image.
     env_file:
       - .env

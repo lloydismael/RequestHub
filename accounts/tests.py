@@ -6,6 +6,7 @@ from django.core.cache import cache
 from django.core import serializers as django_serializers
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
+from django.templatetags.static import static
 from django.urls import reverse
 
 from accounts.models import StoredFile, User
@@ -50,8 +51,7 @@ class LoginPageTests(TestCase):
 
         self.assertContains(response, 'id="request-hub-page"')
         self.assertContains(response, 'class="request-hub-page"')
-        self.assertContains(response, "/static/css/app.")
-        self.assertContains(response, "css?v=22")
+        self.assertContains(response, static("css/app.css") + "?v=")
         self.assertContains(response, "/static/js/page-transitions.")
         self.assertContains(response, "js?v=1")
         self.assertContains(response, "reqHubPageTransitionDirection")
@@ -71,8 +71,7 @@ class LoginPageTests(TestCase):
     def test_login_loads_shared_semantic_theme_stylesheet(self):
         response = self.client.get(reverse("login"))
 
-        self.assertContains(response, "/static/css/liquid-glass.")
-        self.assertContains(response, "css?v=12")
+        self.assertContains(response, static("css/liquid-glass.css") + "?v=")
 
     def test_anonymous_landing_still_redirects_to_login(self):
         response = self.client.get(reverse("landing"))
@@ -93,6 +92,138 @@ class AccountSettingsTests(TestCase):
         user = User.objects.create_user(username="chatbot_default_user", password="TestPass123!")
 
         self.assertFalse(user.show_chatbot)
+
+
+class ProfileSmokeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="smoke-profile", password="Example-password-937!",
+            role=User.Roles.ADMIN, must_change_password=False,
+        )
+        self.client.force_login(self.user)
+
+    def test_saved_profile_renders_for_every_role(self):
+        for role in User.Roles.values:
+            with self.subTest(role=role):
+                self.user.role = role
+                self.user.save(update_fields=["role"])
+                response = self.client.get(reverse("accounts:update"))
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(response, "accounts/profile_form.html")
+                self.assertIs(type(response.context["form"].instance), User)
+
+    def test_saved_profile_post_and_reopen(self):
+        opened = self.client.get(reverse("accounts:update"))
+        response = self.client.post(reverse("accounts:update"), {
+            "first_name": "Smoke", "last_name": "Profile", "email": "smoke@example.com",
+            "phone_number": "", "department": "ESS", "banner_gradient": "blue",
+            "_form_version": opened.context["form"].initial["_form_version"],
+        })
+        self.assertRedirects(response, reverse("accounts:update"))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Smoke")
+        self.assertEqual(self.user.department, "ESS")
+
+    def test_profile_settings_persist(self):
+        response = self.client.post(reverse("accounts:update"), {
+            "save_settings": "1", "pref_reduce_motion": "1", "pref_compact_tables": "1",
+        })
+        self.assertRedirects(response, reverse("accounts:update") + "#settings")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.pref_reduce_motion)
+        self.assertTrue(self.user.pref_compact_tables)
+
+    def test_settings_json_save_persists_only_preferences(self):
+        names = ["pref_compact_tables", "pref_large_text", "pref_reduce_effects",
+                 "pref_reduce_motion", "show_chatbot", "show_login_banner", "idle_timeout_enabled"]
+        for enabled in [True, False]:
+            with self.subTest(enabled=enabled):
+                data = {"save_settings": "1", "first_name": "Unchanged", "banner_gradient": "rose"}
+                if enabled:
+                    data.update({name: "1" for name in names})
+                response = self.client.post(reverse("accounts:update"), data, HTTP_ACCEPT="application/json")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {"message": "Settings saved."})
+                self.user.refresh_from_db()
+                for name in names:
+                    self.assertEqual(getattr(self.user, name), enabled)
+                self.assertEqual(self.user.first_name, "")
+                self.assertEqual(self.user.banner_gradient, "blue")
+
+    def test_settings_have_labels_and_separate_admin_tools(self):
+        response = self.client.get(reverse("accounts:update"))
+        for name in ["pref_compact_tables", "pref_large_text", "pref_reduce_effects",
+                     "pref_reduce_motion", "show_chatbot", "show_login_banner"]:
+            self.assertContains(response, f'for="toggle_{name}"')
+            self.assertContains(response, f'aria-describedby="toggle_{name}-help"')
+        self.assertContains(response, 'id="settings-discard-btn"')
+        self.assertContains(response, "This device only")
+        self.assertContains(response, "Recovery Center")
+        self.assertContains(response, "Validate &amp; Preview")
+        self.user.role = User.Roles.REQUESTOR
+        self.user.save(update_fields=["role"])
+        response = self.client.get(reverse("accounts:update"))
+        self.assertNotContains(response, 'id="restore-form"')
+        self.assertNotContains(response, 'id="profile-panel-backup"')
+
+    def test_themes_persist_for_every_role_without_changing_profile(self):
+        other = User.objects.create_user(username="other-theme", banner_gradient="blue")
+        for index, (theme, _) in enumerate(User.BANNER_GRADIENT_CHOICES):
+            role = User.Roles.values[index % len(User.Roles.values)]
+            with self.subTest(role=role, theme=theme):
+                self.user.role = role
+                self.user.save(update_fields=["role"])
+                response = self.client.post(reverse("accounts:update"), {
+                    "save_theme": "1", "banner_gradient": theme,
+                    "first_name": "Must not change", "show_chatbot": "1",
+                })
+                self.assertRedirects(response, reverse("accounts:update") + "#themes")
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.banner_gradient, theme)
+                self.assertEqual(self.user.first_name, "")
+                self.assertFalse(self.user.profile_completed)
+                self.assertFalse(self.user.show_chatbot)
+                reopened = self.client.get(reverse("accounts:update"))
+                self.assertContains(reopened, f'data-account-theme="{theme}"')
+                self.assertContains(reopened, "Apply Theme")
+                from django.templatetags.static import static
+                self.assertContains(reopened, static("css/account-themes.css"))
+        other.refresh_from_db()
+        self.assertEqual(other.banner_gradient, "blue")
+
+    def test_theme_validation_retains_saved_theme(self):
+        for value in ["invalid", "", "<script>"]:
+            with self.subTest(value=value):
+                response = self.client.post(reverse("accounts:update"), {
+                    "save_theme": "1", "banner_gradient": value,
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["theme_form"].errors)
+                self.assertContains(response, 'id="theme-errors"')
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.banner_gradient, "blue")
+
+    def test_legacy_banner_save_uses_account_theme(self):
+        response = self.client.post(reverse("accounts:update"), {
+            "save_banner": "1", "banner_gradient": "teal",
+        })
+        self.assertRedirects(response, reverse("accounts:update") + "#themes")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.banner_gradient, "teal")
+
+    def test_theme_picker_has_all_choices_and_native_radios(self):
+        response = self.client.get(reverse("accounts:update"))
+        for theme, label in User.BANNER_GRADIENT_CHOICES:
+            self.assertContains(response, f'data-account-theme="{theme}"')
+            self.assertContains(response, f'type="radio" name="banner_gradient" value="{theme}"')
+        self.assertNotContains(response, "Edit Banner")
+        self.assertNotContains(response, "Save Banner")
+
+    def test_anonymous_profile_redirects_to_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("accounts:update"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
 
 
 class SecretHygieneTests(TestCase):

@@ -1,0 +1,75 @@
+[data-account-theme="blue"] { --account-accent: #1d4ed8; --account-dark-accent: #93c5fd; --account-rgb: 29, 78, 216; --account-gradient: linear-gradient(120deg, #1d4ed8, #3b82f6, #6366f1); }
+[data-account-theme="sunset"] { --account-accent: #9a3412; --account-dark-accent: #fdba74; --account-rgb: 154, 52, 18; --account-gradient: linear-gradient(120deg, #f97316, #ec4899, #8b5cf6); }
+[data-account-theme="forest"] { --account-accent: #047857; --account-dark-accent: #6ee7b7; --account-rgb: 4, 120, 87; --account-gradient: linear-gradient(120deg, #065f46, #10b981, #3b82f6); }
+[data-account-theme="crimson"] { --account-accent: #b91c1c; --account-dark-accent: #fca5a5; --account-rgb: 185, 28, 28; --account-gradient: linear-gradient(120deg, #7f1d1d, #dc2626, #f97316); }
+[data-account-theme="slate"] { --account-accent: #334155; --account-dark-accent: #cbd5e1; --account-rgb: 51, 65, 85; --account-gradient: linear-gradient(120deg, #0f172a, #334155, #475569); }
+[data-account-theme="aurora"] { --account-accent: #6d28d9; --account-dark-accent: #c4b5fd; --account-rgb: 109, 40, 217; --account-gradient: linear-gradient(120deg, #1e1b4b, #7c3aed, #06b6d4); }
+[data-account-theme="rose"] { --account-accent: #be123c; --account-dark-accent: #fda4af; --account-rgb: 190, 18, 60; --account-gradient: linear-gradient(120deg, #881337, #f43f5e, #fb923c); }
+[data-account-theme="teal"] { --account-accent: #0f766e; --account-dark-accent: #5eead4; --account-rgb: 15, 118, 110; --account-gradient: linear-gradient(120deg, #134e4a, #0d9488, #3b82f6); }
+
+body.authenticated[data-account-theme] {
+    --brand-primary: var(--account-accent);
+    --lg-accent: var(--account-accent);
+    --lg-accent-deep: color-mix(in srgb, var(--account-accent) 85%, black);
+    --lg-row-hover: rgba(var(--account-rgb), .08);
+    --rh-focus-ring: rgba(var(--account-rgb), .35);
+    --bs-primary: var(--account-accent);
+    --bs-primary-rgb: var(--account-rgb);
+    --bs-link-color: var(--account-accent);
+    --bs-link-color-rgb: var(--account-rgb);
+    --bs-link-hover-color: var(--lg-accent-deep);
+}
+body.dark-mode.authenticated[data-account-theme] {
+    --lg-accent: var(--account-dark-accent);
+    --lg-accent-deep: var(--account-accent);
+    --bs-link-color: var(--account-dark-accent);
+    --bs-link-hover-color: var(--account-dark-accent);
+    --rh-focus-ring: color-mix(in srgb, var(--account-dark-accent) 45%, transparent);
+}
+body.authenticated[data-account-theme] .btn-primary {
+    --bs-btn-bg: var(--account-accent);
+    --bs-btn-border-color: var(--account-accent);
+    --bs-btn-hover-bg: var(--lg-accent-deep);
+    --bs-btn-hover-border-color: var(--lg-accent-deep);
+    --bs-btn-active-bg: var(--lg-accent-deep);
+    --bs-btn-active-border-color: var(--lg-accent-deep);
+    background: var(--account-accent) !important;
+    border-color: var(--account-accent) !important;
+    color: #fff !important;
+}
+body.authenticated[data-account-theme] .btn-primary:hover { background: color-mix(in srgb, var(--account-accent) 85%, black) !important; }
+body.authenticated[data-account-theme] .btn-outline-primary {
+    --bs-btn-color: var(--lg-accent);
+    --bs-btn-border-color: var(--lg-accent);
+    --bs-btn-hover-bg: var(--account-accent);
+    --bs-btn-hover-border-color: var(--account-accent);
+    --bs-btn-active-bg: var(--account-accent);
+    --bs-btn-active-border-color: var(--account-accent);
+}
+body.authenticated[data-account-theme] .text-primary { color: var(--lg-accent) !important; }
+body.authenticated[data-account-theme] .profile-tab--active {
+    color: var(--lg-accent) !important;
+    border-color: var(--lg-accent) !important;
+    background: rgba(var(--account-rgb), .12) !important;
+}
+body.authenticated[data-account-theme] .form-check-input:checked { background-color: var(--account-accent); border-color: var(--account-accent); }
+body.authenticated[data-account-theme] a:not(.btn):not(.nav-link):not(.navbar-brand):not(.nav-avatar-menu__item) { color: var(--lg-accent); }
+
+.account-theme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.account-theme-card { position: relative; display: block; min-width: 0; padding: .6rem; border: 2px solid var(--rh-border); border-radius: 1rem; background: var(--rh-surface-solid); color: var(--rh-text-primary); cursor: pointer; }
+.account-theme-card input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.account-theme-card:hover { border-color: var(--account-accent); }
+.account-theme-card:has(input:checked) { border-color: var(--account-accent); box-shadow: 0 0 0 1px var(--account-accent); }
+.account-theme-card:has(input:focus-visible) { outline: 3px solid var(--lg-accent); outline-offset: 4px; }
+.account-theme-card__preview { display: block; position: relative; height: 105px; border-radius: .6rem; overflow: hidden; background: #f1f5f9; }
+.account-theme-card__nav { display: block; height: 32px; background: var(--account-gradient); }
+.account-theme-card__lines { position: absolute; left: 12px; top: 46px; width: 48%; height: 6px; border-radius: 4px; background: #94a3b8; box-shadow: 0 12px 0 #cbd5e1; }
+.account-theme-card__button { position: absolute; left: 12px; bottom: 10px; width: 40%; height: 14px; background: var(--account-accent); border-radius: 4px; }
+.account-theme-card__footer { display: flex; justify-content: space-between; align-items: center; gap: .3rem; padding: .65rem .15rem .15rem; font-size: .85rem; font-weight: 600; flex-wrap: wrap; }
+.account-theme-card__selected { visibility: hidden; font-size: .7rem; color: var(--account-accent); }
+.account-theme-card:has(input:checked) .account-theme-card__selected { visibility: visible; }
+body.dark-mode .account-theme-card__selected { color: var(--account-dark-accent); }
+body.dark-mode .account-theme-card__preview { background: #1e293b; }
+body.dark-mode .account-theme-card__lines { background: #94a3b8; box-shadow: 0 12px 0 #475569; }
+@media (max-width: 900px) { .account-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 400px) { .account-theme-grid { gap: .6rem; } .account-theme-card { padding: .4rem; } }

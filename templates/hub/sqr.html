@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% load tz humanize static %}
 {% block title %}SQR &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=16">
+<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=18">
+{% if is_pm and active_sqr_tab != 'reports' %}
+<script src="{% static 'js/sqr-performance.js' %}?v=2" defer></script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -22,19 +26,19 @@
                             <i class="bi {% if active_sqr_tab == 'reports' %}bi-table{% else %}bi-bar-chart-line-fill{% endif %} me-1"></i>{% if active_sqr_tab == 'reports' %}To SQR Tracker{% else %}To Reports{% endif %}
                         </a>
                         {% if active_sqr_tab != 'reports' %}
-                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search">
+                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only>
                             <div class="mgmt-search-box sqr-toolbar-search-box" role="search" aria-label="Search SQR records">
                                 <i class="bi bi-search mgmt-search-icon"></i>
                                 <input type="text" id="sqr-header-search" class="mgmt-search-input" placeholder="Search SQR..." autocomplete="off" aria-label="Search SQR records">
                                 <span class="mgmt-result-badge" id="sqr-header-count-badge" role="status" aria-live="polite">0 total</span>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle">
+                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only>
                             <i class="bi bi-funnel-fill me-1"></i>Filter
                         </button>
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-outline-success lg-btn lg-btn--ghost" id="sqr-export-choice-btn">
-                            <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+                            <i class="bi bi-file-earmark-excel me-1"></i>Export Tracker / Reports
                         </button>
                     {% endif %}
                     {% if is_admin and sqr_import_form %}
@@ -55,12 +59,14 @@
                     <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="tracker" aria-pressed="true">
                         <i class="bi bi-table me-1"></i>SQR Tracker
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="esg" aria-pressed="false">
-                        <i class="bi bi-kanban me-1"></i>ESG Performance Tracker <span class="badge rounded-pill text-bg-warning ms-1">Prototype</span>
+                    {% if is_pm %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="performance" aria-pressed="false">
+                        <i class="bi bi-speedometer2 me-1"></i>Project Performance Tracking
                     </button>
+                    {% endif %}
                 </div>
             </div>
-            <div class="collapse" id="sqr-table-filter-panel">
+            <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only>
                 <div class="sqr-filter-toolbar">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                         <div>
@@ -179,7 +185,7 @@
             </div>
             {% endif %}
             {# Summary badges — clickable filters #}
-            <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-badge-filters"
+            <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-badge-filters" data-sqr-tracker-only
                  data-default-my-assigned="{% if default_my_assigned_filter %}1{% else %}0{% endif %}"
                  data-current-user-id="{{ sqr_current_user_id|default:'' }}">
                 <button type="button" class="badge bg-secondary-subtle text-secondary border border-secondary-subtle sqr-badge-filter" data-sqr-filter="">Total: {{ proposal_counts.total }}</button>
@@ -547,6 +553,10 @@
         {% comment %}No lg-enter here: animating/compositing a card that wraps
            the whole 43-column table stalls first paint.{% endcomment %}
         <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker">
+            <div id="sqr-pm-tracker-focus" class="sqr-pm-focus-notice" hidden>
+                <span id="sqr-pm-tracker-focus-label" role="status"></span>
+                <button type="button" id="sqr-pm-tracker-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
+            </div>
             <div class="sqr-tracker-wrap" tabindex="0" role="region" aria-label="SQR tracker table; scroll horizontally for more columns">
                 <table class="sqr-tracker table-hover">
                     <caption class="visually-hidden">Service Quotation Request tracker</caption>
@@ -1037,155 +1047,9 @@
                 </table>
             </div>
         </div>
-
-        {% comment %}ESG panel: content stays in an inert <template> until the ESG view
-           is first opened, so the full second table render is skipped on load.
-           The <template> is a SIBLING of the panel (not a child): the HTML parser
-           drops a hidden div that directly wraps a template containing a table,
-           so we keep them separate and hydrate on demand.{% endcomment %}
-        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="esg" hidden></div>
-        <template id="sqr-esg-content">
-            <div class="sqr-esg-note small mb-2">
-                <i class="bi bi-info-circle me-1"></i>
-                Display-only ESG Performance Tracker layout. Dash values represent columns from the reference tracker that are not stored in the current SQR schema.
-            </div>
-            <div class="sqr-tracker-wrap" tabindex="0" role="region" aria-label="ESG performance tracker table; scroll horizontally for more columns">
-                <table class="sqr-esg-table table-hover">
-                    <caption class="visually-hidden">ESG performance tracker</caption>
-                    <thead>
-                        <tr>
-                            <th class="sqr-esg-sticky-0">Account Name</th>
-                            <th class="sqr-esg-sticky-1 sqr-esg-sticky-border">Service Description</th>
-                            <th>Project Name</th>
-                            <th>SSE1</th>
-                            <th>SSE2</th>
-                            <th>SSE3</th>
-                            <th>Project?</th>
-                            <th>PM</th>
-                            <th>Status</th>
-                            <th>Start and Finish Dates</th>
-                            <th>% Complete</th>
-                            <th>Key Updates</th>
-                            <th>Active Risks/Issues</th>
-                            <th>Scope Status</th>
-                            <th>Schedule Status</th>
-                            <th>Budget Status</th>
-                            <th>Folder</th>
-                            <th>Quoted SSE hrs</th>
-                            <th>Billed SSE hrs</th>
-                            <th>Quoted PM hrs</th>
-                            <th>Billed PM hrs</th>
-                            <th>Project Management</th>
-                            <th>Deployment</th>
-                            <th>On-Call</th>
-                            <th>Total Revenue</th>
-                            <th>Revenue?</th>
-                            <th>SI Type</th>
-                            <th>SI Reference</th>
-                            <th>SI Date</th>
-                            <th>Remarks</th>
-                            <th class="text-center">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in proposal_submissions %}
-                        <tr class="{% if item.status == 'for_revision' %}sqr-row--revision {% endif %}{% if item.proposal_status == 'closed_lost' or item.proposal_status == 'closed_canceled' %}sqr-row--closed-lost{% endif %}"
-                            data-sqr-status="{{ item.status }}"
-                            data-sqr-proposal-status="{{ item.proposal_status|default:'' }}"
-                            data-sqr-ref="{{ item.reference_code|default:'' }}"
-                            data-sqr-customer="{{ item.customer_name|default:''|escapejs }}"
-                            data-sqr-group="{{ item.customer_company|default:''|escapejs }}"
-                            data-sqr-linked-request="{% if item.linked_request_id %}yes{% else %}no{% endif %}"
-                            data-sqr-approver-id="{{ item.pm_esg_reviewer_id|default:'' }}"
-                            data-sqr-assigned-pm="{% if item.assigned_pm %}{{ item.assigned_pm.get_full_name|default:item.assigned_pm.username|escapejs }}{% elif item.pm_esg_reviewer %}{{ item.pm_esg_reviewer.get_full_name|default:item.pm_esg_reviewer.username|escapejs }}{% else %}{% endif %}"
-                            data-sqr-assigned-pm-id="{{ item.assigned_pm_id|default:item.pm_esg_reviewer_id|default:'' }}"
-                            data-sqr-assigned-sse="{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username|escapejs }}{% else %}{% endif %}"
-                            data-sqr-overall-status="{{ item.overall_status|default:'' }}"
-                            data-sqr-health="{{ item.delivery_health|default:'' }}"
-                            data-sqr-revenue-declaration="{{ item.revenue_declaration|default:'' }}"
-                            data-sqr-revenue-source="{{ item.revenue_source|default:'' }}"
-                            data-sqr-revenue-status="{% if item.revenue_status %}{{ item.revenue_status }}{% elif item.revenue_date %}billed{% else %}not_yet_billed{% endif %}"
-                            data-sqr-created-at="{{ item.created_at|date:'Y-m-d' }}"
-                            data-sqr-total-price="{% if item.computed_total_price %}{{ item.computed_total_price }}{% elif item.quotation_total_price %}{{ item.quotation_total_price }}{% else %}0{% endif %}"
-                            data-engineer-email="{{ item.engineer.email|default:'' }}"
-                            data-pm-email="{{ item.pm_esg_reviewer.email|default:'' }}"
-                            data-engineer-name="{{ item.engineer.get_full_name|default:item.engineer.username|default:''|escapejs }}">
-                            <td class="sqr-esg-sticky-0 fw-semibold">{{ item.customer_name|default:"&ndash;" }}</td>
-                            <td class="sqr-esg-sticky-1 sqr-esg-sticky-border">{{ item.project_title|default:"&ndash;" }}</td>
-                            <td>{{ item.customer_name|default:"" }}{% if item.customer_name and item.project_title %} - {% endif %}{{ item.project_title|default:"&ndash;" }}</td>
-                            <td>{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username }}{% elif item.engineer %}{{ item.engineer.get_full_name|default:item.engineer.username }}{% else %}&ndash;{% endif %}</td>
-                            <td class="text-muted">&ndash;</td>
-                            <td class="text-muted">&ndash;</td>
-                            <td>{% if item.assigned_pm or item.pm_esg_reviewer or item.delivery_start_date %}Yes{% else %}No{% endif %}</td>
-                            <td>{% if item.assigned_pm %}{{ item.assigned_pm.get_full_name|default:item.assigned_pm.username }}{% elif item.pm_esg_reviewer %}{{ item.pm_esg_reviewer.get_full_name|default:item.pm_esg_reviewer.username }}{% else %}&ndash;{% endif %}</td>
-                            <td class="sqr-esg-status">
-                                {% if item.overall_status == 'on_hold' %}
-                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">ON HOLD</span>
-                                {% elif item.overall_status == 'completed' or item.delivery_health == 'completed' %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle">COMPLETED</span>
-                                {% elif item.delivery_start_date or item.overall_status == 'in_progress' or item.proposal_status == 'closed_won' %}
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">ONGOING</span>
-                                {% elif item.status == 'for_revision' %}
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">FOR REVISION</span>
-                                {% else %}
-                                    <span class="badge bg-light text-dark border">NOT STARTED</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if item.delivery_start_date or item.delivery_target_finish_date or item.delivery_actual_finish_date %}
-                                    {{ item.delivery_start_date|date:"n/j/y"|default:"TBD" }}-{% if item.delivery_actual_finish_date %}{{ item.delivery_actual_finish_date|date:"n/j/y" }}{% elif item.delivery_target_finish_date %}{{ item.delivery_target_finish_date|date:"n/j/y" }}{% else %}TBD{% endif %}
-                                {% else %}&ndash;{% endif %}
-                            </td>
-                            <td style="min-width:120px;">
-                                {% if item.delivery_progress is not None %}
-                                    <div class="d-flex align-items-center gap-2">
-                                        <div class="progress flex-grow-1" style="height:6px;min-width:60px;">
-                                            <div class="progress-bar {% if item.delivery_progress >= 100 %}bg-success{% elif item.delivery_progress >= 60 %}bg-info{% elif item.delivery_progress >= 30 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ item.delivery_progress }}%"></div>
-                                        </div>
-                                        <span class="small fw-semibold">{{ item.delivery_progress }}%</span>
-                                    </div>
-                                {% else %}&ndash;{% endif %}
-                            </td>
-                            <td class="sqr-esg-wrap">{{ item.key_updates_risks|truncatechars:80|default:"&ndash;" }}</td>
-                            <td class="sqr-esg-wrap">{{ item.key_updates_risks|truncatechars:80|default:"&ndash;" }}</td>
-                            <td>{% if item.project_details %}{{ item.project_details|truncatechars:35 }}{% else %}&ndash;{% endif %}</td>
-                            <td>{% if item.delivery_target_finish_date %}{{ item.delivery_target_finish_date|date:"n/j/y" }}{% else %}&ndash;{% endif %}</td>
-                            <td class="text-muted">&ndash;</td>
-                            <td>{% if item.sqr_folder_link %}<a href="{{ item.sqr_folder_link }}" target="_blank" rel="noopener" class="text-info">Folder</a>{% else %}&ndash;{% endif %}</td>
-                            <td class="text-end">{% if item.sse_manhrs != None %}{{ item.sse_manhrs|floatformat:2 }}{% else %}&ndash;{% endif %}</td>
-                            <td class="text-muted text-end">&ndash;</td>
-                            <td class="text-end">{% if item.effective_pm_manhrs is not None %}{{ item.effective_pm_manhrs|floatformat:2 }}{% else %}&ndash;{% endif %}</td>
-                            <td class="text-muted text-end">&ndash;</td>
-                            <td class="sqr-esg-money">{% if item.effective_pm_amount %}&#8369;{{ item.effective_pm_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
-                            <td class="sqr-esg-money">{% if item.sse_amount %}&#8369;{{ item.sse_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
-                            <td class="sqr-esg-money">{% if item.managed_support_amount %}&#8369;{{ item.managed_support_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
-                            <td class="sqr-esg-money fw-semibold">{% if item.computed_total_price %}&#8369;{{ item.computed_total_price|floatformat:2|intcomma }}{% elif item.quotation_total_price %}&#8369;{{ item.quotation_total_price|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
-                            <td>{% if item.revenue_date or item.revenue_declaration == 'declared' %}Yes{% else %}No{% endif %}</td>
-                            <td>{% if item.revenue_source == 'internal' %}Internal{% elif item.revenue_source == 'invoiced' %}Invoiced{% else %}&ndash;{% endif %}</td>
-                            <td>{{ item.revenue_reference_no|upper|default:"&ndash;" }}</td>
-                            <td>{{ item.revenue_date|date:"j-M-y"|default:"&ndash;" }}</td>
-                            <td class="sqr-esg-wrap">{{ item.revenue_remarks|default:item.remarks|truncatechars:80|default:"&ndash;" }}</td>
-                            <td class="text-center" style="min-width:135px;">
-                                {% if is_pm %}
-                                    <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 sqr-history-btn" data-history-url="{% url 'hub:sqr-history' item.pk %}" data-sqr-ref="{{ item.reference_code|default:'' }}" title="View History">
-                                        <i class="bi bi-clock-history me-1"></i>History
-                                    </button>
-                                {% else %}
-                                    <span class="text-muted">&ndash;</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr>
-                            <td colspan="31" class="text-center text-muted py-5">
-                                <i class="bi bi-inbox fs-2 d-block mb-2"></i>No SQR submissions yet.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </template>
+        {% if is_pm %}
+        {% include "hub/partials/sqr_performance.html" %}
+        {% endif %}
         {% endif %}
 
     </div>
@@ -1252,14 +1116,6 @@
                 </span>
                 <span class="sqr-approval-option__arrow"><i class="bi bi-download"></i></span>
             </button>
-            <button type="button" class="btn sqr-approval-option sqr-approval-option--eml" id="sqr-export-esg-btn">
-                <span class="sqr-approval-option__icon"><i class="bi bi-graph-up-arrow"></i></span>
-                <span>
-                    <span class="sqr-approval-option__label">ESG Performance Tracker</span>
-                    <span class="sqr-approval-option__hint">Download the ESG performance tracker Excel file.</span>
-                </span>
-                <span class="sqr-approval-option__arrow"><i class="bi bi-download"></i></span>
-            </button>
         </div>
         <div class="sqr-approval-choice-modal__footer">
             <button type="button" class="btn btn-outline-secondary" id="sqr-export-cancel-btn">
@@ -1309,7 +1165,6 @@
     var exportBtn = document.getElementById('sqr-export-choice-btn');
     var exportModal = document.getElementById('sqr-export-choice-modal');
     var sqrTrackerBtn = document.getElementById('sqr-export-tracker-btn');
-    var esgTrackerBtn = document.getElementById('sqr-export-esg-btn');
     var cancelBtn = document.getElementById('sqr-export-cancel-btn');
     var exportBaseUrl = '{% url "hub:sqr-export" %}';
 
@@ -1335,7 +1190,6 @@
     if (exportBtn) exportBtn.addEventListener('click', openExportChoiceModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeExportChoiceModal);
     if (sqrTrackerBtn) sqrTrackerBtn.addEventListener('click', function () { downloadReport('sqr'); });
-    if (esgTrackerBtn) esgTrackerBtn.addEventListener('click', function () { downloadReport('esg'); });
 
     if (exportModal) {
         exportModal.addEventListener('click', function (event) {
@@ -1366,6 +1220,7 @@
             <form method="post" action="{% url 'hub:sqr-import' %}" enctype="multipart/form-data" id="import-sqr-form">
                 {% csrf_token %}
                 <div class="mb-3">
+                    {% form_editor_extras sqr_import_form %}
                     <label class="form-label fw-semibold" for="{{ sqr_import_form.import_file.id_for_label }}">{{ sqr_import_form.import_file.label }}</label>
                     {{ sqr_import_form.import_file }}
                     {% if sqr_import_form.import_file.help_text %}
@@ -1832,6 +1687,7 @@
                 })
                 .then(function (result) {
                     if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Unable to restore this history entry.');
+                    document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
                     window.location.reload();
                 })
                 .catch(function (error) {
@@ -1857,7 +1713,7 @@
     <div class="requestor-modal__backdrop" id="create-sqr-backdrop"></div>
     <div class="requestor-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="create-sqr-title">
         <div class="requestor-modal__header">
-            <h2 class="h5 mb-0" id="create-sqr-title"><i class="bi bi-plus-circle me-2"></i>New SQR Submission</h2>
+            <h2 class="h5 mb-0" id="create-sqr-title"><i class="bi bi-plus-circle me-2"></i>{{ sqr_form.editor_title|default:"New SQR Submission" }}</h2>
             <button type="button" class="btn-close" id="close-sqr-btn" aria-label="Close"></button>
         </div>
         <div class="requestor-modal__body">
@@ -1866,8 +1722,10 @@
                 {% if sqr_form.errors %}
                     <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle me-2"></i>Please resolve the highlighted fields before submitting.</div>
                 {% endif %}
-                {% for field in sqr_form %}
-                    <div class="mb-3">
+                {% if sqr_form.editor_description %}<p class="text-muted">{{ sqr_form.editor_description }}</p>{% endif %}
+                {% form_editor_token sqr_form %}
+                {% for field in sqr_form.visible_fields %}
+                    <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.name == 'customer_name' %}
@@ -2080,8 +1938,9 @@
         <div class="requestor-modal__body">
             <form id="edit-sqr-form" method="post" action="" novalidate>
                 {% csrf_token %}
-                {% for field in sqr_edit_form %}
-                    <div class="mb-3">
+                {% form_editor_token sqr_edit_form %}
+                {% for field in sqr_edit_form.visible_fields %}
+                    <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
@@ -2121,9 +1980,36 @@
             if (el) el.value = (val != null) ? String(val) : '';
         }
 
-        function openEditModal(btn) {
+        async function openEditModal(btn) {
             activeRow = btn.closest('tr');
             editForm.action = btn.dataset.url;
+            editForm.querySelectorAll('[data-form-custom="true"]').forEach(function (input) {
+                var wrapper = input.closest('[data-editor-field]');
+                if (wrapper) wrapper.remove();
+            });
+            editForm.querySelectorAll('[name="_form_version"]').forEach(function (input) { input.remove(); });
+            try {
+                var response = await fetch(btn.dataset.url + '?format=form-editor', {credentials: 'same-origin'});
+                if (!response.ok) throw new Error('Could not load the current form.');
+                var data = await response.json();
+                var editorFields = document.createElement('div');
+                editorFields.className = 'editor-custom-fields';
+                editorFields.innerHTML = data.html;
+                editForm.insertBefore(editorFields, editForm.lastElementChild);
+                Object.keys(data.selectors || {}).forEach(function (name) {
+                    var existing = document.getElementById('edit_' + name);
+                    var container = document.createElement('div');
+                    container.innerHTML = data.selectors[name];
+                    var updated = container.querySelector('select');
+                    if (existing && updated) existing.innerHTML = updated.innerHTML;
+                });
+                var department = document.getElementById('edit_customer_company');
+                if (department && data.member_map) department.dataset.memberMap = data.member_map;
+                document.dispatchEvent(new CustomEvent('form-editor-enhance', {detail: {form: editForm}}));
+            } catch (error) {
+                window.location.assign(btn.dataset.url);
+                return;
+            }
 
             // Set department & rebuild member options with preserved contact
             var deptSel   = document.getElementById('edit_customer_company');
@@ -2227,6 +2113,7 @@
         // Exposed so openEditModal() can call with a preserved contact value
         window.rebuildEditMembers = function (dept, preserve) {
             if (!memberSel) return;
+            try { memberMap = JSON.parse(deptSel.dataset.memberMap || '{}'); } catch (e) {}
             memberSel.innerHTML = '';
             var empty = document.createElement('option');
             empty.value = ''; empty.textContent = '— Select Member —';
@@ -2923,6 +2810,8 @@
         if (typeof window.refreshSqrReports === 'function') {
             window.refreshSqrReports();
         }
+        // Shared by save and undo: the dashboard always reads fresh Tracker data.
+        document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
     }
 
     var undoToastTimer = null;
@@ -3291,30 +3180,16 @@
     var buttons = document.querySelectorAll('[data-sqr-view-button]');
     var panels = document.querySelectorAll('[data-sqr-view-panel]');
     if (!buttons.length || !panels.length) return;
-
-    // The ESG panel ships its table inside an inert <template> (a sibling of
-    // the panel) so the second full row set is never laid out on first load.
-    // Hydrate once, on demand. Must run inside setView() (not only on click):
-    // a saved 'esg' view is restored on load before applySqrTableFilter()
-    // reads the visible panel.
-    function hydrateEsgPanel(panel) {
-        if (!panel || panel.dataset.sqrEsgHydrated === '1') return;
-        var tpl = document.getElementById('sqr-esg-content');
-        if (!tpl) return;
-        panel.appendChild(tpl.content.cloneNode(true));
-        tpl.remove();
-        panel.dataset.sqrEsgHydrated = '1';
-        if (typeof window.initRequestHubSmoothScroll === 'function') {
-            window.initRequestHubSmoothScroll(panel);
-        }
-        if (typeof window.invalidateRequestHubScrollGeometry === 'function') {
-            window.invalidateRequestHubScrollGeometry(panel);
-        }
-        panel.dispatchEvent(new CustomEvent('sqr:panel-hydrated', { bubbles: true }));
-    }
+    var trackerControls = Array.from(document.querySelectorAll('[data-sqr-tracker-only]')).map(function (element) {
+        return {element: element, wasHidden: element.hidden};
+    });
 
     function setView(viewName) {
-        var activeView = viewName === 'esg' ? 'esg' : 'tracker';
+        // Retired views ('esg') fall back to 'tracker'.
+        var available = {};
+        panels.forEach(function (panel) { available[panel.dataset.sqrViewPanel] = true; });
+        var activeView = (viewName === 'performance' && available.performance) ? 'performance' : 'tracker';
+        if (!available[activeView]) activeView = 'tracker';
         buttons.forEach(function (button) {
             var isActive = button.dataset.sqrViewButton === activeView;
             button.classList.toggle('btn-primary', isActive);
@@ -3322,13 +3197,16 @@
             button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
         });
         panels.forEach(function (panel) {
-            if (panel.dataset.sqrViewPanel === 'esg' && activeView === 'esg') {
-                hydrateEsgPanel(panel);
-            }
             panel.hidden = panel.dataset.sqrViewPanel !== activeView;
         });
+        trackerControls.forEach(function (control) {
+            // Do not close the Bootstrap collapse or clear any Tracker filters.
+            control.element.hidden = activeView === 'performance' || control.wasHidden;
+        });
+        document.dispatchEvent(new CustomEvent('sqr:performance-view', {detail: {view: activeView}}));
         try { window.localStorage.setItem(storageKey, activeView); } catch (error) {}
     }
+    window.setSqrView = setView;
 
     buttons.forEach(function (button) {
         button.addEventListener('click', function () {
@@ -3371,6 +3249,25 @@
     var billedOnlyCheckbox = document.getElementById('sqr-table-filter-billed-only');
     var resetButton = document.getElementById('sqr-table-filter-reset');
     var resultsMeta = document.getElementById('sqr-filter-results-meta');
+    var focusedProjectPk = '';
+    var focusNotice = document.getElementById('sqr-pm-tracker-focus');
+    var focusLabel = document.getElementById('sqr-pm-tracker-focus-label');
+    var focusDismiss = document.getElementById('sqr-pm-tracker-focus-dismiss');
+    var focusedRow = null;
+    var previousRowTabindex = null;
+
+    function rowProjectPk(row) {
+        var cell = row.querySelector('[data-sqr-pk]');
+        return String(row.dataset.sqrPk || (cell && cell.dataset.sqrPk) || '');
+    }
+
+    function clearFocusedRow() {
+        if (!focusedRow) return;
+        focusedRow.classList.remove('sqr-pm-focused-row');
+        if (previousRowTabindex === null) focusedRow.removeAttribute('tabindex');
+        else focusedRow.setAttribute('tabindex', previousRowTabindex);
+        focusedRow = null;
+    }
 
     function normalizeText(value) {
         return (value || '').toString().trim().toLowerCase();
@@ -3469,7 +3366,7 @@
     }
 
     function getActiveTableRows() {
-        // Prefer the visible panel only — hidden ESG/tracker still in DOM but skip it
+            // Prefer the visible panel only — hidden panels still in DOM but skip them
         var activePanel = document.querySelector('[data-sqr-view-panel]:not([hidden])');
         if (activePanel) {
             return { panel: activePanel, rows: activePanel.querySelectorAll('tbody tr') };
@@ -3514,6 +3411,7 @@
     function runFilter() {
         filterFrame = 0;
         var activeRows = getActiveTableRows();
+        if (activeRows.panel.dataset && activeRows.panel.dataset.sqrViewPanel === 'performance') return;
         var records = getRowRecords(activeRows.panel, activeRows.rows);
         var query = normalizeText(searchInput && searchInput.value ? searchInput.value : '');
         var statusValue = statusSelect ? statusSelect.value : '';
@@ -3576,6 +3474,9 @@
                 && matchesBilled
                 && matchesQuery;
 
+            // Temporary exact-PK override; all ordinary filter values stay intact.
+            if (focusedProjectPk) isVisible = rowProjectPk(row) === focusedProjectPk;
+
             var nextDisplay = isVisible ? '' : 'none';
             if (row.style.display !== nextDisplay) {
                 row.style.display = nextDisplay;
@@ -3599,6 +3500,49 @@
         }
     }
     window.applySqrTableFilter = applyFilter;
+
+    window.focusSqrTrackerProject = function (pk) {
+        var exactPk = String(pk == null ? '' : pk);
+        if (!/^\d+$/.test(exactPk)) return false;
+        var tracker = document.querySelector('[data-sqr-view-panel="tracker"]');
+        if (!tracker) return false;
+        var target = Array.from(tracker.querySelectorAll('tbody tr')).find(function (row) {
+            return rowProjectPk(row) === exactPk;
+        });
+        if (!target) return false;
+        clearFocusedRow();
+        focusedProjectPk = exactPk;
+        focusedRow = target;
+        previousRowTabindex = target.getAttribute('tabindex');
+        target.setAttribute('tabindex', '-1');
+        target.classList.add('sqr-pm-focused-row');
+        if (focusLabel) focusLabel.textContent = 'Focused project: ' + (target.dataset.sqrRef || 'SQR #' + exactPk) + '. Tracker filters are temporarily bypassed.';
+        if (focusNotice) focusNotice.hidden = false;
+        if (typeof window.setSqrView === 'function') window.setSqrView('tracker');
+        if (rowCache) rowCache.delete(tracker);
+        clearTimeout(searchDebounceTimer);
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        runFilter();
+        target.focus({preventScroll: true});
+        target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'start'});
+        return true;
+    };
+
+    if (focusDismiss) focusDismiss.addEventListener('click', function () {
+        focusedProjectPk = '';
+        clearFocusedRow();
+        if (focusNotice) focusNotice.hidden = true;
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        runFilter();
+        // Restore keyboard position outside a row that may now be filtered out.
+        var trackerButton = document.querySelector('[data-sqr-view-button="tracker"]');
+        if (trackerButton) trackerButton.focus({preventScroll: true});
+    });
+
+    document.addEventListener('sqr:performance-invalidated', function () {
+        rowCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+        applyFilter();
+    });
 
     document.addEventListener('sqr:panel-hydrated', function (event) {
         if (rowCache) rowCache.delete(event.target);
@@ -3727,6 +3671,7 @@
     applyFilter();
 })();
 </script>
+
 
 {# ── For Revision Comments Modal (PM/Admin inline edit) ───────────────── #}
 {% if is_pm %}

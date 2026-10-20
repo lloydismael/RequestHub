@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ form_label }} · Form Editor{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'hub/form_editor.css' %}">{% endblock %}
+{% block content %}
+<div id="form-editor" class="form-editor">
+    <div class="glass-card p-3 mb-3">
+        <a href="{% url 'hub:management' %}?tab=forms" class="btn btn-outline-secondary btn-sm mb-3">Back to forms</a>
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div><h1 class="h4 mb-1">{{ form_label }}</h1><p class="small text-muted mb-0">Changes are application-wide. Save a draft before publishing.</p></div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-action="preview">Preview</button>
+                <button type="button" class="btn btn-primary" data-action="draft">Save draft</button>
+                <button type="button" class="btn btn-success" data-action="publish">Publish saved draft</button>
+            </div>
+        </div>
+        <div id="editor-status" class="small mt-3" role="status" aria-live="polite"></div>
+        <div id="editor-error" class="alert alert-danger mt-3 mb-0" role="alert" tabindex="-1" hidden></div>
+    </div>
+    <form id="editor-form" class="editor-layout" novalidate>
+        {% csrf_token %}
+        <section class="glass-card p-3 editor-form-properties" aria-labelledby="properties-heading">
+            <h2 id="properties-heading" class="h6">Form details</h2>
+            <div class="editor-property-grid">
+                <div><label for="editor-title" class="form-label">Title</label><input id="editor-title" class="form-control" maxlength="200"></div>
+                <div><label for="editor-description" class="form-label">Introduction</label><textarea id="editor-description" class="form-control" rows="2"></textarea></div>
+            </div>
+        </section>
+        <aside class="glass-card p-3 editor-navigation" aria-labelledby="fields-heading">
+            <h2 id="fields-heading" class="h6">Fields</h2>
+            <label for="field-search" class="form-label small">Find a field</label>
+            <input id="field-search" type="search" class="form-control mb-2" placeholder="Search label, section or key" aria-controls="editor-fields">
+            <p id="field-count" class="small text-muted" role="status" aria-live="polite"></p>
+            <nav id="editor-fields" aria-label="Form fields"></nav>
+            <details class="editor-add mt-3">
+                <summary>Add a custom field</summary>
+                <div class="pt-3">
+                    <label for="new-field-type" class="form-label">Field type</label>
+                    <select id="new-field-type" class="form-select mb-2"><option value="text">Short text</option><option value="textarea">Long text</option><option value="number">Number</option><option value="email">Email</option><option value="date">Date</option><option value="checkbox">Checkbox</option><option value="select">Single select</option><option value="multiselect">Multi select</option><option value="url">URL</option></select>
+                    <button id="add-field" type="button" class="btn btn-outline-primary w-100">Add field</button>
+                </div>
+            </details>
+            <p class="small text-muted mt-3 mb-0">Select a field to edit it. Use Move up / Move down to change its position. Archived custom fields keep their saved answers.</p>
+        </aside>
+        <section class="glass-card p-3 editor-inspector-panel" aria-labelledby="inspector-heading">
+            <h2 id="inspector-heading" class="h6">Selected field</h2>
+            <div id="editor-inspector"></div>
+        </section>
+        <section class="glass-card p-3 editor-support" aria-label="Safety and version history">
+            <p class="small mb-3">Core field types, validation and visibility stay protected. Where available, choose eligible users or approved member names for this form only; this does not change accounts or names. Saved selections that are no longer eligible stay visible until explicitly removed. Security fields stay locked, and passwords are excluded from editing and preview.</p>
+            <details>
+                <summary>Published history and restore options</summary>
+                <div class="pt-3">
+                    <button type="button" class="btn btn-outline-secondary btn-sm mb-2" data-action="history">Refresh history</button>
+                    <div id="editor-history"></div>
+                    <hr>
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-action="reset">Restore and publish defaults</button>
+                    <p class="small text-muted mt-2 mb-0">Restoring defaults creates a new version. Previous versions and answers are retained.</p>
+                </div>
+            </details>
+        </section>
+    </form>
+    <section id="editor-preview-panel" class="glass-card p-3 mt-3" hidden aria-labelledby="preview-heading">
+        <h2 id="preview-heading" class="h5">Draft preview</h2>
+        <p class="small text-muted">Real Django widgets. Preview is unbound, does not submit business records, and may differ from actor-specific live forms.</p>
+        <div id="editor-preview"></div>
+    </section>
+</div>
+{{ editor_state|json_script:"form-editor-state" }}
+<script src="{% static 'hub/form_editor.js' %}" defer></script>
+{% endblock %}

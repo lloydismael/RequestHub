@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% load static %}
 {% block body_class %}engineer-dashboard engineer-activity-logs{% endblock %}
 {% block title %}Activity Logs · Request Hub{% endblock %}
@@ -385,6 +386,7 @@
         <div class="requestor-modal__body act-modal-body">
             <form method="post" novalidate id="activity-log-form">
                 {% csrf_token %}
+                {% form_editor_extras form %}
                 {% if form.non_field_errors %}
                     <div class="alert alert-danger rounded-3 py-2 mb-3 d-flex align-items-center gap-2" role="alert" style="font-size:0.85rem;">
                         <i class="bi bi-exclamation-triangle-fill flex-shrink-0"></i>

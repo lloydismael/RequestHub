@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load form_customization static %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=1"><link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=1">{% endblock %}
 {% block title %}My Profile · Request Hub{% endblock %}
 {% block body_class %}profile-page-shell{% endblock %}
 {% block content %}
@@ -7,8 +9,8 @@
     {# ── Hero / Avatar banner ──────────────────────────────── #}
     <div class="profile-hero">
         <div class="profile-hero__banner profile-hero__banner--{{ form.instance.banner_gradient|default:'blue' }}" id="profile-hero-banner">
-            <button type="button" class="profile-hero__banner-edit" id="banner-edit-btn" title="Edit banner" aria-label="Edit banner">
-                <i class="bi bi-image-fill"></i><span>Edit Banner</span>
+            <button type="button" class="profile-hero__banner-edit" id="banner-edit-btn" title="Choose your theme" aria-label="Choose your theme">
+                <i class="bi bi-palette-fill" aria-hidden="true"></i><span>Themes</span>
             </button>
         </div>
         <div class="profile-hero__body">
@@ -52,8 +54,8 @@
         <button class="profile-tab" data-profile-tab="password">
             <i class="bi bi-lock-fill me-1"></i>Change Password
         </button>
-        <button class="profile-tab" data-profile-tab="banner" id="banner-tab-btn">
-            <i class="bi bi-image-fill me-1"></i>Edit Banner
+        <button class="profile-tab" data-profile-tab="themes" id="banner-tab-btn">
+            <i class="bi bi-palette-fill me-1" aria-hidden="true"></i>Themes
         </button>
         <button class="profile-tab" data-profile-tab="settings">
             <i class="bi bi-sliders me-1"></i>Settings
@@ -64,15 +66,16 @@
     <form method="post" enctype="multipart/form-data" novalidate class="profile-form-wrap" id="profile-main-form">
         {% csrf_token %}
 
+        {% for hidden in form.editor_hidden_fields %}{{ hidden }}{% endfor %}
         {# Personal Info tab #}
         <div class="profile-panel profile-panel--active" id="profile-panel-info">
             <div class="glass-card profile-card">
                 <h2 class="profile-card__title"><i class="bi bi-person-lines-fill me-2"></i>Personal Information</h2>
                 <div class="row g-3">
-                    {% for field in form %}
+                    {% for field in form.visible_fields %}
                         {% if field.name in "first_name,last_name,email,phone_number,department" %}
                             <div class="col-sm-6">
-                                <label class="form-label profile-label" for="id_{{ field.name }}">
+                                <label class="form-label profile-label" for="{{ field.id_for_label }}">
                                     {{ field.label }}
                                     {% if field.name == "department" and not request.user.role == "admin" %}
                                         <i class="bi bi-lock-fill ms-1 text-secondary" style="font-size:0.75em;" title="Only administrators can edit this field"></i>
@@ -85,6 +88,7 @@
                         {% endif %}
                     {% endfor %}
                 </div>
+                {% include "hub/form_custom_fields.html" with editor_custom_fields=form.editor_custom_fields %}
                 <div class="d-flex gap-2 mt-4">
                     <button class="btn btn-primary" type="submit" name="save_info" value="1">
                         <i class="bi bi-check2 me-1"></i>Save Changes
@@ -109,7 +113,7 @@
                     </div>
                     <div class="profile-avatar-controls">
                         <p class="text-muted small mb-3">Upload a clear photo of yourself. JPG, PNG or GIF, max 5 MB.</p>
-                        {% for field in form %}
+                        {% for field in form.visible_fields %}
                             {% if field.name == "profile_photo" %}
                                 <div class="mb-3">
                                     <label class="form-label profile-label" for="id_profile_photo">Choose new photo</label>
@@ -144,10 +148,10 @@
                     </div>
                 {% endif %}
                 <div class="row g-3">
-                    {% for field in form %}
+                    {% for field in form.visible_fields %}
                         {% if field.name in "current_password,new_password1,new_password2" %}
                             <div class="col-sm-6">
-                                <label class="form-label profile-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                                <label class="form-label profile-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
                                 {% if field.help_text %}<div class="form-text">{{ field.help_text|safe }}</div>{% endif %}
                                 {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -163,327 +167,107 @@
             </div>
         </div>
 
-        {# Banner tab #}
-        <div class="profile-panel" id="profile-panel-banner">
-            <div class="glass-card profile-card">
-                <h2 class="profile-card__title"><i class="bi bi-image-fill me-2"></i>Profile Banner</h2>
-                <p class="text-muted small mb-4">Choose a gradient style for your profile banner.</p>
-
-                {% for field in form %}
-                    {% if field.name == "banner_gradient" %}
-                        {{ field }}
-                    {% endif %}
-                {% endfor %}
-
-                <div class="banner-swatch-grid" id="banner-swatch-grid">
-                    {% with current=form.instance.banner_gradient|default:'blue' %}
-                    <label class="banner-swatch banner-swatch--blue {% if current == 'blue' %}is-active{% endif %}" title="Blue">
-                        <input type="radio" name="banner_choice" value="blue" {% if current == 'blue' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Blue</span>
-                        {% if current == 'blue' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--sunset {% if current == 'sunset' %}is-active{% endif %}" title="Sunset">
-                        <input type="radio" name="banner_choice" value="sunset" {% if current == 'sunset' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Sunset</span>
-                        {% if current == 'sunset' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--forest {% if current == 'forest' %}is-active{% endif %}" title="Forest">
-                        <input type="radio" name="banner_choice" value="forest" {% if current == 'forest' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Forest</span>
-                        {% if current == 'forest' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--crimson {% if current == 'crimson' %}is-active{% endif %}" title="Crimson">
-                        <input type="radio" name="banner_choice" value="crimson" {% if current == 'crimson' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Crimson</span>
-                        {% if current == 'crimson' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--slate {% if current == 'slate' %}is-active{% endif %}" title="Slate">
-                        <input type="radio" name="banner_choice" value="slate" {% if current == 'slate' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Slate</span>
-                        {% if current == 'slate' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--aurora {% if current == 'aurora' %}is-active{% endif %}" title="Aurora">
-                        <input type="radio" name="banner_choice" value="aurora" {% if current == 'aurora' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Aurora</span>
-                        {% if current == 'aurora' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--rose {% if current == 'rose' %}is-active{% endif %}" title="Rose">
-                        <input type="radio" name="banner_choice" value="rose" {% if current == 'rose' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Rose</span>
-                        {% if current == 'rose' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--teal {% if current == 'teal' %}is-active{% endif %}" title="Teal">
-                        <input type="radio" name="banner_choice" value="teal" {% if current == 'teal' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Teal</span>
-                        {% if current == 'teal' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <div class="banner-swatch banner-swatch--custom" title="Custom banner — coming soon">
-                        <i class="bi bi-cloud-upload banner-swatch__icon"></i>
-                        <span class="banner-swatch__coming-soon">Soon</span>
-                        <span class="banner-swatch__label">Custom</span>
-                    </div>
-                    {% endwith %}
-                </div>
-
-                <div class="mt-4">
-                    <button class="btn btn-primary" type="submit" name="save_banner" value="1">
-                        <i class="bi bi-check2 me-1"></i>Save Banner
-                    </button>
-                </div>
-            </div>
-        </div>
-
+        {{ form.banner_gradient }}
     </form>
+
+    <div class="profile-panel" id="profile-panel-themes">
+        <form method="post" class="glass-card profile-card" id="profile-theme-form">
+            {% csrf_token %}
+            <h2 class="profile-card__title"><i class="bi bi-palette-fill me-2" aria-hidden="true"></i>Themes</h2>
+            <p class="text-muted small" id="theme-description">Make Request Hub feel like yours. Choose an accent theme for your account's buttons, highlights, and profile banner. Your light/dark setting stays unchanged.</p>
+            {% if theme_form.errors %}
+                <div class="alert alert-danger" role="alert" id="theme-errors">{{ theme_form.banner_gradient.errors }}</div>
+            {% endif %}
+            <fieldset aria-describedby="theme-description">
+                <legend class="h6">Choose your theme</legend>
+                <div class="account-theme-grid">
+                    {% for value, label in theme_form.fields.banner_gradient.choices %}
+                    {% if value %}
+                    <label class="account-theme-card" data-account-theme="{{ value }}">
+                        <input type="radio" name="banner_gradient" value="{{ value }}" {% if theme_form.banner_gradient.value == value or not theme_form.banner_gradient.value and value == 'blue' %}checked{% endif %}>
+                        <span class="account-theme-card__preview" aria-hidden="true">
+                            <span class="account-theme-card__nav"></span>
+                            <span class="account-theme-card__lines"></span>
+                            <span class="account-theme-card__button"></span>
+                        </span>
+                        <span class="account-theme-card__footer"><span>{{ label }}</span><span class="account-theme-card__selected"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Selected</span></span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <div class="d-flex align-items-center gap-3 flex-wrap mt-4">
+                <button class="btn btn-primary" type="submit" name="save_theme" value="1"><i class="bi bi-check2 me-1" aria-hidden="true"></i>Apply Theme</button>
+                <button class="btn btn-outline-secondary" type="button" id="theme-cancel-btn" hidden>Cancel preview</button>
+                <span class="text-muted small" id="theme-status" role="status">Saved to your account. Available on every device.</span>
+            </div>
+        </form>
+    </div>
 
     {# ── Settings tab (outside main form — its own POST) ─── #}
     <div class="profile-panel" id="profile-panel-settings">
-        <div class="glass-card profile-card">
-            <h2 class="profile-card__title"><i class="bi bi-sliders me-2"></i>Settings</h2>
-            <div class="d-flex align-items-center justify-content-between gap-3 mb-4">
-                <div></div>
-                <div class="profile-tabs__vmt" id="profile-vmt-clone" role="group" aria-label="View mode">
-                    <button class="profile-vmt__btn profile-vmt__btn--active" data-vmt="desktop" type="button" title="Desktop view" aria-pressed="true">
-                        <i class="bi bi-pc-display"></i><span>Desktop</span>
-                    </button>
-                    <span class="profile-vmt__divider" aria-hidden="true"></span>
-                    <button class="profile-vmt__btn" data-vmt="mobile" type="button" title="Mobile view" aria-pressed="false">
-                        <i class="bi bi-phone-fill"></i><span>Mobile</span>
-                    </button>
+        <div class="settings-header">
+            <div><h2 class="profile-card__title"><i class="bi bi-sliders" aria-hidden="true"></i>Settings</h2><p class="settings-subtitle">Personalize your workspace, comfort, and everyday experience.</p></div>
+            <span class="settings-scope"><i class="bi bi-person-check" aria-hidden="true"></i>Your account</span>
+        </div>
+        <form method="post" id="profile-settings-form">
+            {% csrf_token %}
+            <input type="hidden" name="save_settings" value="1">
+            <div class="settings-grid">
+                <section class="glass-card settings-card" aria-labelledby="settings-appearance-title">
+                    <h3 id="settings-appearance-title"><i class="bi bi-palette" aria-hidden="true"></i>Appearance</h3>
+                    <p class="settings-card__intro">A workspace that feels like yours.</p>
+                    <div class="settings-row settings-theme-row">
+                        <span class="settings-theme-preview" aria-hidden="true"></span>
+                        <div class="settings-row__copy"><span class="settings-row__label">{{ request.user.get_banner_gradient_display|default:'Blue' }} theme</span><p class="settings-row__description">Account-wide accents and profile banner.</p></div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="settings-themes-btn">Themes</button>
+                    </div>
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_pref_compact_tables" name="pref_compact_tables" label="Compact Tables" description="Fit more rows on screen with tighter table spacing." checked=form.instance.pref_compact_tables %}
+                </section>
+                <section class="glass-card settings-card" aria-labelledby="settings-accessibility-title">
+                    <h3 id="settings-accessibility-title"><i class="bi bi-universal-access" aria-hidden="true"></i>Accessibility</h3>
+                    <p class="settings-card__intro">Read comfortably and reduce distractions.</p>
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_pref_large_text" name="pref_large_text" label="Large Text" description="Increase text size throughout your workspace." checked=form.instance.pref_large_text %}
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_pref_reduce_motion" name="pref_reduce_motion" label="Reduce Motion" description="Turn off entrance animations and smooth scrolling." checked=form.instance.pref_reduce_motion %}
+                </section>
+                <section class="glass-card settings-card" aria-labelledby="settings-experience-title">
+                    <h3 id="settings-experience-title"><i class="bi bi-toggles" aria-hidden="true"></i>Experience</h3>
+                    <p class="settings-card__intro">Choose the extras you want to see.</p>
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_show_chatbot" name="show_chatbot" label="AI Chatbot" description="Show the assistant in your workspace." checked=form.instance.show_chatbot %}
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_show_login_banner" name="show_login_banner" label="Welcome Banner" description="Show the welcome banner after you sign in." checked=form.instance.show_login_banner %}
+                </section>
+                <section class="glass-card settings-card" aria-labelledby="settings-performance-title">
+                    <h3 id="settings-performance-title"><i class="bi bi-lightning-charge" aria-hidden="true"></i>Performance</h3>
+                    <p class="settings-card__intro">Keep your workspace lightweight.</p>
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_pref_reduce_effects" name="pref_reduce_effects" label="Reduce Visual Effects" description="Disable glass blur and animated backgrounds for better performance." checked=form.instance.pref_reduce_effects %}
+                </section>
+                <section class="glass-card settings-card" aria-labelledby="settings-session-title">
+                    <h3 id="settings-session-title"><i class="bi bi-shield-check" aria-hidden="true"></i>Session</h3>
+                    <p class="settings-card__intro">Protect your account when you step away.</p>
+                    {% include "accounts/_settings_switch.html" with control_id="toggle_idle_timeout" name="idle_timeout_enabled" label="5-Minute Idle Timeout" description="Automatically end your session after five minutes of inactivity." checked=form.instance.idle_timeout_enabled %}
+                </section>
+                <section class="glass-card settings-card" aria-labelledby="settings-display-title">
+                    <h3 id="settings-display-title"><i class="bi bi-display" aria-hidden="true"></i>Display layout</h3>
+                    <p class="settings-card__intro">Choose your preferred layout. This device only; changes apply immediately.</p>
+                    <div class="profile-tabs__vmt" id="profile-vmt-clone" role="group" aria-label="View mode">
+                        <button class="profile-vmt__btn profile-vmt__btn--active" data-vmt="desktop" type="button" aria-pressed="true"><i class="bi bi-pc-display" aria-hidden="true"></i><span>Desktop</span></button>
+                        <span class="profile-vmt__divider" aria-hidden="true"></span>
+                        <button class="profile-vmt__btn" data-vmt="mobile" type="button" aria-pressed="false"><i class="bi bi-phone" aria-hidden="true"></i><span>Mobile</span></button>
+                    </div>
+                </section>
+            </div>
+            <div class="settings-actions">
+                <span id="settings-save-status" role="status" aria-live="polite">Changes apply after saving.</span>
+                <div class="settings-actions__buttons">
+                    <button class="btn btn-outline-secondary" type="reset" id="settings-discard-btn" hidden>Discard Changes</button>
+                    <button class="btn btn-primary" type="submit" id="settings-save-btn"><i class="bi bi-check2" aria-hidden="true"></i> Save Changes</button>
                 </div>
             </div>
-
-            <form method="post" id="profile-settings-form">
-                {% csrf_token %}
-                <input type="hidden" name="save_settings" value="1">
-
-                {# ══ Appearance ══ #}
-                <h3 class="h6 text-uppercase fw-bold mt-2 mb-1" style="letter-spacing:0.05em;color:var(--lg-accent,#4f8cff);">
-                    <i class="bi bi-palette-fill me-2"></i>Appearance
-                </h3>
-                <div class="list-group list-group-flush mb-4">
-
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-table me-2 text-primary"></i>Compact Tables</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_pref_compact_tables" name="pref_compact_tables" value="1"
-                                   {% if form.instance.pref_compact_tables %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-fonts me-2 text-primary"></i>Large Text</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_pref_large_text" name="pref_large_text" value="1"
-                                   {% if form.instance.pref_large_text %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-image-fill me-2 text-primary"></i>Profile Banner &amp; Theme</div>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" onclick="document.getElementById('banner-tab-btn')?.click()">
-                            <i class="bi bi-image me-1"></i>Edit Banner
-                        </button>
-                    </div>
-                </div>
-
-                {# ══ Performance ══ #}
-                <h3 class="h6 text-uppercase fw-bold mb-1" style="letter-spacing:0.05em;color:var(--lg-accent,#4f8cff);">
-                    <i class="bi bi-lightning-charge-fill me-2"></i>Performance
-                </h3>
-                <div class="list-group list-group-flush mb-4">
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-droplet-half me-2 text-warning"></i>Reduce Visual Effects</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_pref_reduce_effects" name="pref_reduce_effects" value="1"
-                                   {% if form.instance.pref_reduce_effects %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-                </div>
-
-                {# ══ Behavior ══ #}
-                <h3 class="h6 text-uppercase fw-bold mb-1" style="letter-spacing:0.05em;color:var(--lg-accent,#4f8cff);">
-                    <i class="bi bi-toggles me-2"></i>Behavior
-                </h3>
-                <div class="list-group list-group-flush mb-4">
-
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-robot me-2 text-info"></i>AI Chatbot</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_show_chatbot" name="show_chatbot" value="1"
-                                   {% if form.instance.show_chatbot %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-clock-history me-2 text-warning"></i>5-Minute Idle Timeout</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_idle_timeout" name="idle_timeout_enabled" value="1"
-                                   {% if form.instance.idle_timeout_enabled %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-stars me-2 text-success"></i>Welcome Banner</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_show_login_banner" name="show_login_banner" value="1"
-                                   {% if form.instance.show_login_banner %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-                </div>
-
-                {# ══ Accessibility ══ #}
-                <h3 class="h6 text-uppercase fw-bold mb-1" style="letter-spacing:0.05em;color:var(--lg-accent,#4f8cff);">
-                    <i class="bi bi-universal-access me-2"></i>Accessibility
-                </h3>
-                <div class="list-group list-group-flush">
-                    <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                        <div>
-                            <div class="fw-semibold"><i class="bi bi-hand-index me-2 text-danger"></i>Reduce Motion</div>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input settings-toggle" type="checkbox" role="switch"
-                                   id="toggle_pref_reduce_motion" name="pref_reduce_motion" value="1"
-                                   {% if form.instance.pref_reduce_motion %}checked{% endif %}
-                                   style="width:2.5em;height:1.4em;cursor:pointer;">
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    <button class="btn btn-primary" type="submit">
-                        <i class="bi bi-check2 me-1"></i>Save Settings
-                    </button>
-                </div>
-            </form>
-
+        </form>
+        <div class="settings-admin-wrap">
             {# ── Backup & Restore settings (admin only) ─────────────────────────── #}
             {% if request.user.role == 'admin' %}
-            <hr class="my-4" style="border-color:rgba(255,255,255,0.08);">
-            <div id="profile-panel-backup">
-            <h2 class="profile-card__title"><i class="bi bi-archive-fill me-2"></i>Backup &amp; Restore</h2>
-            <p class="text-muted small mb-4">
-                Download a complete snapshot of all requests, SQR submissions, and related records.
-                Use the restore feature to recover data from a previous backup.
-                <strong class="text-warning">Restoring will permanently overwrite all current hub data.</strong>
-            </p>
-
-            {# ── Download Backup ── #}
-            <div class="list-group list-group-flush mb-4">
-                <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3"
-                     style="background:transparent;border-color:rgba(255,255,255,0.08);">
-                    <div>
-                        <div class="fw-semibold"><i class="bi bi-download me-2 text-info"></i>Download Backup</div>
-                        <div class="text-muted small mt-1">
-                            Exports all Requests, SQR Submissions, Activity Logs, and Communications as a single JSON file.
-                            User accounts are <em>not</em> included.
-                        </div>
-                    </div>
-                    <a href="{% url 'accounts:backup' %}" class="btn btn-sm btn-outline-info text-nowrap">
-                        <i class="bi bi-cloud-download me-1"></i>Download
-                    </a>
-                </div>
-            </div>
-
-            {# ── Restore ── #}
-            <div class="rounded border border-danger p-3" style="border-color:rgba(239,68,68,0.4)!important;background:rgba(239,68,68,0.05);">
-                <div class="fw-semibold text-danger mb-2"><i class="bi bi-exclamation-triangle-fill me-2"></i>Restore from Backup</div>
-                <p class="text-muted small mb-3">
-                    Select a <code>.json</code> file previously downloaded from this page.
-                    All existing hub data will be <strong>deleted</strong> and replaced with the backup contents.
-                    This action <strong>cannot be undone</strong>.
-                </p>
-                <form method="post" enctype="multipart/form-data" action="{% url 'accounts:restore' %}" id="restore-form">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="backup_file" class="form-label small fw-semibold">Backup File (.json)</label>
-                        <input type="file" class="form-control form-control-sm" id="backup_file" name="backup_file" accept=".json" required>
-                    </div>
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" id="confirm_restore" name="confirm_restore" value="1" required>
-                        <label class="form-check-label small text-danger fw-semibold" for="confirm_restore">
-                            I understand this will permanently overwrite all current data and cannot be undone.
-                        </label>
-                    </div>
-                    <button type="submit" class="btn btn-sm btn-danger" id="restore-submit-btn" disabled>
-                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore Data
-                    </button>
-                </form>
-            </div>
-
-            {# ── Restore Deleted Requests ── #}
-            <hr class="my-4" style="border-color:rgba(255,255,255,0.08);">
-            <div class="fw-semibold mb-1"><i class="bi bi-recycle me-2 text-success"></i>Restore Deleted Requests</div>
-            <p class="text-muted small mb-3">
-                Requests soft-deleted from the dashboard are listed below and can be recovered at any time.
-            </p>
-            {% if deleted_requests %}
-            <div class="table-responsive rounded border" style="border-color:rgba(255,255,255,0.1)!important;">
-                <table class="table table-sm table-hover mb-0" style="font-size:0.82rem;">
-                    <thead style="background:rgba(99,102,241,0.10);">
-                        <tr>
-                            <th class="ps-3">Ref #</th>
-                            <th>Customer</th>
-                            <th>Engagement</th>
-                            <th>Engineer</th>
-                            <th>Status</th>
-                            <th>Deleted</th>
-                            <th class="pe-3"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for req in deleted_requests %}
-                        <tr>
-                            <td class="ps-3 fw-semibold">{{ req.reference_code }}</td>
-                            <td>{{ req.account }}</td>
-                            <td>{{ req.get_engagement_type_display }}</td>
-                            <td>{{ req.engineer.get_full_name|default:req.engineer.username|default:"—" }}</td>
-                            <td><span class="badge bg-secondary">{{ req.get_status_display }}</span></td>
-                            <td class="text-muted">{{ req.deleted_at|date:"M d, Y H:i"|default:"—" }}</td>
-                            <td class="pe-3">
-                                <form method="post" action="{% url 'hub:request-restore' req.pk %}" class="d-inline">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2"
-                                            style="font-size:0.78rem;"
-                                            onclick="return confirm('Restore {{ req.reference_code }}?')">
-                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="text-muted small fst-italic mb-0">No deleted requests to restore.</p>
-            {% endif %}
-            </div>
+            {% include "accounts/_recovery_center.html" %}
             {% endif %}
         </div>
 
@@ -509,7 +293,8 @@
 
     // Hash-based tab activation
     if (window.location.hash === '#avatar') activate('avatar');
-    if (window.location.hash === '#banner') activate('banner');
+    if (['#banner', '#themes'].includes(window.location.hash)) activate('themes');
+    if (document.getElementById('theme-errors')) activate('themes');
     if (window.location.hash === '#settings') activate('settings');
     if (window.location.hash === '#backup') {
         activate('settings');
@@ -517,19 +302,16 @@
         if (backupSection) backupSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    // Restore form: enable submit only when checkbox is ticked
-    const confirmChk = document.getElementById('confirm_restore');
-    const restoreBtn = document.getElementById('restore-submit-btn');
-    if (confirmChk && restoreBtn) {
-        confirmChk.addEventListener('change', () => {
-            restoreBtn.disabled = !confirmChk.checked;
+    document.querySelectorAll('[data-recovery-submit]').forEach(form => {
+        form.addEventListener('submit', () => {
+            form.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = true; });
+            document.getElementById('recovery-progress').hidden = false;
         });
-    }
+    });
 
-    // "Edit Banner" button on hero banner → jump to banner tab
     const bannerEditBtn = document.getElementById('banner-edit-btn');
     if (bannerEditBtn) {
-        bannerEditBtn.addEventListener('click', () => activate('banner'));
+        bannerEditBtn.addEventListener('click', () => activate('themes'));
     }
 
     // Errors on password fields → open password tab
@@ -544,45 +326,30 @@
         activate('info');
     }
 
-    // Banner swatch picker — live preview + update hidden input
-    const bannerHiddenInput = document.getElementById('id_banner_gradient');
+    const themeForm = document.getElementById('profile-theme-form');
+    const savedTheme = document.body.dataset.accountTheme;
     const bannerEl = document.getElementById('profile-hero-banner');
-    const swatches = document.querySelectorAll('.banner-swatch:not(.banner-swatch--custom)');
-    const GRADIENT_MAP = {
-        blue:    'linear-gradient(120deg, #1d4ed8 0%, #3b82f6 50%, #6366f1 100%)',
-        sunset:  'linear-gradient(120deg, #f97316 0%, #ec4899 60%, #8b5cf6 100%)',
-        forest:  'linear-gradient(120deg, #065f46 0%, #10b981 60%, #3b82f6 100%)',
-        crimson: 'linear-gradient(120deg, #7f1d1d 0%, #dc2626 50%, #f97316 100%)',
-        slate:   'linear-gradient(120deg, #0f172a 0%, #334155 60%, #475569 100%)',
-        aurora:  'linear-gradient(120deg, #1e1b4b 0%, #7c3aed 50%, #06b6d4 100%)',
-        rose:    'linear-gradient(120deg, #881337 0%, #f43f5e 50%, #fb923c 100%)',
-        teal:    'linear-gradient(120deg, #134e4a 0%, #0d9488 50%, #3b82f6 100%)',
+    const cancelTheme = document.getElementById('theme-cancel-btn');
+    const themeStatus = document.getElementById('theme-status');
+    const previewTheme = (value) => {
+        document.body.dataset.accountTheme = value;
+        bannerEl.className = `profile-hero__banner profile-hero__banner--${value}`;
+        cancelTheme.hidden = value === savedTheme;
+        themeStatus.textContent = value === savedTheme ? 'Saved to your account. Available on every device.' : 'Preview only — select Apply Theme to save.';
     };
-    swatches.forEach((swatch) => {
-        swatch.addEventListener('click', () => {
-            const val = swatch.querySelector('input[type=radio]').value;
-            // Update hidden input
-            if (bannerHiddenInput) bannerHiddenInput.value = val;
-            // Live preview on hero banner
-            if (bannerEl && GRADIENT_MAP[val]) {
-                bannerEl.style.backgroundImage = GRADIENT_MAP[val];
-                // Remove old class, add new
-                bannerEl.className = bannerEl.className.replace(/profile-hero__banner--\w+/g, '').trim();
-                bannerEl.classList.add(`profile-hero__banner--${val}`);
-            }
-            // Toggle active state on swatches
-            swatches.forEach((s) => {
-                const isThis = s === swatch;
-                s.classList.toggle('is-active', isThis);
-                const checkIcon = s.querySelector('.banner-swatch__check');
-                if (checkIcon) checkIcon.remove();
-                if (isThis) {
-                    const icon = document.createElement('i');
-                    icon.className = 'bi bi-check2 banner-swatch__check';
-                    s.appendChild(icon);
-                }
-            });
-        });
+    themeForm.addEventListener('change', (event) => {
+        if (event.target.name === 'banner_gradient') previewTheme(event.target.value);
+    });
+    cancelTheme.addEventListener('click', () => {
+        themeForm.querySelector(`input[value="${savedTheme}"]`).checked = true;
+        previewTheme(savedTheme);
+    });
+    // A canceled preview must not follow a cached page back into view.
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            themeForm.querySelector(`input[value="${savedTheme}"]`).checked = true;
+            previewTheme(savedTheme);
+        }
     });
 
     // Live avatar preview
@@ -609,14 +376,67 @@
     }
 }());
 
-// ── Settings tab: auto-submit on toggle change ──
+// Settings changes are staged until explicitly saved.
 (function () {
-    document.querySelectorAll('.settings-toggle').forEach(function (toggle) {
-        toggle.addEventListener('change', function () {
-            var form = document.getElementById('profile-settings-form');
-            if (form) form.submit();
-        });
+    const form = document.getElementById('profile-settings-form');
+    const toggles = Array.from(form.querySelectorAll('.settings-toggle'));
+    const save = document.getElementById('settings-save-btn');
+    const discard = document.getElementById('settings-discard-btn');
+    const status = document.getElementById('settings-save-status');
+    let saved = toggles.map(input => input.checked);
+    let saving = false;
+    const dirty = () => toggles.some((input, index) => input.checked !== saved[index]);
+    const update = () => {
+        save.disabled = saving || !dirty();
+        discard.hidden = !dirty();
+        discard.disabled = saving;
+        status.textContent = dirty() ? 'Unsaved changes' : 'All changes saved.';
+        status.classList.remove('settings-save-error');
+    };
+    toggles.forEach(input => input.addEventListener('change', update));
+    form.addEventListener('reset', event => {
+        event.preventDefault();
+        toggles.forEach((input, index) => { input.checked = saved[index]; });
+        update();
     });
+    document.getElementById('settings-themes-btn').addEventListener('click', () => {
+        document.getElementById('banner-tab-btn').click();
+    });
+    window.addEventListener('beforeunload', event => {
+        if (dirty()) { event.preventDefault(); event.returnValue = ''; }
+    });
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (saving || !dirty()) return;
+        const data = new FormData(form);
+        saving = true;
+        save.disabled = true;
+        discard.disabled = true;
+        toggles.forEach(input => { input.disabled = true; });
+        form.setAttribute('aria-busy', 'true');
+        status.classList.remove('settings-save-error');
+        status.textContent = 'Saving changes…';
+        try {
+            const response = await fetch(form.action, {method: 'POST', body: data, headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
+            if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Save failed');
+            await response.json();
+            saved = toggles.map(input => input.checked);
+            toggles.forEach(input => { input.defaultChecked = input.checked; });
+            saving = false;
+            // Reload to activate all saved account preferences, including session behavior.
+            window.location.hash = 'settings';
+            window.location.reload();
+        } catch (_) {
+            saving = false;
+            toggles.forEach(input => { input.disabled = false; });
+            form.removeAttribute('aria-busy');
+            save.disabled = false;
+            discard.disabled = false;
+            status.textContent = 'Could not save changes. Your selections are kept; try again.';
+            status.classList.add('settings-save-error');
+        }
+    });
+    update();
 }());
 
 // ── Profile page: inline view-mode toggle ──

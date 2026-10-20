@@ -175,7 +175,10 @@ def acknowledge_request(
         raise PermissionDenied("Only the current primary assignee can acknowledge this request.")
     if request.assignment_revision != expected_revision:
         raise LifecycleConflictError("The assignment changed. Refresh the page before acknowledging.")
-    if request.lifecycle_stage != Request.LifecycleStage.ASSIGNED:
+    # The denormalized field can drift stale (e.g. lost write leaves ASSIGNED while
+    # acknowledged/started events already advanced the log); gate on the event-log
+    # truth so a stale field can never silently re-enable a redundant acknowledgement.
+    if resolve_current_stage(request) != Request.LifecycleStage.ASSIGNED:
         raise LifecycleConflictError("This request is no longer awaiting acknowledgement.")
 
     occurred_at = timezone.now()
@@ -260,15 +263,15 @@ def _stage_state(stage_value: str, current_stage: str) -> str:
     return "upcoming"
 
 
-def _action_label(request: Request) -> str:
+def _action_label_for_stage(stage: str) -> str:
     labels = {
-        Request.LifecycleStage.CREATED: "Assign a primary owner to the request.",
-        Request.LifecycleStage.ASSIGNED: "Primary owner must acknowledge the request and send the acknowledgement email.",
-        Request.LifecycleStage.ACKNOWLEDGED: "Prepare to begin work.",
-        Request.LifecycleStage.ONGOING: "Complete the work and record related activity.",
-        Request.LifecycleStage.COMPLETED: "No pending action. This request is complete.",
+        Request.LifecycleStage.CREATED.value: "Assign a primary owner to the request.",
+        Request.LifecycleStage.ASSIGNED.value: "Primary owner must acknowledge the request and send the acknowledgement email.",
+        Request.LifecycleStage.ACKNOWLEDGED.value: "Prepare to begin work.",
+        Request.LifecycleStage.ONGOING.value: "Complete the work and record related activity.",
+        Request.LifecycleStage.COMPLETED.value: "No pending action. This request is complete.",
     }
-    return labels[request.lifecycle_stage]
+    return labels[stage]
 
 
 def _current_assignment_acknowledged(request: Request) -> bool:
@@ -278,10 +281,47 @@ def _current_assignment_acknowledged(request: Request) -> bool:
     ).exists()
 
 
+def resolve_current_stage(request: Request, field_value: str | None = None) -> str:
+    """Return the authoritative current lifecycle stage for the progress card.
+
+    The denormalized `request.lifecycle_stage` field can legitimately drift from
+    reality (e.g. a reassignment resets it while acknowledged/started events
+    remain, or a DB write is lost after an event is recorded). The immutable
+    event log is the source of truth: this resolves the stage from the most
+    recent lifecycle event, falling back to the field only when no events exist.
+    """
+    latest = (
+        request.lifecycle_events.order_by("-sequence")
+        .values_list("stage", flat=True)
+        .first()
+    )
+    if latest:
+        return latest
+    return field_value if field_value is not None else request.lifecycle_stage
+
+
+@transaction.atomic
+def reconcile_lifecycle_stage(request_id: int, source: str = "Reconcile") -> str | None:
+    """Align `request.lifecycle_stage` to the event log; returns the new value or None.
+
+    Idempotent: if the denormalized field already matches the latest event stage,
+    no write occurs. Used to heal drift without waiting for the card render to
+    paper over it.
+    """
+    request = Request.all_objects.select_for_update(of=("self",)).get(pk=request_id)
+    resolved = resolve_current_stage(request)
+    if resolved != request.lifecycle_stage:
+        request.lifecycle_stage = resolved
+        request.save(update_fields=["lifecycle_stage", "updated_at"])
+        return resolved
+    return None
+
+
 def build_lifecycle_context(request: Request, actor) -> dict:
+    current_stage = resolve_current_stage(request)
     stages = []
     for value, label in Request.LifecycleStage.choices:
-        state = _stage_state(value, request.lifecycle_stage)
+        state = _stage_state(value, current_stage)
         stages.append(
             {
                 "value": value,
@@ -293,9 +333,9 @@ def build_lifecycle_context(request: Request, actor) -> dict:
             }
         )
 
-    if request.lifecycle_stage == Request.LifecycleStage.CREATED:
+    if current_stage == Request.LifecycleStage.CREATED:
         owner_label = "Admin / PM-ESG triage"
-    elif request.lifecycle_stage == Request.LifecycleStage.COMPLETED:
+    elif current_stage == Request.LifecycleStage.COMPLETED:
         owner_label = "No pending owner"
     else:
         owner_label = _user_label(request.engineer) or "Unassigned"
@@ -314,16 +354,16 @@ def build_lifecycle_context(request: Request, actor) -> dict:
         )
 
     return {
-        "current_stage": request.lifecycle_stage,
-        "current_stage_label": request.get_lifecycle_stage_display(),
-        "current_action_label": _action_label(request),
+        "current_stage": current_stage,
+        "current_stage_label": Request.LifecycleStage(current_stage).label,
+        "current_action_label": _action_label_for_stage(current_stage),
         "current_owner_label": owner_label,
         "backup_support_label": _user_label(request.backup_engineer),
         "assignment_revision": request.assignment_revision,
         "can_acknowledge": bool(
             request.engineer_id
             and actor.pk == request.engineer_id
-            and request.lifecycle_stage
+            and current_stage
             in {
                 Request.LifecycleStage.ASSIGNED,
                 Request.LifecycleStage.ACKNOWLEDGED,
@@ -335,7 +375,7 @@ def build_lifecycle_context(request: Request, actor) -> dict:
             request.engineer_id
             and actor.pk == request.engineer_id
             and _current_assignment_acknowledged(request)
-            and request.lifecycle_stage
+            and current_stage
             in {
                 Request.LifecycleStage.ASSIGNED,
                 Request.LifecycleStage.ACKNOWLEDGED,

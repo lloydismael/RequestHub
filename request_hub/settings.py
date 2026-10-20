@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
@@ -19,11 +20,28 @@ elif not SECRET_KEY or SECRET_KEY == "insecure-development-key":
     )
 
 APP_VERSION = os.getenv("APP_VERSION", "dev")
+PUBLIC_BASE_URL = os.getenv("DJANGO_PUBLIC_BASE_URL", "https://esgrequesthub.com").strip().rstrip("/")
+public_url = urlsplit(PUBLIC_BASE_URL)
+if (
+    public_url.scheme not in (("http", "https") if DEBUG else ("https",))
+    or not public_url.hostname
+    or public_url.username is not None
+    or public_url.password is not None
+    or public_url.path
+    or public_url.query
+    or public_url.fragment
+):
+    raise ImproperlyConfigured("DJANGO_PUBLIC_BASE_URL must be an absolute HTTPS origin (HTTP is allowed in DEBUG).")
 ALLOWED_HOSTS = [host.strip() for host in os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 
-primary_domain = os.getenv("DJANGO_PRIMARY_DOMAIN", "esgrequesthub.dreadops.site").strip()
-if primary_domain and primary_domain not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(primary_domain)
+primary_domains = [
+    host.strip()
+    for host in os.getenv("DJANGO_PRIMARY_DOMAIN", "esgrequesthub.com").split(",")
+    if host.strip()
+]
+for primary_domain in primary_domains:
+    if primary_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(primary_domain)
 
 website_hostname = os.getenv("WEBSITE_HOSTNAME")
 if website_hostname and website_hostname not in ALLOWED_HOSTS:
@@ -32,12 +50,13 @@ if website_hostname and website_hostname not in ALLOWED_HOSTS:
 csrf_hosts = [host.strip() for host in os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if host.strip()]
 if website_hostname:
     csrf_hosts.append(f"https://{website_hostname}")
-if primary_domain:
+if primary_domains:
     schemes = ("https", "http") if DEBUG else ("https",)
-    for scheme in schemes:
-        origin = f"{scheme}://{primary_domain}"
-        if origin not in csrf_hosts:
-            csrf_hosts.append(origin)
+    for primary_domain in primary_domains:
+        for scheme in schemes:
+            origin = f"{scheme}://{primary_domain}"
+            if origin not in csrf_hosts:
+                csrf_hosts.append(origin)
 if csrf_hosts:
     CSRF_TRUSTED_ORIGINS = csrf_hosts
 
@@ -194,13 +213,13 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "ESG Request Hub <no-reply@esgrequesthub.dreadops.site>")
+DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "ESG Request Hub <no-reply@esgrequesthub.com>")
 
 # Azure Communication Services Email
 ACS_EMAIL_CONNECTION_STRING = os.getenv("ACS_EMAIL_CONNECTION_STRING", "").strip()
 ACS_EMAIL_SENDER = os.getenv(
     "ACS_EMAIL_SENDER",
-    "DoNotReply@dreadops.site",
+    "DoNotReply@esgrequesthub.com",
 ).strip()
 
 # Microsoft Graph (MSAL) integration scoped to the phildata tenant.

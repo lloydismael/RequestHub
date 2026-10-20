@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load form_customization %}
+{% block title %}{{ form_title }} · Request Hub{% endblock %}
+{% block content %}
+<div class="glass-card p-4">
+    <h1 class="h4">{{ form_title }}</h1>
+    {% if form.editor_description %}<p>{{ form.editor_description }}</p>{% endif %}
+    <form method="post">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        {% form_editor_token form %}
+        {% for field in form.visible_fields %}
+        <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+            <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+            {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors }}</div>{% endif %}
+        </div>
+        {% endfor %}
+        <a class="btn btn-outline-secondary" href="{{ back_url }}">Cancel</a>
+        <button class="btn btn-primary" type="submit">{{ submit_label }}</button>
+    </form>
+</div>
+{% endblock %}

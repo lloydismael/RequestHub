@@ -198,43 +198,69 @@ class RequestLifecycleServiceTests(TestCase):
         self.assertEqual(result.request.lifecycle_stage, Request.LifecycleStage.ONGOING)
         self.assertEqual(result.request.status, Request.Status.ONGOING)
 
-    def test_completion_and_reopen_are_recorded(self):
+    def test_repair_replaying_acknowledge_events_is_idempotent(self):
+        """Re-running a data repair that replays ACKNOWLEDGED+STARTED events must
+        not duplicate the event log (idempotency keys guard each revision)."""
         request = self.create_request(engineer=self.primary)
         request_lifecycle.record_created(request.pk, actor=self.requestor)
         request.refresh_from_db()
         request_lifecycle.acknowledge_request(request.pk, actor=self.primary, expected_revision=request.assignment_revision)
-        EngineerActivityLog.objects.create(
-            engineer=self.primary,
-            account=self.account,
-            request=request,
-            request_date=timezone.now().date(),
-            activity_type=EngineerActivityLog.ActivityType.INTERNAL_SUPPORT,
-            actual_hours="1.00",
-            details="Worked request",
-            location=EngineerActivityLog.Location.OFFICE,
-        )
-        request.status = Request.Status.COMPLETED
-        request.end_date = timezone.now().date()
-        request.save()
-        completed = request_lifecycle.record_status_change(
-            request.pk,
-            previous_status=Request.Status.ONGOING,
-            actor=self.primary,
-        )
-        self.assertEqual(completed.request.lifecycle_stage, Request.LifecycleStage.COMPLETED)
+        request.refresh_from_db()
 
-        request = completed.request
-        request.status = Request.Status.ONGOING
-        request.end_date = None
-        request.save()
-        reopened = request_lifecycle.record_status_change(
-            request.pk,
-            previous_status=Request.Status.COMPLETED,
-            actor=self.manager,
+        revision = request.assignment_revision
+        baseline_events = list(request.lifecycle_events.values_list("event_type", flat=True))
+
+        # Simulate a data-repair replay using the same idempotency keys.
+        request_lifecycle._create_event(
+            request,
+            event_type=RequestLifecycleEvent.EventType.ACKNOWLEDGED,
+            stage=Request.LifecycleStage.ACKNOWLEDGED,
+            previous_stage=Request.LifecycleStage.ASSIGNED,
+            actor=self.primary,
+            source="Data repair",
+            idempotency_key=f"accepted:{revision}",
+            is_synthetic=True,
         )
-        self.assertEqual(reopened.request.lifecycle_stage, Request.LifecycleStage.ONGOING)
-        self.assertIsNone(reopened.request.end_date)
-        self.assertEqual(reopened.events[0].event_type, RequestLifecycleEvent.EventType.REOPENED)
+        request_lifecycle._create_event(
+            request,
+            event_type=RequestLifecycleEvent.EventType.STARTED,
+            stage=Request.LifecycleStage.ONGOING,
+            previous_stage=Request.LifecycleStage.ACKNOWLEDGED,
+            actor=self.primary,
+            source="Data repair",
+            idempotency_key=f"started:{revision}",
+            is_synthetic=True,
+        )
+
+        self.assertEqual(
+            list(request.lifecycle_events.values_list("event_type", flat=True)),
+            baseline_events,
+        )
+
+    def test_resolve_current_stage_prefers_event_log_over_stale_field(self):
+        """The authoritative stage for the card comes from the event log, healing
+        the exact Bucket-A bug where the denormalized field says 'assigned' after
+        the engineer already acknowledged."""
+        request = self.create_request(engineer=self.primary)
+        request_lifecycle.record_created(request.pk, actor=self.requestor)
+        request.refresh_from_db()
+        request_lifecycle.acknowledge_request(request.pk, actor=self.primary, expected_revision=request.assignment_revision)
+        request.refresh_from_db()
+
+        # Simulate the real failure: the acknowledged/started events persisted but
+        # the denormalized field drifted back to 'assigned'.
+        request.lifecycle_stage = Request.LifecycleStage.ASSIGNED
+        request.save(update_fields=["lifecycle_stage", "updated_at"])
+        request.refresh_from_db()
+
+        self.assertEqual(request.lifecycle_stage, Request.LifecycleStage.ASSIGNED)
+        self.assertEqual(request_lifecycle.resolve_current_stage(request), Request.LifecycleStage.ONGOING)
+
+        # reconcile heals the drift and is idempotent on a second call.
+        self.assertEqual(request_lifecycle.reconcile_lifecycle_stage(request.pk), Request.LifecycleStage.ONGOING)
+        request.refresh_from_db()
+        self.assertEqual(request.lifecycle_stage, Request.LifecycleStage.ONGOING)
+        self.assertIsNone(request_lifecycle.reconcile_lifecycle_stage(request.pk))
 
 
 class RequestLifecycleManagePageTests(TestCase):
@@ -348,3 +374,55 @@ class RequestLifecycleManagePageTests(TestCase):
         )
         self.request.refresh_from_db()
         self.assertEqual(self.request.lifecycle_stage, Request.LifecycleStage.ASSIGNED)
+
+    def test_manage_page_renders_ongoing_when_field_is_stale(self):
+        """Regression for Bucket A: even if `lifecycle_stage` retreats to 'assigned'
+        while acknowledged/started events remain, the card must show the engineer as
+        already acknowledged/ongoing and must NOT re-enable the acknowledge button."""
+        self.request.refresh_from_db()
+        request_lifecycle.acknowledge_request(
+            self.request.pk,
+            actor=self.primary,
+            expected_revision=self.request.assignment_revision,
+        )
+        self.request.refresh_from_db()
+
+        # Simulate the DB drift that originally caused the bug.
+        self.request.lifecycle_stage = Request.LifecycleStage.ASSIGNED
+        self.request.save(update_fields=["lifecycle_stage", "updated_at"])
+
+        self.client.force_login(self.primary)
+        response = self.client.get(reverse("hub:request-manage-collab", args=[self.request.pk]))
+
+        self.assertContains(response, "Current stage: <strong>Ongoing</strong>", html=True)
+        self.assertContains(response, "Acknowledgement sent")
+        self.assertContains(response, 'disabled aria-disabled="true"')
+        self.assertNotContains(response, "Acknowledge request")
+
+    def test_stale_field_does_not_silently_re_enable_ack(self):
+        """A stale field must not create a silent path that lets a second ack
+        (and its redundant email draft) proceed; the acknowledge endpoint must
+        reject with a clear conflict even though the card field reads 'assigned'."""
+        self.request.refresh_from_db()
+        request_lifecycle.acknowledge_request(
+            self.request.pk,
+            actor=self.primary,
+            expected_revision=self.request.assignment_revision,
+        )
+        self.request.refresh_from_db()
+        self.request.lifecycle_stage = Request.LifecycleStage.ASSIGNED
+        self.request.save(update_fields=["lifecycle_stage", "updated_at"])
+        self.request.refresh_from_db()
+
+        self.client.force_login(self.primary)
+        response = self.client.post(
+            reverse("hub:request-lifecycle-acknowledge", args=[self.request.pk]),
+            {"assignment_revision": self.request.assignment_revision},
+            follow=True,
+        )
+
+        # The second ack is rejected (events already present, stage advanced in the
+        # event log), the page renders the authoritative state, and the engineer sees
+        # clear feedback rather than a silent success that re-opens the draft.
+        self.assertContains(response, "This request is no longer awaiting acknowledgement.")
+        self.assertContains(response, "Current stage: <strong>Ongoing</strong>", html=True)

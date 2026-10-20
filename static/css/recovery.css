@@ -1,0 +1,24 @@
+.recovery-header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.recovery-header h2 { margin-bottom: .5rem; }
+.recovery-muted { color: var(--rh-text-secondary); font-size: .85rem; }
+.recovery-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 1.25rem 0; }
+.recovery-stat { padding: 1rem; border: 1px solid var(--rh-border); border-radius: .75rem; background: var(--rh-surface-sunken); min-width: 0; }
+.recovery-stat span { display: block; font-size: .75rem; color: var(--rh-text-secondary); margin-bottom: .35rem; }
+.recovery-stat strong { font-size: .9rem; overflow-wrap: anywhere; }
+.recovery-section { border-top: 1px solid var(--rh-divider); padding-top: 1.25rem; margin-top: 1.25rem; }
+.recovery-section h3 { font-size: 1rem; font-weight: 650; margin-bottom: .5rem; }
+.recovery-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+.recovery-actions .form-control { min-width: 0; }
+.recovery-actions > div { flex: 1; min-width: 160px; }
+.recovery-table { width: 100%; font-size: .8rem; color: var(--rh-text-primary); }
+.recovery-table th, .recovery-table td { padding: .7rem; border-bottom: 1px solid var(--rh-divider); vertical-align: middle; }
+.recovery-table th { color: var(--rh-text-secondary); font-weight: 600; text-align: left; }
+.recovery-table caption { color: var(--rh-text-secondary); }
+.recovery-badge { display: inline-block; border: 1px solid var(--rh-border); padding: .2rem .45rem; border-radius: .4rem; font-size: .75rem; }
+.recovery-notice { padding: 1rem; border-left: 3px solid var(--lg-accent); background: var(--rh-surface-sunken); border-radius: .5rem; margin: 1rem 0; font-size: .85rem; }
+.recovery-danger { border-left-color: var(--bs-danger); }
+.recovery-pagination { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+.recovery-panel .btn, .recovery-panel summary { min-height: 44px; }
+.recovery-panel input:focus-visible, .recovery-panel a:focus-visible, .recovery-panel button:focus-visible { outline: 3px solid var(--lg-accent); outline-offset: 3px; }
+.recovery-progress { color: var(--rh-text-secondary); font-size: .85rem; }
+@media (max-width: 600px) { .recovery-overview { grid-template-columns: minmax(0, 1fr); } .recovery-panel { padding: 1rem; } .recovery-actions { align-items: stretch; } .recovery-actions .btn { width: 100%; } }

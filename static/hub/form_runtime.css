@@ -1,0 +1,7 @@
+.editor-custom-fields { display: flex; flex-wrap: wrap; gap: 1rem; }
+.editor-custom-fields > [data-editor-field] { flex: 0 0 100%; min-width: 0; }
+.editor-section { margin: 1rem 0 .5rem; font-weight: 600; }
+[data-editor-field][hidden] { display: none !important; }
+@media (min-width: 768px) {
+  .editor-custom-fields > .editor-field-half { flex-basis: calc(50% - .5rem); }
+}

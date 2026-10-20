@@ -2,6 +2,7 @@ import csv
 import base64
 import html
 from django.db import IntegrityError
+from .form_editor_runtime import save_configured_instance
 import json
 import logging
 import mimetypes
@@ -43,6 +44,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
+from django.utils.cache import patch_cache_control
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html, json_script
 from django.views import View
@@ -66,6 +68,7 @@ from .forms import (
     AdminRequestFilterForm,
     EngineerActivityLogForm,
     RequestAdminForm,
+    SqrPerformanceForm,
     SqrDeliveryForm,
     SqrProposalStatusForm,
     SqrRevenueForm,
@@ -84,6 +87,7 @@ from .models import (
     Notification,
     Request,
     RequestCommunication,
+    SqrProjectPerformance,
     SqrSubmission,
     SqrSubmissionChange,
     SqrSubmissionHistory,
@@ -97,6 +101,7 @@ from .mixins import (
     EngineerRequiredMixin,
 )
 from .services import request_lifecycle
+from .services.sqr_performance import build_sqr_performance_snapshot
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
@@ -695,7 +700,7 @@ class EngineerActivityLogView(EngineerRequiredMixin, LoginRequiredMixin, Templat
             activity_log.engineer = request.user
             if not activity_log.request_date:
                 activity_log.request_date = timezone.now().date()
-            activity_log.save()
+            save_configured_instance(form, activity_log)
             if instance:
                 messages.success(request, "Activity log updated successfully.")
             else:
@@ -1079,13 +1084,7 @@ def notify_engineer_assignment_email(
 
     actor_name = actor_user.get_full_name() or actor_user.username or "Request Hub"
     due_display = request_obj.due_date.strftime("%b %d, %Y") if request_obj.due_date else "Not set"
-    detail_url = ""
-
-    if request:
-        try:
-            detail_url = request.build_absolute_uri(request_obj.get_absolute_url())
-        except Exception:
-            detail_url = ""
+    detail_url = f"{settings.PUBLIC_BASE_URL}{request_obj.get_absolute_url()}"
 
     subject = f"[Request Hub] New assignment - {request_obj.reference_code or 'Request'}"
     body_lines = [
@@ -1213,13 +1212,7 @@ def _send_sqr_new_submission_email(
     reviewer_name = reviewer.get_full_name() or reviewer.username
     engineer_name = submission.engineer.get_full_name() or submission.engineer.username
     sqr_path = reverse("hub:sqr")
-    if http_request:
-        try:
-            sqr_url = http_request.build_absolute_uri(sqr_path)
-        except Exception:
-            sqr_url = sqr_path
-    else:
-        sqr_url = sqr_path
+    sqr_url = f"{settings.PUBLIC_BASE_URL}{sqr_path}"
 
     customer_company = (submission.customer_company or "").strip()
     submitted_date = (
@@ -1321,13 +1314,7 @@ def _send_sqr_for_revision_email(
 
     engineer_name = engineer.get_full_name() or engineer.username
     sqr_edit_path = reverse("hub:sqr")
-    if http_request:
-        try:
-            sqr_url = http_request.build_absolute_uri(sqr_edit_path)
-        except Exception:
-            sqr_url = sqr_edit_path
-    else:
-        sqr_url = sqr_edit_path
+    sqr_url = f"{settings.PUBLIC_BASE_URL}{sqr_edit_path}"
 
     review_notes = (submission.review_notes or "").strip()
     customer_company = (submission.customer_company or "").strip()
@@ -2535,7 +2522,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             req._actor_source = "Dashboard · New Request"
             if request.user.role in ADMIN_PANEL_ROLES:
                 req._allow_capacity_override = True
-            req.save()
+            save_configured_instance(form, req)
             lifecycle_result = request_lifecycle.record_created(
                 req.pk,
                 actor=request.user,
@@ -2734,6 +2721,115 @@ def _get_sqr_esg_export_columns():
     ]
 
 
+def _get_sqr_performance(prefetched=True):
+    """Return {submission_id: SqrProjectPerformance} for all rows (single query)."""
+    return {p.submission_id: p for p in SqrProjectPerformance.objects.select_related("project_manager")}
+
+
+def _get_sqr_performance_export_columns():
+    def _date(d):
+        return d.strftime("%Y-%m-%d") if d else ""
+
+    def _name(u):
+        return (u.get_full_name() or u.username) if u else ""
+
+    def _perf(s):
+        return getattr(s, "performance", None)
+
+    def _status(s):
+        p = _perf(s)
+        if not p:
+            return ""
+        return dict(SqrProjectPerformance.ProjectStatus.choices).get(p.status, p.status or "")
+
+    def _health(value):
+        return dict(SqrProjectPerformance.Health.choices).get(value, value or "")
+
+    def _overall(s):
+        p = _perf(s)
+        if not p:
+            return ""
+        return dict(SqrProjectPerformance.OverallHealth.choices).get(p.overall_health, p.overall_health)
+
+    return [
+        ("SQR ID", lambda s: s.reference_code or ""),
+        ("Description", lambda s: s.project_title or ""),
+        ("Project Manager", lambda s: _name(_perf(s).project_manager) if _perf(s) and _perf(s).project_manager else (_name(s.assigned_pm) or _name(s.pm_esg_reviewer))),
+        ("Start Date", lambda s: _date(_perf(s).start_date) if _perf(s) else ""),
+        ("Finish Date", lambda s: _date(_perf(s).finish_date) if _perf(s) else ""),
+        ("Status", _status),
+        ("% Complete", lambda s: _perf(s).percent_complete if _perf(s) and _perf(s).percent_complete is not None else ""),
+        ("Next Action / Remarks", lambda s: _perf(s).next_action_remarks if _perf(s) else ""),
+        ("Folder link", lambda s: (_perf(s).folder_link or s.sqr_folder_link or "") if _perf(s) else (s.sqr_folder_link or "")),
+        ("Schedule Health", lambda s: _health(_perf(s).schedule_health) if _perf(s) else ""),
+        ("Scope Health", lambda s: _health(_perf(s).scope_health) if _perf(s) else ""),
+        ("Budget Health", lambda s: _health(_perf(s).budget_health) if _perf(s) else ""),
+        ("Recovery Action / Remarks", lambda s: _perf(s).recovery_action_remarks if _perf(s) else ""),
+        ("Overall Health", _overall),
+        ("Last Updated Date", lambda s: _perf(s).updated_at.strftime("%Y-%m-%d %H:%M") if _perf(s) and _perf(s).updated_at else ""),
+    ]
+
+
+def _perf_sqr_mismatches(submission):
+    """Compare a performance row against its SQR Tracker source columns.
+
+    Returns a list of {field, label, sqr_value, perf_value}. PM is compared by
+    user ID (not display name) to avoid false flags on name formatting.
+    Kept dormant (no UI) for programmatic checks; covered by unit test.
+    """
+    perf = getattr(submission, "performance", None)
+    if not perf:
+        return []
+    mismatches = []
+
+    def _fmt_date(d):
+        return d.strftime("%Y-%m-%d") if d else "—"
+
+    def _fmt_user(u):
+        return (u.get_full_name() or u.username) if u else "—"
+
+    sqr_pm = submission.assigned_pm or submission.pm_esg_reviewer
+    if (perf.project_manager_id, getattr(sqr_pm, "pk", None)) != (None, None) and perf.project_manager_id != getattr(sqr_pm, "pk", None):
+        mismatches.append({
+            "field": "project_manager",
+            "label": "Project Manager ≠ SQR Assigned PM",
+            "sqr_value": _fmt_user(sqr_pm),
+            "perf_value": _fmt_user(perf.project_manager),
+        })
+    if perf.start_date != submission.delivery_start_date and (perf.start_date or submission.delivery_start_date):
+        mismatches.append({
+            "field": "start_date",
+            "label": "Start Date ≠ SQR Start Date",
+            "sqr_value": _fmt_date(submission.delivery_start_date),
+            "perf_value": _fmt_date(perf.start_date),
+        })
+    if perf.finish_date != submission.delivery_actual_finish_date and (perf.finish_date or submission.delivery_actual_finish_date):
+        mismatches.append({
+            "field": "finish_date",
+            "label": "Finish Date ≠ SQR Actual Finish Date",
+            "sqr_value": _fmt_date(submission.delivery_actual_finish_date),
+            "perf_value": _fmt_date(perf.finish_date),
+        })
+    sqr_folder = (submission.sqr_folder_link or "").strip().rstrip("/")
+    perf_folder = (perf.folder_link or "").strip().rstrip("/")
+    if sqr_folder != perf_folder and (sqr_folder or perf_folder):
+        mismatches.append({
+            "field": "folder_link",
+            "label": "Folder link ≠ SQR Doc. Ref. Link",
+            "sqr_value": submission.sqr_folder_link or "—",
+            "perf_value": perf.folder_link or "—",
+        })
+    if (perf.percent_complete is not None and submission.delivery_progress is not None
+            and abs(perf.percent_complete - submission.delivery_progress) > 10):
+        mismatches.append({
+            "field": "percent_complete",
+            "label": "% Complete differs from SQR Overall Progress % by >10",
+            "sqr_value": f"{submission.delivery_progress}%",
+            "perf_value": f"{perf.percent_complete}%",
+        })
+    return mismatches
+
+
 def _normalize_import_text(value) -> str:
     return " ".join(
         str(value or "")
@@ -2765,6 +2861,22 @@ def _make_sqr_edit_form(user):
     return form
 
 
+def _sqr_queryset_for_user(user):
+    """Shared Tracker/dashboard read scope; preserve joins and ordering."""
+    queryset = SqrSubmission.objects.select_related(
+        "engineer",
+        "pm_esg_reviewer",
+        "reviewed_by",
+        "assigned_pm",
+        "assigned_sse",
+        "linked_request",
+        "linked_request__account",
+    ).order_by("-created_at", "-pk")
+    if user.role in ENGINEER_ACCESS_ROLES:
+        return queryset.filter(engineer=user)
+    return queryset
+
+
 class SqrListView(LoginRequiredMixin, TemplateView):
     template_name = "hub/sqr.html"
 
@@ -2781,18 +2893,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        queryset = SqrSubmission.objects.select_related(
-            "engineer",
-            "pm_esg_reviewer",
-            "reviewed_by",
-            "assigned_pm",
-            "assigned_sse",
-            "linked_request",
-            "linked_request__account",
-        ).order_by("-created_at", "-pk")
-        if self.request.user.role in ENGINEER_ACCESS_ROLES:
-            return queryset.filter(engineer=self.request.user)
-        return queryset
+        return _sqr_queryset_for_user(self.request.user)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -3225,6 +3326,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                 "proposal_counts": proposal_counts,
                 "delivery_submissions": delivery_submissions,
                 "delivery_health_counts": delivery_health_counts,
+
                 "revenue_data": revenue_data,
                 "sqr_reports_summary": sqr_reports_summary,
                 "sqr_reports_status_chart": sqr_reports_status_chart,
@@ -3306,7 +3408,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                         )
                     else:
                         submission.managed_support_amount = None
-                    submission.save()
+                    save_configured_instance(form, submission)
             except IntegrityError:
                 form.add_error("linked_request", "An SQR already exists for the selected Request ID.")
                 context = self.get_context_data(form=form)
@@ -3429,6 +3531,28 @@ class NotificationToastDataView(LoginRequiredMixin, View):
         )
 
 
+class SqrPerformanceDataView(LoginRequiredMixin, View):
+    """Lazy, authorized snapshot; never builds Tracker/Reports context."""
+
+    http_method_names = ["get"]
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.role not in ADMIN_PANEL_ROLES:
+            response = JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
+        else:
+            response = super().dispatch(request, *args, **kwargs)
+        patch_cache_control(response, private=True, no_store=True)
+        return response
+
+    def get(self, request, *args, **kwargs):
+        fetched_at = timezone.now()
+        return JsonResponse(build_sqr_performance_snapshot(
+            _sqr_queryset_for_user(request.user),
+            today=timezone.localdate(fetched_at),
+            fetched_at=fetched_at,
+        ))
+
+
 class SqrReportsDataView(LoginRequiredMixin, View):
     """AJAX endpoint that returns the latest SQR reports fragment for live refresh."""
 
@@ -3464,6 +3588,21 @@ class SqrReportsDataView(LoginRequiredMixin, View):
 
 
 class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
+    def get(self, request, *args, **kwargs):
+        if request.GET.get("format") == "form-editor":
+            self.object = self.get_object()
+            form = self.get_form()
+            form.auto_id = "edit_%s"
+            form._bound_fields_cache = {}
+            html = render_to_string("hub/form_custom_fields.html", {
+                "editor_hidden_fields": [form[name] for name in form.fields if form.fields[name].widget.is_hidden],
+                "editor_custom_fields": [form[name] for name in getattr(form, "editor_custom_keys", [])],
+            }, request=request)
+            selectors = {name: str(form[name]) for name in ("customer_contact", "pm_esg_reviewer") if name in form.fields}
+            member_map = form.fields["customer_company"].widget.attrs.get("data-member-map", "{}")
+            return JsonResponse({"html": html, "selectors": selectors, "member_map": member_map})
+        return super().get(request, *args, **kwargs)
+
     model = SqrSubmission
     form_class = SqrSubmissionForm
     template_name = "hub/sqr_submission_form.html"
@@ -4308,7 +4447,7 @@ class SqrRevenueTrackerUpdateView(LoginRequiredMixin, View):
 
                 if not submission.po_attachment_link:
                     updated_submission.po_attached_at = timezone.now()
-                updated_submission.save()
+                save_configured_instance(form, updated_submission)
                 messages.success(request, f"P.O attached for {submission.reference_code}. Moved to Revenue stage.")
             else:
                 self._flash_form_errors(request, form)
@@ -4386,6 +4525,67 @@ class SqrDeliveryUpdateView(LoginRequiredMixin, View):
         if form.is_valid():
             form.save()
             messages.success(request, f"Service delivery updated for {submission.reference_code}.")
+        else:
+            for field, errors in form.errors.items():
+                label = form.fields[field].label if field in form.fields else field
+                for error in errors:
+                    messages.error(request, f"{label}: {error}")
+
+        return redirect("hub:sqr")
+
+
+class SqrPerformanceUpdateView(LoginRequiredMixin, View):
+    """PM-ESG / Admin: create-or-update the 1-to-1 Project Performance record."""
+
+    def post(self, request, pk):
+        if request.user.role not in ADMIN_PANEL_ROLES:
+            messages.error(request, "Only PM-ESG or Admin can update Project Performance details.")
+            return redirect("hub:sqr")
+
+        submission = get_object_or_404(SqrSubmission, pk=pk)
+        try:
+            instance = submission.performance
+        except SqrProjectPerformance.DoesNotExist:
+            instance = SqrProjectPerformance(
+                submission=submission,
+                start_date=submission.delivery_start_date,
+                finish_date=submission.delivery_actual_finish_date,
+                project_manager=submission.assigned_pm or submission.pm_esg_reviewer,
+                folder_link=submission.sqr_folder_link or "",
+            )
+
+        form = SqrPerformanceForm(request.POST, instance=instance)
+        if form.is_valid():
+            performance = form.save(commit=False)
+            performance.submission = submission
+            # Preserve seeded lookup values when the posted form leaves them blank.
+            if not performance.start_date:
+                performance.start_date = submission.delivery_start_date
+            if not performance.finish_date:
+                performance.finish_date = submission.delivery_actual_finish_date
+            if not performance.folder_link:
+                performance.folder_link = submission.sqr_folder_link or ""
+            if not performance.project_manager_id:
+                performance.project_manager = submission.assigned_pm or submission.pm_esg_reviewer
+            save_configured_instance(form, performance)
+            SqrSubmissionHistory.objects.create(
+                submission=submission,
+                actor=request.user,
+                action=SqrSubmissionHistory.Action.UPDATED,
+                field="performance",
+                old_values={},
+                new_values={
+                    "status": performance.status,
+                    "overall_health": performance.overall_health,
+                    "schedule_health": performance.schedule_health,
+                    "scope_health": performance.scope_health,
+                    "budget_health": performance.budget_health,
+                    "percent_complete": performance.percent_complete,
+                },
+                summary=f"Project performance updated for {submission.reference_code}.",
+                source="sqr-performance-update",
+            )
+            messages.success(request, f"Project performance updated for {submission.reference_code}.")
         else:
             for field, errors in form.errors.items():
                 label = form.fields[field].label if field in form.fields else field
@@ -4623,7 +4823,7 @@ class RequestDetailView(LoginRequiredMixin, DetailView):
             log = form.save(commit=False)
             log.request = self.object
             log.author = request.user
-            log.save()
+            save_configured_instance(form, log)
             notify_status_update(log, "Request Detail · Status Update")
             messages.success(request, "Status log saved.")
             return redirect("hub:request-manage-collab", pk=self.object.pk)
@@ -4753,7 +4953,7 @@ class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, Upda
             log = form.save(commit=False)
             log.request = self.object
             log.author = request.user
-            log.save()
+            save_configured_instance(form, log)
             notify_status_update(log, "Admin · Manage Request · Status Update")
             messages.success(request, "Status update posted.")
             return HttpResponseRedirect(self.request.path)
@@ -5052,7 +5252,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             activity_log.account = request_obj.account
             if not activity_log.request_date:
                 activity_log.request_date = timezone.now().date()
-            activity_log.save()
+            save_configured_instance(form, activity_log)
             messages.success(request, "Activity log updated successfully." if instance else "Activity log saved successfully.")
             return redirect("hub:request-manage-collab", pk=request_obj.pk)
 
@@ -5169,7 +5369,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             log = log_form.save(commit=False)
             log.request = request_obj
             log.author = request.user
-            log.save()
+            save_configured_instance(log_form, log)
             source_label = self._source_label("Manage Request · Status Update")
             notify_status_update(log, source_label)
             messages.success(request, "Status update posted.")
@@ -5469,15 +5669,15 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
         else:
             description_line = "No description provided."
 
-        detail_url = request.build_absolute_uri(request_obj.get_absolute_url())
+        detail_url = f"{settings.PUBLIC_BASE_URL}{request_obj.get_absolute_url()}"
 
         body_template = (
             "Hello {requestor_name},\n\n"
-            "Following up on our earlier acknowledgement for {reference}, this is to confirm the request has been fulfilled and is now marked as closed.\n\n"
-            "Advisory Only: Please do not reply to this closed request thread for new support needs.\n\n"
-            "View request details: {detail_url}\n\n"
-            "If you believe further action is required or have additional questions, please submit a new one via Request Hub.\n\n"
-            "Thank you for your cooperation."
+            "This is to confirm that {reference} has been completed and closed.\n\n"
+            "Request details: {reference} — {detail_url}\n\n"
+            f"If additional assistance is needed, please create a new request through {settings.PUBLIC_BASE_URL}\n\n"
+            "Thanks,\n"
+            "ESG"
         )
 
         body = quote(
@@ -5662,10 +5862,11 @@ class SqrExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
         qs = SqrSubmission.objects.select_related(
             "engineer", "pm_esg_reviewer", "reviewed_by",
             "assigned_pm", "assigned_sse", "linked_request",
+            "performance", "performance__project_manager",
         ).order_by("-created_at", "-pk")
 
         report_type = request.GET.get("report", "sqr")
-        if report_type not in {"sqr", "esg"}:
+        if report_type not in {"sqr", "esg", "performance"}:
             report_type = "sqr"
 
         report_config = {
@@ -5678,6 +5879,11 @@ class SqrExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
                 "worksheet_title": "ESG Performance Tracker",
                 "filename_prefix": "esg-performance-tracker",
                 "columns": _get_sqr_esg_export_columns,
+            },
+            "performance": {
+                "worksheet_title": "Project Performance Tracking",
+                "filename_prefix": "project-performance-tracking",
+                "columns": _get_sqr_performance_export_columns,
             },
         }[report_type]
 
@@ -6866,22 +7072,26 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         return page_obj, query
 
     def get(self, request, *args, **kwargs):
+        from .form_editor_views import catalog
+
         self._sync_account_baseline()
         users_page_obj, user_search_query = self._paginate_users(request)
         account_formset = self.account_form_class(queryset=Account.objects.order_by("name"))
         create_user_form = UserManagementForm(prefix="create_user")
         self._prepare_account_formset(account_formset)
-        return render(
-            request,
-            self.template_name,
-            self._build_context(
-                None,
-                account_formset,
-                create_user_form=create_user_form,
-                users_page_obj=users_page_obj,
-                user_search_query=user_search_query,
-            ),
+        context = self._build_context(
+            None,
+            account_formset,
+            create_user_form=create_user_form,
+            users_page_obj=users_page_obj,
+            user_search_query=user_search_query,
         )
+        active_tab = request.GET.get("tab", "users")
+        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "forms"} else "users"
+        context["form_catalog"] = catalog()
+        for user in context["users"]:
+            user.editor_form = UserManagementForm(instance=user)
+        return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
         active_tab = request.POST.get("active_tab", "users")
@@ -7421,14 +7631,37 @@ class RequestLifecycleAcknowledgeView(LoginRequiredMixin, View):
             )
         except PermissionDenied as exc:
             messages.error(request, str(exc))
-            return redirect("hub:request-manage-collab", pk=pk)
+            return self._acknowledge_failure(request, pk)
         except request_lifecycle.LifecycleConflictError as exc:
             messages.error(request, "; ".join(exc.messages))
-            return redirect("hub:request-manage-collab", pk=pk)
+            return self._acknowledge_failure(request, pk)
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
-            return redirect("hub:request-manage-collab", pk=pk)
+            return self._acknowledge_failure(request, pk)
+        except Exception as exc:  # noqa: BLE001 — surface unexpected DB failures instead of a raw 500
+            logger.exception("Acknowledge failed for request %s (user %s)", pk, request.user)
+            messages.error(
+                request,
+                "We could not record your acknowledgement right now. "
+                "The request has NOT been marked as acknowledged — please refresh and try again.",
+            )
+            return self._acknowledge_failure(request, pk)
         return RequestOutlookRedirectView().post(request, pk, allow_existing_draft=True)
+
+    def _acknowledge_failure(self, request, pk):
+        """Re-render the collab page so the engineer sees the authoritative
+        lifecycle state together with the error, instead of a bare redirect.
+        """
+        try:
+            request_obj = RequestCollaborativeManageView()
+            request_obj.request = request
+            request_obj.kwargs = {"pk": pk}
+            request_obj.args = ()
+            obj = request_obj.get_object()
+            context = request_obj.get_context_data(obj)
+            return render(request, request_obj.template_name, context)
+        except Exception:  # noqa: BLE001 — fall back to a redirect if re-render fails
+            return redirect("hub:request-manage-collab", pk=pk)
 
 
 class RequestStatusUpdateView(LoginRequiredMixin, View):

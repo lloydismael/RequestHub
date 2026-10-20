@@ -7,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
@@ -986,6 +987,79 @@ class SqrSubmissionChange(models.Model):
         return self.undone_at is not None
 
 
+class SqrProjectPerformance(models.Model):
+    """1-to-1 Project Performance Tracking record linked to an SQR submission.
+
+    Lookup / auto-filled from SQR: SQR ID (reference_code), Description (project_title).
+    Finish Date means the Actual Finish date (delivery_actual_finish_date seed).
+    """
+
+    class ProjectStatus(models.TextChoices):
+        PENDING_START = "pending_start", "Pending Start"
+        ONGOING = "ongoing", "Ongoing"
+        AT_RISK = "at_risk", "At Risk"
+        CLOSED = "closed", "Closed"
+
+    class Health(models.TextChoices):
+        OK = "ok", "OK"
+        AT_RISK = "at_risk", "At Risk"
+        OVER = "over", "Overdue"
+
+    class OverallHealth(models.TextChoices):
+        GREEN = "green", "Green"
+        YELLOW = "yellow", "Yellow"
+        RED = "red", "Red"
+
+    submission = models.OneToOneField(
+        SqrSubmission,
+        on_delete=models.CASCADE,
+        related_name="performance",
+    )
+    project_manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="sqr_performance_managed",
+        blank=True,
+        null=True,
+    )
+    start_date = models.DateField(blank=True, null=True)
+    finish_date = models.DateField(blank=True, null=True, verbose_name="Finish Date (Actual)")
+    status = models.CharField(
+        max_length=20, choices=ProjectStatus.choices, default=ProjectStatus.PENDING_START
+    )
+    percent_complete = models.PositiveSmallIntegerField(blank=True, null=True)
+    next_action_remarks = models.TextField(blank=True)
+    folder_link = models.URLField(blank=True)
+    schedule_health = models.CharField(
+        max_length=20, choices=Health.choices, default=Health.OK
+    )
+    scope_health = models.CharField(
+        max_length=20, choices=Health.choices, default=Health.OK
+    )
+    budget_health = models.CharField(
+        max_length=20, choices=Health.choices, default=Health.OK
+    )
+    recovery_action_remarks = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-pk"]
+
+    def __str__(self) -> str:
+        return f"Performance for {self.submission}"
+
+    @property
+    def overall_health(self) -> str:
+        """Auto-calculated: any Overdue -> Red; elif any At Risk -> Yellow; else Green."""
+        healths = {self.schedule_health, self.scope_health, self.budget_health}
+        if self.Health.OVER in healths:
+            return self.OverallHealth.RED
+        if self.Health.AT_RISK in healths:
+            return self.OverallHealth.YELLOW
+        return self.OverallHealth.GREEN
+
+
 class SqrSubmissionHistory(models.Model):
     """Permanent user-visible history entry for SQR field and workflow changes."""
 
@@ -1140,3 +1214,91 @@ class StatusLog(models.Model):
 
     def __str__(self) -> str:
         return f"{self.request.reference_code or 'Request'}: {self.author.get_full_name() or self.author.username}"
+
+
+class FormDefinition(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    draft = models.JSONField(default=dict)
+    revision = models.PositiveBigIntegerField(default=0)
+    published_version = models.ForeignKey("FormVersion", null=True, blank=True, on_delete=models.PROTECT, related_name="published_definitions")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def clean(self):
+        if self.published_version_id and self.published_version.definition_id != self.pk:
+            raise ValidationError("Published version belongs to another form.")
+
+
+class ImmutableFormQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+    def delete(self):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+    def bulk_create(self, objs, *args, **kwargs):
+        if kwargs.get("update_conflicts"):
+            raise ValidationError("Published versions and audit events are immutable.")
+        return super().bulk_create(objs, *args, **kwargs)
+
+
+class ImmutableFormRecord(models.Model):
+    objects = ImmutableFormQuerySet.as_manager()
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding or (self.pk is not None and type(self).objects.filter(pk=self.pk).exists()):
+            raise ValidationError("Published versions and audit events are immutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Published versions and audit events are immutable.")
+
+
+class FormVersion(ImmutableFormRecord):
+    definition = models.ForeignKey(FormDefinition, on_delete=models.PROTECT, related_name="versions")
+    number = models.PositiveIntegerField()
+    schema = models.JSONField(default=dict)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="form_versions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-number"]
+        constraints = [models.UniqueConstraint(fields=["definition", "number"], name="unique_form_version_number")]
+
+
+class FormAnswerSet(models.Model):
+    definition = models.ForeignKey(FormDefinition, on_delete=models.PROTECT, related_name="answer_sets")
+    content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT)
+    object_id = models.PositiveBigIntegerField()
+    schema_version = models.ForeignKey(FormVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="answer_sets")
+    answers = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["definition", "content_type", "object_id"], name="unique_form_record_answers")]
+
+    def clean(self):
+        from .form_editor import get_form_class
+        model = getattr(getattr(get_form_class(self.definition.key), "_meta", None), "model", None)
+        if model is None or self.content_type.model_class() is not model:
+            raise ValidationError("Record type is not allowed for this form.")
+        if self.schema_version_id and self.schema_version.definition_id != self.definition_id:
+            raise ValidationError("Answer version belongs to another form.")
+
+
+class FormEditorAuditEvent(ImmutableFormRecord):
+    definition = models.ForeignKey(FormDefinition, on_delete=models.PROTECT, related_name="audit_events")
+    action = models.CharField(max_length=20)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="form_editor_events")
+    revision = models.PositiveBigIntegerField()
+    version = models.ForeignKey(FormVersion, null=True, blank=True, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    details = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]

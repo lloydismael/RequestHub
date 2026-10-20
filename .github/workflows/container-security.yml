@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - dev
+      - master
     paths:
       - Dockerfile
       - requirements*.txt
@@ -20,24 +21,27 @@ on:
       - .github/workflows/container-security.yml
   workflow_dispatch:
 
+concurrency:
+  group: container-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   IMAGE_NAME: request-hub-security-scan
 
 permissions:
   contents: read
-  security-events: write
-  actions: read
 
 jobs:
   dependency-audit:
     name: Python dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -49,10 +53,15 @@ jobs:
 
   image-scan:
     name: Build, scan, and publish SBOM
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set image metadata
         id: meta
@@ -74,8 +83,16 @@ jobs:
             VCS_REF=${{ steps.meta.outputs.revision }}
             BUILD_DATE=${{ steps.meta.outputs.created }}
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: spdx-json
+          output-file: request-hub-sbom.spdx.json
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.35.0
+        id: trivy
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
           format: sarif
@@ -86,20 +103,25 @@ jobs:
           exit-code: '1'
 
       - name: Upload Trivy SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: ${{ !cancelled() && hashFiles('trivy-results.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif
 
-      - name: Generate SBOM
-        uses: anchore/sbom-action@v0
+      - name: Upload Trivy report artifact
+        if: ${{ !cancelled() && hashFiles('trivy-results.sarif') != '' }}
+        uses: actions/upload-artifact@v4
         with:
-          image: ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          format: spdx-json
-          output-file: request-hub-sbom.spdx.json
+          name: request-hub-trivy-results
+          path: trivy-results.sarif
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload SBOM artifact
+        if: ${{ !cancelled() && hashFiles('request-hub-sbom.spdx.json') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: request-hub-sbom
           path: request-hub-sbom.spdx.json
+          if-no-files-found: error
+          retention-days: 14

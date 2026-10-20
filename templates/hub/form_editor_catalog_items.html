@@ -1,0 +1,85 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'hub/form_people_panel.css' %}">
+<link rel="stylesheet" href="{% static 'hub/form_catalog.css' %}">
+<section class="form-people glass-card p-3 p-md-4 mb-3" data-form-people
+         data-request-url="{% url 'hub:form-editor-people' 'request' %}"
+         data-sqr-url="{% url 'hub:form-editor-people' 'sqr_submission' %}">
+    {% csrf_token %}
+    <header class="people-header">
+        <div>
+            <h2 class="h5 mb-1">Form people</h2>
+            <p class="text-muted small mb-0">Choose who appears in each submission form's dropdowns. Saved changes apply to new forms right away. Records that already exist keep their saved names.</p>
+        </div>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-people-reload>
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Reload
+        </button>
+    </header>
+    <div class="people-tabs mt-3" role="tablist" aria-label="Choose a form">
+        <button type="button" class="people-tab" role="tab" data-people-key="request" aria-selected="true" tabindex="0">
+            <span class="people-tab__title"><i class="bi bi-circle people-tab__icon people-tab__icon--off" aria-hidden="true"></i><i class="bi bi-check-circle-fill people-tab__icon people-tab__icon--on" aria-hidden="true"></i>New Request</span>
+            <span class="people-tab__summary" data-tab-summary="request">Loading…</span>
+        </button>
+        <button type="button" class="people-tab" role="tab" data-people-key="sqr_submission" aria-selected="false" tabindex="-1">
+            <span class="people-tab__title"><i class="bi bi-circle people-tab__icon people-tab__icon--off" aria-hidden="true"></i><i class="bi bi-check-circle-fill people-tab__icon people-tab__icon--on" aria-hidden="true"></i>New SQR Submission</span>
+            <span class="people-tab__summary" data-tab-summary="sqr_submission">Loading…</span>
+        </button>
+    </div>
+    <div class="people-message mt-3" data-people-message role="status" aria-live="polite" tabindex="-1" hidden></div>
+    <div role="tabpanel" tabindex="-1" class="mt-3">
+        <p class="people-state small text-muted mb-2" data-people-state></p>
+        <form data-people-form novalidate>
+            <fieldset class="people-controls" data-people-controls disabled>
+                <div class="people-fields" data-people-fields></div>
+                <div class="people-footer">
+                    <p class="people-status" data-people-status aria-live="polite">Loading…</p>
+                    <div class="people-footer__actions">
+                        <button type="button" class="btn btn-outline-secondary" data-people-discard disabled>Discard changes</button>
+                        <button type="submit" class="btn btn-primary" data-people-save disabled>Save and apply</button>
+                    </div>
+                </div>
+            </fieldset>
+        </form>
+    </div>
+    <noscript><p class="mt-3 mb-0">Enable JavaScript to manage form people, or use the advanced editors below.</p></noscript>
+</section>
+<script src="{% static 'hub/form_people_panel.js' %}" defer></script>
+<details class="glass-card p-3 mt-3 form-catalog" data-form-catalog>
+    <summary>Advanced form editors <span class="form-catalog__total" data-catalog-total></span></summary>
+    <div class="form-catalog__body">
+        <p class="text-muted small mb-3">Edit labels, help text, field order, and other settings for any form, or preview forms and review version history. Filter by category or search by name.</p>
+        <div class="form-catalog__toolbar">
+            <div class="form-catalog__search">
+                <label class="form-label small mb-1" data-catalog-label>Find a form</label>
+                <input data-catalog-search type="search" class="form-control" placeholder="Search by form name or category" autocomplete="off">
+            </div>
+            <div class="form-catalog__filters" role="group" aria-label="Filter forms by category">
+                <button type="button" class="catalog-filter catalog-filter--all" data-catalog-filter="all" aria-pressed="true">All <span class="catalog-filter__count" data-catalog-count></span></button>
+                {% for section in form_catalog %}
+                <button type="button" class="catalog-filter catalog-filter--{{ section.name|lower }}" data-catalog-filter="{{ section.name }}" aria-pressed="false">{{ section.name }} <span class="catalog-filter__count" data-catalog-count></span></button>
+                {% endfor %}
+            </div>
+        </div>
+        <p class="form-catalog__status small text-muted mt-2 mb-0" data-catalog-status aria-live="polite"></p>
+        {% for section in form_catalog %}
+        <section class="catalog-section catalog-section--{{ section.name|lower }}" data-catalog-section="{{ section.name }}" aria-labelledby="catalog-heading-{{ section.name|lower }}">
+            <div class="catalog-section__head">
+                <h3 class="catalog-badge mb-0" id="catalog-heading-{{ section.name|lower }}">{{ section.name }}</h3>
+                <p class="small text-muted mb-0">{{ section.description }}</p>
+            </div>
+            <div class="row g-2">
+                {% for entry in section.forms %}
+                <div class="col-md-6 col-xl-4" data-catalog-item data-form-search="{{ entry.label|lower }} {{ entry.group|lower }}">
+                    <a href="{{ entry.url }}" class="catalog-card">
+                        <span class="catalog-card__title"><span class="visually-hidden">{{ section.name }} form: </span>{{ entry.label }}</span>
+                        <span class="catalog-card__action">Open editor <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% empty %}<p class="text-muted">No registered forms.</p>
+        {% endfor %}
+        <p data-catalog-empty class="text-muted mt-3 mb-0" hidden>No forms match your search or category.</p>
+    </div>
+</details>
+<script src="{% static 'hub/form_catalog.js' %}" defer></script>

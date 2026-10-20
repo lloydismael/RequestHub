@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load tz %}
+{% load tz form_customization %}
 
 {% block title %}Management · Request Hub{% endblock %}
 {% block body_class %}management-page{% endblock %}
@@ -17,10 +17,10 @@
     <div class="d-flex gap-2 flex-wrap align-items-center">
         <ul class="nav nav-pills mgmt-tabs gap-1 mb-0" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab != 'accounts' %}active{% endif %}"
+                <button class="nav-link {% if active_tab == 'users' %}active{% endif %}"
                         id="users-tab" data-bs-toggle="tab" data-bs-target="#users-pane"
                         type="button" role="tab" aria-controls="users-pane"
-                        aria-selected="{% if active_tab != 'accounts' %}true{% else %}false{% endif %}">
+                        aria-selected="{% if active_tab == 'users' %}true{% else %}false{% endif %}">
                     <i class="bi bi-people-fill me-1"></i>Users
                 </button>
             </li>
@@ -31,6 +31,13 @@
                         aria-selected="{% if active_tab == 'accounts' %}true{% else %}false{% endif %}">
                     <i class="bi bi-building me-1"></i>Accounts
                 </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <a class="nav-link {% if active_tab == 'forms' %}active{% endif %}" id="forms-tab"
+                   href="{% url 'hub:management' %}?tab=forms" role="tab" aria-controls="forms-pane"
+                   aria-selected="{% if active_tab == 'forms' %}true{% else %}false{% endif %}">
+                    <i class="bi bi-ui-checks me-1"></i>Forms
+                </a>
             </li>
         </ul>
         <span class="mgmt-stat-chip mgmt-stat-chip--users">
@@ -47,7 +54,7 @@
 <div class="tab-content">
 
     {# ══════════════════ USERS PANE ══════════════════ #}
-    <div class="tab-pane {% if active_tab != 'accounts' %}show active{% endif %}"
+    <div class="tab-pane {% if active_tab == 'users' %}show active{% endif %}"
          id="users-pane" role="tabpanel" aria-labelledby="users-tab" tabindex="0">
 
         {# Toolbar: search + New User button #}
@@ -84,6 +91,7 @@
                                 data-search-text="{{ user.get_full_name|lower }} {{ user.username|lower }} {{ user.email|lower }} {{ user.department|lower }} {{ user.role|lower }}">
                                 {# Name + avatar #}
                                 <td>
+                                    <template id="user-editor-{{ user.pk }}">{% form_editor_extras user.editor_form %}</template>
                                     <div class="d-flex align-items-center gap-2">
                                         <div class="mgmt-avatar flex-shrink-0">
                                             {% if user.profile_photo %}
@@ -284,6 +292,7 @@
                                 {% endif %}
                             </div>
                         </div>
+                        {% form_editor_extras create_user_form %}
                         <div class="d-flex gap-2 justify-content-end mt-4">
                             <button type="button" class="btn btn-outline-secondary" id="cancel-create-user-btn">Cancel</button>
                             <button type="submit" class="btn btn-primary">
@@ -380,6 +389,7 @@
                                        name="password2" autocomplete="new-password" placeholder="Confirm new password">
                             </div>
                         </div>
+                        <div id="manage-user-editor-fields"></div>
                         <div class="mb-2">
                             <button type="submit" form="mu-reset-form" class="btn btn-sm btn-outline-warning"
                                     onclick="return confirm('Reset this account to a one-time temporary password and force re-login?');">
@@ -448,9 +458,10 @@
                             {% if form.instance.pk %}
                                 <tr class="mgmt-row align-middle"
                                     data-search-text="{{ form.instance.name|lower }}">
-                                    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                                     <td>
+                                        {% for hidden in form.hidden_fields %}{% if hidden.name != '_form_version' %}{{ hidden }}{% endif %}{% endfor %}
                                         {{ form.name }}
+                                        {% form_editor_extras form %}
                                         {% for error in form.name.errors %}
                                             <div class="invalid-feedback d-block">{{ error }}</div>
                                         {% endfor %}
@@ -478,9 +489,10 @@
                                 </tr>
                             {% else %}
                                 <tr class="mgmt-row-new align-middle">
-                                    {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                                     <td>
+                                        {% for hidden in form.hidden_fields %}{% if hidden.name != '_form_version' %}{{ hidden }}{% endif %}{% endfor %}
                                         {{ form.name }}
+                                        {% form_editor_extras form %}
                                         {% for error in form.name.errors %}
                                             <div class="invalid-feedback d-block">{{ error }}</div>
                                         {% endfor %}
@@ -521,6 +533,12 @@
         </form>
     </div>
 
+    <div class="tab-pane {% if active_tab == 'forms' %}show active{% endif %}"
+         id="forms-pane" role="tabpanel" aria-labelledby="forms-tab" tabindex="0">
+        <h2 class="h5 mb-3">Form Editor</h2>
+        <p class="text-muted">Customize presentation and custom fields without changing business permissions. Drafts are private until published.</p>
+        {% include 'hub/form_editor_catalog_items.html' %}
+    </div>
 </div>
 
 {# ── Search + pagination + Manage modal JS ── #}
@@ -746,6 +764,11 @@
         document.querySelectorAll('.mgmt-manage-btn').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var pk         = btn.dataset.userPk;
+                var editorFields = document.getElementById('manage-user-editor-fields');
+                var editorTemplate = document.getElementById('user-editor-' + pk);
+                editorFields.replaceChildren();
+                if (editorTemplate) editorFields.append(editorTemplate.content.cloneNode(true));
+                document.dispatchEvent(new CustomEvent('form-editor-refresh', {detail: manageForm}));
                 var firstName  = btn.dataset.userFirst  || '';
                 var lastName   = btn.dataset.userLast   || '';
                 var username   = btn.dataset.userUsername || '';

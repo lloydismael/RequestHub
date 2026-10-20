@@ -31,6 +31,7 @@ from hub.models import (
     Notification,
     Request,
     RequestCommunication,
+    SqrProjectPerformance,
     SqrSubmission,
     SqrSubmissionChange,
     SqrSubmissionHistory,
@@ -141,7 +142,7 @@ class AssignmentEmailTests(TestCase):
 
 class AuthenticationBackendTests(TestCase):
     def test_exact_case_admin_username_takes_priority_over_case_insensitive_duplicate(self):
-        canonical_admin = User.objects.get(username="Admin")
+        canonical_admin, _ = User.objects.get_or_create(username="Admin")
         canonical_admin.set_password("@Password")
         canonical_admin.role = User.Roles.ADMIN
         canonical_admin.is_staff = True
@@ -621,7 +622,21 @@ class OutlookThreadingTests(TestCase):
         self.assertEqual(acknowledgement_query["subject"], [f"Re: {self.request_obj.reference_code} · Thread Account"])
         self.assertEqual(closing_query["subject"], acknowledgement_query["subject"])
         self.assertNotIn("Advisory Only", closing_query["subject"][0])
-        self.assertIn("Advisory Only", closing_query["body"][0])
+
+    def test_closing_draft_uses_updated_message_format(self):
+        contexts = self._post_acknowledgement_and_closing_with_captured_contexts()
+        closing_query = self._mailto_query(contexts[1]["mailto_url"])
+        detail_url = f"https://esgrequesthub.com{self.request_obj.get_absolute_url()}"
+
+        self.assertEqual(
+            closing_query["body"][0],
+            "Hello Thread Requestor,\n\n"
+            f"This is to confirm that {self.request_obj.reference_code} has been completed and closed.\n\n"
+            f"Request details: {self.request_obj.reference_code} — {detail_url}\n\n"
+            "If additional assistance is needed, please create a new request through https://esgrequesthub.com\n\n"
+            "Thanks,\n"
+            "ESG",
+        )
 
     def test_closing_draft_keeps_requestor_ess_cc_consistent_with_acknowledgement(self):
         contexts = self._post_acknowledgement_and_closing_with_captured_contexts()
@@ -1401,6 +1416,20 @@ class RequestActivityLogEditModalTests(TestCase):
         self.assertContains(response, 'id="activity-log-form"')
         self.assertContains(response, 'name="form_type" value="activity_log"')
         self.assertContains(response, f'name="log_id" value="{self.activity_log.pk}"')
+
+
+class SqrSubmissionAccountManagerTests(TestCase):
+    def test_hp_account_manager_is_available_and_accepted(self):
+        name = "Maria Hilda C. Mallillin"
+        form = SqrSubmissionForm()
+        member_map = json.loads(
+            form.fields["customer_company"].widget.attrs["data-member-map"]
+        )
+
+        self.assertIn(name, member_map["HP"])
+        self.assertEqual(sum(name in members for members in member_map.values()), 1)
+        self.assertIn((name, name), form.fields["customer_contact"].choices)
+        self.assertEqual(form.fields["customer_contact"].clean(name), name)
 
 
 class SqrApprovalEmailTemplateTests(TestCase):
@@ -2517,3 +2546,306 @@ class UnusedAccountPruneTests(TestCase):
         self.assertEqual(Account.objects.count(), 0)
         UserManagementView._sync_account_baseline()
         self.assertEqual(Account.objects.count(), 0)
+
+
+class SqrPerformanceTrackingTests(TestCase):
+    def setUp(self):
+        self.engineer = User.objects.create_user(
+            username="perf_engineer", password="pass12345", role=User.Roles.ENGINEER,
+            email="perf.engineer@example.com",
+        )
+        self.pm = User.objects.create_user(
+            username="perf_pm", password="pass12345", role=User.Roles.PM_ESG,
+            email="perf.pm@example.com", first_name="Perf", last_name="Manager",
+        )
+        self.submission = SqrSubmission.objects.create(
+            engineer=self.engineer,
+            pm_esg_reviewer=self.pm,
+            customer_name="Perf Account",
+            project_title="Perf Service",
+            project_details="Implementation",
+            documentation_links="https://example.com/doc",
+            delivery_actual_finish_date=date(2026, 9, 30),
+        )
+
+    def test_overall_health_logic(self):
+        perf = SqrProjectPerformance(submission=self.submission)
+        self.assertEqual(perf.overall_health, "green")
+        perf.scope_health = SqrProjectPerformance.Health.AT_RISK
+        self.assertEqual(perf.overall_health, "yellow")
+        perf.budget_health = SqrProjectPerformance.Health.OVER
+        self.assertEqual(perf.overall_health, "red")
+
+    def test_update_view_seeds_actual_finish_and_folder(self):
+        self.client.force_login(self.pm)
+        response = self.client.post(
+            reverse("hub:sqr-performance-update", args=[self.submission.pk]),
+            {
+                "status": "ongoing",
+                "percent_complete": "40",
+                "schedule_health": "ok",
+                "scope_health": "at_risk",
+                "budget_health": "ok",
+                "next_action_remarks": "Kickoff done.",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        perf = SqrProjectPerformance.objects.get(submission=self.submission)
+        self.assertEqual(perf.status, "ongoing")
+        self.assertEqual(perf.percent_complete, 40)
+        self.assertEqual(perf.overall_health, "yellow")
+        self.assertEqual(str(perf.finish_date), "2026-09-30")
+
+    def test_performance_tab_renders_for_pm_only(self):
+        # PM receives a lazy shell, not a second server-rendered project list.
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse("hub:sqr"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn("Project Performance Tracking", content)
+        self.assertIn('data-sqr-view-button="performance"', content)
+        self.assertIn('data-sqr-view-panel="performance"', content)
+        self.assertIn('id="sqr-performance-dashboard"', content)
+        self.assertIn('data-endpoint="' + reverse("hub:sqr-performance-data") + '"', content)
+        self.assertIn('data-current-user-id="' + str(self.pm.pk) + '"', content)
+        self.assertIn('data-default-mine="1"', content)
+        self.assertIn('id="sqr-pm-mine" class="form-check-input" checked', content)
+        self.assertIn('id="sqr-pm-content" hidden', content)
+        self.assertIn('id="sqr-pm-empty" class="sqr-pm-empty" hidden', content)
+        from django.templatetags.static import static
+        self.assertIn(static("js/sqr-performance.js") + "?v=", content)
+        self.assertRegex(content, r'sqr-performance[^" ]*\?v=\d+" defer')
+        self.assertNotIn("sqr-perf-grid", content)
+        self.assertNotIn("sqr-perf-card", content)
+        self.assertNotIn("applyPerfFilter", content)
+        self.assertNotIn("sqr_performance_projects", response.context)
+        self.assertNotIn("sqr_performance_summary", response.context)
+        self.assertIn('<div id="sqr-pm-queue" class="sqr-pm-queue"></div>', content)
+        self.assertIn('<div id="sqr-pm-directory" class="sqr-pm-directory"></div>', content)
+        # Old complex drawer must stay retired.
+        self.assertNotIn("sqr-perf-drawer", content)
+        self.assertNotIn("sqr-perf-table", content)
+        self.assertNotIn("sqr-perf-kpi", content)
+        self.assertNotIn("sqr-perf-nav", content)
+        self.assertNotIn("perf-status-chart-data", content)
+        self.assertNotIn("perf-health-chart-data", content)
+        self.assertNotIn("perf-dimension-chart-data", content)
+        self.assertNotIn("initSqrPerfCharts", content)
+        self.assertNotIn("sqr-export-perf-btn", content)
+        self.assertNotIn("sqr_performance_dashboards", content)
+        # SQR Tracker tab still renders for both roles.
+        self.assertIn("SQR Tracker", content)
+        # Engineer (non-PM) does not see the performance tab.
+        self.client.force_login(self.engineer)
+        eng_content = self.client.get(reverse("hub:sqr")).content.decode()
+        self.assertIn("SQR Tracker", eng_content)
+        self.assertNotIn('data-sqr-view-button="performance"', eng_content)
+        self.assertNotIn('data-sqr-view-panel="performance"', eng_content)
+        self.assertNotIn('id="sqr-performance-dashboard"', eng_content)
+        self.assertNotIn('js/sqr-performance.js', eng_content)
+
+    def test_performance_endpoint_preserves_status_health_progress(self):
+        other_pm = User.objects.create_user(
+            username="perf_pm_other", password="pass12345", role=User.Roles.PM_ESG,
+            email="perf.other@example.com", first_name="Other", last_name="PM",
+        )
+        self.submission.assigned_pm = self.pm
+        self.submission.overall_status = SqrSubmission.OverallStatus.PLANNING
+        self.submission.delivery_health = SqrSubmission.DeliveryHealth.OFF_TRACK
+        self.submission.delivery_progress = 25
+        self.submission.delivery_target_finish_date = date(2026, 10, 31)
+        self.submission.save()
+        other_submission = SqrSubmission.objects.create(
+            engineer=self.engineer,
+            pm_esg_reviewer=other_pm,
+            assigned_pm=other_pm,
+            customer_name="Other Account",
+            project_title="Other Service",
+            project_details="Support",
+            documentation_links="https://example.com/other",
+            overall_status=SqrSubmission.OverallStatus.IN_PROGRESS,
+            delivery_health=SqrSubmission.DeliveryHealth.ON_TRACK,
+            delivery_progress=80,
+            delivery_target_finish_date=date(2026, 11, 30),
+        )
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse("hub:sqr-performance-data"))
+        self.assertEqual(response.status_code, 200)
+        projects = {project["pk"]: project for project in response.json()["projects"]}
+        project = projects[self.submission.pk]
+        self.assertEqual(project["status_key"], "planning")
+        self.assertEqual(project["status_label"], "Planning")
+        self.assertEqual(project["health_key"], "off_track")
+        self.assertEqual(project["health_label"], "Off Track")
+        self.assertEqual(project["progress"], 25)
+        self.assertEqual(project["target_date"], "2026-10-31")
+        self.assertEqual(project["pm_id"], str(self.pm.pk))
+        self.assertTrue(project["needs_attention"])
+        other = projects[other_submission.pk]
+        self.assertEqual(other["status_label"], "In Progress")
+        self.assertEqual(other["health_key"], "on_track")
+        self.assertEqual(other["progress"], 80)
+        self.assertEqual(other["pm_id"], str(other_pm.pk))
+
+    def test_page_view_creates_no_performance_rows(self):
+        self.client.force_login(self.pm)
+        self.client.get(reverse("hub:sqr"))
+        self.assertEqual(SqrProjectPerformance.objects.count(), 0)
+
+    def test_esg_tracker_tab_is_hidden(self):
+        self.client.force_login(self.pm)
+        content = self.client.get(reverse("hub:sqr")).content.decode()
+        self.assertNotIn('data-sqr-view-button="esg"', content)
+        self.assertNotIn('data-sqr-view-panel="esg"', content)
+        self.assertNotIn("sqr-esg-content", content)
+        self.assertNotIn("ESG Performance Tracker", content)
+        self.assertNotIn("sqr-export-esg-btn", content)
+
+    def test_perf_sqr_mismatches(self):
+        from hub.views import _perf_sqr_mismatches
+        perf = SqrProjectPerformance.objects.create(
+            submission=self.submission, project_manager=self.pm,
+            status=SqrProjectPerformance.ProjectStatus.ONGOING,
+            start_date=date(2026, 9, 1),
+            finish_date=date(2026, 10, 31),
+            percent_complete=50,
+            folder_link="https://example.com/other",
+        )
+        self.submission.delivery_start_date = date(2026, 9, 1)
+        self.submission.delivery_actual_finish_date = date(2026, 9, 30)
+        self.submission.delivery_progress = 55
+        self.submission.assigned_pm = self.pm
+        self.submission.sqr_folder_link = "https://example.com/sqr"
+        self.submission.save()
+        fields = {m["field"] for m in _perf_sqr_mismatches(self.submission)}
+        # PM matches by ID, start matches, progress within tolerance.
+        self.assertEqual(fields, {"finish_date", "folder_link"})
+        # Aligned rows verify clean.
+        perf.finish_date = date(2026, 9, 30)
+        perf.folder_link = "https://example.com/sqr"
+        perf.save()
+        self.submission.refresh_from_db()
+        self.assertEqual(_perf_sqr_mismatches(self.submission), [])
+
+    def test_performance_update_post(self):
+        self.client.force_login(self.pm)
+        response = self.client.post(
+            reverse("hub:sqr-performance-update", args=[self.submission.pk]),
+            {
+                "project_manager": str(self.pm.pk),
+                "start_date": "2026-09-01",
+                "finish_date": "2026-10-31",
+                "status": "at_risk",
+                "percent_complete": "65",
+                "next_action_remarks": "Waiting on client.",
+                "folder_link": "https://example.com/f",
+                "schedule_health": "at_risk",
+                "scope_health": "ok",
+                "budget_health": "over",
+                "recovery_action_remarks": "Crash plan.",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        perf = SqrProjectPerformance.objects.get(submission=self.submission)
+        self.assertEqual(perf.status, "at_risk")
+        self.assertEqual(perf.percent_complete, 65)
+        self.assertEqual(perf.overall_health, "red")
+
+    def test_performance_endpoint_preserves_full_titles_without_initial_cards(self):
+        long_title = "VeryLongProjectNameWithoutAnySpaces" * 4
+        self.submission.project_title = long_title
+        self.submission.customer_name = "ExtremelyLongAccountNameWithoutSpaces" * 3
+        self.submission.assigned_pm = self.pm
+        self.submission.save()
+        self.client.force_login(self.pm)
+        content = self.client.get(reverse("hub:sqr")).content.decode()
+        self.assertIn('id="sqr-pm-directory"', content)
+        self.assertNotIn('class="sqr-pm-project"', content)
+        self.assertNotIn("sqr-perf-title", content)
+        response = self.client.get(reverse("hub:sqr-performance-data"))
+        self.assertEqual(response.status_code, 200)
+        project = next(item for item in response.json()["projects"] if item["pk"] == self.submission.pk)
+        self.assertEqual(project["project_name"], long_title)
+        self.assertEqual(project["customer_name"], self.submission.customer_name)
+
+    def test_performance_shell_controller_contract(self):
+        from html.parser import HTMLParser
+
+        class ShellParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.ids = {}
+                self.metrics = set()
+                self.filters = set()
+                self.options = {}
+                self.select_id = None
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                element_id = attrs.get("id")
+                if element_id:
+                    self.ids.setdefault(element_id, []).append(attrs)
+                if "data-pm-metric" in attrs:
+                    self.metrics.add(attrs["data-pm-metric"])
+                if "data-pm-filter" in attrs:
+                    self.filters.add(attrs["data-pm-filter"])
+                if tag == "select":
+                    self.select_id = element_id
+                if tag == "option" and self.select_id:
+                    self.options.setdefault(self.select_id, set()).add(attrs.get("value", ""))
+
+            def handle_endtag(self, tag):
+                if tag == "select":
+                    self.select_id = None
+
+        self.client.force_login(self.pm)
+        content = self.client.get(reverse("hub:sqr")).content.decode()
+        parser = ShellParser()
+        parser.feed(content)
+        for suffix in (
+            "scope", "search", "manager", "health", "status", "attention", "mine",
+            "reset", "refresh", "message", "snapshot", "count", "content", "empty",
+            "coverage", "queue", "health-chart", "progress-chart", "timeline", "directory",
+            "queue-count", "progress-count", "timeline-count", "prev", "next", "page",
+        ):
+            self.assertEqual(len(parser.ids.get("sqr-pm-" + suffix, [])), 1, suffix)
+        self.assertIn("hidden", parser.ids["sqr-performance-dashboard"][0])
+        self.assertEqual(parser.ids["sqr-pm-message"][0]["role"], "status")
+        self.assertEqual(parser.metrics, {"total", "attention", "overdue", "due_soon", "average", "missing_data"})
+        self.assertEqual(parser.filters, {"", "attention", "overdue", "due_soon", "missing_data"})
+        self.assertEqual(parser.options["sqr-pm-scope"], {"active", "all"})
+        self.assertEqual(parser.options["sqr-pm-manager"], {""})
+        self.assertEqual(parser.options["sqr-pm-health"], {"", "on_track", "at_risk", "off_track", "completed", "cancelled", "not_set"})
+        self.assertEqual(parser.options["sqr-pm-status"], {"", "planning", "in_progress", "on_hold", "completed", "cancelled", "not_set"})
+        self.assertEqual(parser.options["sqr-pm-attention"], {"", "attention", "overdue", "due_soon", "missing_data", "inconsistency", "off_track", "at_risk", "on_hold"})
+        self.assertIn("window.setSqrView = setView", content)
+        self.assertIn("window.focusSqrTrackerProject", content)
+        self.assertIn("sqr:performance-view", content)
+        self.assertIn("sqr:performance-invalidated", content)
+        self.assertIn("rowProjectPk(row) === focusedProjectPk", content)
+        self.assertIn("Dismiss focus &amp; restore filters", content)
+
+    def test_performance_shell_admin_defaults_and_reports_remain_separate(self):
+        admin = User.objects.create_user(username="perf_shell_admin", password="pass12345", role=User.Roles.ADMIN)
+        self.client.force_login(admin)
+        content = self.client.get(reverse("hub:sqr")).content.decode()
+        self.assertIn('data-default-mine="0"', content)
+        self.assertNotIn('id="sqr-pm-mine" class="form-check-input" checked', content)
+        reports = self.client.get(reverse("hub:sqr") + "?tab=reports").content.decode()
+        self.assertNotIn('id="sqr-performance-dashboard"', reports)
+        self.assertNotIn('js/sqr-performance.js', reports)
+
+    def test_performance_export_headers(self):
+        self.client.force_login(self.pm)
+        response = self.client.get(f"{reverse('hub:sqr-export')}?report=performance")
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(io.BytesIO(response.content), data_only=True)
+        sheet = workbook.active
+        assert sheet is not None
+        self.assertEqual(sheet.title, "Project Performance Tracking")
+        self.assertEqual([cell.value for cell in sheet[1]], [
+            "SQR ID", "Description", "Project Manager", "Start Date", "Finish Date",
+            "Status", "% Complete", "Next Action / Remarks", "Folder link",
+            "Schedule Health", "Scope Health", "Budget Health",
+            "Recovery Action / Remarks", "Overall Health", "Last Updated Date",
+        ])

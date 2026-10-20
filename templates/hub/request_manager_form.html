@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load form_customization %}
 {% load static tz %}
 {% block title %}Manage Request {{ object.reference_code }} · Request Hub{% endblock %}
 {% block body_class %}request-manager-page{% endblock %}
@@ -152,7 +153,8 @@
                             {% endif %}
                         {% endif %}
                     </div>
-                    {% for field in form %}
+                    {% form_editor_token form %}
+                    {% for field in form.visible_fields %}
                         {% if field.name == 'account_name' %}
                             {# Already rendered above #}
                         {% elif field.name == 'request_date' or field.name == 'needed_by' %}
@@ -170,24 +172,24 @@
                 {# ── Editable fields ── #}
                 <div class="rmf-fields-wrap">
                 <div class="rmf-fields">
-                    {% for field in form %}
+                    {% for field in form.visible_fields %}
                         {% if field.name == 'account_name' or field.name == 'request_date' or field.name == 'needed_by' %}
                             {# Account is rendered in the info strip for admins; requestors still edit it here #}
                             {% if not can_change_account and not request.user.is_engineer_access_role and field.name == 'account_name' %}
-                                <div class="rmf-field-group">
-                                    <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                                <div class="rmf-field-group" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                    <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                     {{ field }}
                                     {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
                                 </div>
                             {% elif not request.user.is_engineer_access_role and field.name == 'needed_by' %}
-                                <div class="rmf-field-group" data-request-date-group{% if form.engagement_type.value == 'deployment' %} style="display:none;"{% endif %}>
-                                    <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                                <div class="rmf-field-group" data-request-date-group{% if form.engagement_type.value == 'deployment' %} style="display:none;"{% endif %} data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                    <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                     {{ field }}
                                     {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
                                 </div>
                             {% elif not request.user.is_engineer_access_role and field.name == 'request_date' %}
-                                <div class="rmf-field-group">
-                                    <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                                <div class="rmf-field-group" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                    <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                     {{ field }}
                                     {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                                     {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -195,8 +197,8 @@
                             {% endif %}
 
                         {% elif field.name == 'priority' %}
-                            <div class="rmf-field-group" data-priority-group{% if form.engagement_type and form.engagement_type.value != 'support' %} style="display:none;"{% endif %}>
-                                <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                            <div class="rmf-field-group" data-priority-group{% if form.engagement_type and form.engagement_type.value != 'support' %} style="display:none;"{% endif %} data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
                                 {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                                 {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -207,7 +209,7 @@
                                 <label class="rmf-label">Deployment Calendar</label>
                                 <div class="deployment-calendar" data-deployment-calendar>
                                     <div class="row g-3 align-items-end">
-                                        <div class="col-sm-6">
+                                        <div class="col-sm-6" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                                             <label class="rmf-label-sm" for="{{ field.id_for_label }}">Start</label>
                                             {{ field }}
                                             {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -236,8 +238,8 @@
                             {# Rendered in the description side column below #}
 
                         {% elif field.name == 'engineer' %}
-                            <div class="rmf-field-group">
-                                <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                            <div class="rmf-field-group" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
                                 {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                                 {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -263,8 +265,8 @@
                             {% endif %}
 
                         {% else %}
-                            <div class="rmf-field-group">
-                                <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                            <div class="rmf-field-group" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                                 {{ field }}
                                 {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
                                 {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -321,9 +323,10 @@
                 <input type="hidden" name="form_type" value="status">
                 <input type="hidden" name="send_closing_email" value="0" data-send-closing-email>
                 <div class="row g-3 align-items-end">
-                    {% for field in status_form %}
-                        <div class="col-sm-6">
-                            <label class="rmf-label" for="id_{{ field.name }}">{{ field.label }}</label>
+                    {% form_editor_token status_form %}
+                {% for field in status_form.visible_fields %}
+                        <div class="col-sm-6" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                            <label class="rmf-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
                             {{ field }}
                             {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
                         </div>
@@ -389,6 +392,7 @@
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="status_log">
                 <div class="rmf-log-form__field">
+                    {% form_editor_extras log_form %}
                     {{ log_form.message }}
                     {% if log_form.message.errors %}
                         <div class="invalid-feedback d-block">{{ log_form.message.errors|join:" " }}</div>
@@ -543,8 +547,9 @@
                     {% endif %}
 
                     <div class="act-form-grid">
-                        {% for field in activity_form %}
-                            <div class="act-form-field{% if field.name == 'details' %} act-form-field--full{% endif %}">
+                        {% form_editor_token activity_form %}
+                {% for field in activity_form.visible_fields %}
+                            <div class="act-form-field{% if field.name == 'details' %} act-form-field--full{% endif %}" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
                                 <label class="act-form-label" for="{{ field.id_for_label }}">
                                     {% if field.name == 'request_date' %}<i class="bi bi-calendar3"></i>{% elif field.name == 'activity_type' %}<i class="bi bi-tag"></i>{% elif field.name == 'request' %}<i class="bi bi-link-45deg"></i>{% elif field.name == 'account' %}<i class="bi bi-building"></i>{% elif field.name == 'actual_hours' %}<i class="bi bi-clock"></i>{% elif field.name == 'location' %}<i class="bi bi-geo-alt"></i>{% elif field.name == 'is_billable' %}<i class="bi bi-currency-dollar"></i>{% elif field.name == 'status' %}<i class="bi bi-check2-circle"></i>{% elif field.name == 'details' %}<i class="bi bi-card-text"></i>{% endif %}
                                     {{ field.label }}
