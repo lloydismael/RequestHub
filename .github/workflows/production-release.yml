@@ -1,0 +1,193 @@
+name: Production Release
+
+on:
+  workflow_run:
+    workflows: [Container Security]
+    types: [completed]
+    branches: [master]
+
+concurrency:
+  group: request-hub-production-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: lloydismael12/request-hub
+
+jobs:
+  release-image:
+    name: Build and publish numbered release
+    if: >-
+      vars.CD_ENABLED == 'true' &&
+      vars.PRODUCTION_READY == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      digest: ${{ steps.push.outputs.digest }}
+      revision: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Reject superseded release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
+
+      - name: Check out release commit
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Allocate next numbered tag
+        id: version
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          import urllib.request
+
+          url = 'https://hub.docker.com/v2/repositories/lloydismael12/request-hub/tags?page_size=100'
+          versions = []
+          while url:
+              if not url.startswith('https://hub.docker.com/v2/repositories/lloydismael12/request-hub/tags'):
+                  raise SystemExit('Unexpected registry pagination URL')
+              with urllib.request.urlopen(url, timeout=30) as response:
+                  page = json.load(response)
+              for tag in page['results']:
+                  match = re.fullmatch(r'v(\d+)\.([0-9])', tag['name'])
+                  if match:
+                      versions.append(tuple(map(int, match.groups())))
+              url = page.get('next')
+          if not versions:
+              raise SystemExit('No numbered release baseline found; refusing allocation')
+          major, patch = max(versions)
+          major, patch = (major + 1, 0) if patch == 9 else (major, patch + 1)
+          version = f'v{major}.{patch}'
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'version={version}\n')
+          print(f'Allocated {version}; latest will not be changed')
+          PY
+
+      - name: Build release image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          pull: true
+          tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
+            VCS_REF=${{ github.event.workflow_run.head_sha }}
+
+      - name: Generate release SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          format: spdx-json
+          output-file: release-sbom.spdx.json
+
+      - name: Scan release image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          format: sarif
+          output: release-trivy.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+          exit-code: '1'
+
+      - name: Upload release evidence
+        if: ${{ !cancelled() && hashFiles('release-sbom.spdx.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-security-evidence
+          path: |
+            release-sbom.spdx.json
+            release-trivy.sarif
+          retention-days: 30
+
+      - name: Sign in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Publish scanned image without rebuilding
+        id: push
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if docker manifest inspect "$IMAGE_NAME:$VERSION" >/dev/null 2>&1; then
+            echo 'Release tag already exists; refusing to overwrite it' >&2
+            exit 1
+          fi
+          docker push "$IMAGE_NAME:$VERSION"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE_NAME:$VERSION")
+          test "${digest%%@*}" = "$IMAGE_NAME"
+          echo "digest=${digest#*@}" >> "$GITHUB_OUTPUT"
+
+  deploy-production:
+    name: Migrate and update production image
+    needs: release-image
+    runs-on: ${{ fromJSON('["self-hosted", "Linux", "X64", "request-hub-production"]') }}
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_SHA: ${{ needs.release-image.outputs.revision }}
+      RELEASE_VERSION: ${{ needs.release-image.outputs.version }}
+      RELEASE_DIGEST: ${{ needs.release-image.outputs.digest }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+      AZURE_MAIN_CONTAINER: ${{ vars.AZURE_MAIN_CONTAINER }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+    steps:
+      - name: Check out trusted release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release-image.outputs.revision }}
+          persist-credentials: false
+
+      - name: Verify release and runner prerequisites
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
+          test -r /opt/request-hub/production.env
+          test -x /opt/request-hub/verify-backup
+          test -z "$(find /opt/request-hub/production.env -perm /077 -print)"
+          /opt/request-hub/verify-backup
+
+      - name: Sign in to Azure using federation
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Run controlled deployment and rollback checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/deploy-production.sh
