@@ -503,6 +503,38 @@ Full Azure App Service container deployment guide:
 
 ---
 
+## Continuous Integration
+
+The `Container Security` GitHub Actions workflow runs on every push to `dev` or `master`, pull requests targeting `master`, and manual dispatch. Application and template changes are included; there are no path filters. Superseded CI runs are cancelled.
+
+Three independent jobs validate each change:
+
+- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements.lock`, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, and runs the complete Django test suite with migrations enabled.
+- **Python dependency audit** checks dependencies with `pip-audit`.
+- **Build, scan, and publish SBOM** builds the Docker image without pushing it, generates an SPDX SBOM, and fails on fixable HIGH/CRITICAL vulnerabilities found by Trivy. Generated scan reports and SBOM artifacts are retained for 14 days, including after scan failures. Fork PRs retain report artifacts without attempting a privileged code-scanning upload.
+
+CI uses only test credentials and an isolated database. It does not publish container images, deploy to Azure, or require production secrets. The separate production-configuration check disables debug mode; application tests keep debug mode enabled to avoid production HTTPS redirects.
+
+To run manually, open **Actions > Container Security > Run workflow** and select the branch containing this workflow. Commit and push local changes before testing them on GitHub.
+
+To reproduce Django validation, install `requirements.lock` in a Python 3.12 virtual environment and configure a disposable PostgreSQL database with database-creation privileges. Do not use a production database or a live `.env`. Set test-only `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=True`, `DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,testserver`, `DJANGO_PUBLIC_BASE_URL=https://esgrequesthub.com`, and the `DB_*` connection values. The canonical URL is needed by existing email-format assertions; it does not connect CI to production. For a local non-TLS test database, use `DB_SSLMODE=disable` and `DB_CONN_MAX_AGE=0`. Leave ACS and Graph credentials unset.
+
+Run these commands in order:
+
+```text
+python -m pip check
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py collectstatic --noinput
+python manage.py test --noinput --verbosity 2
+```
+
+Separately set `DJANGO_DEBUG=False` and run `python manage.py check --deploy --fail-level WARNING`, then restore the test configuration.
+
+After successful GitHub runs, configure branch protection for `master` to require all three job checks and pull-request review. Branch protection is a repository setting and is not enabled by the workflow itself.
+
+---
+
 ## License
 
 Copyright © 2026 Phil-Data Business Systems Inc. All rights reserved.
