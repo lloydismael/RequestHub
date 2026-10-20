@@ -785,8 +785,18 @@
 
         const openRow = (row) => {
             const href = row && row.getAttribute('data-href');
-            if (href) {
-                window.location.href = href;
+            if (!href) {
+                return;
+            }
+            try {
+                const targetUrl = new URL(href, window.location.origin);
+                const isHttpProtocol = targetUrl.protocol === 'http:' || targetUrl.protocol === 'https:';
+                const isSameOrigin = targetUrl.origin === window.location.origin;
+                if (isHttpProtocol && isSameOrigin) {
+                    window.location.href = targetUrl.toString();
+                }
+            } catch (error) {
+                // Ignore malformed URLs from data attributes.
             }
         };
 
