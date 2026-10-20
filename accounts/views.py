@@ -4,7 +4,7 @@ from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -104,6 +104,8 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
                 "pref_compact_tables", "pref_large_text",
                 "pref_reduce_effects", "pref_reduce_motion",
             ])
+            if request.headers.get("Accept") == "application/json":
+                return JsonResponse({"message": "Settings saved."})
             messages.success(request, "Settings saved.")
             return redirect(reverse_lazy("accounts:update") + "#settings")
         return super().post(request, *args, **kwargs)

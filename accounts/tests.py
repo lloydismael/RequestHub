@@ -133,6 +133,39 @@ class ProfileSmokeTests(TestCase):
         self.assertTrue(self.user.pref_reduce_motion)
         self.assertTrue(self.user.pref_compact_tables)
 
+    def test_settings_json_save_persists_only_preferences(self):
+        names = ["pref_compact_tables", "pref_large_text", "pref_reduce_effects",
+                 "pref_reduce_motion", "show_chatbot", "show_login_banner", "idle_timeout_enabled"]
+        for enabled in [True, False]:
+            with self.subTest(enabled=enabled):
+                data = {"save_settings": "1", "first_name": "Unchanged", "banner_gradient": "rose"}
+                if enabled:
+                    data.update({name: "1" for name in names})
+                response = self.client.post(reverse("accounts:update"), data, HTTP_ACCEPT="application/json")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json(), {"message": "Settings saved."})
+                self.user.refresh_from_db()
+                for name in names:
+                    self.assertEqual(getattr(self.user, name), enabled)
+                self.assertEqual(self.user.first_name, "")
+                self.assertEqual(self.user.banner_gradient, "blue")
+
+    def test_settings_have_labels_and_separate_admin_tools(self):
+        response = self.client.get(reverse("accounts:update"))
+        for name in ["pref_compact_tables", "pref_large_text", "pref_reduce_effects",
+                     "pref_reduce_motion", "show_chatbot", "show_login_banner"]:
+            self.assertContains(response, f'for="toggle_{name}"')
+            self.assertContains(response, f'aria-describedby="toggle_{name}-help"')
+        self.assertContains(response, 'id="settings-discard-btn"')
+        self.assertContains(response, "This device only")
+        self.assertContains(response, '<details class="settings-danger-zone">')
+        self.assertContains(response, 'id="confirm_restore"')
+        self.user.role = User.Roles.REQUESTOR
+        self.user.save(update_fields=["role"])
+        response = self.client.get(reverse("accounts:update"))
+        self.assertNotContains(response, 'id="restore-form"')
+        self.assertNotContains(response, 'id="profile-panel-backup"')
+
     def test_themes_persist_for_every_role_without_changing_profile(self):
         other = User.objects.create_user(username="other-theme", banner_gradient="blue")
         for index, (theme, _) in enumerate(User.BANNER_GRADIENT_CHOICES):

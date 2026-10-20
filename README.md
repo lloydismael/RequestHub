@@ -74,6 +74,12 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 
 ## Features
 
+### Personal Settings
+- **My Profile → Settings** groups account preferences into Appearance, Accessibility, Experience, Performance, and Session cards.
+- Change multiple switches, then choose **Save Changes**. **Discard Changes** restores the saved values; unsuccessful saves keep your selections for retry. Saving reloads the page to apply preferences.
+- Display layout applies immediately to the current device only. Theme changes are saved separately in **Themes**.
+- Admin-only backup and recovery tools appear in a separate card; destructive backup restoration is collapsed until opened and still requires confirmation.
+
 ### Account Themes
 - Open **My Profile → Themes** (also available from the profile banner or Settings).
 - Choose Blue, Sunset, Forest, Crimson, Slate, Aurora, Rose, or Teal using mouse or keyboard. Preview updates buttons, highlights, and the profile banner; **Cancel preview** restores the saved theme.

@@ -1,0 +1,9 @@
+<div class="settings-row">
+    <div class="settings-row__copy">
+        <label class="settings-row__label" for="{{ control_id }}">{{ label }}</label>
+        <p class="settings-row__description" id="{{ control_id }}-help">{{ description }}</p>
+    </div>
+    <div class="form-check form-switch settings-switch">
+        <input class="form-check-input settings-toggle" type="checkbox" role="switch" id="{{ control_id }}" name="{{ name }}" value="1" aria-describedby="{{ control_id }}-help" {% if checked %}checked{% endif %}>
+    </div>
+</div>
