@@ -111,13 +111,13 @@ Open each job, expand the first failed step, and read its original error. Later 
 
 On the run summary, check **Artifacts** for `request-hub-trivy-results` and `request-hub-sbom`. They are retained for 14 days when generated. A Docker build failure produces neither report; their upload steps should be skipped without a missing-file error. A vulnerability finding should keep the run red while generated artifacts are still uploaded. Fork PRs skip the privileged SARIF upload but can retain report artifacts.
 
-## Known baseline and blocker
+## Validation baseline and migration fix
 
 Local implementation validation on October 21, 2026 confirmed a successful Docker build, Django configuration and production-security checks, static collection, and 246 passing tests against disposable PostgreSQL 16. This is not proof of a successful GitHub run or a current clean vulnerability scan.
 
-The missing-migration check detected changes to `SqrProjectPerformance.budget_health`, `schedule_health`, and `scope_health`, proposing a migration named `0049_alter_sqrprojectperformance_budget_health_and_more.py`. The name can change as the repository evolves. If these changes are still present without a migration, **Django Validation is expected to fail at Check for missing migrations**, and its later static/test steps will be skipped.
+The missing-migration check previously detected a display-label change from `Over` to `Overdue` for `SqrProjectPerformance.budget_health`, `schedule_health`, and `scope_health`. Migration `0049_alter_sqrprojectperformance_budget_health_and_more.py` now records those choices while preserving the stored value `over`. The local migration-state check reports `No changes detected` after adding it. Commit and push the migration before expecting the remote check to pass; older commits still lack it.
 
-Have the owning developer generate, review, and test the appropriate migration in the normal development environment, then commit it with the model changes. Do not edit historical migrations or disable the CI gate just to make the run green.
+For future missing-migration failures, have the owning developer generate, review, and test the appropriate migration in the normal development environment, then commit it with the model changes. Do not edit historical migrations or disable the CI gate just to make the run green.
 
 ## Troubleshooting
 
