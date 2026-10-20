@@ -17,15 +17,50 @@ env:
   IMAGE_NAME: lloydismael12/request-hub
 
 jobs:
+  release-preflight:
+    name: Check release eligibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Explain release eligibility
+        id: check
+        env:
+          CD_ENABLED: ${{ vars.CD_ENABLED }}
+          PRODUCTION_READY: ${{ vars.PRODUCTION_READY }}
+          CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          CI_EVENT: ${{ github.event.workflow_run.event }}
+          CI_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          CI_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+        run: |
+          set -euo pipefail
+          ready=true
+          echo '## Production release eligibility' >> "$GITHUB_STEP_SUMMARY"
+          check_condition() {
+            if [ "$2" = "$3" ]; then
+              printf -- '- PASS: %s\n' "$1" >> "$GITHUB_STEP_SUMMARY"
+            else
+              printf -- '- BLOCKED: %s (actual: %s; required: %s)\n' "$1" "${2:-unset}" "$3" >> "$GITHUB_STEP_SUMMARY"
+              echo "::notice::$1 is not satisfied; production deployment remains disabled."
+              ready=false
+            fi
+          }
+          check_condition 'Repository variable CD_ENABLED' "$CD_ENABLED" true
+          check_condition 'Repository variable PRODUCTION_READY' "$PRODUCTION_READY" true
+          check_condition 'Upstream CI result' "$CI_CONCLUSION" success
+          check_condition 'Upstream CI event' "$CI_EVENT" push
+          check_condition 'Upstream CI branch' "$CI_BRANCH" master
+          check_condition 'Upstream repository' "$CI_REPOSITORY" "$GITHUB_REPOSITORY"
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          if [ "$ready" = false ]; then
+            echo 'No image will be published or deployed. Complete the runner, credentials, backup, and networking prerequisites in docs/cd-workflow-testing.md before enabling repository variables.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   release-image:
     name: Build and publish numbered release
-    if: >-
-      vars.CD_ENABLED == 'true' &&
-      vars.PRODUCTION_READY == 'true' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'master' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    needs: release-preflight
+    if: needs.release-preflight.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
