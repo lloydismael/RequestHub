@@ -2677,9 +2677,15 @@
             if (dateCell) {
                 var dateText = dateCell.textContent.trim();
                 if (normalizedValue === 'for_revision') {
-                    dateCell.innerHTML = '<span class="d-flex align-items-center gap-1">'
-                        + '<i class="bi bi-exclamation-triangle-fill text-danger" title="Action required: For Revision"></i>'
-                        + dateText + '</span>';
+                    var wrapper = document.createElement('span');
+                    wrapper.className = 'd-flex align-items-center gap-1';
+                    var icon = document.createElement('i');
+                    icon.className = 'bi bi-exclamation-triangle-fill text-danger';
+                    icon.setAttribute('title', 'Action required: For Revision');
+                    wrapper.appendChild(icon);
+                    wrapper.appendChild(document.createTextNode(dateText));
+                    dateCell.textContent = '';
+                    dateCell.appendChild(wrapper);
                 } else {
                     dateCell.textContent = dateText;
                 }

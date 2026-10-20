@@ -67,7 +67,7 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 | 🛠️ **Manage Request** | Admin/PM form for assigning engineers, changing status, and writing updates |
 | 📈 **Reports Operational** | Charts for requestor volume, engineer load, engagement types, product categories |
 | ⏱️ **Reports Activity** | Billable vs non-billable hours, location mix, engineer hour breakdown |
-| 👤 **Profile** | User profile page with avatar, account themes, and contact details |
+| 👤 **Profile** | User profile page with avatar, account-wide themes with banner gradients, and contact details |
 | 🔔 **Notifications** | In-app notification center for assignments and workflow events |
 
 ---
@@ -516,5 +516,3 @@ Built and maintained by **Phil-Data Business Systems Inc.**
 Docker Hub [`lloydismael12/request-hub`](https://hub.docker.com/r/lloydismael12/request-hub)
 
 </div>
-
-
