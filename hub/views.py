@@ -47,6 +47,7 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html, json_script
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DetailView, DeleteView, ListView, TemplateView, UpdateView
 from urllib.parse import quote, urlencode
@@ -128,6 +129,17 @@ SQR_ACCOUNT_MANAGER_EMAILS = {
     for manager in ACCOUNT_MANAGERS
     if manager.get("name") and manager.get("email")
 }
+
+
+def _safe_return_url(request, fallback_name):
+    target = request.META.get("HTTP_REFERER", "").strip()
+    if url_has_allowed_host_and_scheme(
+        target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return target
+    return reverse(fallback_name)
 
 
 def _format_sqr_approval_greeting(requestor_name: str) -> str:
@@ -4636,7 +4648,7 @@ class SqrTeamsRedirectView(LoginRequiredMixin, View):
             pk=pk,
         )
 
-        redirect_target = request.META.get("HTTP_REFERER") or reverse("hub:sqr")
+        redirect_target = _safe_return_url(request, "hub:sqr")
 
         if request.user.role not in ADMIN_PANEL_ROLES:
             return JsonResponse({"error": "Only PM-ESG or Admin can create SQR revision Teams groups."}, status=403)
@@ -4923,12 +4935,10 @@ class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, Upda
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        referer = self.request.META.get("HTTP_REFERER")
-        fallback = reverse("hub:dashboard")
-        if not referer or referer == self.request.build_absolute_uri():
-            context["back_url"] = fallback
-        else:
-            context["back_url"] = referer
+        back_url = _safe_return_url(self.request, "hub:dashboard")
+        if back_url == self.request.build_absolute_uri():
+            back_url = reverse("hub:dashboard")
+        context["back_url"] = back_url
         context["hide_sign_in_nav"] = True
         context["delete_url"] = reverse("hub:request-delete", args=[self.object.pk])
         context["status_logs"] = (
@@ -4956,7 +4966,7 @@ class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, Upda
             save_configured_instance(form, log)
             notify_status_update(log, "Admin · Manage Request · Status Update")
             messages.success(request, "Status update posted.")
-            return HttpResponseRedirect(self.request.path)
+            return redirect("hub:request-manage", pk=self.object.pk)
         if form.errors:
             message_field = form.fields.get("message")
             if message_field:
@@ -5197,12 +5207,9 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
                 instance=editing_activity_log,
             )
 
-        referer = self.request.META.get("HTTP_REFERER")
-        fallback = reverse("hub:dashboard")
-        if not referer or referer == self.request.build_absolute_uri():
-            back_url = fallback
-        else:
-            back_url = referer
+        back_url = _safe_return_url(self.request, "hub:dashboard")
+        if back_url == self.request.build_absolute_uri():
+            back_url = reverse("hub:dashboard")
 
         linked_sqr = SqrSubmission.objects.filter(linked_request=request_obj).first()
 
@@ -5307,14 +5314,14 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             )
             messages.success(request, "Request details updated.")
             flash_assignment_email_feedback(request, assignment_email_result, action_label="updated")
-            return HttpResponseRedirect(request.path)
+            return redirect("hub:request-manage-collab", pk=request_obj.pk)
         context = self.get_context_data(request_obj, form=form)
         return render(request, self.template_name, context)
 
     def _handle_status_update(self, request, request_obj):
         if request.user.pk != request_obj.engineer_id and request.user.role not in ADMIN_PANEL_ROLES:
             messages.error(request, "Only the primary assignee or a manager can update the status.")
-            return HttpResponseRedirect(request.path)
+            return redirect("hub:request-manage-collab", pk=request_obj.pk)
 
         status_form = RequestStatusForm(request.POST, instance=request_obj, actor_user=request.user)
         target_status = request.POST.get("status")
@@ -5353,7 +5360,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             ):
                 return RequestClosingOutlookRedirectView().post(request, request_obj.pk)
             messages.success(request, "Request status updated.")
-            return HttpResponseRedirect(request.path)
+            return redirect("hub:request-manage-collab", pk=request_obj.pk)
         if status_form.errors:
             for field in status_form:
                 if field.errors:
@@ -5373,7 +5380,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             source_label = self._source_label("Manage Request · Status Update")
             notify_status_update(log, source_label)
             messages.success(request, "Status update posted.")
-            return HttpResponseRedirect(request.path)
+            return redirect("hub:request-manage-collab", pk=request_obj.pk)
         if log_form.errors:
             message_field = log_form.fields.get("message")
             if message_field:
@@ -5474,7 +5481,7 @@ class RequestOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequiredMixi
             pk=pk,
         )
 
-        redirect_target = request.META.get("HTTP_REFERER") or reverse("hub:dashboard")
+        redirect_target = _safe_return_url(request, "hub:dashboard")
 
         if request.user.role in ENGINEER_ACCESS_ROLES:
             if request.user != request_obj.engineer and request.user != request_obj.backup_engineer:
@@ -5610,7 +5617,7 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
             pk=pk,
         )
 
-        redirect_target = request.META.get("HTTP_REFERER") or reverse("hub:dashboard")
+        redirect_target = _safe_return_url(request, "hub:dashboard")
 
         if request_obj.status != Request.Status.COMPLETED:
             messages.error(request, "Mark the request as completed before sending a closing email.")
@@ -5720,7 +5727,7 @@ class RequestTeamsRedirectView(LoginRequiredMixin, View):
             pk=pk,
         )
 
-        redirect_target = request.META.get("HTTP_REFERER") or reverse("hub:dashboard")
+        redirect_target = _safe_return_url(request, "hub:dashboard")
 
         role = request.user.role
         if role not in ({User.Roles.ADMIN, PM_ESG_ROLE, PM_ESS_ROLE} | ENGINEER_ACCESS_ROLES):
@@ -7537,7 +7544,7 @@ class NotificationReadView(LoginRequiredMixin, View):
     def post(self, request, pk):
         notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
         notification.mark_read()
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("hub:notifications")))
+        return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))
 
 
 class NotificationFollowRedirectView(LoginRequiredMixin, View):
@@ -7561,13 +7568,13 @@ class NotificationDeleteView(LoginRequiredMixin, View):
     def post(self, request, pk):
         notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
         notification.delete()
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("hub:notifications")))
+        return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))
 
 
 class NotificationMarkAllReadView(LoginRequiredMixin, View):
     def post(self, request):
         request.user.notifications.filter(is_read=False).update(is_read=True)
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER", reverse("hub:notifications")))
+        return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))
 
 
 class RequestNudgeView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):

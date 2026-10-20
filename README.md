@@ -495,6 +495,8 @@ Full Azure App Service container deployment guide:
 - `PasswordChangeRequiredMiddleware` enforces password rotation on flagged accounts
 - `ProfileCompletionMiddleware` blocks access until profile fields are filled
 - All role checks are enforced server-side via `LoginRequiredMixin` + custom role mixins
+- Referer-based return redirects and back links accept only the current request host; HTTPS requests reject HTTP destinations. Missing or unsafe values use named dashboard, SQR, or notification routes. Request-management POST redirects use canonical named routes rather than the incoming path.
+- Redirect/CSRF regression checks: `python manage.py test hub.test_redirect_security`. After publishing changes, rerun CodeQL on the updated branches and confirm alert closure; local tests do not dismiss GitHub alerts.
 - PostgreSQL connections use SSL in production (enforced by Azure Flexible Server)
 - Static files served by WhiteNoise, no user-uploaded files exposed via the filesystem
 - `GET /healthz/` returns `ok` for container probes without authentication
