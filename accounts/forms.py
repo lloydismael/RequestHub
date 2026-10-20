@@ -35,6 +35,15 @@ ROLE_ALIAS_MAP = {
 ROLE_DEFAULT_USERNAMES = {role: aliases.get("admin", "") for role, aliases in ROLE_ALIAS_MAP.items()}
 
 
+class ThemeForm(forms.ModelForm):
+    banner_gradient = forms.ChoiceField(choices=User.BANNER_GRADIENT_CHOICES)
+
+    class Meta:
+        model = User
+        fields = ["banner_gradient"]
+        widgets = {"banner_gradient": forms.RadioSelect()}
+
+
 class ProfileForm(forms.ModelForm):
     current_password = forms.CharField(
         label="Current password",

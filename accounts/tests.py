@@ -133,6 +133,59 @@ class ProfileSmokeTests(TestCase):
         self.assertTrue(self.user.pref_reduce_motion)
         self.assertTrue(self.user.pref_compact_tables)
 
+    def test_themes_persist_for_every_role_without_changing_profile(self):
+        other = User.objects.create_user(username="other-theme", banner_gradient="blue")
+        for index, (theme, _) in enumerate(User.BANNER_GRADIENT_CHOICES):
+            role = User.Roles.values[index % len(User.Roles.values)]
+            with self.subTest(role=role, theme=theme):
+                self.user.role = role
+                self.user.save(update_fields=["role"])
+                response = self.client.post(reverse("accounts:update"), {
+                    "save_theme": "1", "banner_gradient": theme,
+                    "first_name": "Must not change", "show_chatbot": "1",
+                })
+                self.assertRedirects(response, reverse("accounts:update") + "#themes")
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.banner_gradient, theme)
+                self.assertEqual(self.user.first_name, "")
+                self.assertFalse(self.user.profile_completed)
+                self.assertFalse(self.user.show_chatbot)
+                reopened = self.client.get(reverse("accounts:update"))
+                self.assertContains(reopened, f'data-account-theme="{theme}"')
+                self.assertContains(reopened, "Apply Theme")
+                from django.templatetags.static import static
+                self.assertContains(reopened, static("css/account-themes.css"))
+        other.refresh_from_db()
+        self.assertEqual(other.banner_gradient, "blue")
+
+    def test_theme_validation_retains_saved_theme(self):
+        for value in ["invalid", "", "<script>"]:
+            with self.subTest(value=value):
+                response = self.client.post(reverse("accounts:update"), {
+                    "save_theme": "1", "banner_gradient": value,
+                })
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["theme_form"].errors)
+                self.assertContains(response, 'id="theme-errors"')
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.banner_gradient, "blue")
+
+    def test_legacy_banner_save_uses_account_theme(self):
+        response = self.client.post(reverse("accounts:update"), {
+            "save_banner": "1", "banner_gradient": "teal",
+        })
+        self.assertRedirects(response, reverse("accounts:update") + "#themes")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.banner_gradient, "teal")
+
+    def test_theme_picker_has_all_choices_and_native_radios(self):
+        response = self.client.get(reverse("accounts:update"))
+        for theme, label in User.BANNER_GRADIENT_CHOICES:
+            self.assertContains(response, f'data-account-theme="{theme}"')
+            self.assertContains(response, f'type="radio" name="banner_gradient" value="{theme}"')
+        self.assertNotContains(response, "Edit Banner")
+        self.assertNotContains(response, "Save Banner")
+
     def test_anonymous_profile_redirects_to_login(self):
         self.client.logout()
         response = self.client.get(reverse("accounts:update"))

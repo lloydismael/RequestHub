@@ -25,6 +25,7 @@ from hub.mixins import AdminRequiredMixin
 
 from .forms import (
     ProfileForm,
+    ThemeForm,
     ROLE_CHOICES,
     ROLE_LABELS,
     RoleAuthenticationForm,
@@ -66,6 +67,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx.setdefault("theme_form", ThemeForm(instance=self.request.user))
         if self.request.user.role == User.Roles.ADMIN:
             from hub.models import Request as HubRequest
             ctx["deleted_requests"] = (
@@ -76,6 +78,15 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         return ctx
 
     def post(self, request, *args, **kwargs):
+        if request.POST.get("save_theme") or request.POST.get("save_banner"):
+            self.object = self.get_object()
+            theme_form = ThemeForm(request.POST, instance=self.object)
+            if theme_form.is_valid():
+                self.object.banner_gradient = theme_form.cleaned_data["banner_gradient"]
+                self.object.save(update_fields=["banner_gradient"])
+                messages.success(request, "Theme applied to your account.")
+                return redirect(reverse_lazy("accounts:update") + "#themes")
+            return self.render_to_response(self.get_context_data(theme_form=theme_form))
         # Settings tab has its own lightweight POST — handle before the main form
         if request.POST.get("save_settings"):
             user = request.user
@@ -100,7 +111,6 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     def form_valid(self, form):
         password_changed = bool(form.cleaned_data.get("new_password1"))
         delete_photo_requested = form.data.get("delete_photo")
-        save_banner_requested = form.data.get("save_banner")
         photo_deleted = False
 
         if delete_photo_requested:
@@ -111,13 +121,6 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
             form.instance.profile_photo = None
             if "profile_photo" in form.cleaned_data:
                 form.cleaned_data["profile_photo"] = None
-
-        # When saving banner, also propagate the hidden field value from POST
-        if save_banner_requested:
-            banner_val = form.data.get("banner_gradient", "").strip()
-            valid_keys = {"blue", "sunset", "forest", "crimson", "slate", "aurora", "rose", "teal"}
-            if banner_val in valid_keys:
-                form.instance.banner_gradient = banner_val
 
         response = super().form_valid(form)
         user = self.request.user

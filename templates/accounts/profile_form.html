@@ -8,8 +8,8 @@
     {# ── Hero / Avatar banner ──────────────────────────────── #}
     <div class="profile-hero">
         <div class="profile-hero__banner profile-hero__banner--{{ form.instance.banner_gradient|default:'blue' }}" id="profile-hero-banner">
-            <button type="button" class="profile-hero__banner-edit" id="banner-edit-btn" title="Edit banner" aria-label="Edit banner">
-                <i class="bi bi-image-fill"></i><span>Edit Banner</span>
+            <button type="button" class="profile-hero__banner-edit" id="banner-edit-btn" title="Choose your theme" aria-label="Choose your theme">
+                <i class="bi bi-palette-fill" aria-hidden="true"></i><span>Themes</span>
             </button>
         </div>
         <div class="profile-hero__body">
@@ -53,8 +53,8 @@
         <button class="profile-tab" data-profile-tab="password">
             <i class="bi bi-lock-fill me-1"></i>Change Password
         </button>
-        <button class="profile-tab" data-profile-tab="banner" id="banner-tab-btn">
-            <i class="bi bi-image-fill me-1"></i>Edit Banner
+        <button class="profile-tab" data-profile-tab="themes" id="banner-tab-btn">
+            <i class="bi bi-palette-fill me-1" aria-hidden="true"></i>Themes
         </button>
         <button class="profile-tab" data-profile-tab="settings">
             <i class="bi bi-sliders me-1"></i>Settings
@@ -166,77 +166,42 @@
             </div>
         </div>
 
-        {# Banner tab #}
-        <div class="profile-panel" id="profile-panel-banner">
-            <div class="glass-card profile-card">
-                <h2 class="profile-card__title"><i class="bi bi-image-fill me-2"></i>Profile Banner</h2>
-                <p class="text-muted small mb-4">Choose a gradient style for your profile banner.</p>
-
-                {% for field in form %}
-                    {% if field.name == "banner_gradient" %}
-                        {{ field }}
-                    {% endif %}
-                {% endfor %}
-
-                <div class="banner-swatch-grid" id="banner-swatch-grid">
-                    {% with current=form.instance.banner_gradient|default:'blue' %}
-                    <label class="banner-swatch banner-swatch--blue {% if current == 'blue' %}is-active{% endif %}" title="Blue">
-                        <input type="radio" name="banner_choice" value="blue" {% if current == 'blue' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Blue</span>
-                        {% if current == 'blue' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--sunset {% if current == 'sunset' %}is-active{% endif %}" title="Sunset">
-                        <input type="radio" name="banner_choice" value="sunset" {% if current == 'sunset' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Sunset</span>
-                        {% if current == 'sunset' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--forest {% if current == 'forest' %}is-active{% endif %}" title="Forest">
-                        <input type="radio" name="banner_choice" value="forest" {% if current == 'forest' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Forest</span>
-                        {% if current == 'forest' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--crimson {% if current == 'crimson' %}is-active{% endif %}" title="Crimson">
-                        <input type="radio" name="banner_choice" value="crimson" {% if current == 'crimson' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Crimson</span>
-                        {% if current == 'crimson' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--slate {% if current == 'slate' %}is-active{% endif %}" title="Slate">
-                        <input type="radio" name="banner_choice" value="slate" {% if current == 'slate' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Slate</span>
-                        {% if current == 'slate' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--aurora {% if current == 'aurora' %}is-active{% endif %}" title="Aurora">
-                        <input type="radio" name="banner_choice" value="aurora" {% if current == 'aurora' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Aurora</span>
-                        {% if current == 'aurora' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--rose {% if current == 'rose' %}is-active{% endif %}" title="Rose">
-                        <input type="radio" name="banner_choice" value="rose" {% if current == 'rose' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Rose</span>
-                        {% if current == 'rose' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <label class="banner-swatch banner-swatch--teal {% if current == 'teal' %}is-active{% endif %}" title="Teal">
-                        <input type="radio" name="banner_choice" value="teal" {% if current == 'teal' %}checked{% endif %} hidden>
-                        <span class="banner-swatch__label">Teal</span>
-                        {% if current == 'teal' %}<i class="bi bi-check2 banner-swatch__check"></i>{% endif %}
-                    </label>
-                    <div class="banner-swatch banner-swatch--custom" title="Custom banner — coming soon">
-                        <i class="bi bi-cloud-upload banner-swatch__icon"></i>
-                        <span class="banner-swatch__coming-soon">Soon</span>
-                        <span class="banner-swatch__label">Custom</span>
-                    </div>
-                    {% endwith %}
-                </div>
-
-                <div class="mt-4">
-                    <button class="btn btn-primary" type="submit" name="save_banner" value="1">
-                        <i class="bi bi-check2 me-1"></i>Save Banner
-                    </button>
-                </div>
-            </div>
-        </div>
-
+        {{ form.banner_gradient }}
     </form>
+
+    <div class="profile-panel" id="profile-panel-themes">
+        <form method="post" class="glass-card profile-card" id="profile-theme-form">
+            {% csrf_token %}
+            <h2 class="profile-card__title"><i class="bi bi-palette-fill me-2" aria-hidden="true"></i>Themes</h2>
+            <p class="text-muted small" id="theme-description">Make Request Hub feel like yours. Choose an accent theme for your account's buttons, highlights, and profile banner. Your light/dark setting stays unchanged.</p>
+            {% if theme_form.errors %}
+                <div class="alert alert-danger" role="alert" id="theme-errors">{{ theme_form.banner_gradient.errors }}</div>
+            {% endif %}
+            <fieldset aria-describedby="theme-description">
+                <legend class="h6">Choose your theme</legend>
+                <div class="account-theme-grid">
+                    {% for value, label in theme_form.fields.banner_gradient.choices %}
+                    {% if value %}
+                    <label class="account-theme-card" data-account-theme="{{ value }}">
+                        <input type="radio" name="banner_gradient" value="{{ value }}" {% if theme_form.banner_gradient.value == value or not theme_form.banner_gradient.value and value == 'blue' %}checked{% endif %}>
+                        <span class="account-theme-card__preview" aria-hidden="true">
+                            <span class="account-theme-card__nav"></span>
+                            <span class="account-theme-card__lines"></span>
+                            <span class="account-theme-card__button"></span>
+                        </span>
+                        <span class="account-theme-card__footer"><span>{{ label }}</span><span class="account-theme-card__selected"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Selected</span></span>
+                    </label>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <div class="d-flex align-items-center gap-3 flex-wrap mt-4">
+                <button class="btn btn-primary" type="submit" name="save_theme" value="1"><i class="bi bi-check2 me-1" aria-hidden="true"></i>Apply Theme</button>
+                <button class="btn btn-outline-secondary" type="button" id="theme-cancel-btn" hidden>Cancel preview</button>
+                <span class="text-muted small" id="theme-status" role="status">Saved to your account. Available on every device.</span>
+            </div>
+        </form>
+    </div>
 
     {# ── Settings tab (outside main form — its own POST) ─── #}
     <div class="profile-panel" id="profile-panel-settings">
@@ -291,10 +256,10 @@
 
                     <div class="list-group-item px-0 py-3 d-flex align-items-center justify-content-between gap-3" style="background:transparent;border-color:rgba(255,255,255,0.08);">
                         <div>
-                            <div class="fw-semibold"><i class="bi bi-image-fill me-2 text-primary"></i>Profile Banner &amp; Theme</div>
+                            <div class="fw-semibold"><i class="bi bi-palette-fill me-2 text-primary" aria-hidden="true"></i>Account Theme</div>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" onclick="document.getElementById('banner-tab-btn')?.click()">
-                            <i class="bi bi-image me-1"></i>Edit Banner
+                            <i class="bi bi-palette me-1" aria-hidden="true"></i>Themes
                         </button>
                     </div>
                 </div>
@@ -512,7 +477,8 @@
 
     // Hash-based tab activation
     if (window.location.hash === '#avatar') activate('avatar');
-    if (window.location.hash === '#banner') activate('banner');
+    if (['#banner', '#themes'].includes(window.location.hash)) activate('themes');
+    if (document.getElementById('theme-errors')) activate('themes');
     if (window.location.hash === '#settings') activate('settings');
     if (window.location.hash === '#backup') {
         activate('settings');
@@ -529,10 +495,9 @@
         });
     }
 
-    // "Edit Banner" button on hero banner → jump to banner tab
     const bannerEditBtn = document.getElementById('banner-edit-btn');
     if (bannerEditBtn) {
-        bannerEditBtn.addEventListener('click', () => activate('banner'));
+        bannerEditBtn.addEventListener('click', () => activate('themes'));
     }
 
     // Errors on password fields → open password tab
@@ -547,45 +512,30 @@
         activate('info');
     }
 
-    // Banner swatch picker — live preview + update hidden input
-    const bannerHiddenInput = document.getElementById('id_banner_gradient');
+    const themeForm = document.getElementById('profile-theme-form');
+    const savedTheme = document.body.dataset.accountTheme;
     const bannerEl = document.getElementById('profile-hero-banner');
-    const swatches = document.querySelectorAll('.banner-swatch:not(.banner-swatch--custom)');
-    const GRADIENT_MAP = {
-        blue:    'linear-gradient(120deg, #1d4ed8 0%, #3b82f6 50%, #6366f1 100%)',
-        sunset:  'linear-gradient(120deg, #f97316 0%, #ec4899 60%, #8b5cf6 100%)',
-        forest:  'linear-gradient(120deg, #065f46 0%, #10b981 60%, #3b82f6 100%)',
-        crimson: 'linear-gradient(120deg, #7f1d1d 0%, #dc2626 50%, #f97316 100%)',
-        slate:   'linear-gradient(120deg, #0f172a 0%, #334155 60%, #475569 100%)',
-        aurora:  'linear-gradient(120deg, #1e1b4b 0%, #7c3aed 50%, #06b6d4 100%)',
-        rose:    'linear-gradient(120deg, #881337 0%, #f43f5e 50%, #fb923c 100%)',
-        teal:    'linear-gradient(120deg, #134e4a 0%, #0d9488 50%, #3b82f6 100%)',
+    const cancelTheme = document.getElementById('theme-cancel-btn');
+    const themeStatus = document.getElementById('theme-status');
+    const previewTheme = (value) => {
+        document.body.dataset.accountTheme = value;
+        bannerEl.className = `profile-hero__banner profile-hero__banner--${value}`;
+        cancelTheme.hidden = value === savedTheme;
+        themeStatus.textContent = value === savedTheme ? 'Saved to your account. Available on every device.' : 'Preview only — select Apply Theme to save.';
     };
-    swatches.forEach((swatch) => {
-        swatch.addEventListener('click', () => {
-            const val = swatch.querySelector('input[type=radio]').value;
-            // Update hidden input
-            if (bannerHiddenInput) bannerHiddenInput.value = val;
-            // Live preview on hero banner
-            if (bannerEl && GRADIENT_MAP[val]) {
-                bannerEl.style.backgroundImage = GRADIENT_MAP[val];
-                // Remove old class, add new
-                bannerEl.className = bannerEl.className.replace(/profile-hero__banner--\w+/g, '').trim();
-                bannerEl.classList.add(`profile-hero__banner--${val}`);
-            }
-            // Toggle active state on swatches
-            swatches.forEach((s) => {
-                const isThis = s === swatch;
-                s.classList.toggle('is-active', isThis);
-                const checkIcon = s.querySelector('.banner-swatch__check');
-                if (checkIcon) checkIcon.remove();
-                if (isThis) {
-                    const icon = document.createElement('i');
-                    icon.className = 'bi bi-check2 banner-swatch__check';
-                    s.appendChild(icon);
-                }
-            });
-        });
+    themeForm.addEventListener('change', (event) => {
+        if (event.target.name === 'banner_gradient') previewTheme(event.target.value);
+    });
+    cancelTheme.addEventListener('click', () => {
+        themeForm.querySelector(`input[value="${savedTheme}"]`).checked = true;
+        previewTheme(savedTheme);
+    });
+    // A canceled preview must not follow a cached page back into view.
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            themeForm.querySelector(`input[value="${savedTheme}"]`).checked = true;
+            previewTheme(savedTheme);
+        }
     });
 
     // Live avatar preview

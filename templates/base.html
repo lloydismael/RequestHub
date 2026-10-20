@@ -36,11 +36,12 @@
     <!-- Ambient background layer renders below content; defer so it doesn't block first paint -->
     <link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3"></noscript>
+    <link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=1">
     {% block extra_head %}{% endblock %}
     {{ sqr_json_scripts }}
     <link rel="icon" type="image/png" href="{% static 'images/PD favicon.png' %}">
 </head>
-<body class="bg-light {% block body_class %}{% endblock %}{% if request.user.is_authenticated %} authenticated{% if request.user.pref_compact_tables %} pref-compact-tables{% endif %}{% if request.user.pref_large_text %} pref-large-text{% endif %}{% if request.user.pref_reduce_effects %} pref-reduce-effects{% endif %}{% if request.user.pref_reduce_motion %} pref-reduce-motion{% endif %}{% endif %}">
+<body {% if request.user.is_authenticated %}data-account-theme="{{ request.user.banner_gradient|default:'blue' }}"{% endif %} class="bg-light {% block body_class %}{% endblock %}{% if request.user.is_authenticated %} authenticated{% if request.user.pref_compact_tables %} pref-compact-tables{% endif %}{% if request.user.pref_large_text %} pref-large-text{% endif %}{% if request.user.pref_reduce_effects %} pref-reduce-effects{% endif %}{% if request.user.pref_reduce_motion %} pref-reduce-motion{% endif %}{% endif %}">
     <script>
         if (document.documentElement.classList.contains('theme-dark-pending')) {
             document.body.classList.add('dark-mode');
