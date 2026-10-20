@@ -38,6 +38,11 @@ media/
 # Deployment/docs not needed in the runtime image
 docs/
 README.md
+Plan/
+scripts_check/
+.copilot-azure/
+.github/
+apply_pm_ess.py
 
 # OS noise
 .DS_Store
