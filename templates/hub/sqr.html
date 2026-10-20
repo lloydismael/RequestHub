@@ -2660,7 +2660,7 @@
         normalizedValue = String(normalizedValue);
         cell.dataset.sqrValue = normalizedValue;
         if (field === 'status') {
-            displayEl.innerHTML = getDisplay(field, normalizedValue, cell);
+            renderStatusBadge(displayEl, normalizedValue);
         } else {
             displayEl.textContent = getDisplay(field, normalizedValue, cell);
         }
