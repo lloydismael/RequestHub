@@ -6,6 +6,7 @@ from django.core.cache import cache
 from django.core import serializers as django_serializers
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
+from django.templatetags.static import static
 from django.urls import reverse
 
 from accounts.models import StoredFile, User
@@ -50,8 +51,7 @@ class LoginPageTests(TestCase):
 
         self.assertContains(response, 'id="request-hub-page"')
         self.assertContains(response, 'class="request-hub-page"')
-        self.assertContains(response, "/static/css/app.")
-        self.assertContains(response, "css?v=22")
+        self.assertContains(response, static("css/app.css") + "?v=")
         self.assertContains(response, "/static/js/page-transitions.")
         self.assertContains(response, "js?v=1")
         self.assertContains(response, "reqHubPageTransitionDirection")
@@ -71,8 +71,7 @@ class LoginPageTests(TestCase):
     def test_login_loads_shared_semantic_theme_stylesheet(self):
         response = self.client.get(reverse("login"))
 
-        self.assertContains(response, "/static/css/liquid-glass.")
-        self.assertContains(response, "css?v=12")
+        self.assertContains(response, static("css/liquid-glass.css") + "?v=")
 
     def test_anonymous_landing_still_redirects_to_login(self):
         response = self.client.get(reverse("landing"))
@@ -93,6 +92,52 @@ class AccountSettingsTests(TestCase):
         user = User.objects.create_user(username="chatbot_default_user", password="TestPass123!")
 
         self.assertFalse(user.show_chatbot)
+
+
+class ProfileSmokeTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="smoke-profile", password="Example-password-937!",
+            role=User.Roles.ADMIN, must_change_password=False,
+        )
+        self.client.force_login(self.user)
+
+    def test_saved_profile_renders_for_every_role(self):
+        for role in User.Roles.values:
+            with self.subTest(role=role):
+                self.user.role = role
+                self.user.save(update_fields=["role"])
+                response = self.client.get(reverse("accounts:update"))
+                self.assertEqual(response.status_code, 200)
+                self.assertTemplateUsed(response, "accounts/profile_form.html")
+                self.assertIs(type(response.context["form"].instance), User)
+
+    def test_saved_profile_post_and_reopen(self):
+        opened = self.client.get(reverse("accounts:update"))
+        response = self.client.post(reverse("accounts:update"), {
+            "first_name": "Smoke", "last_name": "Profile", "email": "smoke@example.com",
+            "phone_number": "", "department": "ESS", "banner_gradient": "blue",
+            "_form_version": opened.context["form"].initial["_form_version"],
+        })
+        self.assertRedirects(response, reverse("accounts:update"))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Smoke")
+        self.assertEqual(self.user.department, "ESS")
+
+    def test_profile_settings_persist(self):
+        response = self.client.post(reverse("accounts:update"), {
+            "save_settings": "1", "pref_reduce_motion": "1", "pref_compact_tables": "1",
+        })
+        self.assertRedirects(response, reverse("accounts:update") + "#settings")
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.pref_reduce_motion)
+        self.assertTrue(self.user.pref_compact_tables)
+
+    def test_anonymous_profile_redirects_to_login(self):
+        self.client.logout()
+        response = self.client.get(reverse("accounts:update"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("login"), response.url)
 
 
 class SecretHygieneTests(TestCase):

@@ -142,7 +142,7 @@ class AssignmentEmailTests(TestCase):
 
 class AuthenticationBackendTests(TestCase):
     def test_exact_case_admin_username_takes_priority_over_case_insensitive_duplicate(self):
-        canonical_admin = User.objects.get(username="Admin")
+        canonical_admin, _ = User.objects.get_or_create(username="Admin")
         canonical_admin.set_password("@Password")
         canonical_admin.role = User.Roles.ADMIN
         canonical_admin.is_staff = True
@@ -2612,8 +2612,9 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertIn('id="sqr-pm-mine" class="form-check-input" checked', content)
         self.assertIn('id="sqr-pm-content" hidden', content)
         self.assertIn('id="sqr-pm-empty" class="sqr-pm-empty" hidden', content)
-        self.assertIn('sqr-performance.js', content)
-        self.assertIn('?v=1" defer', content)
+        from django.templatetags.static import static
+        self.assertIn(static("js/sqr-performance.js") + "?v=", content)
+        self.assertRegex(content, r'sqr-performance[^" ]*\?v=\d+" defer')
         self.assertNotIn("sqr-perf-grid", content)
         self.assertNotIn("sqr-perf-card", content)
         self.assertNotIn("applyPerfFilter", content)

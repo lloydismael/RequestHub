@@ -57,7 +57,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     success_url = reverse_lazy("accounts:update")
 
     def get_object(self):
-        return self.request.user
+        return User.objects.get(pk=self.request.user.pk)
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
