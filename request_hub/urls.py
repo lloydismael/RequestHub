@@ -4,7 +4,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
-from django.http import HttpResponse
+from django.db import DatabaseError, connection
+from django.http import HttpResponse, JsonResponse
 from django.urls import include, path
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
@@ -18,8 +19,31 @@ def healthz(_request):
     return HttpResponse("ok", content_type="text/plain; charset=utf-8")
 
 
+@never_cache
+@require_GET
+def release_info(_request):
+    return JsonResponse({
+        "version": settings.APP_VERSION,
+        "revision": os.getenv("APP_REVISION", "unknown"),
+    })
+
+
+@never_cache
+@require_GET
+def readyz(_request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError:
+        return JsonResponse({"ready": False}, status=503)
+    return JsonResponse({"ready": True})
+
+
 urlpatterns = [
     path("healthz/", healthz, name="healthz"),
+    path("readyz/", readyz, name="readyz"),
+    path("release/", release_info, name="release_info"),
     path("admin/", admin.site.urls),
     path("", LandingView.as_view(), name="landing"),
     path("accounts/login/", RoleLoginView.as_view(), name="login"),
