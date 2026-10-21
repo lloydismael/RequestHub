@@ -23,12 +23,22 @@ docker pull "$previous"
 previous=$(docker image inspect "$previous" --format '{{index .RepoDigests 0}}')
 test -n "$previous"
 image="lloydismael12/request-hub@$RELEASE_DIGEST"
+deployment_image="lloydismael12/request-hub:$RELEASE_VERSION"
 docker pull "$image"
 test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
+verify_release_tag() {
+    docker pull "$deployment_image"
+    docker image inspect "$deployment_image" --format '{{range .RepoDigests}}{{println .}}{{end}}' | grep -Fx "$image" >/dev/null || {
+        echo '::error::Release tag does not resolve to the scanned image digest; refusing deployment'
+        return 1
+    }
+}
+verify_release_tag
 
 export MIGRATION_IMAGE="$image"
 bash "$(dirname "$0")/migrate-production.sh"
 test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
+verify_release_tag
 
 restore_required=false
 restore_previous() {
@@ -43,7 +53,7 @@ restore_previous() {
 }
 trap restore_previous EXIT
 restore_required=true
-az resource update --ids "$container" --api-version 2025-03-01 --set "properties.image=$image" --output none
+az resource update --ids "$container" --api-version 2025-03-01 --set "properties.image=$deployment_image" --output none
 az webapp restart --name "$AZURE_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --output none
 
 python3 - <<'PY'
@@ -70,6 +80,9 @@ for attempt in range(60):
 else:
     raise SystemExit('Production verification timed out')
 PY
-test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.image -o tsv)" = "$image"
+test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.image -o tsv)" = "$deployment_image"
 restore_required=false
 printf 'Released %s (%s)\n' "$RELEASE_VERSION" "$RELEASE_SHA"
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    printf '## Production release\n\n- Image: `%s`\n- Verified digest: `%s`\n- Commit: `%s`\n- Previous rollback image: `%s`\n' "$deployment_image" "$RELEASE_DIGEST" "$RELEASE_SHA" "$previous" >> "$GITHUB_STEP_SUMMARY"
+fi

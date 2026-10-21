@@ -14,9 +14,11 @@ The workflow serializes releases without cancelling an active one and rejects su
 
 The image remains `lloydismael12/request-hub`. The workflow reads existing Docker Hub tags, chooses the highest matching numbered tag, and increments its single-digit patch: `v51.8` to `v51.9`, then `v52.0`. It refuses to allocate a release if no baseline is found. Registry tags are authoritative; local image listings are not.
 
-The image is built for `linux/amd64`, scanned, and pushed without rebuilding. Production uses the resulting digest rather than a mutable tag. Neither `latest` nor existing numbered tags should be overwritten. All publishers, including manual release operators, must use the same release coordination: the workflow concurrency lock cannot prevent a separate manual publisher from racing it. Restrict token write access and pause manual publishing while CD runs.
+The image is built for `linux/amd64`, scanned, and pushed without rebuilding. Deployment Center uses the readable numbered reference, such as `lloydismael12/request-hub:v52.3`. The script verifies that the tag resolves to the scanned digest before migrations and again before image updating; migrations still execute the digest-pinned image. Tags can be changed externally, so this is less strict than digest-pinned Azure deployment. Neither `latest` nor existing numbered tags should be overwritten. All publishers, including manual release operators, must use the same release coordination: the workflow concurrency lock cannot prevent a separate manual publisher from racing it. Restrict token write access and pause manual publishing while CD runs.
 
 README/Compose tags are not automatically committed after deployment. Use the run outputs and deployed image digest as release evidence, then update documentation through a reviewed PR when needed.
+
+Successful deployment summaries record the numbered image reference, verified digest, commit, and previous rollback digest. For manual overrides, set repository `CD_ENABLED=false`, confirm no release is still running, then edit Deployment Center's `main` container to a known numbered image tag. Check database compatibility before selecting an older version. A later automated release can replace the manual selection after CD is re-enabled. Automatic failure recovery deliberately restores the previous digest, so Deployment Center may show a hash again after rollback. Existing digest-based deployments remain unchanged until a new release deploys this script.
 
 ## Required repository configuration
 
@@ -66,7 +68,7 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 6. Confirm `sitecontainers` mode, the specified container's `isMain=true`, target port 8000, and disabled startup migrations. Classic Docker mode deliberately fails closed; verify the real production mode rather than converting it automatically.
 7. Pull and pin the old image for rollback. Pull the candidate and verify its OCI revision matches the approved CI commit.
 8. Check backup metadata, create owned single-IP firewall access, verify connectivity, run configuration checks/migrations using the exact image, and remove firewall access. No settings are printed or downloaded from App Service.
-9. Update only the main sitecontainer's image using Azure Resource Manager, preserving its registry authentication, environment configuration, mounts, and other containers. Restart the Web App.
+9. Update only the main sitecontainer's image to the verified numbered tag using Azure Resource Manager, preserving its registry authentication, environment configuration, mounts, and other containers. Restart the Web App.
 10. Poll `/release/`, `/readyz/`, and `/accounts/login/` with finite timeouts. Verify the expected commit and Azure image reference.
 
 `/release/` exposes only version/revision metadata. `APP_REVISION` is baked from the build commit; remove any stale platform override before activation. `APP_VERSION` can also be overridden by existing App Settings, so the commit/digest is the authoritative verification signal; reconcile an existing version override deliberately before enabling numbered-version reporting.

@@ -56,6 +56,8 @@ docker() {
     echo "docker $*" >> "$MOCK_LOG"
     case "$*" in
         *org.opencontainers.image.revision*) echo "$RELEASE_SHA" ;;
+        *'range .RepoDigests'*)
+            if [[ "$SCENARIO" == tag-mismatch ]]; then echo "$OLD_IMAGE"; else echo "lloydismael12/request-hub@$RELEASE_DIGEST"; fi ;;
         *RepoDigests*) echo "$OLD_IMAGE" ;;
         *'manage.py migrate'*) [[ "$SCENARIO" != migration-failure ]] ;;
     esac
@@ -75,7 +77,7 @@ curl() {
 
 export -f gh az docker python3 curl
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for scenario in success stale classic missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
+for scenario in success stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
     export SCENARIO="$scenario"
     : > "$MOCK_LOG"
     printf '%s' "$OLD_IMAGE" > "$MOCK_IMAGE"
@@ -88,10 +90,11 @@ for scenario in success stale classic missing-backup migration-failure cleanup-f
     case "$scenario" in
         success)
             test "$exit_status" = 0
-            test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub@$RELEASE_DIGEST"
+            test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub:$RELEASE_VERSION"
             grep -q 'manage.py migrate --noinput' "$MOCK_LOG"
+            grep -q -- "--entrypoint python lloydismael12/request-hub@$RELEASE_DIGEST manage.py migrate" "$MOCK_LOG"
             test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1 ;;
-        stale|classic|missing-backup|migration-failure|cleanup-failure)
+        stale|classic|tag-mismatch|missing-backup|migration-failure|cleanup-failure)
             test "$exit_status" != 0
             test "$(cat "$MOCK_IMAGE")" = "$OLD_IMAGE"
             ! grep -q 'az resource update' "$MOCK_LOG" ;;
@@ -104,7 +107,7 @@ for scenario in success stale classic missing-backup migration-failure cleanup-f
                 grep -q 'operator recovery is required' "$workspace/output"
             fi ;;
     esac
-    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != missing-backup ]]; then
+    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != tag-mismatch && "$scenario" != missing-backup ]]; then
         grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
         grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
     fi
