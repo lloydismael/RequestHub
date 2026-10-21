@@ -52,7 +52,30 @@ touch "$PRODUCTION_ENV_FILE.firewall"
 az postgres flexible-server firewall-rule create "${server_args[@]}" --name "$rule" --start-ip-address "$runner_ip" --end-ip-address "$runner_ip" --output none
 connected=false
 for attempt in {1..12}; do
-    if docker run --rm --env-file "$PRODUCTION_ENV_FILE" -e DJANGO_SETTINGS_MODULE=request_hub.settings --entrypoint python "$MIGRATION_IMAGE" -c 'import django; django.setup(); from django.db import connection; connection.ensure_connection()' >/dev/null 2>&1; then
+    if docker run --rm --env-file "$PRODUCTION_ENV_FILE" -e DJANGO_SETTINGS_MODULE=request_hub.settings --entrypoint python "$MIGRATION_IMAGE" -c '
+import sys
+try:
+    import django
+    django.setup()
+    from django.db import connection
+    connection.settings_dict.setdefault("OPTIONS", {})["connect_timeout"] = 5
+    connection.ensure_connection()
+except Exception as error:
+    message = str(error).lower()
+    category = "database configuration or connection failure"
+    if "password authentication failed" in message:
+        category = "database username/password rejected"
+    elif "does not exist" in message and "database" in message:
+        category = "configured database does not exist"
+    elif "translate host name" in message or "name or service not known" in message:
+        category = "database hostname cannot be resolved"
+    elif "timeout" in message or "timed out" in message or "no route" in message:
+        category = "network timeout; check hostname, port, and runner firewall access"
+    elif "ssl" in message or "certificate" in message:
+        category = "database TLS negotiation or certificate failure"
+    print("Database probe: " + category, file=sys.stderr)
+    sys.exit(1)
+'; then
         connected=true
         break
     fi
