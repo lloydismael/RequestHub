@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-for required in AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_WEBAPP_NAME AZURE_MAIN_CONTAINER PRODUCTION_URL RELEASE_SHA RELEASE_VERSION RELEASE_DIGEST; do
+for required in AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_WEBAPP_NAME AZURE_MAIN_CONTAINER AZURE_POSTGRES_SERVER PRODUCTION_ENV_FILE PRODUCTION_URL RELEASE_SHA RELEASE_VERSION RELEASE_DIGEST; do
     test -n "${!required}" || { echo "Missing $required" >&2; exit 1; }
 done
 [[ "$PRODUCTION_URL" == https://* ]] || exit 1
@@ -25,8 +25,8 @@ image="lloydismael12/request-hub@$RELEASE_DIGEST"
 docker pull "$image"
 test "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$RELEASE_SHA"
 
-docker run --rm --env-file /opt/request-hub/production.env --entrypoint python "$image" manage.py check --deploy --fail-level WARNING
-docker run --rm --env-file /opt/request-hub/production.env --entrypoint python "$image" manage.py migrate --noinput
+export MIGRATION_IMAGE="$image"
+bash "$(dirname "$0")/migrate-production.sh"
 test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
 
 restore_required=false
