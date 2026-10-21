@@ -317,6 +317,6 @@ jobs:
           rm -f "$PRODUCTION_ENV_FILE"
           if [ -f "$PRODUCTION_ENV_FILE.firewall" ]; then
             rule="github-cd-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-            az postgres flexible-server firewall-rule delete --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --server-name "$AZURE_POSTGRES_SERVER" --rule-name "$rule" --yes --output none
+            az postgres flexible-server firewall-rule delete --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --server-name "$AZURE_POSTGRES_SERVER" --name "$rule" --yes --output none
             rm -f "$PRODUCTION_ENV_FILE.firewall"
           fi

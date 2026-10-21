@@ -14,7 +14,7 @@ cleanup() {
     local status=$?
     trap - EXIT
     if "$owned"; then
-        if ! az postgres flexible-server firewall-rule delete "${server_args[@]}" --rule-name "$rule" --yes --output none; then
+        if ! az postgres flexible-server firewall-rule delete "${server_args[@]}" --name "$rule" --yes --output none; then
             echo "::error::Temporary firewall cleanup failed: $rule. Remove this exact rule manually."
             status=1
         else
@@ -49,7 +49,7 @@ if (( (10#$first == 169 && 10#$second == 254) || (10#$first == 172 && 10#$second
 fi
 owned=true
 touch "$PRODUCTION_ENV_FILE.firewall"
-az postgres flexible-server firewall-rule create "${server_args[@]}" --rule-name "$rule" --start-ip-address "$runner_ip" --end-ip-address "$runner_ip" --output none
+az postgres flexible-server firewall-rule create "${server_args[@]}" --name "$rule" --start-ip-address "$runner_ip" --end-ip-address "$runner_ip" --output none
 connected=false
 for attempt in {1..12}; do
     if docker run --rm --env-file "$PRODUCTION_ENV_FILE" -e DJANGO_SETTINGS_MODULE=request_hub.settings --entrypoint python "$MIGRATION_IMAGE" -c 'import django; django.setup(); from django.db import connection; connection.ensure_connection()' >/dev/null 2>&1; then
