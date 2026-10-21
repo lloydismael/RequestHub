@@ -23,6 +23,10 @@ gh() {
 
 az() {
     echo "az $*" >> "$MOCK_LOG"
+    if [[ "$*" == *'--rule-name'* ]]; then
+        echo 'Unsupported firewall argument --rule-name' >&2
+        return 2
+    fi
     case "$*" in
         *'firewall-rule list'*) ;;
         *'firewall-rule create'*)
@@ -101,8 +105,8 @@ for scenario in success stale classic missing-backup migration-failure cleanup-f
             fi ;;
     esac
     if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != missing-backup ]]; then
-        grep -q 'firewall-rule create .*--rule-name github-cd-123-1' "$MOCK_LOG"
-        grep -q 'firewall-rule delete .*--rule-name github-cd-123-1' "$MOCK_LOG"
+        grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
+        grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
     fi
     printf 'PASS: %s\n' "$scenario"
 done
