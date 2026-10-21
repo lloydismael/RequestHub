@@ -7,17 +7,18 @@ done
 [[ "$PRODUCTION_URL" == https://* ]] || exit 1
 [[ "$RELEASE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
 [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]$ ]] || exit 1
-test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
+test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA" || { echo '::error::Release commit is no longer current master'; exit 1; }
 
 resource="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_GROUP/providers/Microsoft.Web/sites/$AZURE_WEBAPP_NAME"
 mode=$(az resource show --ids "$resource/config/web" --api-version 2025-03-01 --query properties.linuxFxVersion -o tsv)
 test "$mode" = sitecontainers || { echo 'Only confirmed sitecontainers mode is supported' >&2; exit 1; }
 container="$resource/sitecontainers/$AZURE_MAIN_CONTAINER"
-test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.isMain -o tsv)" = true
-test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.targetPort -o tsv)" = 8000
-test "$(az webapp config appsettings list --name "$AZURE_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "[?name=='RUN_MIGRATIONS'].value | [0]" -o tsv)" = false
+test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.isMain -o tsv)" = true || { echo '::error::Configured sitecontainer is not the main container'; exit 1; }
+test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.targetPort -o tsv)" = 8000 || { echo '::error::Main container targetPort must be 8000'; exit 1; }
+migration_setting=$(az webapp config appsettings list --name "$AZURE_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "[?name=='RUN_MIGRATIONS'].value | [0]" -o tsv)
+test "$migration_setting" = false || { echo "::error::Web App RUN_MIGRATIONS must be false; current value: ${migration_setting:-unset}. Configure controlled migration execution before changing this setting."; exit 1; }
 previous=$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.image -o tsv)
-test -n "$previous"
+test -n "$previous" || { echo '::error::No previous image configured for rollback'; exit 1; }
 docker pull "$previous"
 previous=$(docker image inspect "$previous" --format '{{index .RepoDigests 0}}')
 test -n "$previous"
