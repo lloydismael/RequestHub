@@ -75,6 +75,8 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
           AZURE_MAIN_CONTAINER: ${{ vars.AZURE_MAIN_CONTAINER }}
+          AZURE_POSTGRES_SERVER: ${{ vars.AZURE_POSTGRES_SERVER }}
+          MIGRATION_ENV_FILE: ${{ secrets.MIGRATION_ENV_FILE }}
           PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -82,7 +84,7 @@ jobs:
           set -euo pipefail
           missing=false
           echo '## Production configuration' >> "$GITHUB_STEP_SUMMARY"
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_WEBAPP_NAME AZURE_MAIN_CONTAINER PRODUCTION_URL DOCKERHUB_USERNAME DOCKERHUB_TOKEN; do
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_RESOURCE_GROUP AZURE_WEBAPP_NAME AZURE_MAIN_CONTAINER AZURE_POSTGRES_SERVER MIGRATION_ENV_FILE PRODUCTION_URL DOCKERHUB_USERNAME DOCKERHUB_TOKEN; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing configuration: $name"
               printf -- '- MISSING: %s\n' "$name" >> "$GITHUB_STEP_SUMMARY"
@@ -97,7 +99,29 @@ jobs:
             echo '::error::PRODUCTION_URL must be an HTTPS origin without a trailing slash.'
             exit 1
           fi
-          echo 'Required values are present. Runner availability, credentials, networking, and backups still require independent verification.' >> "$GITHUB_STEP_SUMMARY"
+            python3 - <<'PY'
+            import os
+            values = {}
+            for line in os.environ['MIGRATION_ENV_FILE'].splitlines():
+              if line.strip() and not line.lstrip().startswith('#'):
+                key, separator, value = line.partition('=')
+                if not separator:
+                  raise SystemExit('Migration secret must use KEY=value lines')
+                values[key.strip()] = value
+            required = ['DJANGO_SECRET_KEY', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_PORT']
+            missing = [key for key in required if not values.get(key)]
+            if missing:
+              raise SystemExit('Missing migration settings: ' + ', '.join(missing))
+            if values.get('DJANGO_DEBUG', '').lower() != 'false':
+              raise SystemExit('Migration settings require DJANGO_DEBUG=False')
+            if values.get('DB_SSLMODE') not in ('require', 'verify-ca', 'verify-full'):
+              raise SystemExit('Migration settings must require database TLS')
+            if values.get('DB_SSLROOTCERT'):
+              raise SystemExit('Certificate mounts are not configured; do not use container-inaccessible paths')
+            if values.get('DJANGO_DEFAULT_USER_PASSWORD'):
+              raise SystemExit('Removed default-password setting is not permitted')
+            PY
+            echo 'Required settings are present. Azure permissions and backup restoration readiness still require independent verification.' >> "$GITHUB_STEP_SUMMARY"
 
   release-image:
     name: Build and publish numbered release
@@ -227,7 +251,7 @@ jobs:
   deploy-production:
     name: Migrate and update production image
     needs: release-image
-    runs-on: ${{ fromJSON('["self-hosted", "Linux", "X64", "request-hub-production"]') }}
+    runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 30
     permissions:
@@ -241,6 +265,7 @@ jobs:
       AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
       AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
       AZURE_MAIN_CONTAINER: ${{ vars.AZURE_MAIN_CONTAINER }}
+      AZURE_POSTGRES_SERVER: ${{ vars.AZURE_POSTGRES_SERVER }}
       PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
     steps:
       - name: Check out trusted release
@@ -249,16 +274,22 @@ jobs:
           ref: ${{ needs.release-image.outputs.revision }}
           persist-credentials: false
 
-      - name: Verify release and runner prerequisites
+      - name: Verify release commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
-          test -r /opt/request-hub/production.env
-          test -x /opt/request-hub/verify-backup
-          test -z "$(find /opt/request-hub/production.env -perm /077 -print)"
-          /opt/request-hub/verify-backup
+
+      - name: Prepare protected migration configuration
+        env:
+          MIGRATION_ENV_FILE: ${{ secrets.MIGRATION_ENV_FILE }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export PRODUCTION_ENV_FILE="$RUNNER_TEMP/request-hub-production.env"
+          echo "PRODUCTION_ENV_FILE=$PRODUCTION_ENV_FILE" >> "$GITHUB_ENV"
+          printf '%s\n' "$MIGRATION_ENV_FILE" > "$PRODUCTION_ENV_FILE"
 
       - name: Sign in to Azure using federation
         uses: azure/login@v2
@@ -277,3 +308,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/deploy-production.sh
+
+      - name: Remove temporary firewall rule and migration settings
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          PRODUCTION_ENV_FILE="$RUNNER_TEMP/request-hub-production.env"
+          rm -f "$PRODUCTION_ENV_FILE"
+          if [ -f "$PRODUCTION_ENV_FILE.firewall" ]; then
+            rule="github-cd-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            az postgres flexible-server firewall-rule delete --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --server-name "$AZURE_POSTGRES_SERVER" --rule-name "$rule" --yes --output none
+            rm -f "$PRODUCTION_ENV_FILE.firewall"
+          fi

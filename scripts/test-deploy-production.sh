@@ -6,11 +6,15 @@ export AZURE_WEBAPP_NAME=test-app AZURE_MAIN_CONTAINER=main
 export PRODUCTION_URL=https://production.invalid
 export RELEASE_SHA=0123456789012345678901234567890123456789
 export RELEASE_VERSION=v52.0 GITHUB_REPOSITORY=test/repository
+export AZURE_POSTGRES_SERVER=test-postgres GITHUB_RUN_ID=123 GITHUB_RUN_ATTEMPT=1
 export RELEASE_DIGEST="sha256:$(printf 'a%.0s' {1..64})"
 export OLD_IMAGE="lloydismael12/request-hub@sha256:$(printf 'b%.0s' {1..64})"
 workspace=$(mktemp -d)
 trap 'rm -rf "$workspace"' EXIT
 export MOCK_LOG="$workspace/commands" MOCK_IMAGE="$workspace/image"
+export PRODUCTION_ENV_FILE="$workspace/production.env"
+touch "$PRODUCTION_ENV_FILE"
+chmod 600 "$PRODUCTION_ENV_FILE"
 
 gh() {
     echo "gh $*" >> "$MOCK_LOG"
@@ -20,6 +24,14 @@ gh() {
 az() {
     echo "az $*" >> "$MOCK_LOG"
     case "$*" in
+        *'firewall-rule list'*) ;;
+        *'firewall-rule create'*)
+            [[ "$*" == *'--start-ip-address 203.0.113.10 --end-ip-address 203.0.113.10'* ]] || return 1 ;;
+        *'firewall-rule delete'*) [[ "$SCENARIO" != cleanup-failure ]] ;;
+        *'--query state'*) echo Ready ;;
+        *backup.backupRetentionDays*) echo 7 ;;
+        *backup.earliestRestoreDate*)
+            if [[ "$SCENARIO" != missing-backup ]]; then echo 2026-10-14T00:00:00Z; fi ;;
         *properties.linuxFxVersion*)
             if [[ "$SCENARIO" == classic ]]; then echo 'DOCKER|old'; else echo sitecontainers; fi ;;
         *properties.isMain*) echo true ;;
@@ -53,12 +65,13 @@ python3() {
 
 curl() {
     echo "curl $*" >> "$MOCK_LOG"
+    if [[ "$*" == *api.ipify.org* ]]; then echo 203.0.113.10; return 0; fi
     [[ "$SCENARIO" != rollback-unhealthy ]]
 }
 
 export -f gh az docker python3 curl
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for scenario in success stale classic migration-failure verification-failure rollback-unhealthy; do
+for scenario in success stale classic missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
     export SCENARIO="$scenario"
     : > "$MOCK_LOG"
     printf '%s' "$OLD_IMAGE" > "$MOCK_IMAGE"
@@ -74,7 +87,7 @@ for scenario in success stale classic migration-failure verification-failure rol
             test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub@$RELEASE_DIGEST"
             grep -q 'manage.py migrate --noinput' "$MOCK_LOG"
             test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1 ;;
-        stale|classic|migration-failure)
+        stale|classic|missing-backup|migration-failure|cleanup-failure)
             test "$exit_status" != 0
             test "$(cat "$MOCK_IMAGE")" = "$OLD_IMAGE"
             ! grep -q 'az resource update' "$MOCK_LOG" ;;
@@ -87,5 +100,9 @@ for scenario in success stale classic migration-failure verification-failure rol
                 grep -q 'operator recovery is required' "$workspace/output"
             fi ;;
     esac
+    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != missing-backup ]]; then
+        grep -q 'firewall-rule create .*--rule-name github-cd-123-1' "$MOCK_LOG"
+        grep -q 'firewall-rule delete .*--rule-name github-cd-123-1' "$MOCK_LOG"
+    fi
     printf 'PASS: %s\n' "$scenario"
 done
