@@ -34,7 +34,8 @@
             </li>
             <li class="nav-item" role="presentation">
                 <a class="nav-link {% if active_tab == 'forms' %}active{% endif %}" id="forms-tab"
-                   href="{% url 'hub:management' %}?tab=forms" role="tab" aria-controls="forms-pane"
+                   href="{% url 'hub:management' %}?tab=forms" data-bs-toggle="tab" data-bs-target="#forms-pane"
+                   role="tab" aria-controls="forms-pane"
                    aria-selected="{% if active_tab == 'forms' %}true{% else %}false{% endif %}">
                     <i class="bi bi-ui-checks me-1"></i>Forms
                 </a>

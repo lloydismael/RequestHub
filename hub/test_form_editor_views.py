@@ -117,6 +117,25 @@ class FormEditorViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="forms-pane"')
         self.assertEqual(response.context["active_tab"], "forms")
+        self.assertInHTML(
+            '<a class="nav-link active" id="forms-tab" '
+            'href="%s?tab=forms" data-bs-toggle="tab" data-bs-target="#forms-pane" '
+            'role="tab" aria-controls="forms-pane" aria-selected="true">'
+            '<i class="bi bi-ui-checks me-1"></i>Forms</a>' % reverse("hub:management"),
+            response.content.decode(),
+        )
+
+    def test_management_tabs_have_only_one_active_pane(self):
+        for tab in ("users", "accounts", "forms"):
+            with self.subTest(tab=tab):
+                response = self.client.get(reverse("hub:management"), {"tab": tab})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["active_tab"], tab)
+                self.assertContains(response, 'class="tab-pane show active"', count=1)
+                self.assertRegex(
+                    response.content.decode(),
+                    r'class="tab-pane show active"\s+id="%s-pane"' % tab,
+                )
 
     def test_published_custom_answer_persists_and_reopens(self):
         from .forms import AccountManagementForm
