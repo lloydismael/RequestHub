@@ -4,7 +4,9 @@
 
 `Production Release` is defined in `.github/workflows/production-release.yml`. It listens for successful `Container Security` runs caused by pushes to `master` in this repository. It excludes development pushes, pull requests, and manually dispatched CI runs. The workflow must be on the default branch to receive `workflow_run` events.
 
-It is disabled unless both repository variables `CD_ENABLED` and `PRODUCTION_READY` are exactly `true`. Do not set these variables until every prerequisite below has been reviewed. Production releases have no staging or reviewer gate, as requested; a restart or failed deployment can directly affect users.
+It is disabled unless repository variable `CD_ENABLED` is exactly `true`. This is the only activation switch. Do not enable it until every prerequisite below has been reviewed. Production releases have no staging or reviewer gate, as requested; a restart or failed deployment can directly affect users.
+
+The eligibility summary distinguishes **DISABLED** (switch unset/false) from **INELIGIBLE** (upstream CI is not a successful trusted master push). Eligible runs first execute a hosted **Check production configuration** job. Missing values fail that job with configuration names only, before image building or publishing. Presence checks do not verify credentials, runner availability, backups, or network connectivity.
 
 The workflow serializes releases without cancelling an active one and rejects superseded commits before publishing/deploying. CI keeps its own cancellation policy. Use branch protection to restrict changes to `master` and require all three CI jobs plus review. Restrict the GitHub `production` environment to the default `master` branch. The environment ref is the downstream workflow's default-branch ref, not the upstream merge ref.
 
@@ -23,7 +25,6 @@ README/Compose tags are not automatically committed after deployment. Use the ru
 | Secret `DOCKERHUB_USERNAME` | Registry account used to publish/pull |
 | Secret `DOCKERHUB_TOKEN` | Repository-scoped publishing credential; never use an account password |
 | Variable `CD_ENABLED` | Explicit release switch; leave unset/false during preparation |
-| Variable `PRODUCTION_READY` | Confirmation of tested backup, networking, compatible migrations, and runner readiness |
 
 Configure these variables on the `production` environment:
 
@@ -33,6 +34,8 @@ Configure these variables on the `production` environment:
 | `AZURE_RESOURCE_GROUP`, `AZURE_WEBAPP_NAME` | Existing production target |
 | `AZURE_MAIN_CONTAINER` | Actual main sitecontainer resource name |
 | `PRODUCTION_URL` | Canonical HTTPS origin, without a trailing slash |
+
+`CD_ENABLED` must be a repository variable; an environment-only value cannot enable the eligibility job. Docker Hub secrets must be repository-accessible because the publishing job does not use the production environment. Do not create different environment overrides for those secrets. Missing runner setup can still leave deployment queued after publishing; verify runner availability before enabling CD.
 
 Create a federated credential for this repository's `production` environment identity. Scope Azure permissions to the Web App/configuration needed for image updates and restarts. The app's runtime identity and registry pull authentication remain separate. Never send tokens, database passwords, or env-file contents through chat.
 
@@ -50,7 +53,7 @@ Configure the existing Web App's `RUN_MIGRATIONS=false` only after the dedicated
 
 ## Deployment sequence
 
-1. A successful trusted `master` CI run triggers a serialized release.
+1. A successful trusted `master` CI run triggers a serialized release. Check eligibility and production configuration before building or publishing.
 2. Allocate an unused numbered tag; build, generate SBOM, and scan the exact image. Failed security checks prevent publishing/deployment, while generated evidence is retained for 30 days.
 3. Publish the scanned image and pass its version, commit, and digest to the production job.
 4. Verify current `master`, runner prerequisites, and the backup/migration approval hook.
@@ -71,7 +74,7 @@ If image update or post-deployment verification fails, the script attempts to re
 
 Failures during pre-update migrations stop the release without replacing the running image. Some migration operations may already have completed; inspect migration state and use the backup/migration playbook rather than blindly rerunning or reversing them. Do not cancel an in-progress migration.
 
-Set `CD_ENABLED=false` to stop new release builds. This is not a cancellation of a deployment already running. There is no manual dispatch in the current release workflow; re-running old jobs is not a way to bypass successful CI or current-master guards.
+Set `CD_ENABLED=false` to stop subsequent eligibility checks from admitting new releases. This does not cancel an already admitted build or deployment. There is no manual dispatch in the current release workflow; re-running old jobs is not a way to bypass successful CI or current-master guards.
 
 ## Validation before activation
 
@@ -81,6 +84,6 @@ Set `CD_ENABLED=false` to stop new release builds. This is not a cancellation of
 - Rehearse migration failure, image update failure, verification timeout, and rollback using mocked Azure/registry tools or a dedicated nonproduction target. Syntax checks alone do not prove rollback.
 - Test successful/failed CI triggers, dev/PR exclusions, serialization, and stale-commit rejection before providing production credentials.
 - Verify actual production mode, backups, protected env/certificate access, persistent uploads, and OIDC permissions through an approved read-only inventory.
-- Keep both activation variables false until all gates pass. A separately approved first activation causes a real production release; it is not a harmless dry run.
+- Keep `CD_ENABLED` unset/false until all prerequisites pass. A separately approved first activation causes a real production release; it is not a harmless dry run.
 
 No registry push, Azure update, runner provisioning, identity creation, backup-hook implementation, or activation is performed merely by adding these files.
