@@ -99,29 +99,29 @@ jobs:
             echo '::error::PRODUCTION_URL must be an HTTPS origin without a trailing slash.'
             exit 1
           fi
-            python3 - <<'PY'
-            import os
-            values = {}
-            for line in os.environ['MIGRATION_ENV_FILE'].splitlines():
+          python3 - <<'PY'
+          import os
+          values = {}
+          for line in os.environ['MIGRATION_ENV_FILE'].splitlines():
               if line.strip() and not line.lstrip().startswith('#'):
-                key, separator, value = line.partition('=')
-                if not separator:
-                  raise SystemExit('Migration secret must use KEY=value lines')
-                values[key.strip()] = value
-            required = ['DJANGO_SECRET_KEY', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_PORT']
-            missing = [key for key in required if not values.get(key)]
-            if missing:
+                  key, separator, value = line.partition('=')
+                  if not separator:
+                      raise SystemExit('Migration secret must use KEY=value lines')
+                  values[key.strip()] = value
+          required = ['DJANGO_SECRET_KEY', 'DB_HOST', 'DB_NAME', 'DB_USER', 'DB_PASSWORD', 'DB_PORT']
+          missing = [key for key in required if not values.get(key)]
+          if missing:
               raise SystemExit('Missing migration settings: ' + ', '.join(missing))
-            if values.get('DJANGO_DEBUG', '').lower() != 'false':
+          if values.get('DJANGO_DEBUG', '').lower() != 'false':
               raise SystemExit('Migration settings require DJANGO_DEBUG=False')
-            if values.get('DB_SSLMODE') not in ('require', 'verify-ca', 'verify-full'):
+          if values.get('DB_SSLMODE') not in ('require', 'verify-ca', 'verify-full'):
               raise SystemExit('Migration settings must require database TLS')
-            if values.get('DB_SSLROOTCERT'):
+          if values.get('DB_SSLROOTCERT'):
               raise SystemExit('Certificate mounts are not configured; do not use container-inaccessible paths')
-            if values.get('DJANGO_DEFAULT_USER_PASSWORD'):
+          if values.get('DJANGO_DEFAULT_USER_PASSWORD'):
               raise SystemExit('Removed default-password setting is not permitted')
-            PY
-            echo 'Required settings are present. Azure permissions and backup restoration readiness still require independent verification.' >> "$GITHUB_STEP_SUMMARY"
+          PY
+          echo 'Required settings are present. Azure permissions and backup restoration readiness still require independent verification.' >> "$GITHUB_STEP_SUMMARY"
 
   release-image:
     name: Build and publish numbered release
