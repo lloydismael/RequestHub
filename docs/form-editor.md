@@ -1,6 +1,6 @@
 # Admin Form Editor
 
-Open **Management → Forms** using an Admin account. Direct editor URLs also enforce the Admin role. Authentication and credential behavior are not configurable.
+Open **Management → Forms** using an Admin account. Switching to **Users** or **Accounts** hides the Form Editor; only the selected management tab's content is shown. Direct editor URLs also enforce the Admin role. Authentication and credential behavior are not configurable.
 
 ## Managing form people
 
