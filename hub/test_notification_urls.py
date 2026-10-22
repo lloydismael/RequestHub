@@ -107,7 +107,6 @@ class NotificationUrlTests(SimpleTestCase):
                     self.assertIn(f"https://esgrequesthub.com{reverse('hub:sqr')}", message["content"]["plainText"])
                     self.assertNotIn("retired.example.com", message["content"]["plainText"])
                     self.assertNotIn("azurewebsites.net", message["content"]["plainText"])
-                    if send == _send_sqr_for_revision_email:
-                        self.assertIn(f'href="https://esgrequesthub.com{reverse("hub:sqr")}"', message["content"]["html"])
-                        self.assertNotIn("retired.example.com", message["content"]["html"])
-                        self.assertNotIn("azurewebsites.net", message["content"]["html"])
+                    self.assertIn(f'href="https://esgrequesthub.com{reverse("hub:sqr")}"', message["content"]["html"])
+                    self.assertNotIn("retired.example.com", message["content"]["html"])
+                    self.assertNotIn("azurewebsites.net", message["content"]["html"])

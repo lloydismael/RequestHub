@@ -31,6 +31,40 @@
 
 {% if report_view == 'activity' %}
 
+    {# ── Activity: KPI band ────────────────────────────────────────────── #}
+    <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid" data-lg-delay="40">
+        <div class="col">
+            <div class="rpt2-kpi rpt2-kpi--green">
+                <span class="rpt2-kpi-label">Total Hours</span>
+                <span class="rpt2-kpi-value">{{ activity_totals.total_hours|default:0|floatformat:1 }}</span>
+            </div>
+        </div>
+        <div class="col">
+            <div class="rpt2-kpi rpt2-kpi--blue">
+                <span class="rpt2-kpi-label">Log Entries</span>
+                <span class="rpt2-kpi-value">{{ activity_totals.entries }}</span>
+            </div>
+        </div>
+        <div class="col">
+            <div class="rpt2-kpi rpt2-kpi--violet">
+                <span class="rpt2-kpi-label">Billable Hrs</span>
+                <span class="rpt2-kpi-value">{{ activity_totals.billable_hours|default:0|floatformat:1 }}</span>
+            </div>
+        </div>
+        <div class="col">
+            <div class="rpt2-kpi rpt2-kpi--amber">
+                <span class="rpt2-kpi-label">Accounts</span>
+                <span class="rpt2-kpi-value">{{ activity_totals.unique_accounts }}</span>
+            </div>
+        </div>
+        <div class="col">
+            <div class="rpt2-kpi rpt2-kpi--cyan">
+                <span class="rpt2-kpi-label">Non-Billable</span>
+                <span class="rpt2-kpi-value">{{ activity_totals.non_billable_hours|default:0|floatformat:1 }}</span>
+            </div>
+        </div>
+    </div>
+
     {# ── Activity: filter ───────────────────────────────────────────────── #}
     <div class="glass-card rpt2-filter rpt2-activity-filter mb-4 lg-enter" data-lg-delay="40">
         <div class="rpt-filter-panel">
@@ -69,74 +103,12 @@
         </div>
     </div>
 
-    {# ── Activity: KPI band ────────────────────────────────────────────── #}
-    <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid" data-lg-delay="40">
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--green">
-                <span class="rpt2-kpi-label">Total Hours</span>
-                <span class="rpt2-kpi-value">{{ activity_totals.total_hours|default:0|floatformat:1 }}</span>
-            </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--blue">
-                <span class="rpt2-kpi-label">Log Entries</span>
-                <span class="rpt2-kpi-value">{{ activity_totals.entries }}</span>
-            </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--violet">
-                <span class="rpt2-kpi-label">Billable Hrs</span>
-                <span class="rpt2-kpi-value">{{ activity_totals.billable_hours|default:0|floatformat:1 }}</span>
-            </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--amber">
-                <span class="rpt2-kpi-label">Accounts</span>
-                <span class="rpt2-kpi-value">{{ activity_totals.unique_accounts }}</span>
-            </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--cyan">
-                <span class="rpt2-kpi-label">Non-Billable</span>
-                <span class="rpt2-kpi-value">{{ activity_totals.non_billable_hours|default:0|floatformat:1 }}</span>
-            </div>
-        </div>
-    </div>
-
-    {# ── Activity: Charts row 1 ──────────────────────────────────────────── #}
-    <div class="row g-4 mb-4 lg-enter" data-lg-delay="80">
-        <div class="col-12 col-xl-8">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head">
-                    <div>
-                        <h3 class="rpt-chart-title">Hours by Engineer</h3>
-                    </div>
-                    <button type="button" class="rpt-expand-btn ms-auto" data-expand-chart="activityEngineerChart" aria-label="Expand Hours by Engineer chart"><i class="bi bi-fullscreen"></i></button>
-                </div>
-                <div class="rpt-series-key" aria-label="Chart series"><span class="rpt-series-key__item rpt-series-key__item--green">Billable</span><span class="rpt-series-key__item rpt-series-key__item--gray">Not Billable</span></div>
-                {% if activity_engineer_chart.labels %}
-                    <div class="rpt-canvas-wrap"><canvas id="activityEngineerChart" role="img" aria-label="Billable and non-billable hours grouped by engineer. Detailed values follow in the Engineer Hour Breakdown table."></canvas></div>
-                {% else %}
-                    <div class="rpt-empty"><i class="bi bi-bar-chart"></i><p>No engineer activity entries available yet.</p></div>
-                {% endif %}
-            </div>
-        </div>
-        <div class="col-12 col-xl-4">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head">
-                    <div>
-                        <h3 class="rpt-chart-title">Billable Distribution</h3>
-                    </div>
-                    <button type="button" class="rpt-expand-btn ms-auto" data-expand-chart="activityBillableChart" aria-label="Expand Billable Distribution chart"><i class="bi bi-fullscreen"></i></button>
-                </div>
-                {% if activity_totals.entries %}
-                    <div class="rpt-canvas-wrap rpt-canvas-wrap--donut"><canvas id="activityBillableChart" role="img" aria-label="Billable and non-billable logged-hour distribution."></canvas></div>
-                {% else %}
-                    <div class="rpt-empty"><i class="bi bi-pie-chart"></i><p>Log activity to see billable trends.</p></div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+    <section class="rpt-chart-grid" aria-label="Activity charts">
+        {% include "hub/partials/report_chart.html" with chart_id="activityEngineerChart" title="Hours by Engineer" subtitle="Billable and non-billable logged hours" has_data=activity_engineer_chart.labels description="Hours by Engineer. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+        {% include "hub/partials/report_chart.html" with chart_id="activityBillableChart" title="Billable Hour Share" subtitle="Share of total logged hours" has_data=activity_totals.entries donut=True description="Billable Hour Share. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+        {% include "hub/partials/report_chart.html" with chart_id="activityTypeChart" title="Hours by Activity Type" subtitle="Billable and non-billable logged hours" has_data=activity_type_chart.labels description="Hours by Activity Type. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+        {% include "hub/partials/report_chart.html" with chart_id="activityLocationChart" title="Work Location Hour Share" subtitle="Share of total logged hours by location" has_data=activity_location_chart.labels donut=True description="Work Location Hour Share. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+    </section>
 
     {# ── Activity: Charts row 2 ──────────────────────────────────────────── #}
     <div class="row g-4 mb-4">
@@ -494,75 +466,13 @@
         </div>
     </div>
 
-    {# ── Operational: Charts row 1 ───────────────────────────────────────── #}
-    <div class="row g-4 mb-4 lg-enter" data-lg-delay="80">
-        <div class="col-12 col-xl-8">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head">
-                    <div>
-                        <h3 class="rpt-chart-title">Requests by Engineer</h3>
-                    </div>
-                    <button type="button" class="rpt-expand-btn ms-auto" data-expand-chart="engineerChart" aria-label="Expand Requests by Engineer chart"><i class="bi bi-fullscreen"></i></button>
-                </div>
-                <div class="rpt-series-key" aria-label="Chart series"><span class="rpt-series-key__item rpt-series-key__item--green">Completed</span><span class="rpt-series-key__item rpt-series-key__item--violet">Ongoing</span></div>
-                {% if engineer_stats %}
-                    <div class="rpt-canvas-wrap"><canvas id="engineerChart" role="img" aria-label="Completed and ongoing requests for the ten busiest engineers, with remaining engineers grouped as Others. Full values follow in the Engineer Allocation table."></canvas></div>
-                {% else %}
-                    <div class="rpt-empty"><i class="bi bi-bar-chart"></i><p>No engineer assignments captured yet.</p></div>
-                {% endif %}
-            </div>
-        </div>
-        <div class="col-12 col-xl-4">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head">
-                    <div>
-                        <h3 class="rpt-chart-title">Engagement Types</h3>
-                    </div>
-                    <button type="button" class="rpt-expand-btn ms-auto" data-expand-chart="engagementChart" title="Expand chart"><i class="bi bi-fullscreen"></i></button>
-                </div>
-                {% if engagement_chart_has_data %}
-                    <div class="rpt-canvas-wrap"><canvas id="engagementChart"></canvas></div>
-                {% else %}
-                    <div class="rpt-empty"><i class="bi bi-bar-chart"></i><p>No engagement type data available yet.</p></div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    {# ── Operational: Charts row 2 ───────────────────────────────────────── #}
-    <div class="row g-4 mb-4">
-        <div class="col-12 col-xl-8">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head">
-                    <div>
-                        <h3 class="rpt-chart-title">Requests by Account Manager</h3>
-                    </div>
-                    <button type="button" class="rpt-expand-btn ms-auto" data-expand-chart="accountManagerChart" aria-label="Expand Requests by Account Manager chart"><i class="bi bi-fullscreen"></i></button>
-                </div>
-                <div class="rpt-series-key" aria-label="Chart series"><span class="rpt-series-key__item rpt-series-key__item--green">Completed</span><span class="rpt-series-key__item rpt-series-key__item--violet">Ongoing</span></div>
-                {% if account_manager_stats %}
-                    <div class="rpt-canvas-wrap"><canvas id="accountManagerChart" role="img" aria-label="Completed and ongoing requests for the ten busiest account managers, with remaining managers grouped as Others. Full values follow in the Account Manager Breakdown table."></canvas></div>
-                {% else %}
-                    <div class="rpt-empty"><i class="bi bi-bar-chart"></i><p>No requests recorded yet for account managers.</p></div>
-                {% endif %}
-            </div>
-        </div>
-        <div class="col-12 col-xl-4">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head">
-                    <div>
-                        <h3 class="rpt-chart-title">Product Categories</h3>
-                    </div>
-                    <button type="button" class="rpt-expand-btn ms-auto" data-expand-chart="productChart" title="Expand chart"><i class="bi bi-fullscreen"></i></button>
-                </div>
-                {% if product_chart_has_data %}
-                    <div class="rpt-canvas-wrap"><canvas id="productChart"></canvas></div>
-                {% else %}
-                    <div class="rpt-empty"><i class="bi bi-bar-chart"></i><p>No product category data recorded yet.</p></div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
+    <p class="rpt-chart-context">All time &middot; Request counts by current status</p>
+    <section class="rpt-chart-grid" aria-label="Operational charts">
+        {% include "hub/partials/report_chart.html" with chart_id="engineerChart" title="Top 10 Engineers + Others" subtitle="Requests by engineer - expand for all engineers" has_data=engineer_stats description="Top 10 Engineers + Others. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+        {% include "hub/partials/report_chart.html" with chart_id="engagementChart" title="Requests by Engagement Type" subtitle="Completed and ongoing requests" has_data=engagement_chart_has_data description="Requests by Engagement Type. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+        {% include "hub/partials/report_chart.html" with chart_id="accountManagerChart" title="Top 10 Account Managers + Others" subtitle="Requests by account manager - expand for all managers" has_data=account_manager_stats description="Top 10 Account Managers + Others. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+        {% include "hub/partials/report_chart.html" with chart_id="productChart" title="Requests by Product Category" subtitle="Completed and ongoing requests" has_data=product_chart_has_data description="Requests by Product Category. Exact values available in View chart values." empty_message="No data available for this chart in the selected period." %}
+    </section>
 
     {# ── Operational: Breakdown tables ───────────────────────────────────── #}
     <div class="row g-4 mb-4">
@@ -663,430 +573,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="{% static 'js/chart-theme.js' %}?v=4"></script>
+<script src="{% static 'js/report-charts.js' %}?v=1" defer></script>
 <script>
 (function () {
-    function hexToRgba(hex, alpha) {
-        var h = (hex || '').replace('#', '').trim();
-        if (h.length === 3) {
-            h = h.split('').map(function (c) { return c + c; }).join('');
-        }
-        if (h.length !== 6) {
-            return 'rgba(10, 132, 255, ' + alpha + ')';
-        }
-        var r = parseInt(h.slice(0, 2), 16);
-        var g = parseInt(h.slice(2, 4), 16);
-        var b = parseInt(h.slice(4, 6), 16);
-        return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')';
-    }
-
-    function token(name, fallback) {
-        var bodyVal = getComputedStyle(document.body).getPropertyValue(name).trim();
-        if (bodyVal) return bodyVal;
-        var value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-        return value || fallback;
-    }
-
-    function buildPalette() {
-        var colors = (window.lgChartPalette && window.lgChartPalette.length)
-            ? window.lgChartPalette.slice()
-            : [
-                token('--lg-accent', '#0a84ff'),
-                token('--lg-ok', '#30d158'),
-                token('--lg-warn', '#ff9f0a'),
-                token('--lg-crit', '#ff453a'),
-                token('--lg-violet', '#bf5af0'),
-                token('--lg-teal', '#40c8e0')
-            ];
-        return {
-            green:  { bg: hexToRgba(colors[1] || '#30d158', 0.42), b: hexToRgba(colors[1] || '#30d158', 0.88) },
-            violet: { bg: hexToRgba(colors[4] || '#bf5af0', 0.42), b: hexToRgba(colors[4] || '#bf5af0', 0.88) },
-            blue:   { bg: hexToRgba(colors[0] || '#0a84ff', 0.42), b: hexToRgba(colors[0] || '#0a84ff', 0.88) },
-            amber:  { bg: hexToRgba(colors[2] || '#ff9f0a', 0.42), b: hexToRgba(colors[2] || '#ff9f0a', 0.88) },
-            cyan:   { bg: hexToRgba(colors[5] || '#40c8e0', 0.42), b: hexToRgba(colors[5] || '#40c8e0', 0.88) },
-            gray:   { bg: 'rgba(100,116,139,0.38)', b: 'rgba(100,116,139,0.72)' },
-            rose:   { bg: hexToRgba(colors[3] || '#ff453a', 0.42), b: hexToRgba(colors[3] || '#ff453a', 0.88) }
-        };
-    }
-
-    var P = buildPalette();
-    var DONUT_BG = [P.blue.bg, P.green.bg, P.amber.bg, P.violet.bg, P.cyan.bg, P.rose.bg, P.gray.bg];
-    var DONUT_BR = [P.blue.b, P.green.b, P.amber.b, P.violet.b, P.cyan.b, P.rose.b, P.gray.b];
-    var reducedMotion = !!window.lgReducedMotion;
-
-    // Live ink per draw so theme toggle refreshes plugin text.
-    var inkNow = function () { return token('--lg-ink', '#0b1220'); };
-    var inkSoftNow = function () { return token('--lg-ink-soft', 'rgba(11,18,32,0.62)'); };
-
-    var totalLabelsPlugin = {
-        id: 'totalLabels',
-        afterDatasetsDraw: function (chart) {
-            var opts = chart.options && chart.options.plugins && chart.options.plugins.totalLabels;
-            if (!opts || !opts.display) return;
-            var totals = opts.totals || [];
-            var meta = chart.getDatasetMeta(chart.data.datasets.length - 1);
-            if (!meta) return;
-            var ctx = chart.ctx;
-            var ink = inkNow();
-            meta.data.forEach(function (el, i) {
-                var val = totals[i];
-                if (val == null) return;
-                var pos = el.tooltipPosition();
-                if (!Number.isFinite(pos.y)) return;
-                ctx.save();
-                ctx.fillStyle = ink;
-                ctx.font = '700 11px ' + (Chart.defaults.font.family || 'system-ui');
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                ctx.fillText(val, pos.x, pos.y - 5);
-                ctx.restore();
-            });
-        }
-    };
-
-    // Donut center total (sum, themed ink).
-    var donutCenterPlugin = {
-        id: 'donutCenter',
-        afterDraw: function (chart) {
-            var opts = chart.options && chart.options.plugins && chart.options.plugins.donutCenter;
-            if (!opts || !opts.display) return;
-            var meta = chart.getDatasetMeta(0);
-            if (!meta || !meta.data || !meta.data.length) return;
-            var el = meta.data[0];
-            var x = el.x, y = el.y;
-            var total = (chart.data.datasets[0].data || []).reduce(function (a, b) { return a + (Number(b) || 0); }, 0);
-            var totalTxt = opts.format ? opts.format(total) : (Math.round(total * 10) / 10);
-            var ctx = chart.ctx;
-            ctx.save();
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = inkNow();
-            ctx.font = '750 20px ' + (Chart.defaults.font.family || 'system-ui');
-            ctx.fillText(totalTxt, x, y - 6);
-            ctx.fillStyle = inkSoftNow();
-            ctx.font = '600 10px ' + (Chart.defaults.font.family || 'system-ui');
-            ctx.fillText(opts.label || 'TOTAL', x, y + 14);
-            ctx.restore();
-        }
-    };
-
-    var chartBuilders = {};
-
-    function chartTitle(canvas) {
-        var card = canvas.closest('.rpt-chart-card');
-        var title = card && card.querySelector('.rpt-chart-title');
-        return title ? title.textContent.trim() : '';
-    }
-
-    function makeStackedBar(canvas, payload, cA, cB, expandedPayload) {
-        if (!canvas || !payload || !payload.labels || !payload.labels.length) return;
-        var axisColor = window.lgChartInk || token('--lg-ink', '#0b1220');
-        var axisSoft = window.lgChartInkSoft || token('--lg-ink-soft', 'rgba(11,18,32,0.62)');
-        var divider = window.lgChartDivider || token('--lg-divider', 'rgba(11,18,32,0.09)');
-        var tooltipBg = document.body.classList.contains('dark-mode') ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.96)';
-        var buildFn = function (tgt, payloadOverride, showAll) {
-            var chartPayload = payloadOverride || payload;
-            var existing = typeof Chart.getChart === 'function' ? Chart.getChart(tgt) : null;
-            if (existing) existing.destroy();
-            return new Chart(tgt, {
-                type: 'bar',
-                data: {
-                    labels: chartPayload.labels,
-                    datasets: [
-                        { label: 'Completed', data: chartPayload.completed || [], backgroundColor: cA.bg, borderColor: cA.b, borderWidth: 0, borderRadius: 8, borderSkipped: false, stack: 'r', order: 1 },
-                        { label: 'Ongoing', data: chartPayload.ongoing || [], backgroundColor: cB.bg, borderColor: cB.b, borderWidth: 0, borderRadius: 8, borderSkipped: false, stack: 'r', order: 2 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: reducedMotion ? 0 : 650, easing: 'easeOutQuart' },
-                    scales: {
-                        x: {
-                            stacked: true,
-                            grid: { color: divider, drawTicks: false },
-                            ticks: { color: axisColor, maxRotation: showAll ? 55 : 35, minRotation: 0, autoSkip: !showAll, maxTicksLimit: showAll ? undefined : 16, font: { weight: 600 } }
-                        },
-                        y: {
-                            stacked: true,
-                            beginAtZero: true,
-                            grace: '12%',
-                            maxTicksLimit: 6,
-                            grid: { color: divider, drawTicks: false },
-                            ticks: { color: axisColor, precision: 0, font: { weight: 600 } }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: tooltipBg,
-                            titleColor: axisColor,
-                            bodyColor: axisColor,
-                            borderColor: divider,
-                            borderWidth: 1,
-                            displayColors: false,
-                            callbacks: {
-                                afterBody: function (items) {
-                                    if (!items.length) return '';
-                                    var t = (chartPayload.totals || [])[items[0].dataIndex];
-                                    return t != null ? 'Total: ' + t : '';
-                                }
-                            }
-                        },
-                        totalLabels: { display: true, totals: chartPayload.totals }
-                    }
-                },
-                plugins: [totalLabelsPlugin]
-            });
-        };
-        buildFn(canvas);
-        if (canvas.id) {
-            var expandedBuild = expandedPayload && expandedPayload.labels && expandedPayload.labels.length
-                ? function (tgt) { return buildFn(tgt, expandedPayload, true); }
-                : function (tgt) { return buildFn(tgt, payload, true); };
-            chartBuilders[canvas.id] = { build: buildFn, expandBuild: expandedBuild, title: chartTitle(canvas) };
-        }
-    }
-
-    function makeHourBar(canvas, payload, cA, cB) {
-        if (!canvas || !payload || !payload.labels || !payload.labels.length) return;
-        var axisColor = window.lgChartInk || token('--lg-ink', '#0b1220');
-        var divider = window.lgChartDivider || token('--lg-divider', 'rgba(11,18,32,0.09)');
-        var tooltipBg = document.body.classList.contains('dark-mode') ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.96)';
-        var buildFn = function (tgt, showAll) {
-            var existing = typeof Chart.getChart === 'function' ? Chart.getChart(tgt) : null;
-            if (existing) existing.destroy();
-            return new Chart(tgt, {
-                type: 'bar',
-                data: {
-                    labels: payload.labels,
-                    datasets: [
-                        { label: 'Billable', data: payload.billable || [], backgroundColor: cA.bg, borderColor: cA.b, borderWidth: 0, borderRadius: 8, borderSkipped: false, stack: 'h' },
-                        { label: 'Not Billable', data: payload.non_billable || [], backgroundColor: cB.bg, borderColor: cB.b, borderWidth: 0, borderRadius: 8, borderSkipped: false, stack: 'h' }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: reducedMotion ? 0 : 650, easing: 'easeOutQuart' },
-                    scales: {
-                        x: {
-                            stacked: true,
-                            grid: { color: divider, drawTicks: false },
-                            ticks: { color: axisColor, autoSkip: !showAll, maxRotation: showAll ? 55 : 35, maxTicksLimit: showAll ? undefined : 16, font: { weight: 600 } }
-                        },
-                        y: {
-                            stacked: true,
-                            beginAtZero: true,
-                            maxTicksLimit: 6,
-                            grid: { color: divider, drawTicks: false },
-                            ticks: { color: axisColor, precision: 0, font: { weight: 600 } }
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: tooltipBg,
-                            titleColor: axisColor,
-                            bodyColor: axisColor,
-                            borderColor: divider,
-                            borderWidth: 1,
-                            displayColors: false,
-                            callbacks: {
-                                label: function (ctx) {
-                                    return ctx.dataset.label + ': ' + ctx.parsed.y + ' hrs';
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        };
-        buildFn(canvas);
-        if (canvas.id) chartBuilders[canvas.id] = { build: buildFn, expandBuild: function (tgt) { return buildFn(tgt, true); }, title: chartTitle(canvas) };
-    }
-
-    function makeDonut(canvas, payload, bgColors, brColors, labelFn) {
-        if (!canvas || !payload || !payload.labels || !payload.labels.length) return;
-        var buildFn = function (tgt) {
-            var existing = typeof Chart.getChart === 'function' ? Chart.getChart(tgt) : null;
-            if (existing) existing.destroy();
-            return new Chart(tgt, {
-                type: 'doughnut',
-                data: {
-                    labels: payload.labels,
-                    datasets: [{
-                        data: payload.totals,
-                        backgroundColor: bgColors,
-                        borderColor: brColors,
-                        borderWidth: 2,
-                        hoverOffset: 10,
-                        borderRadius: 5
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '62%',
-                    animation: { duration: reducedMotion ? 0 : 700, easing: 'easeOutQuart', animateRotate: !reducedMotion },
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 8, boxHeight: 8, padding: 12 } },
-                        tooltip: { callbacks: { label: labelFn } },
-                        donutCenter: { display: true, label: 'HOURS' }
-                    }
-                },
-                plugins: [donutCenterPlugin]
-            });
-        };
-        buildFn(canvas);
-        if (canvas.id) chartBuilders[canvas.id] = { build: buildFn, title: chartTitle(canvas) };
-    }
-
-    var rptView = '{{ report_view }}';
-
-    if (rptView === 'operational') {
-        var amN = document.getElementById('account-manager-data');
-        var amFullN = document.getElementById('account-manager-full-data');
-        var engN = document.getElementById('engineer-data');
-        var engFullN = document.getElementById('engineer-full-data');
-        var engtN = document.getElementById('engagement-data');
-        var prodN = document.getElementById('product-data');
-
-        if (amN && amN.textContent) makeStackedBar(document.getElementById('accountManagerChart'), JSON.parse(amN.textContent), P.green, P.violet, amFullN ? JSON.parse(amFullN.textContent) : null);
-        if (engN && engN.textContent) makeStackedBar(document.getElementById('engineerChart'), JSON.parse(engN.textContent), P.green, P.violet, engFullN ? JSON.parse(engFullN.textContent) : null);
-        if (engtN && engtN.textContent) {
-            var ep = JSON.parse(engtN.textContent);
-            if ((ep.totals || []).some(function (v) { return v > 0; })) makeStackedBar(document.getElementById('engagementChart'), ep, P.green, P.blue);
-        }
-        if (prodN && prodN.textContent) {
-            var pp = JSON.parse(prodN.textContent);
-            if ((pp.totals || []).some(function (v) { return v > 0; })) makeStackedBar(document.getElementById('productChart'), pp, P.green, P.amber);
-        }
-    }
-
-    if (rptView === 'activity') {
-        var aEngN = document.getElementById('activity-engineer-data');
-        var typeN = document.getElementById('activity-type-data');
-        var locN = document.getElementById('activity-location-data');
-        var billN = document.getElementById('activity-billable-data');
-
-        if (aEngN && aEngN.textContent) makeHourBar(document.getElementById('activityEngineerChart'), JSON.parse(aEngN.textContent), P.green, P.gray);
-        if (typeN && typeN.textContent) makeHourBar(document.getElementById('activityTypeChart'), JSON.parse(typeN.textContent), P.blue, P.amber);
-        if (locN && locN.textContent) {
-            var lp = JSON.parse(locN.textContent);
-            makeDonut(
-                document.getElementById('activityLocationChart'),
-                lp,
-                DONUT_BG.slice(0, lp.labels.length),
-                DONUT_BR.slice(0, lp.labels.length),
-                function (ctx) {
-                    var v = ctx.raw != null ? ctx.raw : ctx.parsed;
-                    return ctx.label + ': ' + (typeof v === 'number' ? v.toFixed(1) + ' hrs' : v);
-                }
-            );
-        }
-        if (billN && billN.textContent) {
-            var bp = JSON.parse(billN.textContent);
-            makeDonut(
-                document.getElementById('activityBillableChart'),
-                bp,
-                [P.green.bg, P.gray.bg],
-                [P.green.b, P.gray.b],
-                function (ctx) {
-                    var v = ctx.raw != null ? ctx.raw : ctx.parsed;
-                    return ctx.label + ': ' + (typeof v === 'number' ? v.toFixed(1) + ' hrs' : v);
-                }
-            );
-        }
-    }
-
-    if (typeof window.lgChartOnTheme === 'function') {
-        window.lgChartOnTheme(function () {
-            P = buildPalette();
-            DONUT_BG = [P.blue.bg, P.green.bg, P.amber.bg, P.violet.bg, P.cyan.bg, P.rose.bg, P.gray.bg];
-            DONUT_BR = [P.blue.b, P.green.b, P.amber.b, P.violet.b, P.cyan.b, P.rose.b, P.gray.b];
-            Object.keys(chartBuilders).forEach(function (id) {
-                var canvas = document.getElementById(id);
-                if (canvas) chartBuilders[id].build(canvas);
-            });
-        });
-    }
-
-    (function () {
-        var modal = document.getElementById('rptChartModal');
-        var titleEl = document.getElementById('rptChartModalTitle');
-        var closeBtn = document.getElementById('rptChartModalClose');
-        if (!modal) return;
-        var activeChart = null;
-        var returnFocus = null;
-
-        function focusableElements() {
-            return Array.prototype.slice.call(modal.querySelectorAll('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'));
-        }
-
-        function openModal(id, trigger) {
-            var entry = chartBuilders[id];
-            if (!entry) return;
-            returnFocus = trigger || document.activeElement;
-            titleEl.textContent = entry.title;
-            if (activeChart) {
-                activeChart.destroy();
-                activeChart = null;
-            }
-            modal.classList.add('is-open');
-            modal.setAttribute('aria-hidden', 'false');
-            document.body.style.overflow = 'hidden';
-            requestAnimationFrame(function () {
-                var mc = document.getElementById('rptModalCanvas');
-                if (mc) activeChart = (entry.expandBuild || entry.build)(mc);
-                if (closeBtn) closeBtn.focus();
-            });
-        }
-
-        function closeModal() {
-            modal.classList.remove('is-open');
-            modal.setAttribute('aria-hidden', 'true');
-            document.body.style.overflow = '';
-            if (activeChart) {
-                activeChart.destroy();
-                activeChart = null;
-            }
-            if (returnFocus && typeof returnFocus.focus === 'function') returnFocus.focus();
-            returnFocus = null;
-        }
-
-        document.querySelectorAll('[data-expand-chart]').forEach(function (btn) {
-            btn.addEventListener('click', function () { openModal(btn.dataset.expandChart, btn); });
-        });
-        var pngBtn = document.getElementById('rptChartModalPng');
-        if (pngBtn) {
-            pngBtn.addEventListener('click', function () {
-                if (!activeChart) return;
-                var link = document.createElement('a');
-                link.download = (titleEl.textContent || 'chart').toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.png';
-                link.href = activeChart.toBase64Image();
-                link.click();
-            });
-        }
-        if (closeBtn) closeBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
-            if (e.key === 'Tab' && modal.classList.contains('is-open')) {
-                var focusable = focusableElements();
-                if (!focusable.length) return;
-                var first = focusable[0];
-                var last = focusable[focusable.length - 1];
-                if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault();
-                    last.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault();
-                    first.focus();
-                }
-            }
-        });
-    })();
-
     (function () {
         var modal = document.getElementById('activity-edit-modal');
         if (!modal) return;

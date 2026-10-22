@@ -1350,6 +1350,22 @@ def _send_sqr_new_submission_email(
             "content": {
                 "subject": subject,
                 "plainText": plain_text,
+                "html": render_to_string("hub/emails/sqr_new_submission.html", {
+                    "notification_title": "New SQR Assigned for Review",
+                    "details_heading": "Submission details",
+                    "reviewer_name": reviewer_name,
+                    "details": [
+                        ("Reference", submission.reference_code),
+                        ("Submitted By", engineer_name),
+                        ("Customer", submission.customer_name),
+                        *([("Company/Group", customer_company)] if customer_company else []),
+                        ("Project Title", submission.project_title),
+                        ("Date Submitted (Manila)", submitted_date),
+                    ],
+                    "project_details": submission.project_details or "—",
+                    "action_label": "Open SQR Tracker",
+                    "action_url": sqr_url,
+                }),
             },
         }
         poller = client.begin_send(message)
@@ -2947,11 +2963,9 @@ def _build_choice_import_map(choices) -> dict[str, str]:
 
 def _make_sqr_edit_form(user):
     """Return a SqrSubmissionForm for the edit modal scoped to engineer-accessible requests."""
-    used_req_ids = SqrSubmission.objects.exclude(linked_request_id=None).values_list("linked_request_id", flat=True)
     form = SqrSubmissionForm(auto_id="edit_%s")
     form.fields["linked_request"].queryset = (
-        Request.objects.filter(Q(engineer=user) | Q(backup_engineer=user))
-        .exclude(id__in=used_req_ids)
+        Request.objects.filter(Q(engineer=user) | Q(backup_engineer=user) | Q(sqr_links__engineer=user)).distinct()
         .select_related("account").only("id", "reference_code", "account__name").order_by("-id")
     )
     _refresh_sqr_request_account_map(form)
@@ -3038,12 +3052,8 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         form = kwargs.get("form")
         if can_create and form is None:
             form = SqrSubmissionForm()
-            # Scope RQ ID dropdown to requests assigned to this engineer only,
-            # excluding requests that already have an SQR submission.
-            _used_req_ids = SqrSubmission.objects.exclude(linked_request_id=None).values_list("linked_request_id", flat=True)
             form.fields["linked_request"].queryset = (
                 Request.objects.filter(engineer=user)
-                .exclude(id__in=_used_req_ids)
                 .select_related("account").only("id", "reference_code", "account__name").order_by("-id")
             )
             _refresh_sqr_request_account_map(form)
@@ -3476,17 +3486,14 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         _refresh_sqr_request_account_map(form)
         if form.is_valid():
             linked_request = form.cleaned_data.get("linked_request")
-            if linked_request and SqrSubmission.objects.filter(linked_request=linked_request).exists():
-                form.add_error("linked_request", "An SQR already exists for the selected Request ID.")
-                context = self.get_context_data(form=form)
-                return self.render_to_response(context)
-
             try:
                 with transaction.atomic():
                     if linked_request:
-                        Request.objects.select_for_update().filter(pk=linked_request.pk).first()
-                        if SqrSubmission.objects.select_for_update().filter(linked_request=linked_request).exists():
-                            form.add_error("linked_request", "An SQR already exists for the selected Request ID.")
+                        assigned_request = Request.objects.select_for_update().filter(
+                            pk=linked_request.pk, engineer=request.user,
+                        ).first()
+                        if assigned_request is None:
+                            form.add_error("linked_request", "This request is no longer assigned to you.")
                             context = self.get_context_data(form=form)
                             return self.render_to_response(context)
 
@@ -3507,7 +3514,8 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                         submission.managed_support_amount = None
                     save_configured_instance(form, submission)
             except IntegrityError:
-                form.add_error("linked_request", "An SQR already exists for the selected Request ID.")
+                logger.exception("Unable to save SQR submission for engineer %s", request.user.pk)
+                form.add_error(None, "The SQR could not be saved. Please try again.")
                 context = self.get_context_data(form=form)
                 return self.render_to_response(context)
             # Reload with reviewer to ensure email field is populated
@@ -3718,17 +3726,9 @@ class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
     def get_form(self, form_class=None):
         form = super().get_form(form_class)
         obj = self.object
-        # Exclude requests already linked to OTHER SQR submissions;
-        # this keeps the current linked_request in the queryset so it stays valid.
-        others_used_ids = (
-            SqrSubmission.objects.exclude(pk=obj.pk)
-            .exclude(linked_request_id=None)
-            .values_list("linked_request_id", flat=True)
-        )
         if self.request.user.role == User.Roles.ADMIN:
             qs = (
                 Request.objects
-                .exclude(id__in=others_used_ids)
                 .select_related("account").only("id", "reference_code", "account__name").order_by("-id")
             )
         else:
@@ -3739,10 +3739,10 @@ class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
                     | Q(backup_engineer=self.request.user)
                     | Q(pk=obj.linked_request_id)
                 )
-                .exclude(id__in=others_used_ids)
                 .select_related("account").only("id", "reference_code", "account__name").order_by("-id")
             )
         form.fields["linked_request"].queryset = qs
+        _refresh_sqr_request_account_map(form)
         return form
 
     def get_queryset(self):
@@ -5306,7 +5306,11 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         if back_url == self.request.build_absolute_uri():
             back_url = reverse("hub:dashboard")
 
-        linked_sqr = SqrSubmission.objects.filter(linked_request=request_obj).first()
+        linked_sqrs = (
+            _sqr_queryset_for_user(self.request.user).filter(linked_request=request_obj)
+            if self.request.user.role in SQR_ACCESS_ROLES
+            else SqrSubmission.objects.none()
+        )
 
         return {
             "object": request_obj,
@@ -5320,7 +5324,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             "back_url": back_url,
             "status_allowed": status_allowed,
             "can_change_account": self.request.user.role in ADMIN_PANEL_ROLES,
-            "linked_sqr": linked_sqr,
+            "linked_sqrs": linked_sqrs,
             "lifecycle": request_lifecycle.build_lifecycle_context(request_obj, self.request.user),
             **get_request_activity_log_context(request_obj),
         }

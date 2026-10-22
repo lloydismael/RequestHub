@@ -1720,7 +1720,14 @@
             <form method="post" id="create-sqr-form">
                 {% csrf_token %}
                 {% if sqr_form.errors %}
-                    <div class="alert alert-danger" role="alert"><i class="bi bi-exclamation-triangle me-2"></i>Please resolve the highlighted fields before submitting.</div>
+                    <div class="alert alert-danger" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2" aria-hidden="true"></i>
+                        {% if sqr_form.non_field_errors %}
+                            {{ sqr_form.non_field_errors|join:" " }}
+                        {% else %}
+                            Please resolve the highlighted fields before submitting.
+                        {% endif %}
+                    </div>
                 {% endif %}
                 {% if sqr_form.editor_description %}<p class="text-muted">{{ sqr_form.editor_description }}</p>{% endif %}
                 {% form_editor_token sqr_form %}

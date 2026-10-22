@@ -494,7 +494,7 @@ class RequestAdminForm(forms.ModelForm):
         required=True,
         widget=AvatarSelect(attrs={"class": "form-select", "data-avatar-select": "true"}),
         label="Requestor",
-        help_text="Switch the request owner (Requestor/Requestor-ESS/PM-ESS).",
+        help_text="Switch the request owner (Requestor/Requestor-ESS/PM-ESS/PM-ESG/Admin).",
     )
     engineer = forms.ModelChoiceField(
         queryset=User.objects.none(),
@@ -806,6 +806,7 @@ class SqrSubmissionForm(forms.ModelForm):
             self.fields[field_name].required = True
             self.fields[field_name].widget.attrs["required"] = "required"
             self.fields[field_name].widget.attrs["aria-required"] = "true"
+        self.fields["linked_request"].help_text = "You can submit multiple separate SQRs for the same assigned Request ID."
         self.fields["linked_request"].error_messages["required"] = "Request ID is required."
         self.fields["pm_esg_reviewer"].error_messages["required"] = "Approver Name is required."
         self.fields["sqr_folder_link"].error_messages["required"] = "SQR Folder Link is required."
