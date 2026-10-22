@@ -112,6 +112,9 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 - Chart **expand button** on every chart card for full-screen view
 
 ### 🔔 Notifications & Communication
+- Engineer assignment and SQR revision emails include branded HTML with structured details, multiline descriptions/reviewer comments, action buttons, and visible fallback links. Plain-text bodies remain available for clients that do not display HTML.
+- Email templates live in `templates/hub/emails/`; they use inline CSS and table-based layouts for Outlook compatibility and escape user-entered content. Existing recipients, subjects, notification triggers, and ACS delivery configuration are unchanged; no migration or new dependency is required.
+- Validate changes with `python manage.py test hub.test_engineer_emails hub.test_notification_urls`. Before production rollout, send controlled test emails to Outlook and Gmail and check mobile/dark-mode rendering; browser previews do not verify email-client behavior.
 - In-app notification center for assignment events and workflow changes
 - Communication action log (Teams, Outlook, Phone) with channel tagging
 - Optional Teams chat topic field per request

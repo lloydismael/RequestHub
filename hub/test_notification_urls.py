@@ -90,6 +90,9 @@ class NotificationUrlTests(SimpleTestCase):
                 self.assertIn("https://esgrequesthub.com/requests/1/", message["content"]["plainText"])
                 self.assertNotIn("retired.example.com", message["content"]["plainText"])
                 self.assertNotIn("azurewebsites.net", message["content"]["plainText"])
+                self.assertIn('href="https://esgrequesthub.com/requests/1/"', message["content"]["html"])
+                self.assertNotIn("retired.example.com", message["content"]["html"])
+                self.assertNotIn("azurewebsites.net", message["content"]["html"])
 
     @patch("azure.communication.email.EmailClient.from_connection_string")
     def test_sqr_links_use_primary_origin_with_or_without_request(self, client_factory):
@@ -104,3 +107,7 @@ class NotificationUrlTests(SimpleTestCase):
                     self.assertIn(f"https://esgrequesthub.com{reverse('hub:sqr')}", message["content"]["plainText"])
                     self.assertNotIn("retired.example.com", message["content"]["plainText"])
                     self.assertNotIn("azurewebsites.net", message["content"]["plainText"])
+                    if send == _send_sqr_for_revision_email:
+                        self.assertIn(f'href="https://esgrequesthub.com{reverse("hub:sqr")}"', message["content"]["html"])
+                        self.assertNotIn("retired.example.com", message["content"]["html"])
+                        self.assertNotIn("azurewebsites.net", message["content"]["html"])
