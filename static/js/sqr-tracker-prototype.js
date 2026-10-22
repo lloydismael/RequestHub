@@ -39,7 +39,7 @@
     var el = {
         pipeline: $('pipeline'), body: $('body'), items: $('items'), count: $('count'), more: $('more'),
         editor: $('editor'), search: $('search'), status: $('status'), sort: $('sort'), mine: $('mine'),
-        mineWrap: $('mine-wrap'), reset: $('reset'), refresh: $('refresh'), updated: $('updated'),
+        mineWrap: $('mine-wrap'), reset: $('reset'),
         toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
         approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
     };
@@ -789,7 +789,6 @@
         el.status.value = state.filters.status;
         el.sort.value = state.filters.sort;
         el.mine.checked = state.filters.mine;
-        el.updated.textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
         renderAll();
         if (state.selectedPk && record(state.selectedPk)) {
             var focused = el.editor.contains(document.activeElement);
@@ -824,7 +823,6 @@
     el.sort.addEventListener('change', function () { state.filters.sort = el.sort.value; savePrefs(); renderList(); });
     el.mine.addEventListener('change', function () { state.filters.mine = el.mine.checked; state.shown = PAGE_SIZE; savePrefs(); renderAll(); });
     el.more.addEventListener('click', function () { state.shown += PAGE_SIZE; renderList(); });
-    el.refresh.addEventListener('click', function () { load(true).then(function () { showToast('SQR list refreshed.'); }); });
     el.reset.addEventListener('click', function () {
         state.filters = {stage: 'all', search: '', status: '', sort: 'attention', mine: false, density: state.filters.density};
         el.search.value = ''; el.status.value = ''; el.sort.value = 'attention'; el.mine.checked = false;

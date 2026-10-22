@@ -400,6 +400,94 @@ class RequestReportViewTests(TestCase):
             "?report_view=activity&start_month=2026-08&end_month=2026-08&activity_log_page=2",
         )
 
+    def test_operational_report_health_metrics_and_attention_list(self):
+        today = timezone.localdate()
+        overdue = self._create_request()
+        due_soon = self._create_request()
+        unassigned = self._create_request(engineer=None)
+        completed = self._create_request(status=Request.Status.COMPLETED)
+        Request.objects.filter(pk=overdue.pk).update(due_date=today - timedelta(days=3))
+        Request.objects.filter(pk=due_soon.pk).update(due_date=today + timedelta(days=2))
+        Request.objects.filter(pk=unassigned.pk).update(due_date=today + timedelta(days=30))
+        Request.objects.filter(pk=completed.pk).update(due_date=today + timedelta(days=1), end_date=today)
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("hub:report"))
+
+        health = response.context["health"]
+        self.assertEqual(health["overdue"], 1)
+        self.assertEqual(health["due_soon"], 1)
+        self.assertEqual(health["unassigned"], 1)
+        self.assertEqual(health["on_time_rate"], 100)
+        attention = response.context["attention_requests"]
+        self.assertEqual([item["reference"] for item in attention], [overdue.reference_code, due_soon.reference_code])
+        self.assertTrue(attention[0]["is_overdue"])
+        self.assertEqual(attention[0]["days"], 3)
+        self.assertContains(response, "3 days overdue")
+        self.assertContains(response, "Due in 2 days")
+
+    def test_operational_report_and_export_honor_month_filter(self):
+        january = self._create_request()
+        march = self._create_request()
+        Request.objects.filter(pk=january.pk).update(created_at=datetime(2026, 1, 15, 12, tzinfo=dt_timezone.utc))
+        Request.objects.filter(pk=march.pk).update(created_at=datetime(2026, 3, 10, 12, tzinfo=dt_timezone.utc))
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("hub:report"),
+            {"report_view": "operational", "start_month": "2026-01", "end_month": "2026-01"},
+        )
+
+        self.assertEqual(response.context["totals"]["requests"], 1)
+        self.assertEqual(response.context["period_label"], "January 2026")
+        self.assertEqual(response.context["request_trend_chart"]["labels"], ["Jan 2026"])
+        self.assertContains(response, "report_view=operational&start_month=2026-01&end_month=2026-01")
+
+        export = self.client.get(
+            reverse("hub:report-export"),
+            {"report_view": "operational", "start_month": "2026-01", "end_month": "2026-01"},
+        )
+        body = export.content.decode()
+        self.assertIn(january.reference_code, body)
+        self.assertNotIn(march.reference_code, body)
+        self.assertIn("2026-01_to_2026-01", export["Content-Disposition"])
+
+    def test_operational_report_renders_chart_canvases_and_data(self):
+        self._create_request()
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("hub:report"))
+
+        for chart_id in ("requestTrendChart", "engagementChart", "productChart", "engineerChart", "accountManagerChart"):
+            self.assertContains(response, f'id="{chart_id}"')
+            self.assertContains(response, f'id="{chart_id}-data"')
+        self.assertContains(response, "View chart values")
+        self.assertContains(response, "report-charts")
+
+    def test_activity_report_includes_monthly_trend_account_breakdown_and_utilisation(self):
+        other_account = Account.objects.create(name="Second Reports Account")
+        self._create_activity_log(request_date=date(2026, 8, 5), actual_hours=Decimal("3.00"), is_billable=True)
+        self._create_activity_log(
+            request_date=date(2026, 9, 5),
+            actual_hours=Decimal("1.00"),
+            is_billable=False,
+            account=other_account,
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("hub:report"), {"report_view": "activity"})
+
+        self.assertEqual(response.context["activity_totals"]["billable_rate"], 75)
+        monthly = response.context["activity_monthly_chart"]
+        self.assertEqual(monthly["labels"], ["Aug 2026", "Sep 2026"])
+        self.assertEqual(monthly["billable"], [3.0, 0.0])
+        self.assertEqual(monthly["non_billable"], [0.0, 1.0])
+        accounts = response.context["activity_account_table"]
+        self.assertEqual([row["name"] for row in accounts], ["Reports Account", "Second Reports Account"])
+        self.assertEqual(response.context["activity_account_chart"]["labels"], ["Reports Account", "Second Reports Account"])
+        self.assertContains(response, 'id="activityMonthlyChart"')
+        self.assertContains(response, "Account Hour Breakdown")
+
 
 class NotificationBadgeTests(TestCase):
     def setUp(self):

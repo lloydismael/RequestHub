@@ -68,7 +68,6 @@ body.dark-mode .sqr-proto {
 }
 
 /* ── Top bar ──────────────────────────────────────────────────────── */
-.sqr-proto__topbar { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; padding: .25rem .25rem .75rem; }
 .sqr-proto__meta { color: var(--sp-faint); font-size: .8125rem; }
 .sqr-proto .btn-outline-primary { color: var(--sp-accent); border-color: var(--sp-border); background: var(--sp-surface); }
 .sqr-proto .btn-outline-primary:hover:not(:disabled) { background: var(--sp-accent-soft); border-color: var(--sp-accent); color: var(--sp-accent); }

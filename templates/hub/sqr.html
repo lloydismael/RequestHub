@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=18">
 {% if active_sqr_tab != 'reports' %}
 <link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=1">
-<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=1" defer></script>
+<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=2" defer></script>
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
 <script src="{% static 'js/sqr-performance.js' %}?v=2" defer></script>
@@ -64,8 +64,8 @@
                         <i class="bi bi-table me-1"></i>SQR Tracker
                     </button>
                     {% if is_pm %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="performance" aria-pressed="false">
-                        <i class="bi bi-speedometer2 me-1"></i>Project Performance Tracking
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="performance" aria-pressed="false" disabled title="Under maintenance">
+                        <i class="bi bi-speedometer2 me-1"></i>Project Performance Tracking (Under Maintenance)
                     </button>
                     {% endif %}
                     <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="prototype" aria-pressed="false">
@@ -3213,6 +3213,10 @@
         // Retired views ('esg') fall back to 'tracker'.
         var available = {};
         panels.forEach(function (panel) { available[panel.dataset.sqrViewPanel] = true; });
+        // A disabled view button (under maintenance) cannot be activated, even from a saved preference.
+        buttons.forEach(function (button) {
+            if (button.disabled) available[button.dataset.sqrViewButton] = false;
+        });
         var activeView = available[viewName] ? viewName : 'tracker';
         if (!available[activeView]) activeView = 'tracker';
         buttons.forEach(function (button) {
@@ -3733,5 +3737,74 @@
         </div>
     </div>
 </div>
+{% endif %}
+
+{% if active_sqr_tab != 'reports' %}
+<div class="sqr-approval-choice-modal" id="sqr-new-version-modal" aria-hidden="true">
+    <div class="sqr-approval-choice-modal__backdrop" data-sqr-new-version-close="true"></div>
+    <div class="sqr-approval-choice-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sqr-new-version-title" aria-describedby="sqr-new-version-desc" style="width: min(100%, 460px);">
+        <span class="sqr-approval-choice-modal__eyebrow"><i class="bi bi-stars"></i> What's new</span>
+        <h3 class="h4 mt-3 mb-2" id="sqr-new-version-title">A new version of SQR Tracker is available</h3>
+        <p class="text-muted mb-3" id="sqr-new-version-desc">Would you like to see it? Selecting OK takes you to the SQR Tracker Prototype tab.</p>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="sqr-new-version-dismiss">
+            <label class="form-check-label" for="sqr-new-version-dismiss">Don't show this message again</label>
+        </div>
+        <div class="sqr-approval-choice-modal__footer gap-2">
+            <button type="button" class="btn btn-outline-secondary" id="sqr-new-version-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="sqr-new-version-ok">OK</button>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    'use strict';
+    var storageKey = 'requestHub.sqr.hideNewVersionNotice';
+    var modal = document.getElementById('sqr-new-version-modal');
+    var okBtn = document.getElementById('sqr-new-version-ok');
+    var cancelBtn = document.getElementById('sqr-new-version-cancel');
+    var dismissBox = document.getElementById('sqr-new-version-dismiss');
+    var viewStorageKey = 'requestHub.sqr.tableView';
+    if (!modal || !okBtn || !cancelBtn || !dismissBox) return;
+
+    function readFlag(key) {
+        try { return window.localStorage.getItem(key); } catch (error) { return null; }
+    }
+
+    // Skip when opted out, or when the user already lands on the prototype tab.
+    if (readFlag(storageKey) === '1' || readFlag(viewStorageKey) === 'prototype') return;
+
+    var previousFocus = null;
+
+    function setVisible(isVisible) {
+        modal.classList.toggle('is-visible', isVisible);
+        modal.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+    }
+
+    function close() {
+        if (dismissBox.checked) {
+            try { window.localStorage.setItem(storageKey, '1'); } catch (error) {}
+        }
+        setVisible(false);
+        if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus({preventScroll: true});
+    }
+
+    okBtn.addEventListener('click', function () {
+        close();
+        if (typeof window.setSqrView === 'function') window.setSqrView('prototype');
+    });
+    cancelBtn.addEventListener('click', close);
+    modal.addEventListener('click', function (event) {
+        if (event.target && event.target.getAttribute('data-sqr-new-version-close') === 'true') close();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && modal.classList.contains('is-visible')) close();
+    });
+
+    previousFocus = document.activeElement;
+    setVisible(true);
+    okBtn.focus({preventScroll: true});
+})();
+</script>
 {% endif %}
 {% endblock %}

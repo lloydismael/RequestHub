@@ -4090,3 +4090,125 @@ body.pref-large-text.reports-page .rpt2-activity-log-card .rpt-activity-table {
 body.pref-reduce-effects.reports-page .rpt2-activity-filter .form-control {
     background: var(--glass-bg) !important;
 }
+
+/* ==========================================================================
+   18. Reports redesign — header, chart grid, attention list, chart values
+   ========================================================================== */
+body.reports-page .rpt2-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+body.reports-page .rpt2-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .6rem;
+}
+body.reports-page .rpt2-page-sub {
+    margin: .15rem 0 0;
+    font-size: .82rem;
+    color: var(--lg-ink-soft);
+}
+
+body.reports-page .rpt-chart-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+@media (min-width: 1200px) {
+    body.reports-page .rpt-chart-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    body.reports-page .rpt-chart-card--wide {
+        grid-column: 1 / -1;
+    }
+}
+body.reports-page .rpt-chart-card--tile .rpt-canvas-wrap {
+    min-height: 300px;
+}
+body.reports-page .rpt-chart-card--wide .rpt-canvas-wrap {
+    min-height: 320px;
+}
+
+body.reports-page .rpt2-kpi--rose::before { background: var(--lg-crit); }
+
+body.reports-page .rpt-badge--rose {
+    background: rgba(239, 68, 68, 0.12);
+    color: #991b1b;
+    border: 1px solid rgba(239, 68, 68, 0.32);
+    font-weight: 600;
+    border-radius: 6px;
+    padding: .2rem .55rem;
+}
+body.dark-mode.reports-page .rpt-badge--rose {
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.18);
+}
+
+body.reports-page .rpt-ref-link {
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    color: var(--lg-accent);
+    text-decoration: none;
+}
+body.reports-page .rpt-ref-link:hover,
+body.reports-page .rpt-ref-link:focus-visible {
+    text-decoration: underline;
+}
+
+body.reports-page .rpt2-attention-card {
+    overflow: hidden;
+}
+
+/* Accessible chart data table */
+body.reports-page .rpt-chart-values {
+    margin-top: .75rem;
+    font-size: .8rem;
+}
+body.reports-page .rpt-chart-values summary {
+    cursor: pointer;
+    width: fit-content;
+    color: var(--lg-ink-soft);
+    font-weight: 600;
+}
+body.reports-page .rpt-chart-values summary:hover,
+body.reports-page .rpt-chart-values summary:focus-visible {
+    color: var(--lg-ink);
+}
+body.reports-page .rpt-chart-values__body {
+    max-height: 14rem;
+    margin-top: .5rem;
+    overflow: auto;
+}
+body.reports-page .rpt-values-table th,
+body.reports-page .rpt-values-table td {
+    font-variant-numeric: tabular-nums;
+    background: transparent;
+    color: var(--lg-ink);
+}
+body.reports-page .rpt-values-table thead th {
+    position: sticky;
+    top: 0;
+    color: var(--lg-ink-soft);
+    font-size: .7rem;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+@media (max-width: 767.98px) {
+    body.reports-page .rpt2-header-actions { width: 100%; }
+    body.reports-page .rpt-chart-card--tile .rpt-canvas-wrap,
+    body.reports-page .rpt-chart-card--wide .rpt-canvas-wrap { min-height: 260px; }
+}
+
+/* Breakdown tables: cap height and scroll inside the card; header stays visible. */
+body.reports-page .row.g-4 .dashboard-table-wrapper,
+body.reports-page .rpt2-attention-card .dashboard-table-wrapper {
+    max-height: 22rem;
+    overflow-y: auto;
+}

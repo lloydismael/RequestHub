@@ -3,13 +3,6 @@
          data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}"
          data-default-mine="{% if default_my_assigned_filter %}1{% else %}0{% endif %}"
          aria-label="SQR Tracker Prototype">
-    <div class="sqr-proto__topbar">
-        <span class="sqr-proto__meta" id="sqr-proto-updated" role="status"></span>
-        <button type="button" class="btn btn-sm btn-outline-primary" id="sqr-proto-refresh">
-            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
-        </button>
-    </div>
-
     <div id="sqr-proto-pipeline" class="sqr-proto__pipeline" role="group" aria-label="Filter by pipeline stage"></div>
 
     <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list">
