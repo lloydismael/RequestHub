@@ -11,7 +11,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.core.management import call_command
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -1494,6 +1494,75 @@ class SqrApprovalEmailTemplateTests(TestCase):
         self.assertIn('font-weight:700;">Professional Services Investment Summary</span>', html)
         self.assertIn('<b>Total Professional Services Investment</b>', html)
 
+    @override_settings(DEBUG=True)
+    def test_formatted_preview_and_compose_preserve_saved_approval(self):
+        from urllib.parse import parse_qs, urlsplit
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "hub/sqr_approval_preview.html")
+        self.assertContains(response, "Copy formatted body")
+        self.assertContains(response, "sandbox=\"\"")
+        self.assertContains(response, "sqr_approval_preview.js")
+        compose = urlsplit(response.context["compose_url"])
+        self.assertEqual(compose.scheme, "mailto")
+        self.assertNotIn("body", parse_qs(compose.query))
+        self.assertEqual(parse_qs(compose.query)["subject"], [response.context["email_subject"]])
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, SqrSubmission.Status.APPROVED)
+        self.assertIn("no-store", response["Cache-Control"])
+
+    def test_eml_retains_unsent_html_and_plain_text_parts(self):
+        import base64
+        from email import policy
+        from email.parser import BytesParser
+        from hub.views import _build_sqr_approval_mime_message
+
+        context = _get_sqr_approval_email_context(self.submission)
+        mime = _build_sqr_approval_mime_message(context, self.pm.email, mark_as_unsent=True)
+        message = BytesParser(policy=policy.default).parsebytes(base64.b64decode(mime))
+        self.assertEqual(message["X-Unsent"], "1")
+        html_part = message.get_body(preferencelist=("html",)).get_content()
+        plain_part = message.get_body(preferencelist=("plain",)).get_content()
+        for body in (html_part, plain_part):
+            self.assertIn("SQR Approval Advisory", body)
+            self.assertIn("Next steps", body)
+            self.assertIn("PHP 79,000.00", body)
+        self.assertIn("cid:", html_part)
+
+    def test_preview_requires_approved_status_and_assigned_reviewer(self):
+        self.client.force_login(self.pm)
+        url = reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk])
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        self.client.force_login(self.engineer)
+        self.assertEqual(self.client.get(url).status_code, 302)
+
+    def test_email_summary_escapes_values_and_omits_absent_maintenance(self):
+        self.submission.customer_name = '<script>alert("customer")</script>'
+        self.submission.managed_support_amount = None
+        self.submission.discount_rate = 10
+        self.submission.documentation_links = "https://example.com/docs?a=1&b=2\njavascript:alert(1)"
+        markup = _build_sqr_approval_html(self.submission, "Engineer <Name>")
+        text = "\n".join(_build_sqr_approval_body_lines(self.submission, "Engineer <Name>"))
+        self.assertIn("&lt;script&gt;", markup)
+        self.assertNotIn('<script>', markup)
+        self.assertIn("Engineer &lt;Name&gt;", markup)
+        self.assertIn("Discount (10%)", markup)
+        self.assertIn("PHP 57,600.00", markup)
+        self.assertIn("PHP 2,000.00", markup)
+        self.assertIn("https://example.com/docs?a=1&amp;b=2", markup)
+        self.assertNotIn("javascript:alert", markup)
+        self.assertNotIn("Included Services:", markup)
+        self.assertNotIn("Included Services:", text)
+        self.assertNotIn("**TERMS", text)
+        self.assertIn("Next steps", markup)
+        self.assertIn("Next steps", text)
+
     def test_approval_recipients_include_assigned_account_manager(self):
         User.objects.create_user(
             username="jimlyn",
@@ -1739,6 +1808,7 @@ class SqrInlineUndoTests(TestCase):
     def test_status_undo_restores_status_metadata_with_warning(self):
         response = self._inline_update("status", SqrSubmission.Status.APPROVED)
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["approval_email_draft_url"], reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk]))
         change = SqrSubmissionChange.objects.get(pk=response.json()["change_id"])
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.status, SqrSubmission.Status.APPROVED)

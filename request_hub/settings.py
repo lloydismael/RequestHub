@@ -244,3 +244,10 @@ if os.getenv("DJANGO_DEFAULT_USER_PASSWORD"):
         "DJANGO_DEFAULT_USER_PASSWORD has been removed. Delete it from .env and platform settings. "
         "Admin password resets now issue a one-time temporary password."
     )
+
+# Separate delegated Microsoft 365 SQR integration (never application permissions).
+SQR_OUTLOOK_TENANT_ID = os.getenv("SQR_OUTLOOK_TENANT_ID", "").strip()
+SQR_OUTLOOK_CLIENT_ID = os.getenv("SQR_OUTLOOK_CLIENT_ID", "").strip()
+SQR_OUTLOOK_CLIENT_SECRET = os.getenv("SQR_OUTLOOK_CLIENT_SECRET", "").strip()
+SQR_OUTLOOK_REDIRECT_URI = os.getenv("SQR_OUTLOOK_REDIRECT_URI", "").strip()
+SQR_OUTLOOK_TOKEN_KEY = os.getenv("SQR_OUTLOOK_TOKEN_KEY", "").strip()
