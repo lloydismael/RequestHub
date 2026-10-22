@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
-from django.db import models
+from django.db import connections, models, router, transaction
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
@@ -66,7 +66,7 @@ class Request(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="requests_made",
-        limit_choices_to={"role__in": ["requestor", "requestor_ess", "pm_ess", "pm_esg"]},
+        limit_choices_to={"role__in": ["requestor", "requestor_ess", "pm_ess", "pm_esg", "admin"]},
     )
     account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="requests")
     account_manager = models.CharField(max_length=255)
@@ -728,13 +728,6 @@ class SqrSubmission(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["linked_request"],
-                condition=Q(linked_request__isnull=False),
-                name="unique_sqrsubmission_linked_request",
-            ),
-        ]
 
     def __str__(self) -> str:
         return self.reference_code or f"SQR draft #{self.pk}"
@@ -922,23 +915,31 @@ class SqrSubmission(models.Model):
         else:
             self.pm_amount = None
 
-        super().save(*args, **kwargs)
+        if not creating:
+            return super().save(*args, **kwargs)
 
-        if creating and not self.reference_code:
-            last_in_year = (
-                SqrSubmission.objects.filter(year=self.year)
-                .exclude(pk=self.pk)
-                .order_by("-sequence_number")
-                .first()
-            )
-            next_number = (last_in_year.sequence_number if last_in_year and last_in_year.sequence_number else 0) + 1
-            reference_code = f"SQR-{self.year}-{next_number:04d}"
-            SqrSubmission.objects.filter(pk=self.pk).update(
-                sequence_number=next_number,
-                reference_code=reference_code,
-            )
-            self.sequence_number = next_number
-            self.reference_code = reference_code
+        using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
+        with transaction.atomic(using=using):
+            if connections[using].vendor == "postgresql":
+                # Serialize yearly numbering across every request and creation path.
+                with connections[using].cursor() as cursor:
+                    cursor.execute("SELECT pg_advisory_xact_lock(%s, %s)", [5460306, self.year])
+            super().save(*args, **kwargs)
+            if not self.reference_code:
+                last_in_year = (
+                    SqrSubmission.objects.using(using).filter(year=self.year)
+                    .exclude(pk=self.pk)
+                    .order_by("-sequence_number")
+                    .first()
+                )
+                next_number = (last_in_year.sequence_number if last_in_year and last_in_year.sequence_number else 0) + 1
+                reference_code = f"SQR-{self.year}-{next_number:04d}"
+                SqrSubmission.objects.using(using).filter(pk=self.pk).update(
+                    sequence_number=next_number,
+                    reference_code=reference_code,
+                )
+                self.sequence_number = next_number
+                self.reference_code = reference_code
 
 
 class SqrSubmissionChange(models.Model):

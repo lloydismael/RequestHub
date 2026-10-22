@@ -112,15 +112,17 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 - Chart **expand button** on every chart card for full-screen view
 
 ### 🔔 Notifications & Communication
-- Engineer assignment and SQR revision emails include branded HTML with structured details, multiline descriptions/reviewer comments, action buttons, and visible fallback links. Plain-text bodies remain available for clients that do not display HTML.
+- Engineer assignment, SQR revision, and new SQR emails to assigned PM-ESG reviewers include branded HTML with structured details, multiline descriptions/reviewer comments/scope, action buttons, and visible fallback links. PM-ESG notifications include the submitting engineer, submission date in Manila time, and review next steps. Plain-text bodies remain available for clients that do not display HTML.
 - Email templates live in `templates/hub/emails/`; they use inline CSS and table-based layouts for Outlook compatibility and escape user-entered content. Existing recipients, subjects, notification triggers, and ACS delivery configuration are unchanged; no migration or new dependency is required.
-- Validate changes with `python manage.py test hub.test_engineer_emails hub.test_notification_urls`. Before production rollout, send controlled test emails to Outlook and Gmail and check mobile/dark-mode rendering; browser previews do not verify email-client behavior.
+- Validate changes with `python manage.py test hub.test_engineer_emails hub.test_pm_esg_emails hub.test_notification_urls`. Before production rollout, send controlled test emails to Outlook and Gmail and check mobile/dark-mode rendering; browser previews do not verify email-client behavior.
 - In-app notification center for assignment events and workflow changes
 - Communication action log (Teams, Outlook, Phone) with channel tagging
 - Optional Teams chat topic field per request
 
 ### 🧾 SQR (Service Quotation Request)
 - Engineers and reviewers manage SQR entries directly from the tracker
+- The assigned engineer can create multiple separate SQRs under the same RQ ID without a fixed limit. Backup assignment alone does not permit creation. Each SQR keeps its own unique ID, approval, pricing, history, delivery, performance, and billing lifecycle; request management displays all linked SQRs within the viewer's existing access scope.
+- Apply migration `0052_allow_multiple_sqrs_per_request` before enabling repeated RQ links. Existing submissions are preserved. After multiple SQRs share an RQ ID, reversing this migration requires resolving duplicate links first; prefer a forward fix and never delete or merge submissions automatically.
 - Tracks quotation details, SSE/PM man-hours, managed support amount, discounting, approval metadata, and revenue fields
 - Status labels in the tracker:
       - `submitted` ? **For Processing**

@@ -1,0 +1,23 @@
+{% extends "hub/emails/base.html" %}
+
+{% block introduction %}
+<p style="margin:0 0 12px;">Hi {{ reviewer_name }},</p>
+<p style="margin:0 0 12px;"><strong>Review requested</strong></p>
+<p style="margin:0;">A new SQR submission has been created and assigned to you for review. Please review it at your earliest convenience.</p>
+{% endblock %}
+
+{% block message_details %}
+<h2 style="margin:24px 0 12px;font-size:18px;line-height:26px;">Scope of services</h2>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+  <tr>
+    <td bgcolor="#f8fafc" style="padding:16px;border-left:4px solid #1d4ed8;overflow-wrap:anywhere;word-break:break-word;">{{ project_details|linebreaksbr }}</td>
+  </tr>
+</table>
+<h2 style="margin:24px 0 12px;font-size:18px;line-height:26px;">Next steps</h2>
+<ol style="margin:0;padding-left:24px;">
+  <li style="margin-bottom:8px;">Log in to Request Hub and open the SQR tracker.</li>
+  <li style="margin-bottom:8px;">Review the submission details and quotation.</li>
+  <li>Approve or request revision with your comments.</li>
+</ol>
+<p style="margin:16px 0 0;font-size:13px;line-height:20px;color:#475569;">Please do not reply directly to this message.</p>
+{% endblock %}
