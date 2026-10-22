@@ -25,7 +25,15 @@ MODEL_LABELS = (
     "hub.statuslog", "hub.formdefinition", "hub.formversion", "hub.formanswerset",
     "hub.formeditorauditevent",
 )
-EXCLUSIONS = ["Users, credentials, permissions and sessions", "Media and stored files", "Backup history and recovery audit events"]
+EXCLUDED_MODEL_LABELS = (
+    "hub.outlookconnection", "hub.outlookoauthattempt", "hub.outlooksqrdraft",
+)
+EXCLUSIONS = [
+    "Users, credentials, permissions and sessions",
+    "Media and stored files",
+    "Backup history and recovery audit events",
+    "Microsoft 365 connections, authorization attempts and draft state",
+]
 CONFIRMATION_PHRASE = "RESTORE"
 
 
@@ -48,7 +56,7 @@ def checksum(payload):
 def hub_models():
     result = [apps.get_model(label) for label in MODEL_LABELS]
     actual = {m._meta.label_lower for m in apps.get_app_config("hub").get_models()}
-    if actual != set(MODEL_LABELS) or any(m._meta.local_many_to_many for m in result):
+    if actual != set(MODEL_LABELS) | set(EXCLUDED_MODEL_LABELS) or any(m._meta.local_many_to_many for m in result):
         raise RecoveryError("Hub schema changed; recovery coverage must be updated before proceeding.")
     return result
 

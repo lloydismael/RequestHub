@@ -20,6 +20,17 @@ class RecoveryCenterTests(TransactionTestCase):
     def upload(self, payload):
         return SimpleUploadedFile("backup.json", json.dumps(payload).encode(), content_type="application/json")
 
+    def test_outlook_models_are_explicitly_excluded_from_recovery(self):
+        from django.apps import apps
+        from accounts import recovery
+
+        actual = {model._meta.label_lower for model in apps.get_app_config("hub").get_models()}
+        self.assertEqual(actual - set(recovery.MODEL_LABELS), set(recovery.EXCLUDED_MODEL_LABELS))
+        self.assertEqual(
+            {model._meta.label_lower for model in recovery.hub_models()},
+            set(recovery.MODEL_LABELS),
+        )
+
     def create_backup(self):
         response = self.client.post(reverse("accounts:backup-create"), {"reason": "Test snapshot"})
         self.assertEqual(response.status_code, 302)
