@@ -43,6 +43,8 @@ scripts_check/
 .copilot-azure/
 .github/
 apply_pm_ess.py
+requirements-ci.txt
+request_hub/settings_ci.py
 
 # OS noise
 .DS_Store

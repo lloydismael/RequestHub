@@ -59,10 +59,14 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements-ci.txt
+            requirements.lock
 
       - name: Install dependencies
         run: |
-          python -m pip install -r requirements.lock
+          python -m pip install -r requirements-ci.txt
           python -m pip check
 
       - name: Check Django configuration
@@ -79,8 +83,16 @@ jobs:
       - name: Collect static files
         run: python manage.py collectstatic --noinput
 
+      # Test-only settings use a fast password hasher; the checks above run against
+      # the real settings. Tests run in parallel across the runner's CPUs.
       - name: Run application tests
-        run: python manage.py test --noinput --verbosity 2
+        run: >-
+          python manage.py test
+          --settings=request_hub.settings_ci
+          --parallel auto
+          --durations 10
+          --noinput
+          --verbosity 2
 
   dependency-audit:
     name: Python dependency audit
@@ -94,6 +106,8 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements.lock
 
       - name: Install audit tooling
         run: python -m pip install --upgrade pip pip-audit
@@ -120,6 +134,11 @@ jobs:
           echo "created=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "revision=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Dependency layers come from the Actions cache; OS packages are always
+      # refreshed through APK_REFRESH so security fixes are never cached away.
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -128,10 +147,13 @@ jobs:
           load: true
           pull: true
           tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha,scope=request-hub-image
+          cache-to: type=gha,scope=request-hub-image,mode=max,ignore-error=true
           build-args: |
             APP_VERSION=${{ github.sha }}
             VCS_REF=${{ steps.meta.outputs.revision }}
             BUILD_DATE=${{ steps.meta.outputs.created }}
+            APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
