@@ -1,75 +1,400 @@
-[data-account-theme="blue"] { --account-accent: #1d4ed8; --account-dark-accent: #93c5fd; --account-rgb: 29, 78, 216; --account-gradient: linear-gradient(120deg, #1d4ed8, #3b82f6, #6366f1); }
-[data-account-theme="sunset"] { --account-accent: #9a3412; --account-dark-accent: #fdba74; --account-rgb: 154, 52, 18; --account-gradient: linear-gradient(120deg, #f97316, #ec4899, #8b5cf6); }
-[data-account-theme="forest"] { --account-accent: #047857; --account-dark-accent: #6ee7b7; --account-rgb: 4, 120, 87; --account-gradient: linear-gradient(120deg, #065f46, #10b981, #3b82f6); }
-[data-account-theme="crimson"] { --account-accent: #b91c1c; --account-dark-accent: #fca5a5; --account-rgb: 185, 28, 28; --account-gradient: linear-gradient(120deg, #7f1d1d, #dc2626, #f97316); }
-[data-account-theme="slate"] { --account-accent: #334155; --account-dark-accent: #cbd5e1; --account-rgb: 51, 65, 85; --account-gradient: linear-gradient(120deg, #0f172a, #334155, #475569); }
-[data-account-theme="aurora"] { --account-accent: #6d28d9; --account-dark-accent: #c4b5fd; --account-rgb: 109, 40, 217; --account-gradient: linear-gradient(120deg, #1e1b4b, #7c3aed, #06b6d4); }
-[data-account-theme="rose"] { --account-accent: #be123c; --account-dark-accent: #fda4af; --account-rgb: 190, 18, 60; --account-gradient: linear-gradient(120deg, #881337, #f43f5e, #fb923c); }
-[data-account-theme="teal"] { --account-accent: #0f766e; --account-dark-accent: #5eead4; --account-rgb: 15, 118, 110; --account-gradient: linear-gradient(120deg, #134e4a, #0d9488, #3b82f6); }
+/* ==========================================================================
+   Account themes
+   Every theme is three palette colours (--account-c1/c2/c3) plus a readable
+   accent for light surfaces (--account-accent) and for dark surfaces
+   (--account-dark-accent). Presets are declared below; custom palettes are
+   injected inline on <body> (see accounts/themes.py) with the same variables.
 
-body.authenticated[data-account-theme] {
+   "Default" keeps the original Request Hub look: no overrides are applied.
+   Any other theme adds body.account-themed, and the rules below re-tint the
+   whole app (page background, surfaces, ambient colour mesh, navbar, buttons,
+   links, tabs, tables, inputs). Status colours (ok / warning / critical) stay
+   semantic on purpose.
+   ========================================================================== */
+
+/* ---- 1. Palettes -------------------------------------------------------- */
+[data-account-theme="default"] {
+    --account-c1: #48bbff; --account-c2: #9770ff; --account-c3: #f46fb9;
+    --account-accent: #0a84ff; --account-dark-accent: #4aa3ff; --account-rgb: 10, 132, 255;
+    --account-gradient: linear-gradient(120deg, #1d5be0, #48bbff 28%, #9770ff 56%, #f46fb9 80%, #34ddd2);
+}
+[data-account-theme="blue"]    { --account-c1: #1d4ed8; --account-c2: #3b82f6; --account-c3: #6366f1; --account-accent: #1d4ed8; --account-dark-accent: #93c5fd; --account-rgb: 29, 78, 216; }
+[data-account-theme="sunset"]  { --account-c1: #f97316; --account-c2: #ec4899; --account-c3: #8b5cf6; --account-accent: #9a3412; --account-dark-accent: #fdba74; --account-rgb: 154, 52, 18; }
+[data-account-theme="forest"]  { --account-c1: #065f46; --account-c2: #10b981; --account-c3: #3b82f6; --account-accent: #047857; --account-dark-accent: #6ee7b7; --account-rgb: 4, 120, 87; }
+[data-account-theme="crimson"] { --account-c1: #7f1d1d; --account-c2: #dc2626; --account-c3: #f97316; --account-accent: #b91c1c; --account-dark-accent: #fca5a5; --account-rgb: 185, 28, 28; }
+[data-account-theme="slate"]   { --account-c1: #0f172a; --account-c2: #334155; --account-c3: #475569; --account-accent: #334155; --account-dark-accent: #cbd5e1; --account-rgb: 51, 65, 85; }
+[data-account-theme="aurora"]  { --account-c1: #1e1b4b; --account-c2: #7c3aed; --account-c3: #06b6d4; --account-accent: #6d28d9; --account-dark-accent: #c4b5fd; --account-rgb: 109, 40, 217; }
+[data-account-theme="rose"]    { --account-c1: #881337; --account-c2: #f43f5e; --account-c3: #fb923c; --account-accent: #be123c; --account-dark-accent: #fda4af; --account-rgb: 190, 18, 60; }
+[data-account-theme="teal"]    { --account-c1: #134e4a; --account-c2: #0d9488; --account-c3: #3b82f6; --account-accent: #0f766e; --account-dark-accent: #5eead4; --account-rgb: 15, 118, 110; }
+[data-account-theme="amber"]   { --account-c1: #78350f; --account-c2: #f59e0b; --account-c3: #ef4444; --account-accent: #b45309; --account-dark-accent: #fcd34d; --account-rgb: 180, 83, 9; }
+[data-account-theme="ocean"]   { --account-c1: #0c4a6e; --account-c2: #0284c7; --account-c3: #2dd4bf; --account-accent: #0369a1; --account-dark-accent: #7dd3fc; --account-rgb: 3, 105, 161; }
+[data-account-theme]:not([data-account-theme="default"]) {
+    --account-gradient: linear-gradient(120deg, var(--account-c1), var(--account-c2), var(--account-c3));
+}
+
+/* ---- 2. Derived tokens (themed accounts only) --------------------------- */
+body.account-themed.authenticated {
+    --account-ink: var(--account-accent);
+    --account-soft: color-mix(in srgb, var(--account-accent) 10%, transparent);
+    --account-soft-strong: color-mix(in srgb, var(--account-accent) 16%, transparent);
+    --account-soft-border: color-mix(in srgb, var(--account-accent) 28%, transparent);
+    --account-glow: color-mix(in srgb, var(--account-accent) 38%, transparent);
+    --account-btn-gradient: linear-gradient(135deg, var(--account-accent), color-mix(in srgb, var(--account-accent) 78%, black));
+    --account-btn-gradient-hover: linear-gradient(135deg, color-mix(in srgb, var(--account-accent) 88%, black), color-mix(in srgb, var(--account-accent) 66%, black));
+
     --brand-primary: var(--account-accent);
+    --glass-bg: color-mix(in srgb, var(--account-accent) 4%, rgba(255, 255, 255, 0.7));
+    --glass-border: color-mix(in srgb, var(--account-accent) 18%, rgba(255, 255, 255, 0.18));
+
     --lg-accent: var(--account-accent);
     --lg-accent-deep: color-mix(in srgb, var(--account-accent) 85%, black);
-    --lg-row-hover: rgba(var(--account-rgb), .08);
-    --rh-focus-ring: rgba(var(--account-rgb), .35);
+    --lg-row-hover: color-mix(in srgb, var(--account-accent) 8%, transparent);
+    --lg-thead-bg: color-mix(in srgb, var(--account-accent) 7%, rgba(255, 255, 255, 0.55));
+    --lg-divider: color-mix(in srgb, var(--account-accent) 12%, rgba(11, 18, 32, 0.09));
+    --lg-border-feature: color-mix(in srgb, var(--account-accent) 22%, rgba(255, 255, 255, 0.58));
+    --lg-surface-feature-bg: linear-gradient(160deg, color-mix(in srgb, var(--account-accent) 7%, rgba(255, 255, 255, 0.78)), color-mix(in srgb, var(--account-c2) 9%, rgba(245, 249, 255, 0.5)));
+    --lg-surface-data-bg: linear-gradient(155deg, color-mix(in srgb, var(--account-accent) 9%, #e7edf6), color-mix(in srgb, var(--account-accent) 14%, #d8e2ef));
+
+    --rh-page-bg: color-mix(in srgb, var(--account-accent) 9%, #f8fafc);
+    --rh-surface-panel: color-mix(in srgb, var(--account-accent) 3%, rgba(255, 255, 255, 0.92));
+    --rh-surface-solid: color-mix(in srgb, var(--account-accent) 2%, #ffffff);
+    --rh-surface-sunken: color-mix(in srgb, var(--account-accent) 6%, #f8fafc);
+    --rh-surface-feature: linear-gradient(135deg, color-mix(in srgb, var(--account-accent) 8%, rgba(255, 255, 255, 0.94)), color-mix(in srgb, var(--account-c2) 13%, rgba(255, 255, 255, 0.8)));
+    --rh-border: color-mix(in srgb, var(--account-accent) 24%, rgba(148, 163, 184, 0.24));
+    --rh-divider: color-mix(in srgb, var(--account-accent) 12%, rgba(15, 23, 42, 0.09));
+    --rh-shadow-panel: 0 18px 55px color-mix(in srgb, var(--account-accent) 14%, rgba(15, 23, 42, 0.05));
+    --rh-focus-ring: rgba(var(--account-rgb), 0.35);
+
     --bs-primary: var(--account-accent);
     --bs-primary-rgb: var(--account-rgb);
+    --bs-primary-bg-subtle: color-mix(in srgb, var(--account-accent) 14%, white);
+    --bs-primary-border-subtle: color-mix(in srgb, var(--account-accent) 32%, white);
+    --bs-primary-text-emphasis: color-mix(in srgb, var(--account-accent) 80%, black);
     --bs-link-color: var(--account-accent);
     --bs-link-color-rgb: var(--account-rgb);
     --bs-link-hover-color: var(--lg-accent-deep);
 }
-body.dark-mode.authenticated[data-account-theme] {
+
+body.account-themed.authenticated.dark-mode {
+    --account-ink: var(--account-dark-accent);
+    --account-soft: color-mix(in srgb, var(--account-dark-accent) 15%, transparent);
+    --account-soft-strong: color-mix(in srgb, var(--account-dark-accent) 22%, transparent);
+    --account-soft-border: color-mix(in srgb, var(--account-dark-accent) 32%, transparent);
+    --account-glow: color-mix(in srgb, var(--account-accent) 55%, transparent);
+
+    --glass-bg: color-mix(in srgb, var(--account-accent) 10%, rgba(15, 23, 42, 0.7));
+    --glass-border: color-mix(in srgb, var(--account-dark-accent) 16%, rgba(255, 255, 255, 0.08));
+
     --lg-accent: var(--account-dark-accent);
     --lg-accent-deep: var(--account-accent);
-    --bs-link-color: var(--account-dark-accent);
-    --bs-link-hover-color: var(--account-dark-accent);
+    --lg-row-hover: color-mix(in srgb, var(--account-dark-accent) 10%, transparent);
+    --lg-thead-bg: color-mix(in srgb, var(--account-accent) 14%, rgba(20, 26, 44, 0.62));
+    --lg-divider: color-mix(in srgb, var(--account-dark-accent) 12%, rgba(255, 255, 255, 0.09));
+    --lg-border-feature: color-mix(in srgb, var(--account-dark-accent) 22%, rgba(215, 230, 255, 0.18));
+    --lg-surface-feature-bg: linear-gradient(160deg, color-mix(in srgb, var(--account-accent) 20%, rgba(38, 50, 80, 0.82)), color-mix(in srgb, var(--account-accent) 10%, rgba(18, 27, 48, 0.62)));
+    --lg-surface-data-bg: linear-gradient(155deg, color-mix(in srgb, var(--account-accent) 16%, #192238), color-mix(in srgb, var(--account-accent) 10%, #10172a));
+
+    --rh-page-bg: color-mix(in srgb, var(--account-accent) 17%, #05070f);
+    --rh-surface-panel: color-mix(in srgb, var(--account-accent) 11%, rgba(15, 23, 42, 0.84));
+    --rh-surface-solid: color-mix(in srgb, var(--account-accent) 12%, #141b2c);
+    --rh-surface-sunken: color-mix(in srgb, var(--account-accent) 10%, #10172a);
+    --rh-surface-feature: linear-gradient(135deg, color-mix(in srgb, var(--account-accent) 22%, rgba(15, 23, 42, 0.88)), color-mix(in srgb, var(--account-c2) 14%, rgba(30, 41, 59, 0.74)));
+    --rh-border: color-mix(in srgb, var(--account-dark-accent) 26%, rgba(148, 163, 184, 0.18));
+    --rh-divider: color-mix(in srgb, var(--account-dark-accent) 14%, rgba(255, 255, 255, 0.09));
+    --rh-shadow-panel: 0 22px 70px color-mix(in srgb, var(--account-accent) 20%, rgba(0, 0, 0, 0.3));
     --rh-focus-ring: color-mix(in srgb, var(--account-dark-accent) 45%, transparent);
+
+    --bs-primary-bg-subtle: color-mix(in srgb, var(--account-accent) 30%, #0f172a);
+    --bs-primary-border-subtle: color-mix(in srgb, var(--account-accent) 50%, #0f172a);
+    --bs-primary-text-emphasis: var(--account-dark-accent);
+    --bs-link-color: var(--account-dark-accent);
+    --bs-link-color-rgb: var(--account-rgb);
+    --bs-link-hover-color: var(--account-dark-accent);
 }
-body.authenticated[data-account-theme] .btn-primary {
+
+/* ---- 3. Ambient colour mesh --------------------------------------------- */
+body.account-themed.authenticated .ambient-mesh {
+    --orb-1: var(--account-c2);
+    --orb-2: var(--account-c3);
+    --orb-3: var(--account-accent);
+    --orb-4: color-mix(in srgb, var(--account-c3) 60%, var(--account-c2));
+    --orb-5: color-mix(in srgb, var(--account-c2) 50%, var(--account-dark-accent));
+    --orb-6: color-mix(in srgb, var(--account-c3) 50%, var(--account-dark-accent));
+    --orb-7: color-mix(in srgb, var(--account-accent) 50%, var(--account-c2));
+    --orb-wash: white;
+    --orb-wash-amount: 30%;
+    --orb-veil: color-mix(in srgb, var(--account-accent) 30%, #0a1740);
+}
+body.account-themed.authenticated.dark-mode .ambient-mesh {
+    --orb-wash: transparent;
+    --orb-wash-amount: 0%;
+    --orb-veil: color-mix(in srgb, var(--account-accent) 18%, #05070f);
+}
+body.account-themed.authenticated .ambient-mesh__orb {
+    --orb-color: color-mix(in srgb, var(--orb) calc(100% - var(--orb-wash-amount)), var(--orb-wash));
+    background: radial-gradient(circle at 48% 44%,
+        color-mix(in srgb, var(--orb-color) var(--orb-a), transparent) 0%,
+        color-mix(in srgb, var(--orb-color) calc(var(--orb-a) * 0.42), transparent) 38%,
+        color-mix(in srgb, var(--orb-color) 0%, transparent) 70%);
+}
+body.account-themed.authenticated .ambient-mesh__orb--1 { --orb: var(--orb-1); --orb-a: 60%; }
+body.account-themed.authenticated .ambient-mesh__orb--2 { --orb: var(--orb-2); --orb-a: 52%; }
+body.account-themed.authenticated .ambient-mesh__orb--3 { --orb: var(--orb-3); --orb-a: 58%; }
+body.account-themed.authenticated .ambient-mesh__orb--4 { --orb: var(--orb-4); --orb-a: 42%; }
+body.account-themed.authenticated .ambient-mesh__orb--5 { --orb: var(--orb-5); --orb-a: 42%; }
+body.account-themed.authenticated .ambient-mesh__orb--6 { --orb: var(--orb-6); --orb-a: 36%; }
+body.account-themed.authenticated .ambient-mesh__orb--7 { --orb: var(--orb-7); --orb-a: 38%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--1 { --orb-a: 34%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--2 { --orb-a: 30%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--3 { --orb-a: 46%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--4 { --orb-a: 24%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--5 { --orb-a: 22%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--6 { --orb-a: 20%; }
+body.account-themed.authenticated.dark-mode .ambient-mesh__orb--7 { --orb-a: 20%; }
+body.account-themed.authenticated .ambient-mesh::after {
+    background: radial-gradient(62% 58% at 50% 46%,
+        color-mix(in srgb, var(--orb-veil) 30%, transparent) 0%,
+        color-mix(in srgb, var(--orb-veil) 12%, transparent) 52%,
+        transparent 78%);
+}
+body.account-themed.authenticated.dark-mode .ambient-mesh::after {
+    background: radial-gradient(62% 58% at 50% 46%,
+        color-mix(in srgb, var(--orb-veil) 42%, transparent) 0%,
+        color-mix(in srgb, var(--orb-veil) 16%, transparent) 52%,
+        transparent 78%);
+}
+
+/* ---- 4. Navbar ---------------------------------------------------------- */
+body.account-themed.authenticated:not(.page-login) .navbar,
+body.account-themed.authenticated.dark-mode:not(.page-login) .navbar[data-nav-surface="light"] {
+    --nav-ink: color-mix(in srgb, var(--account-accent) 50%, #020617);
+    --nav-ink-hover: color-mix(in srgb, var(--account-accent) 65%, #020617);
+    --nav-active-ink: color-mix(in srgb, var(--account-accent) 75%, #020617);
+    --nav-veil:
+        radial-gradient(ellipse at 10% 50%, color-mix(in srgb, var(--account-c2) 20%, transparent), transparent 31%),
+        linear-gradient(112deg, color-mix(in srgb, var(--account-accent) 12%, rgba(255, 255, 255, 0.76)), color-mix(in srgb, var(--account-accent) 4%, rgba(255, 255, 255, 0.66)) 48%, color-mix(in srgb, var(--account-c2) 16%, rgba(255, 255, 255, 0.72)));
+    --nav-border: color-mix(in srgb, var(--account-accent) 42%, rgba(255, 255, 255, 0.4));
+    --nav-hover-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62), color-mix(in srgb, var(--account-accent) 16%, transparent));
+    --nav-active-bg: linear-gradient(135deg, color-mix(in srgb, var(--account-accent) 26%, transparent), color-mix(in srgb, var(--account-c2) 30%, transparent));
+    --nav-focus: var(--account-accent);
+}
+body.account-themed.authenticated:not(.page-login) .navbar[data-nav-surface="dark"],
+body.account-themed.authenticated.dark-mode:not(.page-login) .navbar:not([data-nav-surface="light"]) {
+    --nav-ink: #f8fbff;
+    --nav-ink-hover: #ffffff;
+    --nav-active-ink: #ffffff;
+    --nav-veil:
+        radial-gradient(ellipse at 12% 50%, color-mix(in srgb, var(--account-c2) 22%, transparent), transparent 32%),
+        linear-gradient(112deg, color-mix(in srgb, var(--account-accent) 26%, rgba(18, 30, 53, 0.84)), color-mix(in srgb, var(--account-accent) 12%, rgba(5, 12, 27, 0.78)) 55%, color-mix(in srgb, var(--account-c2) 20%, rgba(24, 38, 63, 0.82)));
+    --nav-border: color-mix(in srgb, var(--account-dark-accent) 34%, transparent);
+    --nav-hover-bg: linear-gradient(135deg, color-mix(in srgb, var(--account-dark-accent) 26%, transparent), rgba(255, 255, 255, 0.1));
+    --nav-active-bg: color-mix(in srgb, var(--account-accent) 55%, transparent);
+    --nav-focus: var(--account-dark-accent);
+}
+body.account-themed.authenticated:not(.page-login) .navbar .nav-link:hover,
+body.account-themed.authenticated:not(.page-login) .navbar .nav-link.active {
+    box-shadow: 0 6px 16px -10px var(--account-glow);
+}
+
+/* ---- 5. Bootstrap primitives -------------------------------------------- */
+body.account-themed.authenticated .btn-primary {
     --bs-btn-bg: var(--account-accent);
     --bs-btn-border-color: var(--account-accent);
     --bs-btn-hover-bg: var(--lg-accent-deep);
     --bs-btn-hover-border-color: var(--lg-accent-deep);
     --bs-btn-active-bg: var(--lg-accent-deep);
     --bs-btn-active-border-color: var(--lg-accent-deep);
+    --bs-btn-focus-shadow-rgb: var(--account-rgb);
     background: var(--account-accent) !important;
     border-color: var(--account-accent) !important;
     color: #fff !important;
 }
-body.authenticated[data-account-theme] .btn-primary:hover { background: color-mix(in srgb, var(--account-accent) 85%, black) !important; }
-body.authenticated[data-account-theme] .btn-outline-primary {
-    --bs-btn-color: var(--lg-accent);
-    --bs-btn-border-color: var(--lg-accent);
+body.account-themed.authenticated .btn-primary:hover { background: color-mix(in srgb, var(--account-accent) 85%, black) !important; }
+body.account-themed.authenticated .btn-outline-primary {
+    --bs-btn-color: var(--account-ink);
+    --bs-btn-border-color: var(--account-ink);
     --bs-btn-hover-bg: var(--account-accent);
     --bs-btn-hover-border-color: var(--account-accent);
+    --bs-btn-hover-color: #fff;
     --bs-btn-active-bg: var(--account-accent);
     --bs-btn-active-border-color: var(--account-accent);
+    --bs-btn-active-color: #fff;
 }
-body.authenticated[data-account-theme] .text-primary { color: var(--lg-accent) !important; }
-body.authenticated[data-account-theme] .profile-tab--active {
-    color: var(--lg-accent) !important;
-    border-color: var(--lg-accent) !important;
-    background: rgba(var(--account-rgb), .12) !important;
-}
-body.authenticated[data-account-theme] .form-check-input:checked { background-color: var(--account-accent); border-color: var(--account-accent); }
-body.authenticated[data-account-theme] a:not(.btn):not(.nav-link):not(.navbar-brand):not(.nav-avatar-menu__item) { color: var(--lg-accent); }
+body.account-themed.authenticated .btn-link { --bs-btn-color: var(--account-ink); --bs-btn-hover-color: var(--account-ink); }
+body.account-themed.authenticated .text-primary { color: var(--account-ink) !important; }
+body.account-themed.authenticated .border-primary { border-color: var(--account-accent) !important; }
+body.account-themed.authenticated .bg-primary { background-color: var(--account-accent) !important; }
+body.account-themed.authenticated .bg-primary-subtle { background-color: var(--bs-primary-bg-subtle) !important; }
+body.account-themed.authenticated .badge.text-bg-primary { background-color: var(--account-accent) !important; color: #fff !important; border-color: transparent !important; }
+body.account-themed.authenticated.dark-mode .bg-primary-subtle.text-primary { background-color: var(--account-soft-strong) !important; border-color: var(--account-soft-border) !important; color: var(--account-ink) !important; }
+body.account-themed.authenticated a:not(.btn):not(.nav-link):not(.navbar-brand):not(.nav-avatar-menu__item):not(.dropdown-item):not(.page-link):not(.list-group-item) { color: var(--account-ink); }
+body.account-themed.authenticated.dark-mode .table a:not(.btn),
+body.account-themed.authenticated.dark-mode .table a:not(.btn):hover { color: var(--account-ink) !important; }
 
+body.account-themed.authenticated .form-check-input:checked { background-color: var(--account-accent); border-color: var(--account-accent); }
+body.account-themed.authenticated .form-check-input:focus,
+body.account-themed.authenticated .form-control:focus,
+body.account-themed.authenticated .form-select:focus {
+    border-color: color-mix(in srgb, var(--account-accent) 60%, white);
+    box-shadow: 0 0 0 .25rem rgba(var(--account-rgb), .22);
+}
+body.account-themed.authenticated.dark-mode .form-control:focus,
+body.account-themed.authenticated.dark-mode .form-select:focus { border-color: var(--account-dark-accent); box-shadow: 0 0 0 .25rem rgba(var(--account-rgb), .35); }
+body.account-themed.authenticated .form-range::-webkit-slider-thumb { background-color: var(--account-accent); }
+body.account-themed.authenticated .form-range::-moz-range-thumb { background-color: var(--account-accent); }
+body.account-themed.authenticated .progress,
+body.account-themed.authenticated .progress-stacked { --bs-progress-bar-bg: var(--account-accent); }
+body.account-themed.authenticated .pagination {
+    --bs-pagination-color: var(--account-ink);
+    --bs-pagination-hover-color: var(--account-ink);
+    --bs-pagination-active-bg: var(--account-accent);
+    --bs-pagination-active-border-color: var(--account-accent);
+    --bs-pagination-focus-box-shadow: 0 0 0 .25rem rgba(var(--account-rgb), .25);
+}
+body.account-themed.authenticated .nav-pills { --bs-nav-pills-link-active-bg: var(--account-accent); }
+body.account-themed.authenticated .dropdown-menu { --bs-dropdown-link-active-bg: var(--account-accent); }
+body.account-themed.authenticated .list-group { --bs-list-group-active-bg: var(--account-accent); --bs-list-group-active-border-color: var(--account-accent); }
+body.account-themed.authenticated .spinner-border.text-primary,
+body.account-themed.authenticated .spinner-grow.text-primary { color: var(--account-ink) !important; }
+
+/* ---- 6. App components that used a fixed brand blue --------------------- */
+body.account-themed.authenticated .bg-gradient-primary { background: var(--account-gradient); }
+body.account-themed.authenticated :is(.alo-btn, .btn-create-activity, .act-form-submit, .ai-chat-toggle-btn, .profile-vmt__btn--active, .rmf-engineer-chip__avatar) {
+    background: var(--account-btn-gradient);
+    color: #fff;
+    box-shadow: 0 8px 20px -8px var(--account-glow);
+}
+body.account-themed.authenticated :is(.alo-btn, .btn-create-activity, .act-form-submit, .ai-chat-toggle-btn):hover {
+    background: var(--account-btn-gradient-hover);
+    box-shadow: 0 12px 26px -8px var(--account-glow);
+}
+body.account-themed.authenticated .profile-hero__avatar--placeholder { background: var(--account-gradient); }
+body.account-themed.authenticated .profile-hero__avatar-edit { background: var(--account-accent); }
+body.account-themed.authenticated .profile-hero__avatar-edit:hover { background: var(--lg-accent-deep); }
+body.account-themed.authenticated .profile-hero__role-badge { background: var(--account-soft-strong); color: var(--account-ink); border-color: var(--account-soft-border); }
+body.account-themed.authenticated :is(.profile-tab--active, .profile-vmt__btn--active) { box-shadow: 0 4px 12px -4px var(--account-glow); }
+body.account-themed.authenticated .profile-tab--active {
+    color: var(--account-ink) !important;
+    border-color: var(--account-ink) !important;
+    background: var(--account-soft-strong) !important;
+}
+
+body.account-themed.authenticated :is(
+    .activity-summary-pill .pill-icon, .act-modal-header__icon, .rmf-card__header-icon, .rmf-meta-chip--account,
+    .rpt-hours-badge, .rpt-hero-icon, .notif-hero__icon, .mgmt-stat-chip--users, .notif-filter-tab.is-active i) {
+    background: var(--account-soft);
+    border-color: var(--account-soft-border);
+    color: var(--account-ink);
+}
+body.account-themed.authenticated :is(.act-form-label i, .notif-filter-tab i, .requestor-summary__value--ongoing, .rmf-progress__eyebrow,
+    .rmf-progress__step--current .rmf-progress__state, .table-sort-link:hover, .table-sort-link--active, .rmf-back-link:hover,
+    .al-req-link, .al-req-link:hover, .nav-avatar-menu__item:hover, .acct-dropdown__item:hover, .acct-dropdown__item.is-active,
+    .acct-dropdown__item--create, .acct-dropdown__item--create:hover, .acct-dropdown__item--create.is-active, .mgmt-tabs .nav-link.active) {
+    color: var(--account-ink);
+}
+body.account-themed.authenticated :is(.nav-avatar-menu__item:hover, .acct-dropdown__item:hover, .acct-dropdown__item.is-active,
+    .acct-dropdown__item--create, .acct-dropdown__item--create:hover, .acct-dropdown__item--create.is-active) { background: var(--account-soft); }
+body.account-themed.authenticated .rmf-progress__step--current .rmf-progress__marker {
+    border-color: var(--account-ink);
+    color: var(--account-ink);
+    box-shadow: 0 0 0 4px var(--account-soft);
+}
+body.account-themed.authenticated .rmf-progress__action { background: var(--account-soft); border-color: var(--account-soft-border); }
+body.account-themed.authenticated .mgmt-search-box { border-color: var(--account-soft-border); }
+body.account-themed.authenticated .mgmt-search-box:focus-within {
+    border-color: var(--account-ink);
+    box-shadow: 0 0 0 4px var(--account-soft);
+}
+body.account-themed.authenticated .mgmt-table tbody tr:hover { background: var(--lg-row-hover); }
+body.account-themed.authenticated .dashboard-metric-card--active {
+    border-color: var(--account-soft-border);
+    box-shadow: 0 24px 45px -20px var(--account-glow);
+}
+body.account-themed.authenticated .requestor-summary__cta { box-shadow: 0 10px 25px -10px var(--account-glow); }
+body.account-themed.authenticated .notification-toast,
+body.account-themed.authenticated.dark-mode .notification-toast { border-color: var(--account-soft-border); }
+/* Dashboard request tables (fixed slate fills in the base stylesheet) */
+html body.account-themed.authenticated .dashboard-table-wrapper {
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--account-accent) 7%, rgba(228, 235, 245, 0.98)), color-mix(in srgb, var(--account-accent) 11%, rgba(214, 224, 238, 0.96))),
+        linear-gradient(155deg, var(--lg-tint-strong), var(--lg-tint));
+    border-color: var(--rh-border);
+}
+html body.account-themed.authenticated .dashboard-table-wrapper thead th {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--account-accent) 13%, #e2eaf5), color-mix(in srgb, var(--account-accent) 18%, #d6e0ee)) !important;
+    color: color-mix(in srgb, var(--account-accent) 55%, #0f172a) !important;
+    border-bottom-color: var(--rh-border) !important;
+}
+html body.account-themed.authenticated .dashboard-table-wrapper tbody td { background: color-mix(in srgb, var(--account-accent) 4%, rgba(236, 242, 250, 0.72)) !important; border-bottom-color: var(--rh-divider) !important; }
+html body.account-themed.authenticated .dashboard-table-wrapper tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--account-accent) 9%, rgba(222, 232, 244, 0.78)) !important; }
+html body.account-themed.authenticated.dark-mode .dashboard-table-wrapper {
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--account-accent) 13%, rgba(22, 30, 52, 0.88)), color-mix(in srgb, var(--account-accent) 9%, rgba(14, 20, 36, 0.78))),
+        linear-gradient(155deg, var(--lg-tint-strong), var(--lg-tint));
+}
+html body.account-themed.authenticated.dark-mode .dashboard-table-wrapper thead th {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--account-accent) 22%, #202a44), color-mix(in srgb, var(--account-accent) 16%, #161e34)) !important;
+    color: #e8eefc !important;
+}
+html body.account-themed.authenticated.dark-mode .dashboard-table-wrapper tbody td { background: transparent !important; }
+html body.account-themed.authenticated.dark-mode .dashboard-table-wrapper tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--account-dark-accent) 5%, transparent) !important; }
+
+/* Dense-table panels and floating menus ship with fixed neutral fills; re-tint them. */
+body.account-themed.authenticated :is(.glass-card--expanded, .sqr-view-panel.glass-card) { background: var(--lg-surface-data-bg) !important; }
+body.account-themed.authenticated.dark-mode :is(.glass-card--expanded, .sqr-view-panel.glass-card) { background: var(--lg-surface-data-bg) !important; }
+body.account-themed.authenticated.dark-mode.sqr-page #sqr-cell-preview {
+    background: linear-gradient(155deg, color-mix(in srgb, var(--account-accent) 20%, #202a42), color-mix(in srgb, var(--account-accent) 12%, #141c30));
+}
+body.account-themed.authenticated :is(.nav-avatar-menu, .acct-dropdown, .notification-toast) { background: var(--rh-surface-solid); }
+body.account-themed.authenticated.dark-mode :is(.nav-avatar-menu, .acct-dropdown, .notification-toast) { background: var(--rh-surface-solid); }
+body.account-themed.authenticated.dark-mode :is(.rmf-card, .requestor-modal__dialog, .alo-card) { background: var(--rh-surface-panel); border-color: var(--rh-border); }
+body.account-themed.authenticated :focus-visible { outline-color: var(--account-ink); }
+
+/* ---- 7. Theme picker (Profile > Themes) --------------------------------- */
 .account-theme-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
-.account-theme-card { position: relative; display: block; min-width: 0; padding: .6rem; border: 2px solid var(--rh-border); border-radius: 1rem; background: var(--rh-surface-solid); color: var(--rh-text-primary); cursor: pointer; }
+.account-theme-card { position: relative; display: block; min-width: 0; padding: .6rem; border: 2px solid var(--rh-border); border-radius: 1rem; background: var(--rh-surface-solid); color: var(--rh-text-primary); cursor: pointer; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
 .account-theme-card input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.account-theme-card:hover { border-color: var(--account-accent); }
-.account-theme-card:has(input:checked) { border-color: var(--account-accent); box-shadow: 0 0 0 1px var(--account-accent); }
-.account-theme-card:has(input:focus-visible) { outline: 3px solid var(--lg-accent); outline-offset: 4px; }
+.account-theme-card:hover { border-color: var(--account-accent); transform: translateY(-2px); }
+.account-theme-card:has(input:checked) { border-color: var(--account-accent); box-shadow: 0 0 0 1px var(--account-accent), 0 10px 24px -14px var(--account-accent); }
+.account-theme-card:has(input:focus-visible) { outline: 3px solid var(--account-accent); outline-offset: 4px; }
 .account-theme-card__preview { display: block; position: relative; height: 105px; border-radius: .6rem; overflow: hidden; background: #f1f5f9; }
+.account-theme-card__preview::after { content: ""; position: absolute; right: -18px; bottom: -22px; width: 84px; height: 84px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--account-c3) 55%, transparent), transparent 70%); }
 .account-theme-card__nav { display: block; height: 32px; background: var(--account-gradient); }
 .account-theme-card__lines { position: absolute; left: 12px; top: 46px; width: 48%; height: 6px; border-radius: 4px; background: #94a3b8; box-shadow: 0 12px 0 #cbd5e1; }
-.account-theme-card__button { position: absolute; left: 12px; bottom: 10px; width: 40%; height: 14px; background: var(--account-accent); border-radius: 4px; }
+.account-theme-card__button { position: absolute; left: 12px; bottom: 10px; width: 40%; height: 14px; background: var(--account-accent); border-radius: 4px; z-index: 1; }
 .account-theme-card__footer { display: flex; justify-content: space-between; align-items: center; gap: .3rem; padding: .65rem .15rem .15rem; font-size: .85rem; font-weight: 600; flex-wrap: wrap; }
+.account-theme-card__name { display: inline-flex; align-items: center; gap: .4rem; }
+.account-theme-card__swatches { display: inline-flex; }
+.account-theme-card__swatches i { width: 12px; height: 12px; margin-left: -3px; border-radius: 50%; border: 2px solid var(--rh-surface-solid); }
+.account-theme-card__swatches i:nth-child(1) { background: var(--account-c1); margin-left: 0; }
+.account-theme-card__swatches i:nth-child(2) { background: var(--account-c2); }
+.account-theme-card__swatches i:nth-child(3) { background: var(--account-c3); }
 .account-theme-card__selected { visibility: hidden; font-size: .7rem; color: var(--account-accent); }
 .account-theme-card:has(input:checked) .account-theme-card__selected { visibility: visible; }
 body.dark-mode .account-theme-card__selected { color: var(--account-dark-accent); }
 body.dark-mode .account-theme-card__preview { background: #1e293b; }
 body.dark-mode .account-theme-card__lines { background: #94a3b8; box-shadow: 0 12px 0 #475569; }
+
+.account-theme-custom { margin-top: 1.25rem; padding: 1.1rem 1.25rem; border: 1px solid var(--rh-border); border-radius: 1rem; background: var(--rh-surface-sunken); }
+.account-theme-custom[hidden] { display: none; }
+.account-theme-custom__title { font-size: .95rem; font-weight: 700; margin: 0 0 .15rem; }
+.account-theme-custom__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: .9rem; }
+.account-theme-color { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.account-theme-color__label { font-size: .8rem; font-weight: 600; }
+.account-theme-color__hint { font-size: .72rem; color: var(--rh-text-muted); }
+.account-theme-color__controls { display: flex; align-items: center; gap: .5rem; }
+.account-theme-color__picker { flex: 0 0 auto; width: 44px; height: 44px; padding: 2px; border: 1px solid var(--rh-border); border-radius: .6rem; background: var(--rh-surface-solid); cursor: pointer; }
+.account-theme-color__hex { min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; text-transform: lowercase; }
+.account-theme-combos { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; align-items: center; }
+.account-theme-combos__label { font-size: .75rem; font-weight: 600; color: var(--rh-text-muted); margin-right: .25rem; }
+.account-theme-combo { display: inline-flex; align-items: center; gap: .45rem; padding: .3rem .65rem .3rem .4rem; border: 1px solid var(--rh-border); border-radius: 999px; background: var(--rh-surface-solid); color: var(--rh-text-primary); font-size: .78rem; font-weight: 600; cursor: pointer; }
+.account-theme-combo:hover { border-color: var(--account-accent); }
+.account-theme-combo__dots { display: inline-flex; }
+.account-theme-combo__dots i { width: 14px; height: 14px; margin-left: -4px; border-radius: 50%; border: 2px solid var(--rh-surface-solid); }
+.account-theme-combo__dots i:first-child { margin-left: 0; }
+.account-theme-custom__bar { height: 10px; margin-top: 1rem; border-radius: 999px; background: var(--account-gradient); }
+
 @media (max-width: 900px) { .account-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .account-theme-custom__grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 400px) { .account-theme-grid { gap: .6rem; } .account-theme-card { padding: .4rem; } }
+@media (prefers-reduced-motion: reduce) { .account-theme-card { transition: none; } .account-theme-card:hover { transform: none; } }

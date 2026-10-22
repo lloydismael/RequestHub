@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from django.conf import settings
@@ -10,6 +11,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 
 from accounts.models import StoredFile, User
+from accounts.themes import contrast_ratio, custom_theme_vars
 from accounts.views import LOGIN_THROTTLE_LIMIT, LOGIN_THROTTLE_MESSAGE
 
 
@@ -148,7 +150,7 @@ class ProfileSmokeTests(TestCase):
                 for name in names:
                     self.assertEqual(getattr(self.user, name), enabled)
                 self.assertEqual(self.user.first_name, "")
-                self.assertEqual(self.user.banner_gradient, "blue")
+                self.assertEqual(self.user.banner_gradient, "default")
 
     def test_settings_have_labels_and_separate_admin_tools(self):
         response = self.client.get(reverse("accounts:update"))
@@ -166,6 +168,10 @@ class ProfileSmokeTests(TestCase):
         self.assertNotContains(response, 'id="restore-form"')
         self.assertNotContains(response, 'id="profile-panel-backup"')
 
+    @staticmethod
+    def _body_tag(response):
+        return re.search(r"<body[^>]*>", response.content.decode()).group(0)
+
     def test_themes_persist_for_every_role_without_changing_profile(self):
         other = User.objects.create_user(username="other-theme", banner_gradient="blue")
         for index, (theme, _) in enumerate(User.BANNER_GRADIENT_CHOICES):
@@ -175,6 +181,8 @@ class ProfileSmokeTests(TestCase):
                 self.user.save(update_fields=["role"])
                 response = self.client.post(reverse("accounts:update"), {
                     "save_theme": "1", "banner_gradient": theme,
+                    "custom_theme_primary": "#2563EB", "custom_theme_secondary": "#7c3aed",
+                    "custom_theme_tertiary": "#06b6d4",
                     "first_name": "Must not change", "show_chatbot": "1",
                 })
                 self.assertRedirects(response, reverse("accounts:update") + "#themes")
@@ -186,10 +194,66 @@ class ProfileSmokeTests(TestCase):
                 reopened = self.client.get(reverse("accounts:update"))
                 self.assertContains(reopened, f'data-account-theme="{theme}"')
                 self.assertContains(reopened, "Apply Theme")
+                self.assertEqual("account-themed" in self._body_tag(reopened), theme != "default")
                 from django.templatetags.static import static
                 self.assertContains(reopened, static("css/account-themes.css"))
         other.refresh_from_db()
         self.assertEqual(other.banner_gradient, "blue")
+
+    def test_new_accounts_start_on_default_theme(self):
+        self.assertEqual(self.user.banner_gradient, "default")
+        response = self.client.get(reverse("accounts:update"))
+        self.assertContains(response, '<body data-account-theme="default"')
+        self.assertNotIn("account-themed", self._body_tag(response))
+
+    def test_custom_palette_saves_normalizes_and_styles_body(self):
+        response = self.client.post(reverse("accounts:update"), {
+            "save_theme": "1", "banner_gradient": "custom",
+            "custom_theme_primary": "#FACC15", "custom_theme_secondary": "#7C3AED",
+            "custom_theme_tertiary": "#06B6D4",
+        })
+        self.assertRedirects(response, reverse("accounts:update") + "#themes")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.custom_theme_colors, ("#facc15", "#7c3aed", "#06b6d4"))
+        page = self.client.get(reverse("accounts:update"))
+        self.assertContains(page, 'data-account-theme="custom"')
+        self.assertContains(page, "--account-c1: #facc15")
+        self.assertIn("account-themed", self._body_tag(page))
+        # A light primary is darkened so white button text stays readable.
+        accent = custom_theme_vars(*self.user.custom_theme_colors)["--account-accent"]
+        self.assertGreaterEqual(contrast_ratio(accent, "#ffffff"), 4.5)
+
+    def test_custom_palette_requires_three_valid_colors(self):
+        for data in [
+            {},
+            {"custom_theme_primary": "#2563eb", "custom_theme_secondary": "#7c3aed"},
+            {"custom_theme_primary": "red", "custom_theme_secondary": "#7c3aed", "custom_theme_tertiary": "#06b6d4"},
+            {"custom_theme_primary": "#2563eb", "custom_theme_secondary": "#7c3aed", "custom_theme_tertiary": "url(x)"},
+        ]:
+            with self.subTest(data=data):
+                response = self.client.post(reverse("accounts:update"), {"save_theme": "1", "banner_gradient": "custom", **data})
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context["theme_form"].errors)
+                self.assertContains(response, 'id="theme-errors"')
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.banner_gradient, "default")
+                self.assertEqual(self.user.custom_theme_colors, ("", "", ""))
+
+    def test_switching_away_from_custom_keeps_saved_palette(self):
+        palette = {"custom_theme_primary": "#2563eb", "custom_theme_secondary": "#7c3aed", "custom_theme_tertiary": "#06b6d4"}
+        self.client.post(reverse("accounts:update"), {"save_theme": "1", "banner_gradient": "custom", **palette})
+        self.client.post(reverse("accounts:update"), {
+            "save_theme": "1", "banner_gradient": "teal",
+            "custom_theme_primary": "#000000", "custom_theme_secondary": "#000000", "custom_theme_tertiary": "#000000",
+        })
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.banner_gradient, "teal")
+        self.assertEqual(self.user.custom_theme_colors, ("#2563eb", "#7c3aed", "#06b6d4"))
+
+    def test_incomplete_custom_theme_falls_back_to_default(self):
+        User.objects.filter(pk=self.user.pk).update(banner_gradient="custom")
+        response = self.client.get(reverse("accounts:update"))
+        self.assertContains(response, 'data-account-theme="default"')
 
     def test_theme_validation_retains_saved_theme(self):
         for value in ["invalid", "", "<script>"]:
@@ -201,7 +265,7 @@ class ProfileSmokeTests(TestCase):
                 self.assertTrue(response.context["theme_form"].errors)
                 self.assertContains(response, 'id="theme-errors"')
                 self.user.refresh_from_db()
-                self.assertEqual(self.user.banner_gradient, "blue")
+                self.assertEqual(self.user.banner_gradient, "default")
 
     def test_legacy_banner_save_uses_account_theme(self):
         response = self.client.post(reverse("accounts:update"), {

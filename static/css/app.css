@@ -5906,7 +5906,7 @@ body.requestor-dashboard.dark-mode .dashboard-metric-card--active {
 
 .profile-hero__banner {
     height: 110px;
-    background: linear-gradient(120deg, #1d4ed8 0%, #3b82f6 50%, #6366f1 100%);
+    background: var(--account-gradient, linear-gradient(120deg, #1d4ed8 0%, #3b82f6 50%, #6366f1 100%));
 }
 
 .profile-hero__body {
@@ -6323,15 +6323,7 @@ body:not(.dark-mode) .banner-swatch__label { color: #fff; }
 /* Coming-soon swatch text is always readable on its own bg */
 body:not(.dark-mode) .banner-swatch--custom .banner-swatch__label { color: #e2e8f0; }
 
-/* Banner gradient variants */
-.profile-hero__banner--blue    { background-image: linear-gradient(120deg, #1d4ed8 0%, #3b82f6 50%, #6366f1 100%); }
-.profile-hero__banner--sunset  { background-image: linear-gradient(120deg, #f97316 0%, #ec4899 60%, #8b5cf6 100%); }
-.profile-hero__banner--forest  { background-image: linear-gradient(120deg, #065f46 0%, #10b981 60%, #3b82f6 100%); }
-.profile-hero__banner--crimson { background-image: linear-gradient(120deg, #7f1d1d 0%, #dc2626 50%, #f97316 100%); }
-.profile-hero__banner--slate   { background-image: linear-gradient(120deg, #0f172a 0%, #334155 60%, #475569 100%); }
-.profile-hero__banner--aurora  { background-image: linear-gradient(120deg, #1e1b4b 0%, #7c3aed 50%, #06b6d4 100%); }
-.profile-hero__banner--rose    { background-image: linear-gradient(120deg, #881337 0%, #f43f5e 50%, #fb923c 100%); }
-.profile-hero__banner--teal    { background-image: linear-gradient(120deg, #134e4a 0%, #0d9488 50%, #3b82f6 100%); }
+/* Banner gradient follows the account theme (palette defined in account-themes.css) */
 
 /* Banner edit button (overlay on hero banner) */
 .profile-hero__banner {
