@@ -1187,6 +1187,21 @@ def notify_engineer_assignment_email(
             "content": {
                 "subject": subject,
                 "plainText": "\n".join(body_lines),
+                "html": render_to_string("hub/emails/engineer_assignment.html", {
+                    "notification_title": "New Request Assignment",
+                    "details_heading": "Request details",
+                    "details": [
+                        ("Reference", request_obj.reference_code or "Request"),
+                        ("Account", request_obj.account.name if request_obj.account else "Not set"),
+                        ("Engagement", request_obj.get_engagement_type_display()),
+                        ("Priority", request_obj.get_priority_display()),
+                        ("Due date", due_display),
+                        ("Assigned by", actor_name),
+                    ],
+                    "description": description,
+                    "action_label": "View Request",
+                    "action_url": detail_url,
+                }),
             },
         }
         poller = client.begin_send(message)
@@ -1451,6 +1466,22 @@ def _send_sqr_for_revision_email(
             "content": {
                 "subject": subject,
                 "plainText": plain_text,
+                "html": render_to_string("hub/emails/sqr_revision.html", {
+                    "notification_title": "SQR Requires Revision",
+                    "details_heading": "SQR details",
+                    "engineer_name": engineer_name,
+                    "details": [
+                        ("Reference", submission.reference_code),
+                        ("Customer", submission.customer_name),
+                        *([("Company/Group", customer_company)] if customer_company else []),
+                        ("Project Title", submission.project_title),
+                        ("Reviewed By", reviewer_name),
+                        ("Date Reviewed", reviewed_date),
+                    ],
+                    "review_notes": review_notes,
+                    "action_label": "Open SQR Tracker",
+                    "action_url": sqr_url,
+                }),
             },
         }
         poller = client.begin_send(message)

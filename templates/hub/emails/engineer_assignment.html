@@ -1,0 +1,12 @@
+{% extends "hub/emails/base.html" %}
+
+{% block introduction %}
+<p style="margin:0;">You have been assigned a request in Request Hub. Review the details below and open the request to coordinate your work.</p>
+{% endblock %}
+
+{% block message_details %}
+{% if description %}
+<h2 style="margin:24px 0 12px;font-size:18px;line-height:26px;">Description</h2>
+<div style="overflow-wrap:anywhere;word-break:break-word;">{{ description|linebreaksbr }}</div>
+{% endif %}
+{% endblock %}

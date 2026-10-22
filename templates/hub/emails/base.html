@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ notification_title }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;color:#172033;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <!--[if mso]><table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #dbe3ed;">
+          <tr>
+            <td bgcolor="#142b49" style="padding:24px;color:#ffffff;">
+              <p style="margin:0 0 8px;font-size:14px;line-height:20px;font-weight:bold;">ESG REQUEST HUB</p>
+              <h1 style="margin:0;font-size:24px;line-height:32px;">{{ notification_title }}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px;font-size:16px;line-height:24px;overflow-wrap:anywhere;word-break:break-word;">
+              {% block introduction %}{% endblock %}
+              <h2 style="margin:24px 0 12px;font-size:18px;line-height:26px;">{{ details_heading }}</h2>
+              <table width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-size:14px;line-height:22px;table-layout:fixed;">
+                <tbody>
+                  {% for label, value in details %}
+                  <tr>
+                    <th scope="row" align="left" valign="top" width="36%" style="padding:10px 8px;border-bottom:1px solid #dbe3ed;background-color:#f8fafc;color:#334155;">{{ label }}</th>
+                    <td valign="top" style="padding:10px 8px;border-bottom:1px solid #dbe3ed;overflow-wrap:anywhere;word-break:break-word;">{{ value }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+              {% block message_details %}{% endblock %}
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;">
+                <tr>
+                  <td bgcolor="#1d4ed8" align="center" style="border-radius:4px;mso-padding-alt:14px 20px;">
+                    <a href="{{ action_url }}" style="display:inline-block;padding:14px 20px;color:#ffffff;font-size:16px;line-height:22px;font-weight:bold;text-decoration:none;">{{ action_label }}</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:16px 0 0;font-size:13px;line-height:20px;color:#475569;">If the button does not work, open this link:<br><a href="{{ action_url }}" style="color:#1d4ed8;text-decoration:underline;overflow-wrap:anywhere;word-break:break-all;">{{ action_url }}</a></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 24px;border-top:1px solid #dbe3ed;background-color:#f8fafc;font-size:12px;line-height:20px;color:#475569;">
+              <p style="margin:0 0 4px;">This is an automated notification from Request Hub.</p>
+              <p style="margin:0;">ESG Request Hub &nbsp;|&nbsp; <a href="mailto:ESGRequestHub@phildata.com" style="color:#1d4ed8;text-decoration:underline;">ESGRequestHub@phildata.com</a></p>
+            </td>
+          </tr>
+        </table>
+        <!--[if mso]></td></tr></table><![endif]-->
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
