@@ -92,9 +92,10 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 
 ### Account Themes
 - Open **My Profile → Themes** (also available from the profile banner or Settings).
-- Choose Blue, Sunset, Forest, Crimson, Slate, Aurora, Rose, or Teal using mouse or keyboard. Preview updates buttons, highlights, and the profile banner; **Cancel preview** restores the saved theme.
+- Choose **Default** (the original Request Hub look and mixed colour palette), Blue, Sunset, Forest, Crimson, Slate, Aurora, Rose, Teal, Amber, Ocean, or **Custom** using mouse or keyboard. Any non-default theme recolors the whole app — page background, ambient glow, navbar, surfaces, buttons, links, tabs, tables, and the profile banner — in both light and dark mode. Status colours (success / warning / critical) stay semantic. **Cancel preview** restores the saved theme.
+- **Custom** lets you pick three colours (Primary, Secondary, Accent) with a colour picker or hex code, or start from a suggested combination. Primary is automatically adjusted when needed so button and link text stays readable. Your last custom palette is kept when you switch to another theme.
 - **Apply Theme** saves only your account's theme, independently of profile details and settings, and makes it available across devices. The existing light/dark toggle remains unchanged.
-- Existing banner selections become account themes using the existing `banner_gradient` preference; no database migration is needed.
+- Themes are stored in `banner_gradient` plus `custom_theme_primary/secondary/tertiary`. New accounts start on **Default**; existing selections are preserved. Run `python manage.py migrate` to add the custom palette columns.
 
 ### 📝 Request Management
 - Create requests with reference codes, priority (Medium / High), engagement type, and product category

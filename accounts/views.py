@@ -72,8 +72,14 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
             self.object = self.get_object()
             theme_form = ThemeForm(request.POST, instance=self.object)
             if theme_form.is_valid():
-                self.object.banner_gradient = theme_form.cleaned_data["banner_gradient"]
-                self.object.save(update_fields=["banner_gradient"])
+                cleaned = theme_form.cleaned_data
+                self.object.banner_gradient = cleaned["banner_gradient"]
+                update_fields = ["banner_gradient"]
+                if cleaned["banner_gradient"] == User.CUSTOM_THEME:
+                    for name in ThemeForm.CUSTOM_FIELDS:
+                        setattr(self.object, name, cleaned[name])
+                    update_fields.extend(ThemeForm.CUSTOM_FIELDS)
+                self.object.save(update_fields=update_fields)
                 messages.success(request, "Theme applied to your account.")
                 return redirect(reverse_lazy("accounts:update") + "#themes")
             return self.render_to_response(self.get_context_data(theme_form=theme_form))

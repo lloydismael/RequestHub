@@ -1,0 +1,867 @@
+/* SQR Tracker Prototype: pipeline list + record editor.
+ * Reads /sqr/prototype-data/ and writes through the existing inline-update, undo and history endpoints,
+ * so validation, permissions, locks and audit history stay authoritative on the server. */
+(function () {
+    'use strict';
+
+    var root = document.getElementById('sqr-proto');
+    if (!root || root.dataset.ready) return;
+    root.dataset.ready = 'true';
+
+    var ENDPOINT = root.dataset.endpoint;
+    var CSRF = root.dataset.csrf;
+    var STORE_KEY = 'requestHub.sqr.prototype';
+    var VIEW_KEY = 'requestHub.sqr.tableView';
+    var PAGE_SIZE = 40;
+    var STALE_MS = 60000;
+
+    var BADGES = {
+        status: {submitted: 'warning', for_revision: 'danger', reviewed: 'success'},
+        proposal_status: {submitted_pending: 'primary', negotiation_review: 'info', closed_won: 'success', closed_lost: 'danger', closed_canceled: 'muted'},
+        delivery_health: {on_track: 'success', off_track: 'warning', at_risk: 'danger', completed: 'primary', cancelled: 'muted'},
+        overall_status: {planning: 'info', in_progress: 'primary', on_hold: 'muted', completed: 'success', cancelled: 'danger'},
+        revenue_status: {billed: 'success', not_yet_billed: 'warning'}
+    };
+    var STAGE_ICONS = {done: 'bi-check-circle-fill', current: 'bi-record-circle-fill', todo: 'bi-circle', closed: 'bi-slash-circle-fill'};
+    var STAGE_NAMES = {opportunity: 'Opportunity', delivery: 'Delivery', billing: 'Billing', closed: 'Closed'};
+
+    var state = {
+        loaded: false, loadedAt: 0, viewer: null, schema: null, options: {}, records: [], byPk: {},
+        specs: {}, sections: {}, labels: {}, selectedPk: null, tab: 'summary', shown: PAGE_SIZE,
+        dirtyClassic: false, history: {},
+        filters: {stage: 'all', search: '', status: '', sort: 'attention', mine: false, density: 'comfortable'}
+    };
+    var inFlight = null;
+    var toastTimer = 0;
+    var pendingUndo = null;
+
+    function $(id) { return document.getElementById('sqr-proto-' + id); }
+    var el = {
+        pipeline: $('pipeline'), body: $('body'), items: $('items'), count: $('count'), more: $('more'),
+        editor: $('editor'), search: $('search'), status: $('status'), sort: $('sort'), mine: $('mine'),
+        mineWrap: $('mine-wrap'), reset: $('reset'), refresh: $('refresh'), updated: $('updated'),
+        toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
+        approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
+    };
+
+    /* ── helpers ─────────────────────────────────────────────────── */
+    function h(tag, props, children) {
+        var node = document.createElement(tag);
+        Object.keys(props || {}).forEach(function (key) {
+            var value = props[key];
+            if (value === null || value === undefined || value === false) return;
+            if (key === 'class') node.className = value;
+            else if (key === 'text') node.textContent = value;
+            else if (key === 'dataset') Object.keys(value).forEach(function (name) { if (value[name] !== null && value[name] !== undefined) node.dataset[name] = value[name]; });
+            else if (key === 'on') Object.keys(value).forEach(function (name) { node.addEventListener(name, value[name]); });
+            else if (key === 'value') node.value = value;
+            else node.setAttribute(key, value === true ? '' : value);
+        });
+        [].concat(children || []).forEach(function (child) {
+            if (child === null || child === undefined || child === false) return;
+            node.append(child.nodeType ? child : document.createTextNode(String(child)));
+        });
+        return node;
+    }
+    function icon(name, extra) { return h('i', {class: 'bi ' + name + (extra ? ' ' + extra : ''), 'aria-hidden': 'true'}); }
+
+    var dateFmt = new Intl.DateTimeFormat(undefined, {year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'});
+    function fmtDate(iso) { return iso ? dateFmt.format(new Date(iso + 'T00:00:00Z')) : ''; }
+    function peso(raw) {
+        if (raw === '' || raw === null || raw === undefined) return '';
+        var n = parseFloat(raw);
+        return isNaN(n) ? String(raw) : '\u20b1' + n.toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+    function compactPeso(n) {
+        if (!n) return '\u20b10';
+        if (n >= 1e6) return '\u20b1' + (n / 1e6).toFixed(2) + 'M';
+        if (n >= 1e3) return '\u20b1' + (n / 1e3).toFixed(1) + 'K';
+        return '\u20b1' + n.toFixed(0);
+    }
+    function choiceLabel(key, value) {
+        var map = state.labels[key];
+        return map && map[value] !== undefined ? map[value] : value;
+    }
+    function badge(key, value, text) {
+        if (!value) return null;
+        return h('span', {class: 'sqr-proto__badge', dataset: {tone: (BADGES[key] || {})[value] || 'muted'}, text: text || choiceLabel(key, value)});
+    }
+    function api(url, options) {
+        var init = Object.assign({credentials: 'same-origin', headers: {Accept: 'application/json'}}, options || {});
+        return fetch(url, init).then(function (response) {
+            return response.json().catch(function () { return {}; }).then(function (data) {
+                return {ok: response.ok && data.ok !== false, status: response.status, data: data};
+            });
+        });
+    }
+    function post(url, body) {
+        return api(url, {
+            method: 'POST', body: body === undefined ? undefined : JSON.stringify(body),
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF, Accept: 'application/json'}
+        });
+    }
+    function record(pk) { return state.byPk[pk] || null; }
+    function savePrefs() {
+        try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state.filters)); } catch (error) { /* storage unavailable */ }
+    }
+    function loadPrefs() {
+        try {
+            var saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
+            if (saved) { Object.keys(state.filters).forEach(function (key) { if (key in saved) state.filters[key] = saved[key]; }); return true; }
+        } catch (error) { /* ignore corrupt prefs */ }
+        return false;
+    }
+
+    /* ── toast ───────────────────────────────────────────────────── */
+    function hideToast() {
+        el.toast.hidden = true;
+        pendingUndo = null;
+        clearTimeout(toastTimer);
+    }
+    function showToast(text, options) {
+        options = options || {};
+        el.toastText.textContent = text;
+        el.toast.dataset.tone = options.tone || '';
+        pendingUndo = options.undo || null;
+        el.toastUndo.hidden = !pendingUndo;
+        el.toastUndo.disabled = false;
+        el.toast.hidden = false;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(hideToast, pendingUndo ? 10000 : 5000);
+    }
+    el.toastClose.addEventListener('click', hideToast);
+    el.toastUndo.addEventListener('click', function () {
+        if (!pendingUndo) return;
+        var undo = pendingUndo;
+        el.toastUndo.disabled = true;
+        post(undo.url).then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'Unable to undo this change.');
+            markClassicStale();
+            return refreshRecord(undo.pk).then(function () { showToast('Change undone.'); });
+        }).catch(function (error) { showToast(error.message, {tone: 'error'}); });
+    });
+
+    /* ── filtering / sorting ─────────────────────────────────────── */
+    function needsAction(rec) {
+        return rec.attention.some(function (flag) { return flag.tone === 'danger'; }) ||
+            (state.viewer.is_pm && rec.status === 'submitted');
+    }
+    function isMine(rec) {
+        return rec.approver_id === state.viewer.pk || rec.values.assigned_pm === String(state.viewer.pk);
+    }
+    function baseMatches(rec) {
+        var f = state.filters;
+        if (f.status && rec.status !== f.status) return false;
+        if (f.mine && state.viewer.is_pm && !isMine(rec)) return false;
+        if (f.search) {
+            var terms = f.search.toLowerCase().split(/\s+/).filter(Boolean);
+            for (var i = 0; i < terms.length; i += 1) if (rec.search.indexOf(terms[i]) === -1) return false;
+        }
+        return true;
+    }
+    function stageMatches(rec) {
+        var stage = state.filters.stage;
+        if (stage === 'all') return true;
+        if (stage === 'attention') return needsAction(rec);
+        return rec.stage === stage;
+    }
+    function attentionScore(rec) {
+        return rec.attention.reduce(function (sum, flag) { return sum + (flag.tone === 'danger' ? 3 : flag.tone === 'warning' ? 2 : 0); }, 0);
+    }
+    var SORTERS = {
+        attention: function (a, b) { return attentionScore(b) - attentionScore(a) || SORTERS.newest(a, b); },
+        newest: function (a, b) { return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.pk - a.pk; },
+        oldest: function (a, b) { return -SORTERS.newest(a, b); },
+        value: function (a, b) { return (parseFloat(b.total) || 0) - (parseFloat(a.total) || 0); },
+        target: function (a, b) {
+            if (!a.target_date && !b.target_date) return SORTERS.newest(a, b);
+            if (!a.target_date) return 1;
+            if (!b.target_date) return -1;
+            return a.target_date < b.target_date ? -1 : a.target_date > b.target_date ? 1 : 0;
+        }
+    };
+    function visibleRecords() {
+        return state.records.filter(function (rec) { return baseMatches(rec) && stageMatches(rec); })
+            .sort(SORTERS[state.filters.sort] || SORTERS.attention);
+    }
+
+    /* ── pipeline strip ──────────────────────────────────────────── */
+    function renderPipeline() {
+        var pool = state.records.filter(baseMatches);
+        var defs = [{key: 'all', label: 'All SQRs', test: function () { return true; }},
+            {key: 'attention', label: 'Needs action', test: needsAction}];
+        state.schema.stages.forEach(function (stage) {
+            defs.push({key: stage[0], label: stage[1], test: function (rec) { return rec.stage === stage[0]; }});
+        });
+        el.pipeline.replaceChildren.apply(el.pipeline, defs.map(function (def) {
+            var matching = pool.filter(def.test);
+            var total = matching.reduce(function (sum, rec) { return sum + (parseFloat(rec.total) || 0); }, 0);
+            return h('button', {
+                type: 'button', class: 'sqr-proto__stage', dataset: {stage: def.key},
+                'aria-pressed': state.filters.stage === def.key ? 'true' : 'false',
+                on: {click: function () {
+                    state.filters.stage = state.filters.stage === def.key ? 'all' : def.key;
+                    state.shown = PAGE_SIZE; savePrefs(); renderAll();
+                }}
+            }, [
+                h('span', {class: 'sqr-proto__stage-label', text: def.label}),
+                h('span', {class: 'sqr-proto__stage-count', text: matching.length}),
+                h('span', {class: 'sqr-proto__stage-value', text: compactPeso(total)})
+            ]);
+        }));
+    }
+
+    /* ── list ────────────────────────────────────────────────────── */
+    function cardFor(rec) {
+        var flags = rec.attention.filter(function (flag) { return flag.key !== 'revision' && flag.key !== 'awaiting'; });
+        var meta = [badge('status', rec.status), badge('proposal_status', rec.proposal_status)];
+        if (flags[0]) meta.push(h('span', {class: 'sqr-proto__badge', dataset: {tone: flags[0].tone}, text: flags[0].label}));
+        var showBar = rec.stage === 'delivery' && rec.progress !== null && rec.progress !== undefined;
+        return h('button', {
+            type: 'button', class: 'sqr-proto__card',
+            dataset: {pk: rec.pk, stage: rec.stage, dim: rec.stage === 'closed' ? 'true' : null},
+            'aria-current': state.selectedPk === rec.pk ? 'true' : 'false',
+            on: {click: function () { select(rec.pk); }}
+        }, [
+            h('span', {class: 'sqr-proto__card-top'}, [
+                h('span', {class: 'sqr-proto__card-ref', text: rec.ref + ' \u00b7 ' + STAGE_NAMES[rec.stage]}),
+                h('span', {class: 'sqr-proto__card-value', text: rec.total ? peso(rec.total) : '\u2013'})
+            ]),
+            h('span', {class: 'sqr-proto__card-title', text: rec.account}),
+            h('span', {class: 'sqr-proto__card-sub', text: rec.service}),
+            h('span', {class: 'sqr-proto__card-meta'}, meta),
+            showBar ? h('span', {class: 'sqr-proto__bar', role: 'progressbar', 'aria-label': 'Delivery progress', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': rec.progress},
+                h('span', {style: 'width:' + Math.max(0, Math.min(100, rec.progress)) + '%'})) : null
+        ]);
+    }
+    function renderList() {
+        var activePk = el.items.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.pk : null;
+        var rows = visibleRecords();
+        var slice = rows.slice(0, state.shown);
+        el.items.dataset.density = state.filters.density;
+        el.items.replaceChildren.apply(el.items, slice.map(function (rec) { return h('li', null, cardFor(rec)); }));
+        el.more.hidden = rows.length <= slice.length;
+        el.more.textContent = 'Show ' + Math.min(PAGE_SIZE, rows.length - slice.length) + ' more';
+        el.count.textContent = rows.length
+            ? 'Showing ' + slice.length + ' of ' + rows.length + ' SQR' + (rows.length === 1 ? '' : 's')
+            : (state.records.length ? 'No matches.' : 'No SQRs yet.');
+        document.querySelectorAll('.sqr-proto__density button').forEach(function (button) {
+            button.setAttribute('aria-pressed', button.dataset.density === state.filters.density ? 'true' : 'false');
+        });
+        if (activePk) {
+            var again = el.items.querySelector('.sqr-proto__card[data-pk="' + activePk + '"]');
+            if (again) again.focus({preventScroll: true});
+        }
+    }
+    function renderAll() {
+        if (!state.loaded) return;
+        renderPipeline();
+        renderList();
+    }
+
+    /* ── selection ───────────────────────────────────────────────── */
+    function select(pk) {
+        var rec = record(pk);
+        if (!rec) return;
+        var changed = state.selectedPk !== pk;
+        state.selectedPk = pk;
+        if (changed) state.tab = 'summary';
+        el.body.dataset.mode = 'detail';
+        renderList();
+        renderEditor();
+        // On narrow screens the list is hidden, so move the reader to the record.
+        if (changed && window.matchMedia('(max-width: 1199.98px)').matches) {
+            var heading = el.editor.querySelector('.sqr-proto__ed-title');
+            if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
+            el.editor.scrollIntoView({block: 'start'});
+        }
+    }
+    function backToList() {
+        el.body.dataset.mode = 'list';
+        var card = el.items.querySelector('[aria-current="true"]');
+        if (card) card.focus();
+    }
+
+    /* ── editor: chrome (header, stepper, next step) ─────────────── */
+    function stepStates(rec) {
+        if (rec.stage === 'opportunity') return ['current', 'todo', 'todo'];
+        if (rec.stage === 'delivery') return ['done', 'current', 'todo'];
+        if (rec.stage === 'billing') return ['done', 'done', 'current'];
+        if (rec.closed_reason === 'billed') return ['done', 'done', 'done'];
+        return rec.proposal_status === 'closed_won' ? ['done', 'closed', 'todo'] : ['closed', 'todo', 'todo'];
+    }
+    function renderChrome(rec) {
+        var canWorkflow = rec.editable.indexOf('status') !== -1;
+        var names = ['opportunity', 'delivery', 'billing'];
+        var states = stepStates(rec);
+        var actions = [];
+        if (rec.perms.edit_form) actions.push(h('a', {class: 'btn btn-outline-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), 'Edit submission']));
+        if (rec.values.sqr_folder_link) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.values.sqr_folder_link, target: '_blank', rel: 'noopener'}, [icon('bi-folder2-open', 'me-2'), 'SQR documents']));
+        if (rec.linked_request) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.linked_request.url, target: '_blank', rel: 'noopener'}, [icon('bi-box-arrow-up-right', 'me-2'), rec.linked_request.code]));
+        if (rec.perms.delete) actions.push(h('a', {class: 'btn btn-outline-danger', href: rec.urls.delete}, [icon('bi-trash', 'me-2'), 'Delete']));
+
+        var next = rec.next_step;
+        var nextActions = [];
+        if (next.action === 'review' && canWorkflow) {
+            if (rec.status !== 'reviewed') nextActions.push(h('button', {type: 'button', class: 'btn btn-primary', on: {click: function () { openApprove(rec.pk); }}}, [icon('bi-patch-check', 'me-2'), 'Approve']));
+            if (rec.status !== 'for_revision') nextActions.push(h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { openRevise(rec.pk); }}}, [icon('bi-arrow-repeat', 'me-2'), 'Request revision']));
+        }
+        if (next.action === 'edit' && rec.perms.edit_form) nextActions.push(h('a', {class: 'btn btn-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), 'Edit submission']));
+
+        var flags = rec.attention.filter(function (flag) { return flag.key !== 'revision' && flag.key !== 'awaiting'; });
+        return [
+            h('div', {class: 'sqr-proto__ed-head'}, [
+                h('div', {style: 'min-width:0'}, [
+                    h('p', {class: 'sqr-proto__ed-ref', text: rec.ref}),
+                    h('h3', {class: 'sqr-proto__ed-title', text: rec.account}),
+                    h('p', {class: 'sqr-proto__ed-sub', text: rec.service})
+                ]),
+                h('div', {class: 'sqr-proto__ed-actions'}, actions)
+            ]),
+            h('ol', {class: 'sqr-proto__stepper', 'aria-label': 'Progress through the pipeline'}, names.map(function (name, index) {
+                var step = states[index];
+                return h('li', {class: 'sqr-proto__step', dataset: {state: step, stage: name}, 'aria-current': step === 'current' ? 'step' : null}, [
+                    icon(STAGE_ICONS[step]), STAGE_NAMES[name],
+                    step === 'closed' ? h('span', {class: 'visually-hidden', text: ' (closed)'}) : null
+                ]);
+            })),
+            h('div', {class: 'sqr-proto__next', dataset: {tone: next.tone}}, [
+                h('div', null, [
+                    h('p', {class: 'sqr-proto__next-title', text: next.title}),
+                    next.hint ? h('p', {class: 'sqr-proto__next-hint', text: next.hint}) : null
+                ]),
+                nextActions.length ? h('div', {class: 'sqr-proto__next-actions'}, nextActions) : null
+            ]),
+            rec.review_notes ? h('div', {class: 'sqr-proto__notes'}, [h('strong', {text: 'Revision notes'}), rec.review_notes]) : null,
+            flags.length ? h('div', {class: 'sqr-proto__flags'}, flags.map(function (flag) {
+                return h('span', {class: 'sqr-proto__badge', dataset: {tone: flag.tone}, text: flag.label});
+            })) : null
+        ];
+    }
+
+    /* ── editor: fields ──────────────────────────────────────────── */
+    var EDIT_TYPES = {text: 1, textarea: 1, number: 1, date: 1, select: 1, user: 1, request: 1};
+    function isInput(spec) { return !!EDIT_TYPES[spec.type]; }
+    function lockReason(rec, spec) {
+        if (!rec.editable.length) return 'Read-only for your role';
+        if (rec.locked && spec.tab !== 'opportunity') return 'Locked: proposal is closed';
+        return 'Admin only';
+    }
+    function optionsFor(rec, spec) {
+        var current = rec.values[spec.key] || '';
+        var list;
+        if (spec.type === 'select') list = spec.choices.map(function (c) { return {value: c[0], label: c[1]}; });
+        else if (spec.type === 'user') list = (state.options[spec.options] || []).slice();
+        else list = (state.options.rq_options || []).slice();
+        var blank = spec.key !== 'status';
+        var known = list.some(function (o) { return o.value === current; });
+        if (current && !known) {
+            var label = spec.key === 'assigned_pm' ? rec.assigned_pm_name : spec.key === 'assigned_sse' ? rec.assigned_sse_name :
+                spec.key === 'linked_request' && rec.linked_request ? rec.linked_request.code : current;
+            list.unshift({value: current, label: label || current});
+        }
+        if (blank) list.unshift({value: '', label: '\u2014 Not set \u2014'});
+        return list;
+    }
+    function displayText(rec, spec) {
+        var value = rec.values[spec.key];
+        if (value === '' || value === null || value === undefined) return '';
+        if (spec.type === 'select') return choiceLabel(spec.key, value);
+        if (spec.type === 'user') return spec.key === 'assigned_pm' ? rec.assigned_pm_name : rec.assigned_sse_name;
+        if (spec.type === 'date') return fmtDate(value);
+        if (spec.type === 'computed' && spec.format === 'money') return peso(value);
+        if (spec.type === 'number') {
+            if (spec.unit === '\u20b1') return peso(value);
+            return value + (spec.unit ? ' ' + spec.unit : '');
+        }
+        return String(value);
+    }
+    function fillReadonly(node, rec, spec) {
+        var value = rec.values[spec.key];
+        node.replaceChildren();
+        if (spec.type === 'request' && rec.linked_request) {
+            node.append(h('a', {href: rec.linked_request.url, target: '_blank', rel: 'noopener', text: rec.linked_request.code}));
+            node.dataset.empty = 'false';
+            return;
+        }
+        if (spec.type === 'link' && value) {
+            node.append(h('a', {href: value, target: '_blank', rel: 'noopener', text: 'Open link'}));
+            node.dataset.empty = 'false';
+            return;
+        }
+        var text = displayText(rec, spec);
+        node.dataset.empty = text ? 'false' : 'true';
+        node.textContent = text || '\u2014';
+    }
+    function setControl(control, rec, spec) {
+        var value = rec.values[spec.key] || '';
+        if (control.tagName === 'SELECT' && !Array.prototype.some.call(control.options, function (o) { return o.value === value; })) {
+            control.append(h('option', {value: value, text: displayText(rec, spec) || value}));
+        }
+        control.value = value;
+    }
+    function setFieldState(wrap, stateName, message) {
+        wrap.dataset.state = stateName;
+        var node = wrap.querySelector('.sqr-proto__state');
+        if (!node) return;
+        node.replaceChildren();
+        if (stateName === 'saving') node.append(h('span', {class: 'sqr-proto__spinner', 'aria-hidden': 'true'}), 'Saving\u2026');
+        else if (stateName === 'saved') node.append(icon('bi-check2'), 'Saved');
+        else if (stateName === 'error') node.append(icon('bi-exclamation-circle'), message || 'Could not save');
+        if (stateName === 'saved') setTimeout(function () { if (wrap.dataset.state === 'saved') setFieldState(wrap, 'idle'); }, 2200);
+    }
+
+    function buildControl(rec, spec, id) {
+        var control;
+        if (spec.type === 'textarea') control = h('textarea', {id: id, rows: 3});
+        else if (spec.type === 'select' || spec.type === 'user' || spec.type === 'request') {
+            control = h('select', {id: id}, optionsFor(rec, spec).map(function (o) { return h('option', {value: o.value, text: o.label}); }));
+        } else if (spec.type === 'number') {
+            control = h('input', {id: id, type: 'number', inputmode: 'decimal', step: spec.key === 'delivery_progress' || spec.key === 'discount_rate' ? '1' : 'any', min: spec.min, max: spec.max});
+        } else if (spec.type === 'date') control = h('input', {id: id, type: 'date'});
+        else control = h('input', {id: id, type: 'text', autocomplete: 'off', style: spec.uppercase ? 'text-transform:uppercase' : null});
+        setControl(control, rec, spec);
+        return control;
+    }
+
+    function renderField(rec, spec) {
+        var editable = rec.editable.indexOf(spec.key) !== -1;
+        var id = 'sqr-proto-f-' + rec.pk + '-' + spec.key;
+        var wide = spec.type === 'textarea';
+        var wrap = h('div', {class: 'sqr-proto__field' + (wide ? ' sqr-proto__field--wide' : ''), dataset: {fieldKey: spec.key, state: 'idle', emphasis: spec.emphasis ? 'true' : null}});
+        if (spec.workflow) { renderStatusBlock(wrap, rec, spec); return wrap; }
+        var lockedInput = !editable && isInput(spec);
+        var label = h(editable ? 'label' : 'span', {class: 'sqr-proto__label', id: editable ? null : id + '-label', for: editable ? id : null}, [
+            spec.label,
+            lockedInput ? h('span', {class: 'sqr-proto__lock', title: lockReason(rec, spec)}, [icon('bi-lock-fill'), h('span', {class: 'visually-hidden', text: lockReason(rec, spec)})]) : null
+        ]);
+        wrap.append(label);
+        if (editable) {
+            var control = buildControl(rec, spec, id);
+            control.dataset.key = spec.key;
+            control.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') { setControl(control, record(rec.pk), spec); control.blur(); }
+                else if (event.key === 'Enter' && spec.type !== 'textarea') { event.preventDefault(); control.blur(); }
+                else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); control.blur(); }
+            });
+            var eventName = control.tagName === 'SELECT' || spec.type === 'date' ? 'change' : 'blur';
+            control.addEventListener(eventName, function () { commit(rec.pk, spec, control, wrap); });
+            wrap.append(h('div', {class: 'sqr-proto__control'}, [control, spec.unit && spec.unit !== '\u20b1' ? h('span', {class: 'sqr-proto__unit', text: spec.unit}) : null,
+                spec.unit === '\u20b1' ? h('span', {class: 'sqr-proto__unit', text: 'PHP'}) : null]));
+        } else {
+            var box = h('div', {class: 'sqr-proto__readonly', role: 'group', 'aria-labelledby': id + '-label'});
+            fillReadonly(box, rec, spec);
+            wrap.append(box);
+        }
+        wrap.append(h('div', {class: 'sqr-proto__state', 'aria-live': 'polite'}));
+        return wrap;
+    }
+
+    function renderStatusBlock(wrap, rec, spec) {
+        var canWorkflow = rec.editable.indexOf('status') !== -1;
+        wrap.replaceChildren(
+            h('span', {class: 'sqr-proto__label'}, [spec.label, !canWorkflow ? h('span', {class: 'sqr-proto__lock', title: lockReason(rec, spec)}, [icon('bi-lock-fill'), h('span', {class: 'visually-hidden', text: lockReason(rec, spec)})]) : null]),
+            h('div', {class: 'sqr-proto__control', style: 'flex-wrap:wrap'}, [badge('status', rec.status)].concat(canWorkflow ? [
+                rec.status !== 'reviewed' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', on: {click: function () { openApprove(rec.pk); }}}, 'Approve') : null,
+                rec.status !== 'for_revision' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', on: {click: function () { openRevise(rec.pk); }}}, 'Request revision') : null,
+                rec.status !== 'submitted' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-secondary', on: {click: function () { saveStatus(rec.pk, 'submitted', wrap); }}}, 'Back to processing') : null
+            ] : [])),
+            h('div', {class: 'sqr-proto__state', 'aria-live': 'polite'})
+        );
+    }
+
+    function sectionsForTab(tab) {
+        var order = [];
+        var groups = {};
+        state.schema.fields.forEach(function (spec) {
+            if (spec.tab !== tab) return;
+            if (!groups[spec.section]) { groups[spec.section] = []; order.push(spec.section); }
+            groups[spec.section].push(spec);
+        });
+        return order.map(function (name) { return {name: name, fields: groups[name]}; });
+    }
+    function renderFormTab(rec, tab) {
+        var nodes = [];
+        if (rec.locked && tab !== 'opportunity') {
+            nodes.push(h('div', {class: 'sqr-proto__locknote'}, [icon('bi-lock-fill'),
+                'Locked because the proposal is Closed-Lost or Closed-Canceled.']));
+        } else if (!rec.editable.length) {
+            nodes.push(h('div', {class: 'sqr-proto__locknote'}, [icon('bi-eye'),
+                rec.perms.edit_form ? 'View only. Use Edit submission to change the request.' : 'View only.']));
+        }
+        sectionsForTab(tab).forEach(function (section) {
+            nodes.push(h('section', {class: 'sqr-proto__section', 'aria-label': section.name}, [
+                h('h4', {text: section.name}),
+                h('div', {class: 'sqr-proto__fields'}, section.fields.map(function (spec) { return renderField(rec, spec); }))
+            ]));
+        });
+        return nodes;
+    }
+
+    /* ── editor: summary + history ───────────────────────────────── */
+    function fact(label, value) {
+        return h('div', {class: 'sqr-proto__fact'}, [h('dt', {text: label}), h('dd', null, value === '' || value === null || value === undefined ? '\u2014' : value)]);
+    }
+    function renderSummary(rec) {
+        var v = rec.values;
+        var timeline = [
+            ['SQR submitted', fmtDate(rec.created_at)], ['Approved', v.reviewed_at], ['Validity due', v.validity_due_date],
+            ['Delivery start', fmtDate(v.delivery_start_date)], ['Target finish', fmtDate(v.delivery_target_finish_date)],
+            ['Actual finish', fmtDate(v.delivery_actual_finish_date)], ['Completion signed', fmtDate(v.delivery_completion_signed_date)],
+            ['PO / PNL', fmtDate(v.po_pnl_date)], ['Billed', fmtDate(v.revenue_date)]
+        ];
+        return [
+            h('section', {class: 'sqr-proto__section', 'aria-label': 'Key facts'}, [
+                h('h4', {text: 'At a glance'}),
+                h('dl', {class: 'sqr-proto__facts'}, [
+                    fact('Total price', rec.total ? peso(rec.total) : ''),
+                    fact('SQR status', badge('status', rec.status)),
+                    fact('Proposal', badge('proposal_status', rec.proposal_status)),
+                    fact('Delivery', badge('overall_status', rec.overall_status)),
+                    fact('Health', badge('delivery_health', rec.delivery_health)),
+                    fact('Progress', rec.progress === null || rec.progress === undefined ? '' : rec.progress + '%'),
+                    fact('Billing', rec.stage === 'opportunity' || (rec.stage === 'closed' && rec.closed_reason !== 'billed') ? '' : badge('revenue_status', rec.revenue_status)),
+                    fact('Requester', rec.requester), fact('Approver', rec.approver),
+                    fact('Assigned PM', rec.assigned_pm_name), fact('Assigned SSE', rec.assigned_sse_name),
+                    fact('Scope', rec.scope), fact('Group', rec.group)
+                ])
+            ]),
+            h('section', {class: 'sqr-proto__section', 'aria-label': 'Key dates'}, [
+                h('h4', {text: 'Key dates'}),
+                h('ul', {class: 'sqr-proto__timeline'}, timeline.map(function (row) {
+                    return h('li', {dataset: {done: row[1] ? 'true' : 'false'}}, [icon(row[1] ? 'bi-check-circle-fill' : 'bi-circle'), row[0], h('span', {text: row[1] || 'Not set'})]);
+                }))
+            ])
+        ];
+    }
+
+    function renderHistory(rec, container) {
+        var slot = h('div', {class: 'sqr-proto__history-wrap'});
+        container.append(slot);
+        var cached = state.history[rec.pk];
+        if (cached) { fillHistory(slot, rec, cached); return; }
+        slot.append(h('p', {class: 'sqr-proto__message', text: 'Loading history\u2026'}));
+        api(rec.urls.history).then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'Unable to load history.');
+            state.history[rec.pk] = res.data.entries;
+            if (state.selectedPk === rec.pk && state.tab === 'history') fillHistory(slot, rec, res.data.entries);
+        }).catch(function (error) {
+            slot.replaceChildren(h('p', {class: 'sqr-proto__message', dataset: {state: 'error'}, text: error.message}));
+        });
+    }
+    function fillHistory(slot, rec, entries) {
+        if (!entries.length) { slot.replaceChildren(h('p', {class: 'sqr-proto__message', text: 'No changes have been recorded yet.'})); return; }
+        slot.replaceChildren(h('ul', {class: 'sqr-proto__history'}, entries.map(function (entry) {
+            return h('li', null, [
+                h('div', {class: 'sqr-proto__history-head'}, [
+                    h('span', null, [h('strong', {text: entry.action_label}), ' \u00b7 ' + entry.actor]),
+                    h('span', {text: entry.created_at})
+                ]),
+                entry.summary ? h('p', {class: 'sqr-proto__change', text: entry.summary}) : null
+            ].concat(entry.changes.map(function (change) {
+                return h('p', {class: 'sqr-proto__change'}, [change.field_label + ': ', h('del', {text: change.old || 'empty'}), ' \u2192 ', h('ins', {text: change.new || 'empty'})]);
+            })).concat(entry.restorable ? [h('div', null, h('button', {type: 'button', class: 'btn btn-sm btn-outline-secondary', on: {click: function (event) { restore(rec, entry, event.currentTarget); }}}, [icon('bi-arrow-counterclockwise', 'me-1'), 'Restore this change']))] : [])
+              .concat(entry.is_restored ? [h('p', {class: 'sqr-proto__meta', text: 'Restored by ' + entry.restored_by + ' on ' + entry.restored_at})] : []));
+        })));
+    }
+    function restore(rec, entry, button) {
+        button.disabled = true;
+        post(entry.restore_url).then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'Unable to restore this change.');
+            markClassicStale();
+            delete state.history[rec.pk];
+            return refreshRecord(rec.pk).then(function () { showToast('History entry restored.'); renderPanel(); });
+        }).catch(function (error) { button.disabled = false; showToast(error.message, {tone: 'error'}); });
+    }
+
+    /* ── editor: tabs and panel ──────────────────────────────────── */
+    function tabList(rec) {
+        var tabs = [['summary', 'Summary']].concat(state.schema.tabs);
+        if (rec.perms.history) tabs.push(['history', 'History']);
+        return tabs;
+    }
+    function renderEditor() {
+        var rec = record(state.selectedPk);
+        if (!rec) return;
+        var tabs = tabList(rec);
+        if (!tabs.some(function (t) { return t[0] === state.tab; })) state.tab = 'summary';
+        el.editor.replaceChildren(
+            h('button', {type: 'button', class: 'btn btn-outline-secondary sqr-proto__back', on: {click: backToList}}, [icon('bi-arrow-left', 'me-2'), 'All SQRs']),
+            h('div', {class: 'sqr-proto__chrome'}, renderChrome(rec)),
+            h('div', {class: 'sqr-proto__tabs', role: 'tablist', 'aria-label': 'Record sections'}, tabs.map(function (tab) {
+                var selected = tab[0] === state.tab;
+                return h('button', {
+                    type: 'button', role: 'tab', class: 'sqr-proto__tab', id: 'sqr-proto-tab-' + tab[0],
+                    'aria-selected': selected ? 'true' : 'false', 'aria-controls': 'sqr-proto-panel', tabindex: selected ? '0' : '-1',
+                    dataset: {tab: tab[0]}, text: tab[1],
+                    on: {click: function () { setTab(tab[0]); }, keydown: tabKeys}
+                });
+            })),
+            h('div', {class: 'sqr-proto__panel', id: 'sqr-proto-panel', role: 'tabpanel', tabindex: '-1'})
+        );
+        renderPanel();
+    }
+    function renderPanel() {
+        var rec = record(state.selectedPk);
+        var panel = document.getElementById('sqr-proto-panel');
+        if (!rec || !panel) return;
+        panel.setAttribute('aria-labelledby', 'sqr-proto-tab-' + state.tab);
+        panel.replaceChildren();
+        if (state.tab === 'summary') panel.append.apply(panel, renderSummary(rec));
+        else if (state.tab === 'history') renderHistory(rec, panel);
+        else panel.append.apply(panel, renderFormTab(rec, state.tab));
+    }
+    function setTab(tab, focus) {
+        state.tab = tab;
+        el.editor.querySelectorAll('.sqr-proto__tab').forEach(function (button) {
+            var selected = button.dataset.tab === tab;
+            button.setAttribute('aria-selected', selected ? 'true' : 'false');
+            button.tabIndex = selected ? 0 : -1;
+            if (selected && focus) button.focus();
+        });
+        renderPanel();
+    }
+    function tabKeys(event) {
+        var tabs = Array.prototype.slice.call(el.editor.querySelectorAll('.sqr-proto__tab'));
+        var index = tabs.indexOf(event.currentTarget);
+        var target = null;
+        if (event.key === 'ArrowRight') target = tabs[(index + 1) % tabs.length];
+        else if (event.key === 'ArrowLeft') target = tabs[(index - 1 + tabs.length) % tabs.length];
+        else if (event.key === 'Home') target = tabs[0];
+        else if (event.key === 'End') target = tabs[tabs.length - 1];
+        if (target) { event.preventDefault(); setTab(target.dataset.tab, true); }
+    }
+
+    /* ── editing ─────────────────────────────────────────────────── */
+    function markClassicStale() {
+        state.dirtyClassic = true;
+        document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
+    }
+    function normalize(spec, raw) {
+        var value = String(raw === null || raw === undefined ? '' : raw).trim();
+        if (spec.uppercase) value = value.toUpperCase();
+        return value;
+    }
+    function validate(spec, value) {
+        if (spec.type !== 'number' || value === '') return '';
+        var n = parseFloat(value);
+        if (isNaN(n)) return 'Enter a number';
+        if (spec.min !== undefined && n < spec.min) return 'Must be at least ' + spec.min;
+        if (spec.max !== undefined && n > spec.max) return 'Must be at most ' + spec.max;
+        return '';
+    }
+    function commit(pk, spec, control, wrap) {
+        var rec = record(pk);
+        if (!rec) return;
+        var value = normalize(spec, control.value);
+        var original = rec.values[spec.key] || '';
+        if (spec.type === 'number' && value !== '' && original !== '' && parseFloat(value) === parseFloat(original)) return;
+        if (value === original) { control.value = value; return; }
+        var problem = validate(spec, value);
+        if (problem) { setFieldState(wrap, 'error', problem); control.value = original; return; }
+        save(pk, spec.key, value, wrap, {control: control, spec: spec}).catch(function () {});
+    }
+    function save(pk, key, value, wrap, extra) {
+        extra = extra || {};
+        var rec = record(pk);
+        var label = (state.specs[key] || {}).label || key;
+        if (wrap) setFieldState(wrap, 'saving');
+        var payload = {field: key, value: value};
+        if (extra.reviewNotes !== undefined) payload.review_notes = extra.reviewNotes;
+        return post(rec.urls.inline, payload).then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'Could not save this change.');
+            markClassicStale();
+            delete state.history[pk];
+            var message = 'Saved ' + label + '.';
+            if (res.data.workflow_side_effect_warning && res.data.workflow_side_effect_message) message += ' ' + res.data.workflow_side_effect_message;
+            return refreshRecord(pk).then(function () {
+                var fresh = state.selectedPk === pk ? el.editor.querySelector('[data-field-key="' + key + '"]') : null;
+                if (fresh) setFieldState(fresh, 'saved');
+                showToast(message, res.data.undo_url ? {undo: {url: res.data.undo_url, pk: pk}} : null);
+                return res.data;
+            });
+        }).catch(function (error) {
+            var current = state.selectedPk === pk ? el.editor.querySelector('[data-field-key="' + key + '"]') : wrap;
+            if (current) setFieldState(current, 'error', error.message);
+            if (extra.control && extra.spec) setControl(extra.control, record(pk), extra.spec);
+            throw error;
+        });
+    }
+    function saveStatus(pk, value, wrap) {
+        save(pk, 'status', value, wrap).catch(function () {});
+    }
+
+    /* ── workflow dialogs ────────────────────────────────────────── */
+    var dialogPk = null;
+    function openApprove(pk) { dialogPk = pk; el.approve.showModal(); }
+    function openRevise(pk) {
+        dialogPk = pk;
+        el.reviseNotes.value = '';
+        el.reviseError.hidden = true;
+        el.revise.showModal();
+        el.reviseNotes.focus();
+    }
+    el.approve.addEventListener('click', function (event) {
+        var button = event.target.closest('[data-approve]');
+        if (!button) return;
+        var choice = button.dataset.approve;
+        var pk = dialogPk;
+        var transfer = choice === 'draft' && typeof window.startSqrApprovalDraft === 'function' ? window.startSqrApprovalDraft() : null;
+        el.approve.close();
+        save(pk, 'status', 'reviewed', el.editor.querySelector('[data-field-key="status"]')).then(function (data) {
+            var url = choice === 'eml' ? data.approval_email_eml_url : data.approval_email_draft_url;
+            if (!url) { if (transfer) transfer.cancel(); return; }
+            if (transfer) transfer.complete(url);
+            else window.location.href = url;
+        }).catch(function () { if (transfer) transfer.cancel(); });
+    });
+    el.revise.addEventListener('click', function (event) {
+        if (!event.target.closest('[data-revise="confirm"]')) return;
+        var notes = el.reviseNotes.value.trim();
+        if (!notes) { el.reviseError.hidden = false; el.reviseNotes.focus(); return; }
+        var rec = record(dialogPk);
+        var pk = dialogPk;
+        el.revise.close();
+        openTeamsChat(rec, notes);
+        save(pk, 'status', 'for_revision', el.editor.querySelector('[data-field-key="status"]'), {reviewNotes: notes}).catch(function () {});
+    });
+    function openTeamsChat(rec, notes) {
+        if (!rec || (!rec.engineer_email && !rec.pm_email)) return;
+        var people = [rec.engineer_email, rec.pm_email].filter(Boolean).join(',');
+        var message = 'Hi ' + (rec.engineer_name ? '@' + rec.engineer_name : 'Team') + ',\n\nSubmitted SQR is for revision, please refer to the ff. comments below.\n\nComments:\n' + notes + '\n\nThanks';
+        var url = 'https://teams.microsoft.com/l/chat/0/0?users=' + encodeURIComponent(people) +
+            '&topicName=' + encodeURIComponent(rec.ref + ' ' + rec.account) + '&message=' + encodeURIComponent(message);
+        window.open(url, '_blank', 'noopener');
+    }
+
+    /* ── data ────────────────────────────────────────────────────── */
+    function index(records) {
+        state.records = records;
+        state.byPk = {};
+        records.forEach(function (rec) { state.byPk[rec.pk] = rec; });
+    }
+    function syncEditor(rec, previous) {
+        var sameAccess = JSON.stringify(previous.editable) === JSON.stringify(rec.editable) && previous.locked === rec.locked;
+        var chrome = el.editor.querySelector('.sqr-proto__chrome');
+        if (chrome) chrome.replaceChildren.apply(chrome, renderChrome(rec).filter(Boolean));
+        if (!sameAccess || state.tab === 'summary') { renderPanel(); return; }
+        el.editor.querySelectorAll('[data-field-key]').forEach(function (wrap) {
+            var spec = state.specs[wrap.dataset.fieldKey];
+            if (!spec) return;
+            if (spec.workflow) { renderStatusBlock(wrap, rec, spec); return; }
+            var control = wrap.querySelector('[data-key]');
+            if (control) { if (document.activeElement !== control) setControl(control, rec, spec); return; }
+            var box = wrap.querySelector('.sqr-proto__readonly');
+            if (box) fillReadonly(box, rec, spec);
+        });
+    }
+    function refreshRecord(pk) {
+        return api(ENDPOINT + '?pk=' + encodeURIComponent(pk), {cache: 'no-store'}).then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'Unable to refresh this SQR.');
+            var previous = record(pk);
+            var fresh = res.data.record;
+            state.records = state.records.map(function (rec) { return rec.pk === pk ? fresh : rec; });
+            state.byPk[pk] = fresh;
+            renderAll();
+            if (state.selectedPk === pk && previous) syncEditor(fresh, previous);
+        });
+    }
+    function apply(data) {
+        state.viewer = data.viewer;
+        state.schema = data.schema;
+        state.options = data.options;
+        state.specs = {};
+        state.labels = {};
+        data.schema.fields.forEach(function (spec) {
+            state.specs[spec.key] = spec;
+            if (spec.choices) {
+                state.labels[spec.key] = {};
+                spec.choices.forEach(function (choice) { state.labels[spec.key][choice[0]] = choice[1]; });
+            }
+        });
+        index(data.records);
+        state.history = {};
+        if (!state.loaded && !loadPrefs()) state.filters.mine = root.dataset.defaultMine === '1' && data.viewer.is_pm;
+        state.loaded = true;
+        state.loadedAt = Date.now();
+        el.mineWrap.hidden = !data.viewer.is_pm;
+        el.search.value = state.filters.search;
+        el.status.value = state.filters.status;
+        el.sort.value = state.filters.sort;
+        el.mine.checked = state.filters.mine;
+        el.updated.textContent = 'Updated ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+        renderAll();
+        if (state.selectedPk && record(state.selectedPk)) {
+            var focused = el.editor.contains(document.activeElement);
+            if (!focused) renderEditor();
+        } else if (state.selectedPk) {
+            state.selectedPk = null;
+            el.body.dataset.mode = 'list';
+        }
+    }
+    function load(background) {
+        if (inFlight) return inFlight;
+        if (!background) el.count.textContent = 'Loading\u2026';
+        inFlight = api(ENDPOINT, {cache: 'no-store'}).then(function (res) {
+            if (!res.ok) throw new Error(res.data.error || 'Unable to load SQR data.');
+            apply(res.data);
+        }).catch(function (error) {
+            if (!state.loaded) {
+                el.count.textContent = error.message;
+                el.items.replaceChildren(h('li', null, h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again')));
+            } else showToast(error.message, {tone: 'error'});
+        }).then(function () { inFlight = null; });
+        return inFlight;
+    }
+
+    /* ── wiring ──────────────────────────────────────────────────── */
+    var searchTimer = 0;
+    el.search.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () { state.filters.search = el.search.value.trim(); state.shown = PAGE_SIZE; savePrefs(); renderAll(); }, 150);
+    });
+    el.status.addEventListener('change', function () { state.filters.status = el.status.value; state.shown = PAGE_SIZE; savePrefs(); renderAll(); });
+    el.sort.addEventListener('change', function () { state.filters.sort = el.sort.value; savePrefs(); renderList(); });
+    el.mine.addEventListener('change', function () { state.filters.mine = el.mine.checked; state.shown = PAGE_SIZE; savePrefs(); renderAll(); });
+    el.more.addEventListener('click', function () { state.shown += PAGE_SIZE; renderList(); });
+    el.refresh.addEventListener('click', function () { load(true).then(function () { showToast('SQR list refreshed.'); }); });
+    el.reset.addEventListener('click', function () {
+        state.filters = {stage: 'all', search: '', status: '', sort: 'attention', mine: false, density: state.filters.density};
+        el.search.value = ''; el.status.value = ''; el.sort.value = 'attention'; el.mine.checked = false;
+        state.shown = PAGE_SIZE; savePrefs(); renderAll();
+    });
+    document.querySelectorAll('.sqr-proto__density button').forEach(function (button) {
+        button.addEventListener('click', function () { state.filters.density = button.dataset.density; savePrefs(); renderList(); });
+    });
+    el.items.addEventListener('keydown', function (event) {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        var cards = Array.prototype.slice.call(el.items.querySelectorAll('.sqr-proto__card'));
+        var index = cards.indexOf(document.activeElement);
+        if (index === -1) return;
+        event.preventDefault();
+        var next = cards[index + (event.key === 'ArrowDown' ? 1 : -1)];
+        if (next) next.focus();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== '/' || root.hidden || event.ctrlKey || event.metaKey || event.altKey) return;
+        var tag = (event.target.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select' || event.target.isContentEditable) return;
+        event.preventDefault();
+        el.search.focus();
+    });
+
+    document.addEventListener('sqr:performance-view', function (event) {
+        var view = event.detail && event.detail.view;
+        if (view === 'prototype') {
+            if (!state.loaded) load();
+            else if (Date.now() - state.loadedAt > STALE_MS) load(true);
+            return;
+        }
+        if (state.dirtyClassic) {
+            // The classic tables are server-rendered; reload so they never show pre-edit values.
+            try { localStorage.setItem(VIEW_KEY, view || 'tracker'); } catch (error) { /* ignore */ }
+            window.location.reload();
+        }
+    });
+    if (!root.hidden) load();
+})();

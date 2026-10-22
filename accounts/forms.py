@@ -4,6 +4,7 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 
 from .models import User
+from .themes import DEFAULT_CUSTOM_COLORS, custom_theme_style, normalize_hex
 
 ROLE_LABELS = {
     User.Roles.ADMIN: "Admin",
@@ -37,11 +38,49 @@ ROLE_DEFAULT_USERNAMES = {role: aliases.get("admin", "") for role, aliases in RO
 
 class ThemeForm(forms.ModelForm):
     banner_gradient = forms.ChoiceField(choices=User.BANNER_GRADIENT_CHOICES)
+    custom_theme_primary = forms.CharField(required=False, max_length=7)
+    custom_theme_secondary = forms.CharField(required=False, max_length=7)
+    custom_theme_tertiary = forms.CharField(required=False, max_length=7)
+
+    CUSTOM_FIELDS = ("custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary")
 
     class Meta:
         model = User
-        fields = ["banner_gradient"]
+        fields = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary"]
         widgets = {"banner_gradient": forms.RadioSelect()}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial["banner_gradient"] = self.instance.account_theme
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("banner_gradient") == User.CUSTOM_THEME:
+            for name in self.CUSTOM_FIELDS:
+                color = normalize_hex(cleaned.get(name))
+                if color:
+                    cleaned[name] = color
+                elif name in self.fields and name not in self.errors:
+                    self.add_error(name, "Choose all three palette colours as #RRGGBB.")
+        else:
+            # A non-custom save keeps the stored palette so switching back restores it.
+            for name in self.CUSTOM_FIELDS:
+                cleaned[name] = getattr(self.instance, name)
+        return cleaned
+
+    @property
+    def custom_colors(self):
+        """Palette shown in the editor: submitted values first, then saved, then defaults."""
+        colors = []
+        for name, fallback in zip(self.CUSTOM_FIELDS, DEFAULT_CUSTOM_COLORS):
+            submitted = normalize_hex(self.data.get(name)) if self.is_bound else ""
+            colors.append(submitted or normalize_hex(getattr(self.instance, name)) or fallback)
+        return colors
+
+    @property
+    def custom_style(self):
+        return custom_theme_style(*self.custom_colors)
 
 
 class ProfileForm(forms.ModelForm):

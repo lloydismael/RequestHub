@@ -13,6 +13,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
 from datetime import date, datetime, timedelta
+from functools import partial
 from email.charset import Charset, QP
 from email.header import Header
 from email.mime.image import MIMEImage
@@ -103,6 +104,7 @@ from .mixins import (
 )
 from .services import request_lifecycle
 from .services.sqr_performance import build_sqr_performance_snapshot
+from .services import sqr_prototype
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
@@ -3656,6 +3658,65 @@ class SqrPerformanceDataView(LoginRequiredMixin, View):
             today=timezone.localdate(fetched_at),
             fetched_at=fetched_at,
         ))
+
+
+class SqrPrototypeDataView(LoginRequiredMixin, View):
+    """Role-scoped records for the SQR Tracker Prototype; edits go through the inline-update endpoint."""
+
+    http_method_names = ["get"]
+
+    def dispatch(self, request, *args, **kwargs):
+        if request.user.is_authenticated and request.user.role not in SQR_ACCESS_ROLES:
+            response = JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
+        else:
+            response = super().dispatch(request, *args, **kwargs)
+        patch_cache_control(response, private=True, no_store=True)
+        return response
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        is_pm = user.role in ADMIN_PANEL_ROLES
+        queryset = _sqr_queryset_for_user(user)
+        raw_pk = request.GET.get("pk")
+        if raw_pk is not None:
+            if not raw_pk.isdigit():
+                return JsonResponse({"ok": False, "error": "Invalid record"}, status=400)
+            queryset = queryset.filter(pk=int(raw_pk))
+
+        serialize = partial(
+            sqr_prototype.serialize_record,
+            user=user,
+            allowed_fields=SqrInlineFieldUpdateView._allowed_fields_for_user(user),
+            locked_fields=SqrInlineFieldUpdateView._CLOSED_LOST_LOCKED_FIELDS,
+            today=timezone.localdate(),
+            is_pm=is_pm,
+            is_admin=user.role == User.Roles.ADMIN,
+            is_engineer=user.role in ENGINEER_ACCESS_ROLES,
+        )
+        records = [serialize(submission) for submission in queryset]
+        if raw_pk is not None:
+            if not records:
+                return JsonResponse({"ok": False, "error": "Not found"}, status=404)
+            return JsonResponse({"ok": True, "record": records[0]})
+
+        options = sqr_prototype.build_options(
+            pm_users=User.objects.filter(role=User.Roles.PM_ESG)
+            .values("pk", "first_name", "last_name", "username").order_by("first_name", "last_name"),
+            sse_users=User.objects.filter(role__in=[User.Roles.ENGINEER, User.Roles.ON_HOLD])
+            .values("pk", "first_name", "last_name", "username").order_by("first_name", "last_name"),
+            rq_options=Request.objects.order_by("-id")[:300].values("pk", "reference_code"),
+        ) if is_pm else {"pm_users": [], "sse_users": [], "rq_options": []}
+        return JsonResponse({
+            "ok": True,
+            "viewer": {"pk": user.pk, "is_pm": is_pm, "is_admin": user.role == User.Roles.ADMIN},
+            "schema": {
+                "fields": sqr_prototype.FIELD_SPECS,
+                "stages": sqr_prototype.STAGES,
+                "tabs": sqr_prototype.TABS,
+            },
+            "options": options,
+            "records": records,
+        })
 
 
 class SqrReportsDataView(LoginRequiredMixin, View):

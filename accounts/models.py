@@ -4,6 +4,7 @@ from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
 from .storage import DatabaseMediaStorage
+from .themes import custom_theme_style, custom_theme_vars
 
 
 def user_profile_photo_upload_to(instance, filename):
@@ -80,7 +81,10 @@ class User(AbstractUser):
         blank=True,
         validators=[RegexValidator(r"^[0-9+\-() ]*$", "Phone number contains invalid characters.")],
     )
+    DEFAULT_THEME = "default"
+    CUSTOM_THEME = "custom"
     BANNER_GRADIENT_CHOICES = [
+        (DEFAULT_THEME, "Default"),
         ("blue", "Blue"),
         ("sunset", "Sunset"),
         ("forest", "Forest"),
@@ -89,7 +93,11 @@ class User(AbstractUser):
         ("aurora", "Aurora"),
         ("rose", "Rose"),
         ("teal", "Teal"),
+        ("amber", "Amber"),
+        ("ocean", "Ocean"),
+        (CUSTOM_THEME, "Custom"),
     ]
+    HEX_COLOR_VALIDATOR = RegexValidator(r"^#[0-9a-fA-F]{6}$", "Enter a colour as #RRGGBB.")
 
     profile_photo = models.ImageField(
         upload_to=user_profile_photo_upload_to,
@@ -100,10 +108,13 @@ class User(AbstractUser):
     banner_gradient = models.CharField(
         max_length=20,
         choices=BANNER_GRADIENT_CHOICES,
-        default="blue",
+        default=DEFAULT_THEME,
         blank=True,
     )
-    role = models.CharField(max_length=20, choices=Roles.choices, default=Roles.REQUESTOR)
+    custom_theme_primary = models.CharField(max_length=7, blank=True, default="", validators=[HEX_COLOR_VALIDATOR])
+    custom_theme_secondary = models.CharField(max_length=7, blank=True, default="", validators=[HEX_COLOR_VALIDATOR])
+    custom_theme_tertiary = models.CharField(max_length=7, blank=True, default="", validators=[HEX_COLOR_VALIDATOR])
+    role =  models.CharField(max_length=20, choices=Roles.choices, default=Roles.REQUESTOR)
     department = models.CharField(max_length=100, blank=True, default="")
     REQUESTOR_ROLES = (Roles.REQUESTOR, Roles.REQUESTOR_ESS)
     REQUEST_CREATOR_ROLES = (Roles.REQUESTOR, Roles.REQUESTOR_ESS, Roles.PM_ESS, Roles.PM_ESG, Roles.ADMIN)
@@ -133,6 +144,30 @@ class User(AbstractUser):
         default=False, verbose_name="Reduce Motion",
         help_text="Disable entrance animations and smooth scrolling.",
     )
+
+    @property
+    def custom_theme_colors(self):
+        return (self.custom_theme_primary, self.custom_theme_secondary, self.custom_theme_tertiary)
+
+    @property
+    def account_theme(self):
+        """Effective theme key; unknown values and incomplete custom palettes fall back to default."""
+        theme = self.banner_gradient
+        if theme not in dict(self.BANNER_GRADIENT_CHOICES):
+            return self.DEFAULT_THEME
+        if theme == self.CUSTOM_THEME and not custom_theme_vars(*self.custom_theme_colors):
+            return self.DEFAULT_THEME
+        return theme
+
+    @property
+    def account_theme_style(self):
+        if self.account_theme != self.CUSTOM_THEME:
+            return ""
+        return custom_theme_style(*self.custom_theme_colors)
+
+    @property
+    def account_theme_label(self):
+        return dict(self.BANNER_GRADIENT_CHOICES)[self.account_theme]
 
     def must_complete_profile(self) -> bool:
         required_fields = [self.email, self.phone_number, self.profile_photo]
