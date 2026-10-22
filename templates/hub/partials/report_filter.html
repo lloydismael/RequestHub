@@ -1,0 +1,23 @@
+<section class="glass-card rpt2-filter{% if report_view == 'activity' %} rpt2-activity-filter{% endif %} mb-4">
+    <div class="rpt-filter-panel">
+        <form method="get" class="row align-items-end">
+            <input type="hidden" name="report_view" value="{{ report_view }}">
+            <div class="col-12 col-md-3">
+                <label class="form-label" for="report-start-month">Start month</label>
+                <input class="form-control" type="month" id="report-start-month" name="start_month" value="{{ period_start_month }}">
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label" for="report-end-month">End month</label>
+                <input class="form-control" type="month" id="report-end-month" name="end_month" value="{{ period_end_month }}">
+            </div>
+            <div class="col-12 col-md-6 d-flex flex-wrap align-items-center gap-2">
+                <button type="submit" class="btn btn-primary lg-btn lg-btn--accent">Apply</button>
+                <a class="btn btn-outline-secondary lg-btn lg-btn--ghost" href="?report_view={{ report_view }}">Clear</a>
+                <span class="rpt-period-badge"><i class="bi bi-calendar3 me-1"></i>{{ caption }}{{ period_label }}</span>
+                {% if period_range_swapped %}
+                    <span class="rpt-range-hint"><i class="bi bi-exclamation-triangle-fill me-1"></i>Range was reversed</span>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</section>

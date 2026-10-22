@@ -368,6 +368,8 @@ class RequestReportViewTests(TestCase):
         self.assertContains(response, 'class="rpt-tab rpt-tab--active"')
         self.assertContains(response, 'aria-current="page"')
         self.assertContains(response, 'class="glass-card rpt2-filter rpt2-activity-filter')
+        self.assertContains(response, 'name="start_month" value="2026-08"')
+        self.assertContains(response, 'name="end_month" value="2026-09"')
         self.assertContains(response, 'class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid"')
         self.assertContains(response, 'class="glass-card rpt-chart-card rpt2-activity-log-card')
         self.assertContains(response, "Recent Engineer Activity")
@@ -441,6 +443,9 @@ class RequestReportViewTests(TestCase):
         self.assertEqual(response.context["totals"]["requests"], 1)
         self.assertEqual(response.context["period_label"], "January 2026")
         self.assertEqual(response.context["request_trend_chart"]["labels"], ["Jan 2026"])
+        self.assertContains(response, 'name="report_view" value="operational"')
+        self.assertContains(response, 'name="start_month" value="2026-01"')
+        self.assertContains(response, 'name="end_month" value="2026-01"')
         self.assertContains(response, "report_view=operational&start_month=2026-01&end_month=2026-01")
 
         export = self.client.get(
