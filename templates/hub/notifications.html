@@ -3,195 +3,144 @@
 {% block title %}Notifications · Request Hub{% endblock %}
 {% block body_class %}notifications-page{% endblock %}
 {% block content %}
-<div class="notif-page">
+<div class="nq-page">
 
-    <section class="notif-hero" aria-labelledby="notifications-heading" data-navbar-surface="theme">
-        <div class="notif-hero__content">
-            <div class="notif-hero__meta">
-                <span class="notif-hero__icon" aria-hidden="true"><i class="bi bi-bell-fill"></i></span>
-                <div class="notif-hero__text">
-                    <span class="notif-hero__eyebrow">Overview</span>
-                    <h1 id="notifications-heading" class="notif-hero__title">Notifications</h1>
-                </div>
-            </div>
-            <div class="notif-hero__stats" aria-label="Notification summary">
-                <div class="notif-stat-card notif-stat-card--primary">
-                    <span class="notif-stat-card__label">Unread</span>
-                    <span class="notif-stat-card__value">{{ unread_count }}</span>
-                </div>
-                <div class="notif-stat-card">
-                    <span class="notif-stat-card__label">Total</span>
-                    <span class="notif-stat-card__value">{{ total_count }}</span>
-                </div>
-            </div>
-        </div>
-        <div class="notif-hero__actions">
-            {% if unread_count > 0 %}
-                <form method="post" action="{% url 'hub:notification-mark-all-read' %}" class="notif-mark-all-form">
-                    {% csrf_token %}
-                    <button type="submit" class="notif-btn-markall">
-                        <i class="bi bi-check2-all"></i> Mark all as read
-                    </button>
-                </form>
-            {% endif %}
-            {% if current_filter and current_filter != 'all' or current_category %}
-                <a href="?" class="notif-clear-filters notif-clear-filters--hero">
-                    <i class="bi bi-arrow-counterclockwise"></i> Reset view
-                </a>
-            {% endif %}
-        </div>
-    </section>
-
-    <section class="notif-controls" aria-label="Notification filters">
-        <div class="notif-controls__header">
+    <header class="nq-head" aria-labelledby="notifications-heading" data-navbar-surface="theme">
+        <div class="nq-head__title">
+            <span class="nq-head__icon" aria-hidden="true"><i class="bi bi-bell-fill"></i></span>
             <div>
-                <h2 class="notif-section-title">Filters</h2>
+                <h1 id="notifications-heading" class="nq-head__h1">Notifications</h1>
+                <p class="nq-head__summary" aria-label="Notification summary">
+                    <span class="nq-summary-pill{% if unread_count %} nq-summary-pill--unread{% endif %}"><strong>{{ unread_count }}</strong> unread</span>
+                    <span class="nq-summary-sep" aria-hidden="true">·</span>
+                    <span><strong>{{ total_count }}</strong> total</span>
+                </p>
             </div>
-            {% if current_filter and current_filter != 'all' or current_category %}
-                <a href="?" class="notif-clear-filters">
-                    <i class="bi bi-x-lg"></i> Clear
-                </a>
-            {% endif %}
         </div>
+        {% if unread_count > 0 %}
+            <form method="post" action="{% url 'hub:notification-mark-all-read' %}" class="nq-head__action">
+                {% csrf_token %}
+                <button type="submit" class="nq-btn nq-btn--primary">
+                    <i class="bi bi-check2-all"></i> Mark all as read
+                </button>
+            </form>
+        {% endif %}
+    </header>
 
-        <div class="notif-filter-tabs" role="list" aria-label="Read status filters">
-            <a href="?filter=all{% if current_category %}&category={{ current_category }}{% endif %}"
-               class="notif-filter-tab {% if current_filter == 'all' or not current_filter %}is-active{% endif %}">
-                <span>All</span>
-                <strong>{{ total_count }}</strong>
-            </a>
+    <section class="nq-toolbar" aria-label="Notification filters">
+        <div class="nq-segment" role="group" aria-label="Read status">
             <a href="?filter=unread{% if current_category %}&category={{ current_category }}{% endif %}"
-               class="notif-filter-tab {% if current_filter == 'unread' %}is-active{% endif %}">
-                <span>Unread</span>
-                <strong>{{ unread_count }}</strong>
+               class="nq-segment__item{% if current_filter == 'unread' %} is-active{% endif %}"
+               {% if current_filter == 'unread' %}aria-current="true"{% endif %}>
+                Unread <span class="nq-count">{{ unread_count }}</span>
+            </a>
+            <a href="?filter=all{% if current_category %}&category={{ current_category }}{% endif %}"
+               class="nq-segment__item{% if current_filter == 'all' or not current_filter %} is-active{% endif %}"
+               {% if current_filter == 'all' or not current_filter %}aria-current="true"{% endif %}>
+                All <span class="nq-count">{{ total_count }}</span>
             </a>
             <a href="?filter=read{% if current_category %}&category={{ current_category }}{% endif %}"
-               class="notif-filter-tab {% if current_filter == 'read' %}is-active{% endif %}">
-                <span>Read</span>
-                <i class="bi bi-check2-circle"></i>
+               class="nq-segment__item{% if current_filter == 'read' %} is-active{% endif %}"
+               {% if current_filter == 'read' %}aria-current="true"{% endif %}>
+                Read
             </a>
         </div>
 
-        <div class="notif-category-grid" aria-label="Category filters">
+        <div class="nq-chips" role="group" aria-label="Category">
             <a href="?{% if current_filter and current_filter != 'all' %}filter={{ current_filter }}{% endif %}"
-               class="notif-category-card {% if not current_category %}is-active{% endif %}">
-                <span class="notif-category-card__icon"><i class="bi bi-grid"></i></span>
-                <span class="notif-category-card__text"><strong>All</strong></span>
+               class="nq-chip{% if not current_category %} is-active{% endif %}">
+                <i class="bi bi-grid"></i> All types
             </a>
             <a href="?category=new_request{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
-               class="notif-category-card notif-category-card--new {% if current_category == 'new_request' %}is-active{% endif %}">
-                <span class="notif-category-card__icon"><i class="bi bi-plus-circle-fill"></i></span>
-                <span class="notif-category-card__text"><strong>New</strong></span>
+               class="nq-chip nq-chip--new_request{% if current_category == 'new_request' %} is-active{% endif %}">
+                <i class="bi bi-plus-circle-fill"></i> New
             </a>
             <a href="?category=assignment{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
-               class="notif-category-card notif-category-card--assign {% if current_category == 'assignment' %}is-active{% endif %}">
-                <span class="notif-category-card__icon"><i class="bi bi-person-workspace"></i></span>
-                <span class="notif-category-card__text"><strong>Assigned</strong></span>
+               class="nq-chip nq-chip--assignment{% if current_category == 'assignment' %} is-active{% endif %}">
+                <i class="bi bi-person-workspace"></i> Assigned
             </a>
             <a href="?category=update{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
-               class="notif-category-card notif-category-card--update {% if current_category == 'update' %}is-active{% endif %}">
-                <span class="notif-category-card__icon"><i class="bi bi-chat-left-text-fill"></i></span>
-                <span class="notif-category-card__text"><strong>Updated</strong></span>
+               class="nq-chip nq-chip--update{% if current_category == 'update' %} is-active{% endif %}">
+                <i class="bi bi-chat-left-text-fill"></i> Updated
             </a>
             <a href="?category=completion{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
-               class="notif-category-card notif-category-card--complete {% if current_category == 'completion' %}is-active{% endif %}">
-                <span class="notif-category-card__icon"><i class="bi bi-check2-circle"></i></span>
-                <span class="notif-category-card__text"><strong>Done</strong></span>
+               class="nq-chip nq-chip--completion{% if current_category == 'completion' %} is-active{% endif %}">
+                <i class="bi bi-check2-circle"></i> Done
             </a>
             <a href="?category=reminder{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
-               class="notif-category-card notif-category-card--remind {% if current_category == 'reminder' %}is-active{% endif %}">
-                <span class="notif-category-card__icon"><i class="bi bi-alarm"></i></span>
-                <span class="notif-category-card__text"><strong>Reminders</strong></span>
+               class="nq-chip nq-chip--reminder{% if current_category == 'reminder' %} is-active{% endif %}">
+                <i class="bi bi-alarm"></i> Reminders
             </a>
         </div>
+
+        {% if current_filter != 'unread' or current_category %}
+            <a href="?" class="nq-reset"><i class="bi bi-arrow-counterclockwise"></i> Reset</a>
+        {% endif %}
     </section>
 
     {% if grouped_notifications %}
-        <section class="notif-feed" aria-label="Notifications list">
+        <section class="nq-feed" aria-label="Notifications list">
             {% for group_label, group_items in grouped_notifications.items %}
-                <div class="notif-group">
-                    <div class="notif-group__header">
-                        <div>
-                            <span class="notif-group__label">{{ group_label }}</span>
-                        </div>
-                    </div>
+                <div class="nq-group">
+                    <h2 class="nq-group__label">{{ group_label }} <span class="nq-group__count">{{ group_items|length }}</span></h2>
 
+                    <ul class="nq-list">
                     {% for notification in group_items %}
-                        <article class="notif-card notif-card--{{ notification.category_key }}{% if not notification.is_read %} notif-card--unread{% endif %}"
-                                 id="notif-{{ notification.pk }}">
-                            <div class="notif-card__accent" aria-hidden="true"></div>
-                            <div class="notif-card__icon" aria-hidden="true">
+                        <li class="nq-item nq-item--{{ notification.category_key }}{% if not notification.is_read %} nq-item--unread{% endif %}"
+                            id="notif-{{ notification.pk }}">
+                            <span class="nq-item__icon" aria-hidden="true" title="{{ notification.category_label }}">
                                 <i class="bi {{ notification.icon_class }}"></i>
-                            </div>
-                            <div class="notif-card__content">
-                                <div class="notif-card__topline">
-                                    <span class="notif-card__category">{{ notification.category_label }}</span>
-                                    {% if not notification.is_read %}
-                                        <span class="notif-card__status"><span class="notif-card__dot"></span> Unread</span>
-                                    {% else %}
-                                        <span class="notif-card__status notif-card__status--read"><i class="bi bi-check2"></i> Read</span>
+                            </span>
+
+                            <div class="nq-item__main">
+                                <p class="nq-item__message">
+                                    {% if not notification.is_read %}<span class="nq-item__dot" title="Unread"></span><span class="visually-hidden">Unread: </span>{% endif %}{{ notification.message }}
+                                </p>
+                                <div class="nq-item__meta">
+                                    <span class="nq-item__type">{{ notification.category_label }}</span>
+                                    {% if notification.related_request %}
+                                        <span class="nq-meta-chip nq-meta-chip--ref"><i class="bi bi-hash"></i>{{ notification.related_request.reference_code }} · {{ notification.related_request.account.name }}</span>
                                     {% endif %}
-                                    <time class="notif-card__time" datetime="{{ notification.created_at|date:'c' }}" title="{{ notification.created_at|timezone:'Asia/Manila'|date:'N j, Y g:i A' }}">
-                                        {{ notification.created_at|timezone:"Asia/Manila"|date:"M j, g:i A" }}
+                                    {% if notification.actor %}
+                                        <span class="nq-meta-chip"><i class="bi bi-person-fill"></i>{{ notification.actor }}</span>
+                                    {% endif %}
+                                    <time class="nq-item__time" datetime="{{ notification.created_at|date:'c' }}" title="{{ notification.created_at|timezone:'Asia/Manila'|date:'N j, Y g:i A' }}">
+                                        {% if group_label == "Today" or group_label == "Yesterday" %}{{ notification.created_at|timezone:"Asia/Manila"|date:"g:i A" }}{% else %}{{ notification.created_at|timezone:"Asia/Manila"|date:"M j, g:i A" }}{% endif %}
                                     </time>
                                 </div>
-
-                                <div class="notif-card__body">
-                                    <p class="notif-card__message">{{ notification.message }}</p>
-                                </div>
-
-                                <div class="notif-card__details" aria-label="Notification details">
-                                    {% if notification.actor %}
-                                        <span class="notif-tag notif-tag--person">
-                                            <i class="bi bi-person-fill"></i><span>By {{ notification.actor }}</span>
-                                        </span>
-                                    {% endif %}
-                                    {% if notification.related_request %}
-                                        <span class="notif-tag notif-tag--ref">
-                                            <i class="bi bi-hash"></i><span>{{ notification.related_request.reference_code }} · {{ notification.related_request.account.name }}</span>
-                                        </span>
-                                    {% endif %}
-                                    {% if notification.source %}
-                                        <span class="notif-tag notif-tag--source">
-                                            <i class="bi bi-info-circle-fill"></i><span>{{ notification.source }}</span>
-                                        </span>
-                                    {% endif %}
-                                </div>
                             </div>
 
-                            <div class="notif-card__actions" aria-label="Notification actions">
+                            <div class="nq-item__actions">
                                 {% if notification.related_request %}
-                                    <a class="notif-card__action notif-card__action--goto"
+                                    <a class="nq-btn nq-btn--open"
                                        href="{% url 'hub:notification-follow' notification.pk %}">
-                                        <i class="bi bi-arrow-right-circle-fill"></i>
-                                        <span>{{ notification.action_label }}</span>
+                                        <span>{{ notification.action_label }}</span> <i class="bi bi-arrow-right"></i>
                                     </a>
                                 {% endif %}
                                 {% if not notification.is_read %}
-                                    <form method="post" action="{% url 'hub:notification-read' notification.pk %}" class="notif-inline-form">
+                                    <form method="post" action="{% url 'hub:notification-read' notification.pk %}" class="nq-inline-form">
                                         {% csrf_token %}
-                                        <button class="notif-card__action notif-card__action--read" type="submit">
+                                        <button class="nq-icon-btn" type="submit" title="Mark as read" aria-label="Mark as read">
                                             <i class="bi bi-check2"></i>
-                                            <span>Read</span>
                                         </button>
                                     </form>
                                 {% endif %}
-                                <form method="post" action="{% url 'hub:notification-delete' notification.pk %}" class="notif-inline-form">
+                                <form method="post" action="{% url 'hub:notification-delete' notification.pk %}" class="nq-inline-form">
                                     {% csrf_token %}
-                                    <button class="notif-card__action notif-card__action--delete" type="submit">
+                                    <button class="nq-icon-btn nq-icon-btn--danger" type="submit" title="Delete" aria-label="Delete notification">
                                         <i class="bi bi-trash3"></i>
-                                        <span>Delete</span>
                                     </button>
                                 </form>
                             </div>
-                        </article>
+                        </li>
                     {% endfor %}
+                    </ul>
                 </div>
             {% endfor %}
         </section>
     {% else %}
-        <section class="notif-empty" aria-live="polite">
-            <div class="notif-empty__icon-wrap">
+        <section class="nq-empty" aria-live="polite">
+            <div class="nq-empty__icon">
                 {% if current_filter == 'unread' %}
                     <i class="bi bi-check2-circle"></i>
                 {% elif current_category %}
@@ -200,7 +149,7 @@
                     <i class="bi bi-bell-slash"></i>
                 {% endif %}
             </div>
-            <h2 class="notif-empty__title">
+            <h2 class="nq-empty__title">
                 {% if current_filter == 'unread' %}
                     You are all caught up
                 {% elif current_category %}
@@ -209,7 +158,7 @@
                     No notifications yet
                 {% endif %}
             </h2>
-            <p class="notif-empty__sub">
+            <p class="nq-empty__sub">
                 {% if current_filter == 'unread' %}
                     Everything in your notification center has already been read.
                 {% elif current_category %}
@@ -219,7 +168,7 @@
                 {% endif %}
             </p>
             {% if current_filter or current_category %}
-                <a href="?" class="notif-empty__action">
+                <a href="?filter=all" class="nq-btn nq-btn--primary">
                     <i class="bi bi-arrow-left"></i> Show all notifications
                 </a>
             {% endif %}
@@ -227,29 +176,23 @@
     {% endif %}
 
     {% if is_paginated %}
-        <nav class="notif-pagination" aria-label="Notifications pages">
+        <nav class="nq-pagination" aria-label="Notifications pages">
             {% if page_obj.has_previous %}
-                <a class="notif-page-btn" href="?page={{ page_obj.previous_page_number }}{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">
-                    <i class="bi bi-chevron-left"></i> Newer updates
+                <a class="nq-btn" href="?page={{ page_obj.previous_page_number }}{% if current_filter %}&filter={{ current_filter }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">
+                    <i class="bi bi-chevron-left"></i> Newer
                 </a>
             {% else %}
-                <span class="notif-page-btn notif-page-btn--disabled">
-                    <i class="bi bi-chevron-left"></i> Newer updates
-                </span>
+                <span class="nq-btn nq-btn--disabled" aria-disabled="true"><i class="bi bi-chevron-left"></i> Newer</span>
             {% endif %}
 
-            <span class="notif-page-info">
-                Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-            </span>
+            <span class="nq-pagination__info">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
 
             {% if page_obj.has_next %}
-                <a class="notif-page-btn" href="?page={{ page_obj.next_page_number }}{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">
-                    Older updates <i class="bi bi-chevron-right"></i>
+                <a class="nq-btn" href="?page={{ page_obj.next_page_number }}{% if current_filter %}&filter={{ current_filter }}{% endif %}{% if current_category %}&category={{ current_category }}{% endif %}">
+                    Older <i class="bi bi-chevron-right"></i>
                 </a>
             {% else %}
-                <span class="notif-page-btn notif-page-btn--disabled">
-                    Older updates <i class="bi bi-chevron-right"></i>
-                </span>
+                <span class="nq-btn nq-btn--disabled" aria-disabled="true">Older <i class="bi bi-chevron-right"></i></span>
             {% endif %}
         </nav>
     {% endif %}
