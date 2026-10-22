@@ -25,6 +25,24 @@
                 <i class="bi bi-clipboard-data-fill"></i> Activity Logs
             </a>
         </div>
+        <div class="rpt2-filter-menu" id="rpt-filter-menu">
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost rpt2-filter-toggle{% if period_start_month or period_end_month %} rpt2-filter-toggle--active{% endif %}"
+                    id="rpt-filter-toggle"
+                    aria-expanded="{% if period_range_swapped %}true{% else %}false{% endif %}"
+                    aria-controls="rpt-filter-popover"
+                    aria-label="Filter by month"
+                    title="Filter by month">
+                <i class="bi bi-funnel{% if period_start_month or period_end_month %}-fill{% endif %}"></i>
+            </button>
+            <div class="rpt2-filter-popover" id="rpt-filter-popover"{% if not period_range_swapped %} hidden{% endif %}>
+                {% if report_view == 'activity' %}
+                    {% include "hub/partials/report_filter.html" with caption="Dated: " %}
+                {% else %}
+                    {% include "hub/partials/report_filter.html" with caption="Created: " %}
+                {% endif %}
+            </div>
+        </div>
         <a class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost"
            href="{% url 'hub:report-export' %}?report_view={{ report_view }}{{ period_query }}">
             <i class="bi bi-download me-1"></i>Export CSV
@@ -72,8 +90,6 @@
             </div>
         </div>
     </div>
-
-    {% include "hub/partials/report_filter.html" with caption="Dated: " %}
 
     <section class="rpt-chart-grid" aria-label="Activity charts">
         {% include "hub/partials/report_chart.html" with chart_id="activityMonthlyChart" title="Monthly Hours Trend" subtitle="Billable and non-billable hours per month" has_data=activity_monthly_chart.labels wide=True description="Billable and non-billable logged hours per month. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
@@ -215,8 +231,6 @@
             </div>
         </div>
     </div>
-
-    {% include "hub/partials/report_filter.html" with caption="Created: " %}
 
     {# ── Operational: needs attention ── #}
     <section class="glass-card rpt-chart-card rpt2-attention-card mb-4" aria-labelledby="rpt-attention-title">
@@ -404,6 +418,28 @@
     });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && modal.classList.contains('requestor-modal--visible')) closeModal();
+    });
+})();
+</script>
+<script>
+(function () {
+    var menu = document.getElementById('rpt-filter-menu');
+    if (!menu) return;
+    var toggle = document.getElementById('rpt-filter-toggle');
+    var popover = document.getElementById('rpt-filter-popover');
+    function setOpen(open) {
+        popover.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    toggle.addEventListener('click', function () { setOpen(popover.hidden); });
+    document.addEventListener('click', function (e) {
+        if (!popover.hidden && !menu.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !popover.hidden) {
+            setOpen(false);
+            toggle.focus();
+        }
     });
 })();
 </script>

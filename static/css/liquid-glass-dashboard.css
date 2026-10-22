@@ -4108,6 +4108,36 @@ body.reports-page .rpt2-header-actions {
     align-items: center;
     gap: .6rem;
 }
+body.reports-page .rpt2-header {
+    position: relative;
+    z-index: 30;
+}
+body.reports-page .rpt2-filter-menu {
+    position: relative;
+}
+body.reports-page .rpt2-filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+body.reports-page .rpt2-filter-toggle--active {
+    color: var(--lg-accent);
+    border-color: var(--lg-accent);
+}
+body.reports-page .rpt2-filter-popover {
+    position: absolute;
+    top: calc(100% + .5rem);
+    right: 0;
+    z-index: 40;
+    width: min(26rem, calc(100vw - 3rem));
+}
+body.reports-page .rpt2-filter-popover[hidden] {
+    display: none;
+}
+body.reports-page .rpt2-filter-popover .rpt2-filter {
+    margin: 0;
+}
 body.reports-page .rpt2-page-sub {
     margin: .15rem 0 0;
     font-size: .82rem;
@@ -4211,4 +4241,475 @@ body.reports-page .row.g-4 .dashboard-table-wrapper,
 body.reports-page .rpt2-attention-card .dashboard-table-wrapper {
     max-height: 22rem;
     overflow-y: auto;
+}
+
+/* ==========================================================================
+   19. Notifications — compact, scannable inbox
+   ========================================================================== */
+body.notifications-page .nq-page {
+    --nq-ink: var(--rh-text-primary, #0f172a);
+    --nq-soft: var(--rh-text-secondary, #334155);
+    --nq-line: var(--rh-border, rgba(148, 163, 184, 0.24));
+    --nq-panel: var(--rh-surface-panel, rgba(255, 255, 255, 0.92));
+    --nq-accent: var(--lg-accent, #0a84ff);
+    --nq-new_request: #2563eb;
+    --nq-assignment: #7c3aed;
+    --nq-update: #0891b2;
+    --nq-completion: #16a34a;
+    --nq-reminder: #d97706;
+    --nq-system: #64748b;
+    max-width: 1100px;
+    margin-inline: auto;
+    color: var(--nq-ink);
+}
+body.dark-mode.notifications-page .nq-page {
+    --nq-new_request: #60a5fa;
+    --nq-assignment: #a78bfa;
+    --nq-update: #22d3ee;
+    --nq-completion: #4ade80;
+    --nq-reminder: #fbbf24;
+    --nq-system: #94a3b8;
+}
+
+/* Header */
+body.notifications-page .nq-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+body.notifications-page .nq-head__title {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+}
+body.notifications-page .nq-head__icon {
+    display: grid;
+    place-items: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 14px;
+    font-size: 1.2rem;
+    color: var(--nq-accent);
+    background: color-mix(in srgb, var(--nq-accent) 14%, transparent);
+}
+body.notifications-page .nq-head__h1 {
+    margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--nq-ink);
+}
+body.notifications-page .nq-head__summary {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    margin: .15rem 0 0;
+    font-size: .85rem;
+    color: var(--nq-soft);
+}
+body.notifications-page .nq-head__summary strong {
+    color: var(--nq-ink);
+    font-variant-numeric: tabular-nums;
+}
+body.notifications-page .nq-summary-pill--unread {
+    padding: .05rem .55rem;
+    border-radius: 999px;
+    font-weight: 600;
+    color: var(--nq-accent);
+    background: color-mix(in srgb, var(--nq-accent) 14%, transparent);
+}
+body.notifications-page .nq-summary-pill--unread strong {
+    color: inherit;
+}
+body.notifications-page .nq-head__action {
+    margin: 0;
+}
+
+/* Buttons */
+body.notifications-page .nq-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    min-height: 2.25rem;
+    padding: .35rem .9rem;
+    border: 1px solid var(--nq-line);
+    border-radius: 999px;
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--nq-ink);
+    background: color-mix(in srgb, var(--nq-panel) 70%, transparent);
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+body.notifications-page .nq-btn:hover {
+    border-color: var(--nq-accent);
+    color: var(--nq-accent);
+}
+body.notifications-page .nq-btn--primary {
+    border-color: transparent;
+    color: #fff;
+    background: var(--nq-accent);
+}
+body.notifications-page .nq-btn--primary:hover {
+    color: #fff;
+    filter: brightness(1.08);
+}
+body.notifications-page .nq-btn--disabled {
+    opacity: .45;
+    pointer-events: none;
+}
+body.notifications-page .nq-icon-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-size: 1rem;
+    color: var(--nq-soft);
+    background: transparent;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease;
+}
+body.notifications-page .nq-icon-btn:hover {
+    color: var(--nq-accent);
+    background: color-mix(in srgb, var(--nq-accent) 12%, transparent);
+}
+body.notifications-page .nq-icon-btn--danger:hover {
+    color: #dc2626;
+    background: rgba(220, 38, 38, .12);
+}
+body.notifications-page .nq-btn:focus-visible,
+body.notifications-page .nq-icon-btn:focus-visible,
+body.notifications-page .nq-chip:focus-visible,
+body.notifications-page .nq-segment__item:focus-visible {
+    outline: 2px solid var(--nq-accent);
+    outline-offset: 2px;
+}
+
+/* Toolbar: one compact row of filters */
+body.notifications-page .nq-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .75rem 1rem;
+    margin-bottom: 1.25rem;
+    padding: .6rem .75rem;
+    border: 1px solid var(--nq-line);
+    border-radius: 18px;
+    background: var(--nq-panel);
+}
+body.notifications-page .nq-segment {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--nq-soft) 12%, transparent);
+}
+body.notifications-page .nq-segment__item {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .85rem;
+    border-radius: 999px;
+    font-size: .85rem;
+    font-weight: 600;
+    color: var(--nq-soft);
+    text-decoration: none;
+    transition: background-color .15s ease, color .15s ease;
+}
+body.notifications-page .nq-segment__item:hover {
+    color: var(--nq-ink);
+}
+body.notifications-page .nq-segment__item.is-active {
+    color: var(--nq-ink);
+    background: var(--nq-panel);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .18);
+}
+body.notifications-page .nq-count {
+    min-width: 1.4rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    color: var(--nq-accent);
+    background: color-mix(in srgb, var(--nq-accent) 14%, transparent);
+}
+body.notifications-page .nq-chips {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: .4rem;
+}
+body.notifications-page .nq-chip {
+    --chip: var(--nq-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .75rem;
+    border: 1px solid var(--nq-line);
+    border-radius: 999px;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--nq-soft);
+    text-decoration: none;
+    transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+body.notifications-page .nq-chip i {
+    color: var(--chip);
+}
+body.notifications-page .nq-chip:hover {
+    color: var(--nq-ink);
+    border-color: var(--chip);
+}
+body.notifications-page .nq-chip.is-active {
+    color: var(--nq-ink);
+    border-color: var(--chip);
+    background: color-mix(in srgb, var(--chip) 16%, transparent);
+}
+body.notifications-page .nq-chip--new_request { --chip: var(--nq-new_request); }
+body.notifications-page .nq-chip--assignment { --chip: var(--nq-assignment); }
+body.notifications-page .nq-chip--update { --chip: var(--nq-update); }
+body.notifications-page .nq-chip--completion { --chip: var(--nq-completion); }
+body.notifications-page .nq-chip--reminder { --chip: var(--nq-reminder); }
+body.notifications-page .nq-reset {
+    margin-left: auto;
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--nq-soft);
+    text-decoration: none;
+}
+body.notifications-page .nq-reset:hover {
+    color: var(--nq-accent);
+}
+
+/* Feed */
+body.notifications-page .nq-group + .nq-group {
+    margin-top: 1.25rem;
+}
+body.notifications-page .nq-group__label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    margin: 0 0 .5rem .25rem;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--nq-soft);
+}
+body.notifications-page .nq-group__count {
+    padding: 0 .45rem;
+    border-radius: 999px;
+    font-size: .7rem;
+    letter-spacing: 0;
+    background: color-mix(in srgb, var(--nq-soft) 14%, transparent);
+}
+body.notifications-page .nq-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow: hidden;
+    border: 1px solid var(--nq-line);
+    border-radius: 18px;
+    background: var(--nq-panel);
+}
+body.notifications-page .nq-item {
+    --c: var(--nq-system);
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: .85rem;
+    padding: .85rem 1rem .85rem 1.1rem;
+    transition: background-color .15s ease;
+}
+body.notifications-page .nq-item + .nq-item {
+    border-top: 1px solid var(--nq-line);
+}
+body.notifications-page .nq-item:hover {
+    background: color-mix(in srgb, var(--nq-accent) 5%, transparent);
+}
+body.notifications-page .nq-item--new_request { --c: var(--nq-new_request); }
+body.notifications-page .nq-item--assignment { --c: var(--nq-assignment); }
+body.notifications-page .nq-item--update { --c: var(--nq-update); }
+body.notifications-page .nq-item--completion { --c: var(--nq-completion); }
+body.notifications-page .nq-item--reminder { --c: var(--nq-reminder); }
+body.notifications-page .nq-item--unread::before {
+    content: "";
+    position: absolute;
+    inset: .5rem auto .5rem 0;
+    width: 4px;
+    border-radius: 0 4px 4px 0;
+    background: var(--c);
+}
+body.notifications-page .nq-item:not(.nq-item--unread) {
+    opacity: .78;
+}
+body.notifications-page .nq-item:not(.nq-item--unread):hover {
+    opacity: 1;
+}
+body.notifications-page .nq-item__icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 12px;
+    font-size: 1.05rem;
+    color: var(--c);
+    background: color-mix(in srgb, var(--c) 15%, transparent);
+}
+body.notifications-page .nq-item__main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+body.notifications-page .nq-item__message {
+    margin: 0;
+    font-size: .95rem;
+    line-height: 1.4;
+    font-weight: 500;
+    color: var(--nq-ink);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+body.notifications-page .nq-item--unread .nq-item__message {
+    font-weight: 600;
+}
+body.notifications-page .nq-item__dot {
+    display: inline-block;
+    width: .5rem;
+    height: .5rem;
+    margin-right: .45rem;
+    border-radius: 50%;
+    vertical-align: middle;
+    background: var(--c);
+}
+body.notifications-page .nq-item__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .6rem;
+    margin-top: .4rem;
+    font-size: .78rem;
+    color: var(--nq-soft);
+}
+body.notifications-page .nq-item__type {
+    font-weight: 700;
+    letter-spacing: .02em;
+    color: var(--c);
+}
+body.notifications-page .nq-meta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+body.notifications-page .nq-meta-chip--ref {
+    font-weight: 600;
+    color: var(--nq-ink);
+}
+body.notifications-page .nq-item__time {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+body.notifications-page .nq-item__actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: .25rem;
+}
+body.notifications-page .nq-inline-form {
+    margin: 0;
+}
+body.notifications-page .nq-btn--open {
+    margin-right: .25rem;
+    color: var(--c);
+    border-color: color-mix(in srgb, var(--c) 40%, transparent);
+    background: color-mix(in srgb, var(--c) 10%, transparent);
+}
+body.notifications-page .nq-btn--open:hover {
+    color: var(--c);
+    background: color-mix(in srgb, var(--c) 20%, transparent);
+    border-color: var(--c);
+}
+
+/* Empty state & pagination */
+body.notifications-page .nq-empty {
+    padding: 3rem 1.5rem;
+    text-align: center;
+    border: 1px dashed var(--nq-line);
+    border-radius: 18px;
+    background: var(--nq-panel);
+}
+body.notifications-page .nq-empty__icon {
+    display: inline-grid;
+    place-items: center;
+    width: 4rem;
+    height: 4rem;
+    margin-bottom: .75rem;
+    border-radius: 50%;
+    font-size: 1.8rem;
+    color: var(--nq-accent);
+    background: color-mix(in srgb, var(--nq-accent) 14%, transparent);
+}
+body.notifications-page .nq-empty__title {
+    margin: 0 0 .25rem;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+body.notifications-page .nq-empty__sub {
+    margin: 0 auto 1rem;
+    max-width: 28rem;
+    color: var(--nq-soft);
+}
+body.notifications-page .nq-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+body.notifications-page .nq-pagination__info {
+    font-size: .85rem;
+    color: var(--nq-soft);
+}
+
+@media (max-width: 767.98px) {
+    body.notifications-page .nq-item {
+        flex-wrap: wrap;
+    }
+    body.notifications-page .nq-item__main {
+        flex-basis: calc(100% - 3.5rem);
+    }
+    body.notifications-page .nq-item__actions {
+        flex-basis: 100%;
+        justify-content: flex-end;
+        padding-left: 3.35rem;
+    }
+    body.notifications-page .nq-btn--open {
+        margin-right: auto;
+    }
+    body.notifications-page .nq-chips {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-bottom: 2px;
+    }
+    body.notifications-page .nq-chip {
+        flex: 0 0 auto;
+    }
 }
