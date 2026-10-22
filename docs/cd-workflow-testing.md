@@ -52,7 +52,7 @@ In addition to the Web App assignment, grant the deployment identity a custom Az
 
 The helper requires the server state to be Ready, retention of at least seven days, and nonempty earliest-restore metadata. These checks establish available restoration metadata, not a recent successful backup or a rehearsed restore. A platform-owned restoration rehearsal and backward-compatible migration review remain required operational prerequisites. The old local backup executable is no longer used.
 
-The helper obtains the runner's IPv4 address from `https://api.ipify.org`, validates its format, and creates only a start=end rule named `github-cd-RUN_ID-RUN_ATTEMPT`. It retries database connectivity for up to about one minute, requires TLS settings, runs checks/migrations, and removes that rule before updating the app. Existing firewall rules, including any allow-Azure-services rule, are not changed. Existing same-name rules cause failure rather than being taken over.
+The helper obtains the runner's IPv4 address from `https://api.ipify.org`, validates its format, and creates only a start=end rule named `github-cd-RUN_ID-RUN_ATTEMPT`. It retries database connectivity for up to about one minute, requires TLS settings, runs checks/migrations, and then deletes that rule. When called from the deployment script, deletion starts in the background after migrations succeed and is confirmed before the release can succeed; on any failure, the helper deletes it synchronously before exiting. Existing firewall rules, including any allow-Azure-services rule, are not changed. Existing same-name rules cause failure rather than being taken over.
 
 EXIT/signal traps perform cleanup, with a job-level cleanup step as fallback for owned rules. Cleanup failures fail the release. Force cancellation or runner loss can defeat cleanup; inspect rules with the `github-cd-` prefix, correlate the run and attempt, and remove only the orphaned rule after confirming no migration is active. Do not cancel a migration or delete another run's rule blindly.
 
@@ -67,13 +67,29 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 5. Authenticate to Azure using OIDC and to Docker Hub using the scoped token.
 6. Confirm `sitecontainers` mode, the specified container's `isMain=true`, target port 8000, and disabled startup migrations. Classic Docker mode deliberately fails closed; verify the real production mode rather than converting it automatically.
 7. Pull and pin the old image for rollback. Pull the candidate and verify its OCI revision matches the approved CI commit.
-8. Check backup metadata, create owned single-IP firewall access, verify connectivity, run configuration checks/migrations using the exact image, and remove firewall access. No settings are printed or downloaded from App Service.
+8. Compare the commit label of the currently deployed image with the release commit. If the deployed commit is a verified ancestor of the release and no `**/migrations/*.py`, `requirements.txt`, `requirements.lock`, or `request_hub/settings*.py` file changed between them, skip the migration window entirely (steps 8a-8c). Any uncertainty (missing or malformed label, unknown or diverged history, git failure) runs the full window.
+   - 8a. Check backup metadata, create owned single-IP firewall access, and verify connectivity.
+   - 8b. Run configuration checks/migrations using the exact image. No settings are printed or downloaded from App Service.
+   - 8c. Start deleting the firewall rule in the background and continue; the rule is not left to the workflow's final cleanup step unless deletion fails.
 9. Update only the main sitecontainer's image to the verified numbered tag using Azure Resource Manager, preserving its registry authentication, environment configuration, mounts, and other containers. Restart the Web App.
-10. Poll `/release/`, `/readyz/`, and `/accounts/login/` with finite timeouts. Verify the expected commit and Azure image reference.
+10. Poll `/release/`, `/readyz/`, and `/accounts/login/` with finite timeouts. Verify the expected commit and Azure image reference. Then confirm the firewall rule deletion finished; the release is marked failed if it did not.
 
 `/release/` exposes only version/revision metadata. `APP_REVISION` is baked from the build commit; remove any stale platform override before activation. `APP_VERSION` can also be overridden by existing App Settings, so the commit/digest is the authoritative verification signal; reconcile an existing version override deliberately before enabling numbered-version reporting.
 
 `/readyz/` checks a database connection with `SELECT 1`. `/healthz/` remains database-independent. Static collection remains at runtime in this implementation, using the existing startup default; build-time static collection is not enabled. Do not set `RUN_COLLECTSTATIC=false` unless static assets have been prepared independently.
+
+## Release speed and timing
+
+The October 22, 2026 release took about 6 minutes: roughly 73 seconds to build, scan, and publish and 286 seconds in the production job. Time in the production job was about 19 seconds of Azure checks and image pulls, 74 seconds to open firewall access and probe the database, 70 seconds deleting the firewall rule, and about 105 seconds from image update through verification. Speed measures:
+
+- **Image build cache.** The release build reads (never writes) the `request-hub-image` Actions cache populated by the CI run for the same commit, so dependency layers are not rebuilt. OS packages are still refreshed on every build.
+- **Overlapped pulls and shorter polling.** The release image downloads while the Azure checks run, and readiness is polled every 5 seconds within the same 10-minute budget.
+- **Skipped migration window.** Releases without schema-affecting changes skip the firewall, probe, `check --deploy`, and migrate steps (about 144 seconds). The backup-retention gate applies only to releases that run the window, and `check --deploy` against the production configuration runs only inside it. Applying the release still verifies the application boots and reports ready on the production configuration, and a failed verification rolls back.
+- **Background firewall cleanup.** On releases that do run migrations, the firewall rule is deleted while the app restarts. A failed cleanup no longer stops the image update; it fails the release, names the rule, and leaves the workflow's final cleanup step to retry. Treat that failure as urgent: the new image is already live.
+
+Deployment and migration scripts print `[timing] <phase>: <seconds>s` lines in the job log for each phase. Use them to confirm these savings on the first real release and to find the next hot spot. The step summary records whether the migration window was executed or skipped and the deployed revision used for the decision.
+
+To force the full window for a release, include a change to a file matching the patterns above or temporarily remove the revision label from the deployed image; there is deliberately no skip-bypass input.
 
 ## Recovery
 
@@ -85,7 +101,7 @@ Set `CD_ENABLED=false` to stop subsequent eligibility checks from admitting new 
 
 ## Validation before activation
 
-- Validate the workflow with `actionlint` and the shell script with `bash -n`.
+- Validate the workflow with `actionlint` and the shell scripts with `bash -n`. Run `bash scripts/test-deploy-production.sh` on Linux or in a Linux container; it exercises the deployment and migration scripts against mocked `az`, `docker`, `gh`, `git`, and `curl` for success, skipped-migration, stale-commit, migration-failure, cleanup-failure, and rollback scenarios.
 - Run focused `hub.test_release_health` tests and the full suite against disposable PostgreSQL.
 - Build the image locally with a synthetic version/revision; prove startup defaults, disabled migrations, revision reporting, database readiness, and local Docker health under production HTTPS settings.
 - Rehearse migration failure, image update failure, verification timeout, and rollback using mocked Azure/registry tools or a dedicated nonproduction target. Syntax checks alone do not prove rollback.
