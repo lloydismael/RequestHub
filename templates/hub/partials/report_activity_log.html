@@ -1,0 +1,206 @@
+{% load form_customization %}
+    {# ── Activity: log table ─────────────────────────────────────────────── #}
+    <section class="glass-card rpt-chart-card rpt2-activity-log-card mb-4" aria-labelledby="recent-engineer-activity-title">
+        <div class="rpt-chart-head flex-wrap gap-2">
+            <div class="flex-grow-1">
+                <h3 class="rpt-chart-title" id="recent-engineer-activity-title">Recent Engineer Activity</h3>
+                <p class="rpt-chart-sub">Detailed entries for {{ activity_month_filter_label|lower }}.</p>
+            </div>
+            {% if activity_totals.entries %}
+                <span class="rpt-log-count-badge">
+                    <i class="bi bi-journals me-1"></i>
+                    {{ activity_totals.entries }} entr{{ activity_totals.entries|pluralize:"y,ies" }}
+                </span>
+            {% endif %}
+        </div>
+        {% if activity_logs %}
+            <div class="rpt-log-meta d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 mb-2">
+                {% if activity_logs_page_obj.paginator.num_pages > 1 %}
+                    <span class="text-muted small">
+                        Page <strong>{{ activity_logs_page_obj.number }}</strong>
+                        of <strong>{{ activity_logs_page_obj.paginator.num_pages }}</strong>
+                    </span>
+                {% endif %}
+            </div>
+            <div class="table-responsive dashboard-table-wrapper">
+                <table class="table align-middle rpt-activity-table mb-0">
+                    <caption class="visually-hidden">Recent engineer activity entries for {{ activity_month_filter_label }}</caption>
+                    <colgroup>
+                        <col style="width: 2.75rem;">
+                        <col style="width: 7.5rem;">
+                        <col style="width: 10rem;">
+                        <col style="width: 8.5rem;">
+                        <col style="width: 18rem;">
+                        <col style="width: 4rem;">
+                        <col style="width: 6.5rem;">
+                        <col style="width: 7rem;">
+                        <col style="width: 4.5rem;">
+                    </colgroup>
+                    <thead class="rpt-table-head">
+                        <tr>
+                            <th class="rpt-col-num">#</th>
+                            <th>Date</th>
+                            <th>Engineer</th>
+                            <th>Account</th>
+                            <th>Activity</th>
+                            <th class="text-center">Hrs</th>
+                            <th>Location</th>
+                            <th>Billable</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in activity_logs %}
+                            <tr class="rpt-activity-row{% if editing_activity_log and editing_activity_log.pk == log.pk %} rpt-activity-row--editing{% endif %}">
+                                <td class="rpt-row-num">{{ activity_logs_page_obj.start_index|add:forloop.counter0 }}</td>
+                                <td class="text-nowrap">
+                                    <span class="rpt-date-chip">
+                                        <i class="bi bi-calendar3 me-1 opacity-50"></i>{{ log.request_date|date:"M d, Y" }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="rpt-eng-avatar">{{ log.engineer.get_full_name|default:log.engineer.username|slice:":1"|upper }}</span>
+                                        <span class="rpt-eng-name">{{ log.engineer.get_full_name|default:log.engineer.username }}</span>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="rpt-account-name">{{ log.account.name }}</span>
+                                </td>
+                                <td>
+                                    <div class="rpt-activity-cell">
+                                        <span class="rpt-activity-type">{{ log.get_activity_type_display }}</span>
+                                        {% if log.details %}
+                                            <span class="rpt-activity-detail text-muted">{{ log.details|truncatechars:60 }}</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="text-center">
+                                    <span class="rpt-hours-badge">{{ log.actual_hours|floatformat:1 }}</span>
+                                </td>
+                                <td><span class="badge rpt-badge--gray">{{ log.get_location_display }}</span></td>
+                                <td>
+                                    {% if log.is_billable %}
+                                        <span class="badge rpt-badge--green"><i class="bi bi-check-circle-fill me-1"></i>Billable</span>
+                                    {% else %}
+                                        <span class="badge rpt-badge--muted">Non-billable</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <a class="rpt-edit-btn"
+                                       href="{% url 'hub:report' %}?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&edit_activity={{ log.pk }}"
+                                       title="Edit this entry">
+                                        <i class="bi bi-pencil-fill"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if activity_logs_page_obj.paginator.num_pages > 1 %}
+                <nav class="rpt-log-pagination d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3"
+                     aria-label="Activity log pages">
+                    <span class="text-muted small">50 rows per page</span>
+                    <div class="d-flex align-items-center gap-1">
+                        {% if activity_logs_page_obj.has_previous %}
+                            <a class="rpt-page-btn" title="First page"
+                               href="?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&activity_log_page=1">
+                                <i class="bi bi-chevron-double-left"></i>
+                            </a>
+                            <a class="rpt-page-btn" title="Previous page"
+                               href="?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&activity_log_page={{ activity_logs_page_obj.previous_page_number }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        {% else %}
+                            <span class="rpt-page-btn rpt-page-btn--disabled"><i class="bi bi-chevron-double-left"></i></span>
+                            <span class="rpt-page-btn rpt-page-btn--disabled"><i class="bi bi-chevron-left"></i></span>
+                        {% endif %}
+
+                        {% with num_pages=activity_logs_page_obj.paginator.num_pages cur=activity_logs_page_obj.number %}
+                            {% for p in activity_logs_page_obj.paginator.page_range %}
+                                {% if p == cur %}
+                                    <span class="rpt-page-btn rpt-page-btn--active">{{ p }}</span>
+                                {% elif p == 1 or p == num_pages %}
+                                    <a class="rpt-page-btn"
+                                       href="?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&activity_log_page={{ p }}">{{ p }}</a>
+                                {% elif p >= cur|add:"-2" and p <= cur|add:"2" %}
+                                    <a class="rpt-page-btn"
+                                       href="?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&activity_log_page={{ p }}">{{ p }}</a>
+                                {% elif p == cur|add:"-3" or p == cur|add:"3" %}
+                                    <span class="rpt-page-btn rpt-page-btn--ellipsis" aria-hidden="true">&hellip;</span>
+                                {% endif %}
+                            {% endfor %}
+                        {% endwith %}
+
+                        {% if activity_logs_page_obj.has_next %}
+                            <a class="rpt-page-btn" title="Next page"
+                               href="?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&activity_log_page={{ activity_logs_page_obj.next_page_number }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                            <a class="rpt-page-btn" title="Last page"
+                               href="?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}&activity_log_page={{ activity_logs_page_obj.paginator.num_pages }}">
+                                <i class="bi bi-chevron-double-right"></i>
+                            </a>
+                        {% else %}
+                            <span class="rpt-page-btn rpt-page-btn--disabled"><i class="bi bi-chevron-right"></i></span>
+                            <span class="rpt-page-btn rpt-page-btn--disabled"><i class="bi bi-chevron-double-right"></i></span>
+                        {% endif %}
+                    </div>
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="rpt-empty"><i class="bi bi-journal-x"></i><p>No engineer activity logs recorded yet.</p></div>
+        {% endif %}
+    </section>
+
+    {# ── Activity edit modal ─────────────────────────────────────────────── #}
+    <div class="requestor-modal" id="activity-edit-modal" aria-hidden="true"
+         data-open-on-load="{% if editing_activity_log and activity_form %}true{% else %}false{% endif %}">
+        <div class="requestor-modal__backdrop" id="activity-edit-backdrop"></div>
+        <div class="requestor-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="activity-edit-title">
+            <div class="requestor-modal__header">
+                <div>
+                    <h2 class="h5 mb-1" id="activity-edit-title">Edit Engineer Activity Log</h2>
+                    {% if editing_activity_log %}
+                        <p class="text-muted small mb-0">
+                            {{ editing_activity_log.engineer.get_full_name|default:editing_activity_log.engineer.username }} &middot;
+                            {{ editing_activity_log.request_date|date:"M d, Y" }}
+                        </p>
+                    {% endif %}
+                </div>
+                <button type="button" class="btn-close" id="activity-edit-close" aria-label="Close"></button>
+            </div>
+            <div class="requestor-modal__body">
+                {% if editing_activity_log and activity_form %}
+                    <form method="post" novalidate id="activity-edit-form">
+                        {% csrf_token %}
+                        <input type="hidden" name="report_view" value="activity">
+                        <input type="hidden" name="start_month" value="{{ activity_start_month }}">
+                        <input type="hidden" name="end_month" value="{{ activity_end_month }}">
+                        <input type="hidden" name="log_id" value="{{ editing_activity_log.pk }}">
+                        {% if activity_form.non_field_errors %}
+                            <div class="alert alert-danger" role="alert">{{ activity_form.non_field_errors|join:" " }}</div>
+                        {% endif %}
+                        <div class="row g-3">
+                            {% form_editor_token activity_form %}
+                {% for field in activity_form.visible_fields %}
+                                <div class="col-12 col-md-6" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
+                                    <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                    {{ field }}
+                                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                                    {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <a href="{% url 'hub:report' %}?report_view=activity{% if activity_start_month %}&start_month={{ activity_start_month }}{% endif %}{% if activity_end_month %}&end_month={{ activity_end_month }}{% endif %}"
+                               class="btn btn-outline-secondary lg-btn lg-btn--ghost" id="activity-edit-cancel">Cancel</a>
+                            <button type="submit" class="btn btn-primary lg-btn lg-btn--accent">Update Activity Log</button>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>

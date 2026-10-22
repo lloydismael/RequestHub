@@ -65,8 +65,8 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 | 📊 **Dashboard** | Filterable request table with SLA indicators, stat pills, and status badges |
 | 📄 **Request Detail** | Full lifecycle view status log, communication actions, SQR submission |
 | 🛠️ **Manage Request** | Admin/PM form for assigning engineers, changing status, and writing updates |
-| 📈 **Reports Operational** | Charts for requestor volume, engineer load, engagement types, product categories |
-| ⏱️ **Reports Activity** | Billable vs non-billable hours, location mix, engineer hour breakdown |
+| 📈 **Reports Operational** | Delivery health (overdue, due soon, unassigned, on-time rate, turnaround), needs-attention list, created-vs-completed trend, workload by engineer / account manager, engagement and product mix; month-range filter |
+| ⏱️ **Reports Activity** | Billable utilisation, monthly hours trend, billable vs non-billable share, location mix, engineer / account / activity-type hour breakdowns; month-range filter |
 | 👤 **Profile** | User profile page with avatar, account-wide themes with banner gradients, and contact details |
 | 🔔 **Notifications** | In-app notification center for assignments and workflow events |
 

@@ -51,8 +51,8 @@
                         <div class="dashboard-toolbar__search">
                             <div class="mgmt-search-box dashboard-request-search-box dashboard-request-search-box--toolbar" role="search" aria-label="Search requests">
                                 <i class="bi bi-search mgmt-search-icon"></i>
-                                <input type="text" id="dashboard-request-search" class="mgmt-search-input" placeholder="Search requests..." autocomplete="off" aria-label="Search requests">
-                                <span class="mgmt-result-badge" id="dashboard-request-count-badge">0 total</span>
+                                <input type="text" id="dashboard-request-search" class="mgmt-search-input" placeholder="Search requests..." autocomplete="off" aria-label="Search requests" value="{{ dashboard_search_query }}">
+                                <span class="mgmt-result-badge" id="dashboard-request-count-badge" aria-live="polite">{{ requests_total_count|default:0 }} {% if dashboard_search_query %}match{{ requests_total_count|pluralize:"es" }}{% else %}total{% endif %}</span>
                             </div>
                         </div>
                         <div class="dashboard-toolbar__actions d-flex align-items-center gap-2 flex-wrap justify-content-end">
@@ -640,6 +640,8 @@
                 }
             }
 
+            window.applyDashboardRows = applyRowsWhenIdle;
+
             function buildUrl() {
                 const params = new URLSearchParams(window.location.search || "");
                 if (version) {
@@ -700,11 +702,19 @@
                             version = data.version;
                             root.dataset.liveVersion = version;
                         }
+                        const searchBox = document.getElementById("dashboard-request-search");
+                        if (searchBox && (data.search_query || "") !== searchBox.value.trim()) {
+                            // The user kept typing while this poll was in flight; the search request owns the table.
+                            return;
+                        }
                         if (data.html_metrics) {
                             const metricsHost = document.getElementById("dashboard-live-metrics");
                             if (metricsHost) {
                                 metricsHost.outerHTML = data.html_metrics;
                             }
+                        }
+                        if (typeof data.total_count === "number" && window.setDashboardSearchBadge) {
+                            window.setDashboardSearchBadge(data.total_count, data.search_query);
                         }
                         if (data.html_rows) {
                             applyRowsWhenIdle(data.html_rows);
@@ -727,112 +737,72 @@
     </script>
     <script>
         (function () {
-            let searchState = null;
+            const searchInput = () => document.getElementById("dashboard-request-search");
+            let searchTimer = 0;
+            let controller = null;
 
-            function initDashboardRequestSearch() {
-                const searchInput = document.getElementById("dashboard-request-search");
-                const tbody = document.getElementById("dashboard-live-tbody");
+            function setBadge(total, query) {
                 const badge = document.getElementById("dashboard-request-count-badge");
-                if (!searchInput || !tbody) {
-                    return;
-                }
-
-                const records = Array.from(tbody.querySelectorAll("tr")).filter(function (row) {
-                    return !row.classList.contains("dashboard-empty-row");
-                }).map(function (row, index) {
-                    return {
-                        row: row,
-                        order: index,
-                        text: (row.textContent || "").replace(/\s+/g, " ").trim().toLowerCase()
-                    };
-                });
-
-                let emptyRow = tbody.querySelector("tr.dashboard-empty-row");
-                if (!emptyRow) {
-                    emptyRow = document.createElement("tr");
-                    emptyRow.className = "dashboard-empty-row";
-                    const totalColumns = tbody.closest("table")?.querySelectorAll("thead th").length || 1;
-                    emptyRow.innerHTML = '<td colspan="' + totalColumns + '" class="text-center text-muted py-5"><i class="bi bi-search display-6 d-block mb-2 opacity-50"></i>No requests found.</td>';
-                    tbody.appendChild(emptyRow);
-                }
-
-                function scoreMatch(text, query) {
-                    if (!query) {
-                        return 1;
-                    }
-                    if (!text) {
-                        return 0;
-                    }
-
-                    let score = 0;
-                    if (text === query) score += 1000;
-                    if (text.startsWith(query)) score += 300;
-                    if (text.includes(query)) score += 120;
-
-                    text.split(/\s+/).forEach(function (term) {
-                        if (term === query) score += 180;
-                        if (term.startsWith(query)) score += 60;
-                    });
-
-                    return score;
-                }
-
-                searchState = { input: searchInput, tbody: tbody, badge: badge, records: records, emptyRow: emptyRow };
-
-                function render() {
-                    if (!searchState) return;
-                    const state = searchState;
-                    const q = state.input.value.trim().toLowerCase();
-                    const filtered = !q
-                        ? state.records.map(function (record) {
-                            return { record: record, score: 1 };
-                        })
-                        : state.records.map(function (record) {
-                            return { record: record, score: scoreMatch(record.text, q) };
-                        })
-                        .filter(function (item) {
-                            return item.score > 0;
-                        })
-                        .sort(function (a, b) {
-                            if (b.score !== a.score) {
-                                return b.score - a.score;
-                            }
-                            const textOrder = a.record.text.localeCompare(b.record.text);
-                            return textOrder || a.record.order - b.record.order;
-                        });
-
-                    state.records.forEach(function (record) {
-                        if (record.row.style.display !== "none") record.row.style.display = "none";
-                    });
-
-                    if (filtered.length === 0) {
-                        state.emptyRow.style.display = "";
-                    } else {
-                        state.emptyRow.style.display = "none";
-                        const fragment = document.createDocumentFragment();
-                        filtered.forEach(function (item) {
-                            if (item.record.row.style.display !== "") item.record.row.style.display = "";
-                            fragment.appendChild(item.record.row);
-                        });
-                        state.tbody.appendChild(fragment);
-                    }
-
-                    if (state.badge) {
-                        state.badge.textContent = q ? filtered.length + " match" + (filtered.length !== 1 ? "es" : "") : state.records.length + " total";
-                    }
-                }
-
-                if (searchInput.dataset.dashboardSearchBound !== "1") {
-                    let searchTimer = 0;
-                    searchInput.addEventListener("input", function () {
-                        window.clearTimeout(searchTimer);
-                        searchTimer = window.setTimeout(render, 100);
-                    });
-                    searchInput.dataset.dashboardSearchBound = "1";
-                }
-                render();
+                if (!badge || typeof total !== "number") return;
+                badge.textContent = total + (query ? " match" + (total !== 1 ? "es" : "") : " total");
             }
 
+            // Search runs on the server so it covers every matching request, not only the rows rendered.
+            function runSearch() {
+                const input = searchInput();
+                const root = document.getElementById("dashboard-live-root");
+                if (!input || !root) return;
+                const query = input.value.trim();
+                const params = new URLSearchParams(window.location.search || "");
+                if (query) params.set("q", query); else params.delete("q");
+                params.delete("version");
+                const qs = params.toString();
+
+                if (controller) controller.abort();
+                const current = new AbortController();
+                controller = current;
+                fetch(qs ? root.dataset.liveUrl + "?" + qs : root.dataset.liveUrl, {
+                    headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" },
+                    credentials: "same-origin",
+                    signal: current.signal,
+                })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error("search failed");
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        if (!data || !data.ok || typeof data.html_rows !== "string") return;
+                        window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
+                        const metricsHost = document.getElementById("dashboard-live-metrics");
+                        if (metricsHost && data.html_metrics) metricsHost.outerHTML = data.html_metrics;
+                        setBadge(data.total_count, data.search_query);
+                        if (window.applyDashboardRows) window.applyDashboardRows(data.html_rows);
+                    })
+                    .catch(function (error) {
+                        if (error && error.name === "AbortError") return;
+                        const badge = document.getElementById("dashboard-request-count-badge");
+                        if (badge) badge.textContent = "Search unavailable";
+                    });
+            }
+
+            function initDashboardRequestSearch() {
+                const input = searchInput();
+                if (!input || input.dataset.dashboardSearchBound === "1") return;
+                input.addEventListener("input", function () {
+                    window.clearTimeout(searchTimer);
+                    searchTimer = window.setTimeout(runSearch, 250);
+                });
+                input.addEventListener("keydown", function (event) {
+                    if (event.key === "Enter") {
+                        event.preventDefault();
+                        window.clearTimeout(searchTimer);
+                        runSearch();
+                    }
+                });
+                input.dataset.dashboardSearchBound = "1";
+            }
+
+            window.setDashboardSearchBadge = setBadge;
             window.initDashboardRequestSearch = initDashboardRequestSearch;
             document.addEventListener("DOMContentLoaded", initDashboardRequestSearch);
 

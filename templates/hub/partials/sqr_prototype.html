@@ -1,17 +1,7 @@
 {# Lazy shell for the SQR Tracker Prototype: records are fetched when the view is first opened. #}
 <section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
          data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}"
-         data-default-mine="{% if default_my_assigned_filter %}1{% else %}0{% endif %}"
          aria-label="SQR Tracker Prototype">
-    <div class="sqr-proto__topbar">
-        <span class="sqr-proto__meta" id="sqr-proto-updated" role="status"></span>
-        <button type="button" class="btn btn-sm btn-outline-primary" id="sqr-proto-refresh">
-            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Refresh
-        </button>
-    </div>
-
-    <div id="sqr-proto-pipeline" class="sqr-proto__pipeline" role="group" aria-label="Filter by pipeline stage"></div>
-
     <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list">
         <aside class="sqr-proto__list" aria-label="SQR list">
             <div class="sqr-proto__tools">
@@ -20,39 +10,7 @@
                     <i class="bi bi-search" aria-hidden="true"></i>
                     <input type="search" id="sqr-proto-search" placeholder="Search ID, account, service, people…" autocomplete="off">
                 </div>
-                <div class="sqr-proto__tool-row">
-                    <div>
-                        <label class="visually-hidden" for="sqr-proto-status">SQR status</label>
-                        <select id="sqr-proto-status" class="form-select form-select-sm">
-                            <option value="">Any status</option>
-                            <option value="submitted">For Processing</option>
-                            <option value="for_revision">For Revision</option>
-                            <option value="reviewed">Approved</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="visually-hidden" for="sqr-proto-sort">Sort by</label>
-                        <select id="sqr-proto-sort" class="form-select form-select-sm">
-                            <option value="attention">Needs attention first</option>
-                            <option value="newest">Newest first</option>
-                            <option value="oldest">Oldest first</option>
-                            <option value="value">Highest value</option>
-                            <option value="target">Nearest target date</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="sqr-proto__tool-row sqr-proto__tool-row--between">
-                    <label class="sqr-proto__check" id="sqr-proto-mine-wrap" hidden>
-                        <input type="checkbox" id="sqr-proto-mine"> <span>Assigned to me</span>
-                    </label>
-                    <div class="sqr-proto__density" role="group" aria-label="List density">
-                        <button type="button" data-density="comfortable" aria-pressed="true" title="Comfortable"><i class="bi bi-view-stacked" aria-hidden="true"></i><span class="visually-hidden">Comfortable</span></button>
-                        <button type="button" data-density="compact" aria-pressed="false" title="Compact"><i class="bi bi-list-ul" aria-hidden="true"></i><span class="visually-hidden">Compact</span></button>
-                    </div>
-                    <button type="button" class="sqr-proto__link" id="sqr-proto-reset">Reset</button>
-                </div>
             </div>
-            <p class="sqr-proto__count" id="sqr-proto-count" role="status" aria-live="polite">Loading…</p>
             <ul class="sqr-proto__items" id="sqr-proto-items"></ul>
             <button type="button" class="btn btn-outline-primary sqr-proto__more" id="sqr-proto-more" hidden>Show more</button>
         </aside>

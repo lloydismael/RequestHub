@@ -65,7 +65,7 @@
                     <i class="bi bi-search mgmt-search-icon"></i>
                     <input type="text" id="user-search" name="user_q" class="mgmt-search-input"
                            value="{{ user_search_query }}" placeholder="Search users..." autocomplete="off" aria-label="Search users">
-                    <span class="mgmt-result-badge" id="user-count-badge">{% if users_page_obj %}{{ users_page_obj.paginator.count }} total{% endif %}</span>
+                    <span class="mgmt-result-badge" id="user-count-badge" aria-live="polite">{% if users_page_obj %}{{ users_page_obj.paginator.count }} {% if user_search_query %}match{{ users_page_obj.paginator.count|pluralize:"es" }}{% else %}total{% endif %}{% endif %}</span>
                 </form>
                 <button type="button" class="btn btn-primary btn-sm lg-btn lg-btn--accent" id="new-user-btn">
                     <i class="bi bi-person-plus-fill me-1"></i>New User
@@ -638,73 +638,63 @@
     }
 
     function initUserLiveSearch() {
+        var form = document.querySelector('form.mgmt-search-box');
         var searchInput = document.getElementById('user-search');
         var tbody = document.getElementById('users-tbody');
         var badge = document.getElementById('user-count-badge');
+        var limitNote = document.getElementById('user-limit-note');
+        var pagination = document.getElementById('user-pagination');
         if (!searchInput || !tbody) return;
 
-        var rows = Array.from(tbody.querySelectorAll('tr.mgmt-row'));
-        var emptyState = tbody.querySelector('tr.mgmt-empty-state');
-        if (!emptyState) {
-            emptyState = document.createElement('tr');
-            emptyState.className = 'mgmt-empty-state text-center text-muted';
-            emptyState.innerHTML = '<td colspan="7" class="text-center text-muted py-5"><i class="bi bi-people display-6 d-block mb-2 opacity-50"></i>No users found.</td>';
-            tbody.appendChild(emptyState);
-        }
+        var timer = 0;
+        var controller = null;
 
-        function scoreMatch(row, query) {
-            if (!query) return 1;
-            var text = (row.dataset.searchText || '').toLowerCase();
-            if (!text) return 0;
-            var score = 0;
-            if (text === query) score += 1000;
-            if (text.startsWith(query)) score += 300;
-            if (text.includes(query)) score += 120;
-            var parts = text.split(/\s+/);
-            for (var i = 0; i < parts.length; i += 1) {
-                if (parts[i] === query) score += 180;
-                if (parts[i].startsWith(query)) score += 60;
-            }
-            return score;
-        }
+        // Query the server so the search spans every user, not only the page currently rendered.
+        function runSearch() {
+            var url = new URL(window.location.href);
+            var q = searchInput.value.trim();
+            if (q) url.searchParams.set('user_q', q); else url.searchParams.delete('user_q');
+            url.searchParams.delete('user_page');
 
-        function render() {
-            var q = searchInput.value.trim().toLowerCase();
-            var filtered = rows
-                .map(function (row) {
-                    return { row: row, score: scoreMatch(row, q) };
-                })
-                .filter(function (item) {
-                    return !q || item.score > 0;
-                })
-                .sort(function (a, b) {
-                    if (b.score !== a.score) return b.score - a.score;
-                    return (a.row.dataset.searchText || '').localeCompare(b.row.dataset.searchText || '');
+            if (controller) controller.abort();
+            var current = new AbortController();
+            controller = current;
+            fetch(url.toString(), {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+                signal: current.signal
+            }).then(function (response) {
+                if (!response.ok) throw new Error('search failed');
+                return response.text();
+            }).then(function (html) {
+                var doc = new DOMParser().parseFromString(html, 'text/html');
+                var nextBody = doc.getElementById('users-tbody');
+                if (!nextBody) throw new Error('unexpected response');
+                tbody.innerHTML = nextBody.innerHTML;
+                [[badge, 'user-count-badge'], [limitNote, 'user-limit-note']].forEach(function (pair) {
+                    var next = doc.getElementById(pair[1]);
+                    if (pair[0] && next) pair[0].textContent = next.textContent;
                 });
-
-            rows.forEach(function (row) {
-                row.style.display = 'none';
+                var nextPagination = doc.getElementById('user-pagination');
+                if (pagination && nextPagination) pagination.innerHTML = nextPagination.innerHTML;
+                window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+            }).catch(function (error) {
+                if (error && error.name === 'AbortError') return;
+                if (form) form.submit();
             });
-
-            if (filtered.length === 0) {
-                emptyState.style.display = '';
-            } else {
-                emptyState.style.display = 'none';
-                filtered.forEach(function (item) {
-                    item.row.style.display = '';
-                    tbody.appendChild(item.row);
-                });
-            }
-
-            if (badge) {
-                badge.textContent = q
-                    ? filtered.length + ' match' + (filtered.length !== 1 ? 'es' : '')
-                    : rows.length + ' total';
-            }
         }
 
-        searchInput.addEventListener('input', render);
-        render();
+        searchInput.addEventListener('input', function () {
+            clearTimeout(timer);
+            timer = setTimeout(runSearch, 250);
+        });
+        if (form) {
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                clearTimeout(timer);
+                runSearch();
+            });
+        }
     }
 
     /* ── Shared requestor-modal open/close (same as Create Request) ── */
@@ -762,8 +752,11 @@
         var resetPkInput = document.getElementById('mu-reset-pk');
         if (!manageForm) return;
 
-        document.querySelectorAll('.mgmt-manage-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
+        // Delegated: user rows are re-rendered by the live search.
+        document.addEventListener('click', function (event) {
+            var btn = event.target.closest('.mgmt-manage-btn');
+            if (!btn) return;
+            (function () {
                 var pk         = btn.dataset.userPk;
                 var editorFields = document.getElementById('manage-user-editor-fields');
                 var editorTemplate = document.getElementById('user-editor-' + pk);
@@ -799,7 +792,7 @@
 
                 if (resetPkInput) resetPkInput.value = 'reset_password:' + pk;
                 if (manageUserModal) manageUserModal.open();
-            });
+            }());
         });
     }
 

@@ -400,6 +400,94 @@ class RequestReportViewTests(TestCase):
             "?report_view=activity&start_month=2026-08&end_month=2026-08&activity_log_page=2",
         )
 
+    def test_operational_report_health_metrics_and_attention_list(self):
+        today = timezone.localdate()
+        overdue = self._create_request()
+        due_soon = self._create_request()
+        unassigned = self._create_request(engineer=None)
+        completed = self._create_request(status=Request.Status.COMPLETED)
+        Request.objects.filter(pk=overdue.pk).update(due_date=today - timedelta(days=3))
+        Request.objects.filter(pk=due_soon.pk).update(due_date=today + timedelta(days=2))
+        Request.objects.filter(pk=unassigned.pk).update(due_date=today + timedelta(days=30))
+        Request.objects.filter(pk=completed.pk).update(due_date=today + timedelta(days=1), end_date=today)
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("hub:report"))
+
+        health = response.context["health"]
+        self.assertEqual(health["overdue"], 1)
+        self.assertEqual(health["due_soon"], 1)
+        self.assertEqual(health["unassigned"], 1)
+        self.assertEqual(health["on_time_rate"], 100)
+        attention = response.context["attention_requests"]
+        self.assertEqual([item["reference"] for item in attention], [overdue.reference_code, due_soon.reference_code])
+        self.assertTrue(attention[0]["is_overdue"])
+        self.assertEqual(attention[0]["days"], 3)
+        self.assertContains(response, "3 days overdue")
+        self.assertContains(response, "Due in 2 days")
+
+    def test_operational_report_and_export_honor_month_filter(self):
+        january = self._create_request()
+        march = self._create_request()
+        Request.objects.filter(pk=january.pk).update(created_at=datetime(2026, 1, 15, 12, tzinfo=dt_timezone.utc))
+        Request.objects.filter(pk=march.pk).update(created_at=datetime(2026, 3, 10, 12, tzinfo=dt_timezone.utc))
+        self.client.force_login(self.admin)
+
+        response = self.client.get(
+            reverse("hub:report"),
+            {"report_view": "operational", "start_month": "2026-01", "end_month": "2026-01"},
+        )
+
+        self.assertEqual(response.context["totals"]["requests"], 1)
+        self.assertEqual(response.context["period_label"], "January 2026")
+        self.assertEqual(response.context["request_trend_chart"]["labels"], ["Jan 2026"])
+        self.assertContains(response, "report_view=operational&start_month=2026-01&end_month=2026-01")
+
+        export = self.client.get(
+            reverse("hub:report-export"),
+            {"report_view": "operational", "start_month": "2026-01", "end_month": "2026-01"},
+        )
+        body = export.content.decode()
+        self.assertIn(january.reference_code, body)
+        self.assertNotIn(march.reference_code, body)
+        self.assertIn("2026-01_to_2026-01", export["Content-Disposition"])
+
+    def test_operational_report_renders_chart_canvases_and_data(self):
+        self._create_request()
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("hub:report"))
+
+        for chart_id in ("requestTrendChart", "engagementChart", "productChart", "engineerChart", "accountManagerChart"):
+            self.assertContains(response, f'id="{chart_id}"')
+            self.assertContains(response, f'id="{chart_id}-data"')
+        self.assertContains(response, "View chart values")
+        self.assertContains(response, "report-charts")
+
+    def test_activity_report_includes_monthly_trend_account_breakdown_and_utilisation(self):
+        other_account = Account.objects.create(name="Second Reports Account")
+        self._create_activity_log(request_date=date(2026, 8, 5), actual_hours=Decimal("3.00"), is_billable=True)
+        self._create_activity_log(
+            request_date=date(2026, 9, 5),
+            actual_hours=Decimal("1.00"),
+            is_billable=False,
+            account=other_account,
+        )
+        self.client.force_login(self.admin)
+
+        response = self.client.get(reverse("hub:report"), {"report_view": "activity"})
+
+        self.assertEqual(response.context["activity_totals"]["billable_rate"], 75)
+        monthly = response.context["activity_monthly_chart"]
+        self.assertEqual(monthly["labels"], ["Aug 2026", "Sep 2026"])
+        self.assertEqual(monthly["billable"], [3.0, 0.0])
+        self.assertEqual(monthly["non_billable"], [0.0, 1.0])
+        accounts = response.context["activity_account_table"]
+        self.assertEqual([row["name"] for row in accounts], ["Reports Account", "Second Reports Account"])
+        self.assertEqual(response.context["activity_account_chart"]["labels"], ["Reports Account", "Second Reports Account"])
+        self.assertContains(response, 'id="activityMonthlyChart"')
+        self.assertContains(response, "Account Hour Breakdown")
+
 
 class NotificationBadgeTests(TestCase):
     def setUp(self):
@@ -517,6 +605,32 @@ class UserManagementSearchTests(TestCase):
 
         self.assertEqual(query, "ali")
         self.assertEqual(usernames[:2], ["alice", "alina"])
+
+    def test_user_search_covers_users_beyond_first_page(self):
+        for index in range(60):
+            User.objects.create_user(
+                username=f"bulk{index:02d}",
+                password="pass12345",
+                role=User.Roles.REQUESTOR,
+                first_name="Bulk",
+                last_name=f"User{index:02d}",
+            )
+        User.objects.create_user(
+            username="zz-needle",
+            password="pass12345",
+            role=User.Roles.REQUESTOR,
+            first_name="Zelda",
+            last_name="Needle",
+        )
+
+        page_obj, _ = UserManagementView()._paginate_users(RequestFactory().get("/management/"))
+        self.assertNotIn("zz-needle", [user.username for user in page_obj.object_list])
+
+        page_obj, query = UserManagementView()._paginate_users(
+            RequestFactory().get("/management/", {"user_q": "zelda needle"})
+        )
+        self.assertEqual([user.username for user in page_obj.object_list], ["zz-needle"])
+        self.assertEqual(query, "zelda needle")
 
 
 class RequestStatusValidationTests(TestCase):
@@ -807,7 +921,7 @@ class DashboardViewTests(TestCase):
         self.assertIn('aria-pressed="false"', content)
         self.assertIn("window.reapplyDashboardEngineerHighlight", content)
 
-    def test_dashboard_search_preserves_server_sort_when_query_is_empty(self):
+    def test_dashboard_search_is_server_side_and_keeps_sort_links(self):
         admin = User.objects.create_user(
             username="admin_dashboard_sort",
             password="pass12345",
@@ -818,13 +932,16 @@ class DashboardViewTests(TestCase):
 
         response = self.client.get(
             reverse("hub:dashboard"),
-            {"sort": "engineer", "direction": "asc"},
+            {"sort": "engineer", "direction": "asc", "q": "nomatch-xyz"},
         )
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn("const filtered = !q", content)
-        self.assertIn("? state.records.map(function (record) {", content)
+        self.assertIn("function runSearch()", content)
+        self.assertNotIn("const filtered = !q", content)
+        self.assertIn('value="nomatch-xyz"', content)
+        self.assertIn("No requests match your search.", content)
+        self.assertIn("q=nomatch-xyz", content)
 
     def test_sqr_page_includes_compact_toolbar_search_control(self):
         self.client.force_login(self.pm_esg)
@@ -1264,6 +1381,45 @@ class DashboardLiveDataViewTests(TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn(self.request_obj.reference_code, payload["html_rows"])
         self.assertGreaterEqual(payload["request_count"], 1)
+
+    def test_search_finds_requests_beyond_row_limit_and_metric_filter(self):
+        older = Request.objects.create(
+            requestor=self.requestor,
+            account=Account.objects.create(name="Zyxwv Unique Account"),
+            account_manager="Live Requestor",
+            product_category="Azure",
+            engagement_type=Request.Engagement.SUPPORT,
+            priority=Request.Priority.MEDIUM,
+            engineer=self.engineer,
+            status=Request.Status.COMPLETED,
+            end_date=timezone.now().date(),
+            description="old finished request",
+        )
+        with patch.object(DashboardView, "LIST_ROW_LIMIT", 1):
+            request = self.factory.get(reverse("hub:dashboard-live"), data={"q": "zyxwv"})
+            request.user = self.admin
+            payload = json.loads(DashboardLiveDataView.as_view()(request).content)
+            unfiltered = self.factory.get(reverse("hub:dashboard-live"))
+            unfiltered.user = self.admin
+            unfiltered_payload = json.loads(DashboardLiveDataView.as_view()(unfiltered).content)
+
+        self.assertIn(older.reference_code, payload["html_rows"])
+        self.assertNotIn(self.request_obj.reference_code, payload["html_rows"])
+        self.assertEqual(payload["total_count"], 1)
+        self.assertEqual(payload["search_query"], "zyxwv")
+        self.assertNotIn(older.reference_code, unfiltered_payload["html_rows"])
+
+    def test_search_matches_people_and_requires_all_terms(self):
+        request = self.factory.get(reverse("hub:dashboard-live"), data={"q": "engineer_live live"})
+        request.user = self.admin
+        payload = json.loads(DashboardLiveDataView.as_view()(request).content)
+        self.assertIn(self.request_obj.reference_code, payload["html_rows"])
+
+        request = self.factory.get(reverse("hub:dashboard-live"), data={"q": "engineer_live nomatchterm"})
+        request.user = self.admin
+        payload = json.loads(DashboardLiveDataView.as_view()(request).content)
+        self.assertNotIn(self.request_obj.reference_code, payload["html_rows"])
+        self.assertEqual(payload["total_count"], 0)
 
 
 class OnHoldRoleTests(TestCase):

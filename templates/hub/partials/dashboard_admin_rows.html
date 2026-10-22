@@ -335,6 +335,6 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="{% if role == 'admin' %}12{% elif role == 'engineer' %}9{% elif is_pm_ess %}8{% elif is_requestor_ui %}7{% else %}8{% endif %}" class="text-center text-muted py-4">No requests yet.</td>
+                                <td colspan="{% if role == 'admin' %}12{% elif role == 'engineer' %}9{% elif is_pm_ess %}8{% elif is_requestor_ui %}7{% else %}8{% endif %}" class="text-center text-muted py-4">{% if dashboard_search_query %}No requests match your search.{% else %}No requests yet.{% endif %}</td>
                             </tr>
                         {% endfor %}

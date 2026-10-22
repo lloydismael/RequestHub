@@ -36,7 +36,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import close_old_connections
 from django.core.paginator import InvalidPage, Paginator
 from django.db import transaction
-from django.db.models import Count, Max, Min, Q, Sum
+from django.db.models import Count, F, Max, Min, Q, Sum
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import TruncMonth
 from django.forms import modelformset_factory
@@ -48,6 +48,7 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html, json_script
+from django.utils.safestring import mark_safe
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DetailView, DeleteView, ListView, TemplateView, UpdateView
@@ -819,7 +820,15 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
         return localized.strftime("%Y-%m-%d %H:%M:%S")
 
     def _export_operational_report(self):
-        filename = f"operational-report-{timezone.now().strftime('%Y%m%d-%H%M%S')}.csv"
+        report_view = RequestReportView()
+        report_view.request = self.request
+        month_filters = report_view._resolve_activity_month_filters()
+        start_month = month_filters.get("start_month") or ""
+        end_month = month_filters.get("end_month") or ""
+        range_slug = ""
+        if start_month or end_month:
+            range_slug = f"-{start_month or 'start'}_to_{end_month or 'end'}"
+        filename = f"operational-report{range_slug}-{timezone.now().strftime('%Y%m%d-%H%M%S')}.csv"
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
 
@@ -837,6 +846,7 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
                 "Backup Engineer",
                 "Start Date",
                 "Due Date",
+                "End Date",
                 "Created",
             ]
         )
@@ -845,6 +855,10 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
             Request.objects.select_related("requestor", "account", "engineer", "backup_engineer")
             .order_by("created_at")
         )
+        if month_filters.get("start_month_date"):
+            queryset = queryset.filter(created_at__date__gte=month_filters["start_month_date"])
+        if month_filters.get("end_exclusive_date"):
+            queryset = queryset.filter(created_at__date__lt=month_filters["end_exclusive_date"])
         status_labels = dict(Request.Status.choices)
         engagement_labels = dict(Request.Engagement.choices)
         for request_obj in queryset:
@@ -861,6 +875,7 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
                     self._format_user(getattr(request_obj, "backup_engineer", None)),
                     self._format_date(request_obj.start_date),
                     self._format_date(request_obj.due_date),
+                    self._format_date(request_obj.end_date),
                     self._format_datetime(request_obj.created_at),
                 ]
             )
@@ -2369,6 +2384,37 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             req.ack_first_iso = ack_time.isoformat() if ack_time else ""
             req.is_acknowledged = bool(ack_time)
 
+    @staticmethod
+    def _request_search_haystack(req: Request) -> str:
+        parts = [
+            req.reference_code,
+            req.account.name if req.account_id else "",
+            req.account_manager,
+            req.description,
+            req.teams_chat_topic,
+            req.get_engagement_type_display(),
+            req.get_product_category_display(),
+            req.get_priority_display(),
+            req.get_status_display(),
+        ]
+        for person in (req.requestor, req.engineer, req.backup_engineer):
+            if person:
+                parts.extend([person.get_full_name(), person.username, person.email])
+        return " ".join(str(part) for part in parts if part).casefold()
+
+    @classmethod
+    def _search_requests(cls, requests: list[Request], query: str) -> list[Request]:
+        """Match every whitespace-separated term against the whole request, not just the visible page."""
+        terms = [term for term in query.casefold().split() if term]
+        if not terms:
+            return requests
+        results = []
+        for req in requests:
+            haystack = cls._request_search_haystack(req)
+            if all(term in haystack for term in terms):
+                results.append(req)
+        return results
+
     def _build_admin_dashboard_context(self, user) -> dict:
         """Shared admin/PM-ESG dashboard table + metrics context (full page + live poll)."""
         metric_keys = [
@@ -2439,7 +2485,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         today = timezone.now().astimezone(MANILA_TZ).date()
         all_requests = list(requests)
-        filtered_requests = self._filter_requests_by_metric(all_requests, metric_filter, today)
+        search_query = (self.request.GET.get("q") or "").strip()[:200]
+        if search_query:
+            # A search spans every request matching the other filters, regardless of the metric card.
+            filtered_requests = self._search_requests(all_requests, search_query)
+        else:
+            filtered_requests = self._filter_requests_by_metric(all_requests, metric_filter, today)
         display_requests, list_meta = self._limit_dashboard_rows(filtered_requests)
         # Annotate only rows that will render — keeps live poll/table HTML light.
         self._annotate_acknowledgement_status(display_requests)
@@ -2528,7 +2579,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "filter_toggle_link": filter_toggle_link,
             "metrics": {key: len(metric_buckets[key]) for key in metric_keys},
             "metric_links": metric_links,
-            "active_metric_filter": metric_filter,
+            "active_metric_filter": "" if search_query else metric_filter,
+            "dashboard_search_query": search_query,
             "pm_esg_tab": pm_esg_tab,
             "pm_esg_tab_links": pm_esg_tab_links,
             "dashboard_live_version": live_version,
@@ -3580,6 +3632,8 @@ class DashboardLiveDataView(LoginRequiredMixin, View):
                 "changed": True,
                 "version": context.get("dashboard_live_version") or live_version,
                 "request_count": len(context.get("requests") or []),
+                "total_count": context.get("requests_total_count", 0),
+                "search_query": context.get("dashboard_search_query", ""),
                 "html_metrics": html_metrics,
                 "html_rows": html_rows,
             }
@@ -6901,10 +6955,120 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             context.update(self._build_operational_context())
         return context
 
+    @staticmethod
+    def _period_query(month_filters: dict) -> str:
+        params = {}
+        if month_filters.get("start_month"):
+            params["start_month"] = month_filters["start_month"]
+        if month_filters.get("end_month"):
+            params["end_month"] = month_filters["end_month"]
+        # Values are strict YYYY-MM strings and urlencoded, so the result is safe to embed in hrefs.
+        return mark_safe("&" + urlencode(params)) if params else ""
+
+    @staticmethod
+    def _month_key(value) -> str:
+        return f"{value.year:04d}-{value.month:02d}"
+
+    @staticmethod
+    def _month_label(month_key: str) -> str:
+        return datetime.strptime(month_key, "%Y-%m").strftime("%b %Y")
+
+    def _build_request_health_context(self, requests_qs) -> dict:
+        today = timezone.localdate()
+        soon_limit = today + timedelta(days=7)
+        ongoing_qs = requests_qs.filter(status=Request.Status.ONGOING)
+
+        overdue_count = ongoing_qs.filter(due_date__lt=today).count()
+        due_soon_count = ongoing_qs.filter(due_date__gte=today, due_date__lte=soon_limit).count()
+        unassigned_count = ongoing_qs.filter(engineer__isnull=True).count()
+
+        # Ignore completions dated before the request started (bad legacy dates would skew metrics).
+        valid_completed_qs = requests_qs.filter(
+            status=Request.Status.COMPLETED, end_date__isnull=False, end_date__gte=F("start_date")
+        )
+
+        turnaround_days = []
+        on_time = 0
+        measured = 0
+        completed_rows = valid_completed_qs.values_list("start_date", "end_date", "due_date")
+        for start_date, end_date, due_date in completed_rows:
+            turnaround_days.append((end_date - start_date).days)
+            if due_date:
+                measured += 1
+                if end_date <= due_date:
+                    on_time += 1
+
+        attention_qs = (
+            ongoing_qs.filter(due_date__isnull=False, due_date__lte=soon_limit)
+            .select_related("account", "engineer")
+            .order_by("due_date", "priority", "reference_code")[:10]
+        )
+        attention_requests = []
+        for item in attention_qs:
+            days_delta = (item.due_date - today).days
+            engineer = item.engineer
+            attention_requests.append(
+                {
+                    "pk": item.pk,
+                    "url": item.get_absolute_url(),
+                    "reference": item.reference_code,
+                    "account": item.account.name,
+                    "engineer": (engineer.get_full_name() or engineer.username) if engineer else "Unassigned",
+                    "priority": item.get_priority_display(),
+                    "is_high": item.priority == Request.Priority.HIGH,
+                    "due_date": item.due_date,
+                    "is_overdue": days_delta < 0,
+                    "days": abs(days_delta),
+                }
+            )
+
+        created_rows = (
+            requests_qs.annotate(month=TruncMonth("created_at"))
+            .values("month")
+            .annotate(total=Count("id"))
+        )
+        completed_month_rows = (
+            valid_completed_qs.annotate(month=TruncMonth("end_date"))
+            .values("month")
+            .annotate(total=Count("id"))
+        )
+        created_by_month = {self._month_key(row["month"]): row["total"] for row in created_rows if row["month"]}
+        completed_by_month = {
+            self._month_key(row["month"]): row["total"] for row in completed_month_rows if row["month"]
+        }
+        month_keys = sorted(set(created_by_month) | set(completed_by_month))
+        trend_chart = {
+            "labels": [self._month_label(key) for key in month_keys],
+            "created": [created_by_month.get(key, 0) for key in month_keys],
+            "completed": [completed_by_month.get(key, 0) for key in month_keys],
+        }
+
+        return {
+            "health": {
+                "overdue": overdue_count,
+                "due_soon": due_soon_count,
+                "unassigned": unassigned_count,
+                "on_time_rate": round(on_time * 100 / measured) if measured else None,
+                "avg_turnaround_days": (
+                    round(sum(turnaround_days) / len(turnaround_days), 1) if turnaround_days else None
+                ),
+            },
+            "attention_requests": attention_requests,
+            "request_trend_chart": trend_chart,
+            "request_trend_has_data": bool(month_keys),
+        }
+
     def _build_operational_context(self):
-        total_requests = Request.objects.count()
+        month_filters = self._resolve_activity_month_filters()
+        all_requests = Request.objects.all()
+        if month_filters["start_month_date"]:
+            all_requests = all_requests.filter(created_at__date__gte=month_filters["start_month_date"])
+        if month_filters["end_exclusive_date"]:
+            all_requests = all_requests.filter(created_at__date__lt=month_filters["end_exclusive_date"])
+
+        total_requests = all_requests.count()
         account_manager_qs = (
-            Request.objects.values("account_manager")
+            all_requests.values("account_manager")
             .annotate(
                 total=Count("id"),
                 ongoing=Count("id", filter=Q(status=Request.Status.ONGOING)),
@@ -6925,7 +7089,7 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             )
 
         engineer_qs = (
-            Request.objects.values(
+            all_requests.values(
                 "engineer",
                 "engineer__first_name",
                 "engineer__last_name",
@@ -6958,7 +7122,7 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
 
         status_labels = dict(Request.Status.choices)
         status_counts = {status: 0 for status, _ in Request.Status.choices}
-        for item in Request.objects.values("status").annotate(total=Count("id")):
+        for item in all_requests.values("status").annotate(total=Count("id")):
             status_counts[item["status"]] = item["total"]
         status_breakdown = [
             {
@@ -6974,7 +7138,7 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             value: {"total": 0, "ongoing": 0, "completed": 0}
             for value, _ in Request.Engagement.choices
         }
-        for item in Request.objects.values("engagement_type", "status").annotate(total=Count("id")):
+        for item in all_requests.values("engagement_type", "status").annotate(total=Count("id")):
             key = item["engagement_type"]
             bucket = engagement_counts.setdefault(
                 key,
@@ -6995,7 +7159,7 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             category: {"total": 0, "ongoing": 0, "completed": 0}
             for category in product_categories
         }
-        for item in Request.objects.values("product_category", "status").annotate(total=Count("id")):
+        for item in all_requests.values("product_category", "status").annotate(total=Count("id")):
             category = item["product_category"] or "Others"
             bucket = product_buckets.setdefault(category, {"total": 0, "ongoing": 0, "completed": 0})
             bucket["total"] += item["total"]
@@ -7019,24 +7183,29 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
         engagement_chart_has_data = any(value > 0 for value in engagement_chart_payload["totals"])
         product_chart_has_data = any(value > 0 for value in product_chart_payload["totals"])
 
-        return {
+        context = {
+            "period_start_month": month_filters["start_month"],
+            "period_end_month": month_filters["end_month"],
+            "period_label": month_filters["label"],
+            "period_query": self._period_query(month_filters),
+            "period_range_swapped": month_filters.get("range_swapped", False),
             "totals": {
                 "requests": total_requests,
                 "account_managers": (
-                    Request.objects.exclude(account_manager__isnull=True)
+                    all_requests.exclude(account_manager__isnull=True)
                     .exclude(account_manager__exact="")
                     .values("account_manager")
                     .distinct()
                     .count()
                 ),
                 "engineers": (
-                    Request.objects.exclude(engineer__isnull=True)
+                    all_requests.exclude(engineer__isnull=True)
                     .values("engineer")
                     .distinct()
                     .count()
                 ),
-                "ongoing": Request.objects.filter(status=Request.Status.ONGOING).count(),
-                "completed": Request.objects.filter(status=Request.Status.COMPLETED).count(),
+                "ongoing": all_requests.filter(status=Request.Status.ONGOING).count(),
+                "completed": all_requests.filter(status=Request.Status.COMPLETED).count(),
             },
             "account_manager_chart": self._compact_ranked_chart(account_manager_data),
             "account_manager_chart_full": self._full_ranked_chart(account_manager_data),
@@ -7050,6 +7219,8 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             "engineer_stats": engineer_data,
             "status_breakdown": status_breakdown,
         }
+        context.update(self._build_request_health_context(all_requests))
+        return context
 
     def _build_activity_log_context(self, *, start_month_value: str | None = None, end_month_value: str | None = None, page_num: int = 1):
         month_filters = self._resolve_activity_month_filters(
@@ -7172,6 +7343,57 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             ],
         }
 
+        monthly_chart = {"labels": [], "billable": [], "non_billable": []}
+        monthly_rows = (
+            logs_qs.annotate(month=TruncMonth("request_date"))
+            .values("month")
+            .annotate(
+                total_hours=Sum("actual_hours"),
+                billable_hours=Sum("actual_hours", filter=Q(is_billable=True)),
+            )
+            .order_by("month")
+        )
+        for row in monthly_rows:
+            if not row["month"]:
+                continue
+            total_val = row.get("total_hours") or Decimal("0")
+            billable_val = row.get("billable_hours") or Decimal("0")
+            monthly_chart["labels"].append(row["month"].strftime("%b %Y"))
+            monthly_chart["billable"].append(float(billable_val))
+            monthly_chart["non_billable"].append(float(total_val - billable_val))
+
+        account_rows = (
+            logs_qs.values("account", "account__name")
+            .annotate(
+                total_hours=Sum("actual_hours"),
+                billable_hours=Sum("actual_hours", filter=Q(is_billable=True)),
+                entries=Count("id"),
+            )
+            .order_by("-total_hours", "account__name")
+        )
+        account_table = []
+        for row in account_rows:
+            total_val = row.get("total_hours") or Decimal("0")
+            billable_val = row.get("billable_hours") or Decimal("0")
+            account_table.append(
+                {
+                    "name": row.get("account__name") or "Unspecified",
+                    "entries": row["entries"],
+                    "total_hours": total_val,
+                    "billable_hours": billable_val,
+                    "non_billable_hours": total_val - billable_val,
+                }
+            )
+        account_chart = {
+            "labels": [row["name"] for row in account_table[: self.CHART_RANKING_LIMIT]],
+            "billable": [float(row["billable_hours"]) for row in account_table[: self.CHART_RANKING_LIMIT]],
+            "non_billable": [float(row["non_billable_hours"]) for row in account_table[: self.CHART_RANKING_LIMIT]],
+        }
+
+        billable_rate = (
+            round(float(billable_hours_value) * 100 / float(total_hours_value)) if total_hours_value else None
+        )
+
         paginator = Paginator(logs_qs.order_by("-request_date", "-created_at"), 50)
         try:
             page_obj = paginator.page(page_num)
@@ -7186,7 +7408,16 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
                 "billable_hours": billable_hours_value,
                 "non_billable_hours": non_billable_hours_value,
                 "unique_accounts": logs_qs.values("account").distinct().count(),
+                "billable_rate": billable_rate,
             },
+            "period_start_month": month_filters["start_month"],
+            "period_end_month": month_filters["end_month"],
+            "period_label": month_filters["label"],
+            "period_query": self._period_query(month_filters),
+            "period_range_swapped": month_filters.get("range_swapped", False),
+            "activity_monthly_chart": monthly_chart,
+            "activity_account_chart": account_chart,
+            "activity_account_table": account_table,
             "activity_start_month": month_filters["start_month"],
             "activity_end_month": month_filters["end_month"],
             "activity_month_filter_label": month_filters["label"],
@@ -7221,6 +7452,8 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         if query:
             terms = [term for term in query.split() if term]
             for term in terms:
+                lowered = term.lower()
+                matching_roles = [value for value, label in User.Roles.choices if lowered in str(label).lower()]
                 qs = qs.filter(
                     Q(first_name__icontains=term)
                     | Q(last_name__icontains=term)
@@ -7228,6 +7461,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                     | Q(email__icontains=term)
                     | Q(department__icontains=term)
                     | Q(role__icontains=term)
+                    | Q(role__in=matching_roles)
                 )
         qs = qs.order_by("first_name", "last_name", "username")
         paginator = Paginator(qs, 50)
