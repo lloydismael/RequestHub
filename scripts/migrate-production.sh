@@ -10,15 +10,29 @@ test -z "$(find "$PRODUCTION_ENV_FILE" -perm /077 -print)"
 rule="github-cd-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 server_args=(--subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --server-name "$AZURE_POSTGRES_SERVER")
 owned=false
+defer_cleanup="${MIGRATION_DEFER_FIREWALL_CLEANUP:-false}"
+phase_start=$SECONDS
+timing() {
+    printf '[timing] %s: %ss\n' "$1" "$((SECONDS - phase_start))"
+    phase_start=$SECONDS
+}
 cleanup() {
     local status=$?
     trap - EXIT
     if "$owned"; then
-        if ! az postgres flexible-server firewall-rule delete "${server_args[@]}" --name "$rule" --yes --output none; then
-            echo "::error::Temporary firewall cleanup failed: $rule. Remove this exact rule manually."
-            status=1
+        if [ "$status" = 0 ] && [ "$defer_cleanup" = true ]; then
+            # The caller deletes the rule concurrently with its next steps and must
+            # confirm the deletion; the marker file keeps the workflow's safety net armed.
+            echo "Firewall rule $rule is left for the caller to delete."
         else
-            rm -f "$PRODUCTION_ENV_FILE.firewall"
+            phase_start=$SECONDS
+            if ! az postgres flexible-server firewall-rule delete "${server_args[@]}" --name "$rule" --yes --output none; then
+                echo "::error::Temporary firewall cleanup failed: $rule. Remove this exact rule manually."
+                status=1
+            else
+                rm -f "$PRODUCTION_ENV_FILE.firewall"
+            fi
+            timing 'Firewall rule delete'
         fi
     fi
     exit "$status"
@@ -33,6 +47,7 @@ restore_date=$(az postgres flexible-server show --subscription "$AZURE_SUBSCRIPT
 test "$state" = Ready
 [[ "$retention" =~ ^[0-9]+$ ]] && (( retention >= 7 ))
 test -n "$restore_date" || { echo 'No point-in-time restore metadata available' >&2; exit 1; }
+timing 'Database state and backup checks'
 
 existing=$(az postgres flexible-server firewall-rule list "${server_args[@]}" --query "[?name=='$rule'].name | [0]" -o tsv)
 test -z "$existing" || { echo "Rule $rule already exists; reconcile it before rerunning" >&2; exit 1; }
@@ -50,6 +65,7 @@ fi
 owned=true
 touch "$PRODUCTION_ENV_FILE.firewall"
 az postgres flexible-server firewall-rule create "${server_args[@]}" --name "$rule" --start-ip-address "$runner_ip" --end-ip-address "$runner_ip" --output none
+timing 'Firewall rule create'
 connected=false
 for attempt in {1..12}; do
     if docker run --rm --env-file "$PRODUCTION_ENV_FILE" -e DJANGO_SETTINGS_MODULE=request_hub.settings --entrypoint python "$MIGRATION_IMAGE" -c '
@@ -82,5 +98,7 @@ except Exception as error:
     sleep 5
 done
 "$connected" || { echo 'TLS database connectivity did not become available' >&2; exit 1; }
+timing 'Database connectivity probe'
 docker run --rm --env-file "$PRODUCTION_ENV_FILE" --entrypoint python "$MIGRATION_IMAGE" manage.py check --deploy --fail-level WARNING
 docker run --rm --env-file "$PRODUCTION_ENV_FILE" --entrypoint python "$MIGRATION_IMAGE" manage.py migrate --noinput
+timing 'Deploy check and migrate'

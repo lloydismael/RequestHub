@@ -177,6 +177,11 @@ jobs:
           print(f'Allocated {version}; latest will not be changed')
           PY
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Reuses dependency layers cached by the Container Security run for this
+      # commit. Read-only: the release build never writes the shared cache.
       - name: Build release image
         uses: docker/build-push-action@v6
         with:
@@ -186,9 +191,11 @@ jobs:
           load: true
           pull: true
           tags: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          cache-from: type=gha,scope=request-hub-image
           build-args: |
             APP_VERSION=${{ steps.version.outputs.version }}
             VCS_REF=${{ github.event.workflow_run.head_sha }}
+            APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Generate release SBOM
         uses: anchore/sbom-action@v0
@@ -273,6 +280,9 @@ jobs:
         with:
           ref: ${{ needs.release-image.outputs.revision }}
           persist-credentials: false
+          # Full history lets the deploy script decide whether migrations changed
+          # since the currently deployed revision.
+          fetch-depth: 0
 
       - name: Verify release commit
         env:

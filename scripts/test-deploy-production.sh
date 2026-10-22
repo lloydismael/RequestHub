@@ -9,6 +9,7 @@ export RELEASE_VERSION=v52.0 GITHUB_REPOSITORY=test/repository
 export AZURE_POSTGRES_SERVER=test-postgres GITHUB_RUN_ID=123 GITHUB_RUN_ATTEMPT=1
 export RELEASE_DIGEST="sha256:$(printf 'a%.0s' {1..64})"
 export OLD_IMAGE="lloydismael12/request-hub@sha256:$(printf 'b%.0s' {1..64})"
+export PREVIOUS_SHA=$(printf 'c%.0s' {1..40})
 workspace=$(mktemp -d)
 trap 'rm -rf "$workspace"' EXIT
 export MOCK_LOG="$workspace/commands" MOCK_IMAGE="$workspace/image"
@@ -55,6 +56,8 @@ az() {
 docker() {
     echo "docker $*" >> "$MOCK_LOG"
     case "$*" in
+        *"$OLD_IMAGE"*org.opencontainers.image.revision*)
+            if [[ "$SCENARIO" != unknown-revision ]]; then echo "$PREVIOUS_SHA"; fi ;;
         *org.opencontainers.image.revision*) echo "$RELEASE_SHA" ;;
         *'range .RepoDigests'*)
             if [[ "$SCENARIO" == tag-mismatch ]]; then echo "$OLD_IMAGE"; else echo "lloydismael12/request-hub@$RELEASE_DIGEST"; fi ;;
@@ -75,11 +78,21 @@ curl() {
     [[ "$SCENARIO" != rollback-unhealthy ]]
 }
 
-export -f gh az docker python3 curl
+git() {
+    echo "git $*" >> "$MOCK_LOG"
+    case "$*" in
+        cat-file*) ;;
+        merge-base*) [[ "$SCENARIO" != diverged ]] ;;
+        diff*) if [[ "$SCENARIO" != no-migrations ]]; then echo hub/migrations/0099_example.py; fi ;;
+    esac
+}
+
+export -f gh az docker python3 curl git
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for scenario in success stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
+for scenario in success no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
     export SCENARIO="$scenario"
     : > "$MOCK_LOG"
+    rm -f "$PRODUCTION_ENV_FILE.firewall"
     printf '%s' "$OLD_IMAGE" > "$MOCK_IMAGE"
     if [[ "$scenario" == rollback-unhealthy ]]; then
         python3() { cat >/dev/null; return 1; }
@@ -88,13 +101,32 @@ for scenario in success stale classic tag-mismatch missing-backup migration-fail
     exit_status=0
     bash "$script_dir/deploy-production.sh" > "$workspace/output" 2>&1 || exit_status=$?
     case "$scenario" in
-        success)
+        success|unknown-revision|diverged)
             test "$exit_status" = 0
             test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub:$RELEASE_VERSION"
             grep -q 'manage.py migrate --noinput' "$MOCK_LOG"
             grep -q -- "--entrypoint python lloydismael12/request-hub@$RELEASE_DIGEST manage.py migrate" "$MOCK_LOG"
-            test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1 ;;
-        stale|classic|tag-mismatch|missing-backup|migration-failure|cleanup-failure)
+            test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1
+            # The firewall rule is removed only after migrations have finished.
+            test "$(grep -n 'manage.py migrate' "$MOCK_LOG" | head -1 | cut -d: -f1)" -lt "$(grep -n 'firewall-rule delete' "$MOCK_LOG" | head -1 | cut -d: -f1)" ;;
+        no-migrations)
+            test "$exit_status" = 0
+            test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub:$RELEASE_VERSION"
+            test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1
+            grep -q "git diff .*$PREVIOUS_SHA $RELEASE_SHA" "$MOCK_LOG"
+            grep -q 'skipping the migration window' "$workspace/output"
+            ! grep -q 'manage.py' "$MOCK_LOG"
+            ! grep -q 'firewall-rule' "$MOCK_LOG"
+            ! grep -q 'flexible-server' "$MOCK_LOG" ;;
+        cleanup-failure)
+            # A failed background cleanup no longer blocks the image update, but the
+            # release must still fail and name the rule to remove.
+            test "$exit_status" != 0
+            test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub:$RELEASE_VERSION"
+            test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1
+            grep -q 'Temporary firewall cleanup failed: github-cd-123-1' "$workspace/output"
+            test -f "$PRODUCTION_ENV_FILE.firewall" ;;
+        stale|classic|tag-mismatch|missing-backup|migration-failure)
             test "$exit_status" != 0
             test "$(cat "$MOCK_IMAGE")" = "$OLD_IMAGE"
             ! grep -q 'az resource update' "$MOCK_LOG" ;;
@@ -107,9 +139,12 @@ for scenario in success stale classic tag-mismatch missing-backup migration-fail
                 grep -q 'operator recovery is required' "$workspace/output"
             fi ;;
     esac
-    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != tag-mismatch && "$scenario" != missing-backup ]]; then
+    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != tag-mismatch && "$scenario" != missing-backup && "$scenario" != no-migrations ]]; then
         grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
         grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
+    fi
+    if [[ "$scenario" != cleanup-failure ]]; then
+        test ! -e "$PRODUCTION_ENV_FILE.firewall"
     fi
     printf 'PASS: %s\n' "$scenario"
 done
