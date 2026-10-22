@@ -75,10 +75,22 @@ class LoginPageTests(TestCase):
 
         self.assertContains(response, static("css/liquid-glass.css") + "?v=")
 
-    def test_anonymous_landing_still_redirects_to_login(self):
-        response = self.client.get(reverse("landing"))
+    def test_anonymous_homepage_renders_login_without_redirect(self):
+        response = self.client.get("/")
 
-        self.assertRedirects(response, reverse("login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "accounts/login.html")
+
+    def test_authenticated_homepage_redirects_to_dashboard(self):
+        user = User.objects.create_user(
+            username="home_user", password="x-Strong-Pass-123", role=User.Roles.ADMIN,
+            must_change_password=False,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+
+        self.assertRedirects(response, reverse("hub:dashboard"), fetch_redirect_response=False)
 
     def test_login_page_does_not_expose_credentials(self):
         response = self.client.get(reverse("login"))
