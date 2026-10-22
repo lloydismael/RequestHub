@@ -321,7 +321,9 @@ def _build_sqr_approval_body_lines(submission: "SqrSubmission", requestor_name: 
         submission.computed_total_price if submission.computed_total_price is not None else submission.quotation_total_price
     )
 
-    return [
+    lines = [
+        "SQR Approval Advisory",
+        _format_sqr_approval_greeting(requestor_name),
         "Submitted SQR is now approved, please refer to the ff. details below.",
         "",
         f"SQR ID : {submission.reference_code or '—'}",
@@ -329,7 +331,7 @@ def _build_sqr_approval_body_lines(submission: "SqrSubmission", requestor_name: 
         f"Service Description : {service_description}",
         f"Account Manager : {account_manager}",
         f"Scope of Services : {scope_of_services}",
-        f"Add-On Service : {service_component}",
+        *([f"Add-On Service : {service_component}"] if submission.managed_support_amount is not None else []),
         "Included Services:",
         "• Proactive System Health Checks",
         "• System/Platform Patching (scheduled)",
@@ -347,7 +349,7 @@ def _build_sqr_approval_body_lines(submission: "SqrSubmission", requestor_name: 
         f"Systems Support & Maintenance Service - 1 Year (Optional): {_format_sqr_approval_currency(submission.managed_support_amount)}",
         f"Total Professional Services Investment: {investment_total}",
         "",
-        "**TERMS AND CONDITIONS**",
+        "TERMS AND CONDITIONS",
         "VAT: This quote excludes Value Added Tax (VAT).",
         "For P&L documentation purposes, a VAT-inclusive total may be applied. Internal billing and revenue reporting remain VAT-exclusive.",
         "This is a budgetary quote.",
@@ -358,6 +360,42 @@ def _build_sqr_approval_body_lines(submission: "SqrSubmission", requestor_name: 
         "For any questions or to discuss this quote further, please don't hesitate to contact us:",
         "EnterpriseServices@phildata.com",
     ]
+    summary = [f"Engineer : {requestor_name or 'Not assigned'}"]
+    reviewer = submission.reviewed_by or submission.pm_esg_reviewer
+    if reviewer:
+        summary.append(f"Reviewer : {reviewer.get_full_name() or reviewer.username}")
+    for label, hours, amount in (
+        ("Implementation", submission.sse_manhrs, submission.sse_amount),
+        ("Project Management", submission.pm_manhrs, submission.pm_amount),
+    ):
+        if hours is not None:
+            rate = amount / hours if amount is not None and hours else None
+            summary.append(f"{label} : {hours} man-hours" + (f" at {_format_sqr_approval_currency(rate)} / hour" if rate is not None else ""))
+    if submission.computed_gross_total is not None:
+        summary.extend([
+            f"Subtotal: {_format_sqr_approval_currency(submission.computed_gross_total)}",
+            f"Discount ({submission.discount_rate or 0}%): {_format_sqr_approval_currency(submission.computed_discount_amount)}",
+        ])
+    lines[lines.index("Professional Services Investment Summary") + 1:lines.index("Professional Services Investment Summary") + 1] = summary
+    lines.extend(["", "Next steps", "Review the approved quotation and supporting documents before proceeding with internal billing."])
+    for label, url in _sqr_approval_document_links(submission):
+        lines.append(f"{label}: {url}")
+    if submission.managed_support_amount is None:
+        start = lines.index("Included Services:")
+        end = lines.index("Quantity: 1 Lot")
+        del lines[start:end]
+        lines = [line for line in lines if not line.startswith("Systems Support & Maintenance Service - 1 Year (Optional):")]
+    return lines
+
+
+def _sqr_approval_document_links(submission):
+    links = []
+    for label, value in (("Supporting document", submission.documentation_links), ("SQR folder", submission.sqr_folder_link)):
+        for url in (value or "").splitlines():
+            url = url.strip()
+            if re.match(r"^https?://[^\s]+$", url, re.IGNORECASE):
+                links.append((label, url))
+    return links
 
 
 def _build_sqr_approval_html(submission: "SqrSubmission", requestor_name: str) -> str:
@@ -375,21 +413,49 @@ def _build_sqr_approval_html_markup(submission: "SqrSubmission", requestor_name:
     validity_date = html.escape(_format_sqr_approval_validity_date(submission))
     greeting = html.escape(_format_sqr_approval_greeting(requestor_name))
     logo_url = html.escape(logo_src)
-    project_implementation = html.escape(_format_sqr_approval_currency(submission.sse_amount))
-    project_management = html.escape(_format_sqr_approval_currency(submission.pm_amount))
-    maintenance_amount = html.escape(_format_sqr_approval_currency(submission.managed_support_amount))
     professional_total = html.escape(
         _format_sqr_approval_currency(
             submission.computed_total_price if submission.computed_total_price is not None else submission.quotation_total_price
         )
     )
 
-    return "".join(
+    summary_rows = []
+    reviewer = submission.reviewed_by or submission.pm_esg_reviewer
+    for label, value in (
+        ("Engineer", requestor_name),
+        ("Reviewer", reviewer.get_full_name() or reviewer.username if reviewer else ""),
+    ):
+        if value:
+            summary_rows.append(f'<p style="font:13px Arial;color:#101828;margin:8px 0;"><b>{label}</b>: {html.escape(value)}</p>')
+    cost_rows = []
+    for label, hours, amount in (
+        ("Project Implementation", submission.sse_manhrs, submission.sse_amount),
+        ("Project Management", submission.pm_manhrs, submission.pm_amount),
+        ("Systems Support & Maintenance Service - 1 Year (Optional)", None, submission.managed_support_amount),
+    ):
+        if amount is None and hours is None:
+            continue
+        rate = amount / hours if amount is not None and hours else None
+        cells = [label, str(hours) if hours is not None else "1 Lot", _format_sqr_approval_currency(rate) if rate is not None else "—", _format_sqr_approval_currency(amount)]
+        cost_rows.append('<tr>' + ''.join(f'<td style="border:1px solid #cfd8e3;padding:12px;font:13px Arial;color:#101828;">{html.escape(value)}</td>' for value in cells) + '</tr>')
+    costing = '<table style="width:100%;border-collapse:collapse;"><thead><tr>' + ''.join(f'<th scope="col" style="background:#edf2f7;border:1px solid #cfd8e3;padding:12px;text-align:left;font: bold 13px Arial;color:#101828;">{label}</th>' for label in ("Service", "Man-hours / quantity", "Rate", "Amount")) + '</tr></thead><tbody>' + ''.join(cost_rows)
+    for label, amount in (("Subtotal", submission.computed_gross_total), (f"Discount ({submission.discount_rate or 0}%)", submission.computed_discount_amount)):
+        if amount is not None:
+            costing += f'<tr><td colspan="3" style="padding:12px;font:13px Arial;color:#101828;">{label}</td><td style="padding:12px;font:13px Arial;color:#101828;">{html.escape(_format_sqr_approval_currency(amount))}</td></tr>'
+    costing += f'<tr style="background:#e8f1fa;"><td colspan="3" style="padding:14px;font:14px Arial;color:#101828;"><b>Total Professional Services Investment</b></td><td style="padding:14px;font: bold 16px Arial;color:#101828;">{professional_total}</td></tr></tbody></table>'
+    next_steps = '<div style="margin-top:24px;font:13px Arial;color:#101828;"><h2 style="font-size:16px;">Next steps</h2><p>Review the approved quotation and supporting documents before proceeding with internal billing.</p>'
+    for label, url in _sqr_approval_document_links(submission):
+        next_steps += f'<p><a href="{html.escape(url, quote=True)}" style="color:#156082;">{label}</a></p>'
+    next_steps += '</div>'
+
+    markup = "".join(
         [
-            '<html><head><meta http-equiv="Content-Type" content="text/html; charset=Windows-1252"><style type="text/css" style="display:none;"> P {margin-top:0;margin-bottom:0;} </style></head><body dir="ltr">',
+            '<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><style type="text/css" style="display:none;"> P {margin-top:0;margin-bottom:0;} </style></head><body dir="ltr">',
             '<div class="elementToProof" style="background-color:rgb(244,247,251);padding:24px 12px;">',
             '<div class="elementToProof" style="background-color:rgb(255,255,255);margin:0 auto;border-width:1px;border-style:solid;border-color:rgb(215,222,232);max-width:860px;">',
-            '<div class="elementToProof" style="padding:28px 30px 32px;">',
+            '<div class="elementToProof" style="padding:28px 30px 32px;overflow-wrap:anywhere;">',
+            '<h1 style="font:bold 20px Arial;color:#101828;margin:0 0 18px;">SQR Approval Advisory</h1>',
+            ''.join(summary_rows),
             f'<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:0 0 12px;font-size:14px;"><span style="font-family:Arial,Helvetica,sans-serif;color:rgb(16,24,40);">{greeting}</span></p>',
             '<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:0 0 22px;font-size:14px;"><span style="font-family:Arial,Helvetica,sans-serif;color:rgb(16,24,40);">Submitted SQR is now approved, please refer to the ff. details below.</span></p>',
             '<div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:rgb(16,24,40);">',
@@ -421,7 +487,7 @@ def _build_sqr_approval_html_markup(submission: "SqrSubmission", requestor_name:
             '<td colspan="2" style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;"><b>Scope of Services</b> : ' + html.escape((submission.project_details or "").strip() or "—") + '</div></td>',
             '</tr>',
             '<tr>',
-            '<td colspan="2" style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;"><b>Add-On Service</b> : ' + service_component + '</div></td>',
+            ('<td colspan="2" style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;"><b>Add-On Service</b> : ' + service_component + '</div></td>') if submission.managed_support_amount is not None else '',
             '</tr>',
             '</tbody></table>',
             '<div class="elementToProof" style="direction:ltr;margin-top:18px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:rgb(16,24,40);"><div style="font-weight:700;">Included Services:</div><ul style="margin:8px 0 0 18px;padding:0;line-height:1.7;">',
@@ -437,25 +503,7 @@ def _build_sqr_approval_html_markup(submission: "SqrSubmission", requestor_name:
             f'<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:8px 0 0;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;"><b>Quotation Validity Until</b>: {validity_date}</span></p>',
             '<div class="elementToProof" style="margin-top:24px;">',
             '<div class="elementToProof" style="direction:ltr;margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:16px;color:rgb(16,24,40);"><span style="font-weight:700;">Professional Services Investment Summary</span></div>',
-            '<table role="presentation" style="direction:ltr;width:100%;box-sizing:border-box;border-collapse:collapse;border-spacing:0;">',
-            '<tbody>',
-            '<tr>',
-            '<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;">Project Implementation</div></td>',
-            f'<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);text-align:right;"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;">{project_implementation}</div></td>',
-            '</tr>',
-            '<tr>',
-            '<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;">Project Management</div></td>',
-            f'<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);text-align:right;"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;">{project_management}</div></td>',
-            '</tr>',
-            '<tr>',
-            '<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;">Systems Support &amp; Maintenance Service - 1 Year (Optional)</div></td>',
-            f'<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);text-align:right;"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;">{maintenance_amount}</div></td>',
-            '</tr>',
-            '<tr>',
-            '<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;"><b>Total Professional Services Investment</b></div></td>',
-            f'<td style="direction:ltr;border-width:1px;border-style:solid;border-color:rgb(207,216,227);padding:14px;vertical-align:top;color:rgb(16,24,40);text-align:right;"><div class="elementToProof" style="direction:ltr;font-family:Arial,Helvetica,sans-serif;font-size:13px;"><b>{professional_total}</b></div></td>',
-            '</tr>',
-            '</tbody></table>',
+            costing,
             '</div>',
             '<div class="elementToProof" style="margin-top:24px;">',
             '<div class="elementToProof" style="direction:ltr;margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:16px;color:rgb(16,24,40);"><span style="font-weight:700;">Terms and Conditions</span></div>',
@@ -466,6 +514,7 @@ def _build_sqr_approval_html_markup(submission: "SqrSubmission", requestor_name:
             '<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:0 0 8px;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;">Travel costs within Metro Manila are included.</span></p>',
             '<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:0 0 8px;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;">This quote does not include hardware, software licenses, or subscriptions unless stated.</span></p>',
             '</div>',
+            next_steps,
             '<div class="elementToProof" style="margin-top:22px;padding-top:16px;border-top:1px solid rgb(228,231,236);">',
             '<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:0 0 6px;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;">For any questions or to discuss this quote further, please don\'t hesitate to contact us:</span></p>',
             '<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:0;font-size:13px;"><span style="font-family:Arial,Helvetica,sans-serif;color:rgb(21,96,130);font-weight:700;"><a href="mailto:EnterpriseServices@phildata.com" style="color:rgb(21,96,130);text-decoration:none;margin-top:0;margin-bottom:0;">EnterpriseServices@phildata.com</a></span></p>',
@@ -476,6 +525,11 @@ def _build_sqr_approval_html_markup(submission: "SqrSubmission", requestor_name:
             '</body></html>',
         ]
     )
+    if submission.managed_support_amount is None:
+        start = markup.index('<div class="elementToProof" style="direction:ltr;margin-top:18px;')
+        end = markup.index('<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:12px', start)
+        markup = markup[:start] + markup[end:]
+    return markup
 
 
 @dataclass(frozen=True)
@@ -4189,7 +4243,7 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             and coerced == SqrSubmission.Status.APPROVED
             and old_status != SqrSubmission.Status.APPROVED
         ):
-            approval_urls["draft"] = _build_sqr_approval_mailto_url(_get_sqr_approval_email_context(submission))
+            approval_urls["draft"] = reverse("hub:sqr-approval-email-formatted-draft", args=[submission.pk])
             approval_urls["eml"] = reverse("hub:sqr-approval-email-eml", args=[submission.pk])
 
         response_data = self._build_inline_response(
@@ -4763,7 +4817,7 @@ class SqrApprovalEmlDownloadView(LoginRequiredMixin, View):
 
 
 class SqrApprovalFormattedDraftView(LoginRequiredMixin, View):
-    """Open the default mail app with an editable draft for the approved SQR email."""
+    """Preview an approved advisory for formatted copying into the user's mail app."""
 
     def _get_submission(self, pk):
         return get_object_or_404(
@@ -4791,7 +4845,17 @@ class SqrApprovalFormattedDraftView(LoginRequiredMixin, View):
             return redirect("hub:sqr")
 
         context = _get_sqr_approval_email_context(submission)
-        return HttpResponseRedirect(_build_sqr_approval_mailto_url(context))
+        compose_context = {**context, "plain_text": ""}
+        response = render(request, "hub/sqr_approval_preview.html", {
+            "submission": submission,
+            "email_subject": context["subject"],
+            "email_recipients": context["recipients"],
+            "email_html": context["html_preview"],
+            "email_plain_text": context["plain_text"],
+            "compose_url": _build_sqr_approval_mailto_url(compose_context),
+        })
+        patch_cache_control(response, private=True, no_store=True)
+        return response
 
 
 class RequestDetailView(LoginRequiredMixin, DetailView):

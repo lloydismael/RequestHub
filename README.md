@@ -124,8 +124,12 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
       - `for_revision` ? **For Revision**
       - `reviewed` ? **Approved**
 - Approved flow supports two user options:
-      - open a ready-to-edit email draft through the local mail app
+      - automatically copy the formatted email body upon selecting the ready draft option, then launch the local mail app with recipients and subject populated; paste with Ctrl+V (Outlook must be the default `mailto` handler)
       - download a formatted `.eml` file with the branded quotation layout
+- Selecting either option saves the approval, refreshes the status badge and approval dates, then opens the selected advisory. Cancel leaves the status unchanged.
+- Ready drafts include project details, engineer/reviewer, service man-hours and rates, subtotal, discount, final total, validity, and supporting links. Preview and `.eml` use the same HTML builder; the `.eml` embeds the logo.
+- Automatic copying starts during the selection click, waits for approval to save, and copies the saved quotation before launching Outlook. If automatic copying is blocked or unsupported, the preview opens with manual copy and `.eml` options. Browsers may require confirmation before opening Outlook.
+- Copying requires browser clipboard permission and rich-text support in Outlook. If HTML copying fails, plain text is offered; if clipboard access is blocked, select the manual-copy body or download `.eml`. Copy/download failures do not revert approval. No email is sent automatically.
 - Managed support date behavior:
       - `AI` = Post-service warranty end date
       - `AJ` = Support start date (manual value or computed fallback)

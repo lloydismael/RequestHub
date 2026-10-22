@@ -1137,7 +1137,7 @@
                 <span class="sqr-approval-option__icon"><i class="bi bi-envelope-paper"></i></span>
                 <span>
                     <span class="sqr-approval-option__label">Use ready draft email body</span>
-                    <span class="sqr-approval-option__hint">Opens your mail app with a clean, table-style plain-text quotation ready to edit.</span>
+                    <span class="sqr-approval-option__hint">Automatically copies the formatted quotation and opens your mail app. Paste with Ctrl+V.</span>
                 </span>
                 <span class="sqr-approval-option__arrow"><i class="bi bi-arrow-right-circle"></i></span>
             </button>
@@ -1329,7 +1329,7 @@
                     pendingDraft.cell,
                     pendingDraft.displayEl,
                     undefined,
-                    { approvalEmailAction: 'draft' }
+                    { approvalEmailAction: 'draft', draftTransfer: window.startSqrApprovalDraft() }
                 );
                 return;
             }
@@ -2181,6 +2181,7 @@
 
 {# ── Inline cell editing JS (Admin / PM-ESG) ──────────────────────────── #}
 {% if is_pm %}
+<script src="{% static 'hub/sqr_approval_autocopy.js' %}"></script>
 <script>
 (function () {
     'use strict';
@@ -2253,7 +2254,7 @@
                     pendingDraft.cell,
                     pendingDraft.displayEl,
                     undefined,
-                    { approvalEmailAction: 'draft' }
+                    { approvalEmailAction: 'draft', draftTransfer: window.startSqrApprovalDraft() }
                 );
                 return;
             }
@@ -2386,14 +2387,6 @@
         return labels[field] || String(field || 'field').replace(/_/g, ' ');
     }
 
-    function getDisplay(field, value) {
-        if (!value && value !== 0) return '\u2013';
-        if (field === 'status') {
-            if (value === 'reviewed')     return '<span class="badge bg-success-subtle text-success border border-success-subtle">Approved</span>';
-            if (value === 'for_revision') return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">For Revision</span>';
-            return '<span class="badge bg-warning-subtle text-warning border border-warning-subtle">For Processing</span>';
-        }
-
     function renderStatusBadge(container, statusValue) {
         if (!container) return;
         container.textContent = '';
@@ -2413,6 +2406,14 @@
 
         container.appendChild(badge);
     }
+
+    function getDisplay(field, value) {
+        if (!value && value !== 0) return '\u2013';
+        if (field === 'status') {
+            if (value === 'reviewed')     return '<span class="badge bg-success-subtle text-success border border-success-subtle">Approved</span>';
+            if (value === 'for_revision') return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">For Revision</span>';
+            return '<span class="badge bg-warning-subtle text-warning border border-warning-subtle">For Processing</span>';
+        }
         if (field === 'proposal_status') {
             if (value === 'submitted_pending')  return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle">Submitted</span>';
             if (value === 'negotiation_review') return '<span class="badge bg-info-subtle text-info border border-info-subtle">On Review</span>';
@@ -2789,7 +2790,11 @@
                 ? data.approval_email_eml_url
                 : data.approval_email_draft_url;
             if (options.approvalEmailAction && chosenApprovalUrl) {
-                window.location.href = chosenApprovalUrl;
+                if (options.draftTransfer) {
+                    options.draftTransfer.complete(chosenApprovalUrl);
+                } else {
+                    window.location.href = chosenApprovalUrl;
+                }
             } else {
                 cell.title = 'Choose how to open the approved SQR quotation email.';
                 openApprovalChoiceModal(data.approval_email_draft_url, data.approval_email_eml_url);
@@ -2894,6 +2899,7 @@
             showUndoToast({pk: pk, field: field, cell: cell, displayEl: displayEl, data: result.data});
         })
         .catch(function() {
+            if (options.draftTransfer) options.draftTransfer.cancel();
             cell.classList.remove('sqr-saving');
             cell.classList.add('sqr-error');
             setTimeout(function() { cell.classList.remove('sqr-error'); }, 2500);

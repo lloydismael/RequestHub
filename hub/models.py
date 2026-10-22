@@ -1302,3 +1302,37 @@ class FormEditorAuditEvent(ImmutableFormRecord):
 
     class Meta:
         ordering = ["-created_at", "-pk"]
+
+class OutlookConnection(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    session_hash = models.CharField(max_length=64)
+    tenant_id = models.CharField(max_length=64)
+    mailbox_oid = models.CharField(max_length=64)
+    encrypted_cache = models.TextField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "session_hash"], name="outlook_user_session_unique")]
+
+
+class OutlookOAuthAttempt(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    session_hash = models.CharField(max_length=64)
+    state_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    consumed = models.BooleanField(default=False)
+
+
+class OutlookSqrDraft(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    submission = models.ForeignKey(SqrSubmission, on_delete=models.CASCADE)
+    tenant_id = models.CharField(max_length=64)
+    mailbox_oid = models.CharField(max_length=64)
+    correlation_id = models.UUIDField(unique=True)
+    # Pending is durable before Graph POST: an uncertain result only permits reconciliation.
+    state = models.CharField(max_length=16, default="new")
+    message_id = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["user", "tenant_id", "mailbox_oid", "submission"], name="outlook_user_mailbox_sqr_unique")]

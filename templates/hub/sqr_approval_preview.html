@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Approval email · Request Hub{% endblock %}
+{% block content %}
+<div class="glass-card p-4" id="sqr-email-preview">
+    <a href="{% url 'hub:sqr' %}" class="btn btn-outline-secondary mb-3">Back to SQR tracker</a>
+    <h1 class="h3">Prepare approval email</h1>
+    <p class="text-success">{{ submission.reference_code }} is approved. Preparing this email does not change its saved status.</p>
+    <dl>
+        <dt>To</dt><dd>{{ email_recipients|join:"; " }}</dd>
+        <dt>Subject</dt><dd>{{ email_subject }}</dd>
+    </dl>
+    <p>Copy the formatted body, open your email draft, then paste into the message using <kbd>Ctrl</kbd> + <kbd>V</kbd>. Outlook must be your default mail app. Formatting support varies by browser and Outlook version.</p>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn btn-primary" id="sqr-email-copy">Copy formatted body</button>
+        <a class="btn btn-outline-primary" href="{{ compose_url }}" id="sqr-email-open">Open email draft</a>
+        <a class="btn btn-outline-secondary" href="{% url 'hub:sqr-approval-email-eml' submission.pk %}">Download Outlook template (.eml)</a>
+    </div>
+    <p id="sqr-email-feedback" role="status" aria-live="polite">The draft opens with recipients and subject only. Copy and paste the body, or use the complete .eml template.</p>
+    <details class="mb-3" id="sqr-email-plain-fallback">
+        <summary>Plain-text fallback / manual copy</summary>
+        <label for="sqr-email-plain" class="form-label mt-2">Select and copy this body if formatted copying is unavailable.</label>
+        <textarea id="sqr-email-plain" class="form-control" rows="12" readonly>{{ email_plain_text }}</textarea>
+    </details>
+    <iframe id="sqr-email-frame" title="Approval email body preview" sandbox="" referrerpolicy="no-referrer" srcdoc="{{ email_html }}" style="width:100%;height:680px;border:1px solid #cfd8e3;background:#fff;"></iframe>
+    {{ email_html|json_script:"sqr-email-html" }}
+    {{ email_plain_text|json_script:"sqr-email-text" }}
+</div>
+<script src="{% static 'hub/sqr_approval_preview.js' %}"></script>
+{% endblock %}
