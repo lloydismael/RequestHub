@@ -4,10 +4,10 @@
 {% block title %}SQR &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=18">
+<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=19">
 {% if active_sqr_tab != 'reports' %}
-<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=1">
-<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=2" defer></script>
+<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=3">
+<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=5" defer></script>
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
 <script src="{% static 'js/sqr-performance.js' %}?v=2" defer></script>
@@ -236,6 +236,8 @@
                 </button>
                 {% endif %}
             </div>
+            {# SQR Tracker Prototype stage filters: rendered by sqr-tracker-prototype.js #}
+            <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-proto-pipeline" role="group" aria-label="Filter by pipeline stage" data-sqr-prototype-only hidden></div>
         </div>
 
         {% if is_pm and active_sqr_tab == 'reports' %}
@@ -3208,6 +3210,7 @@
     var trackerControls = Array.from(document.querySelectorAll('[data-sqr-tracker-only]')).map(function (element) {
         return {element: element, wasHidden: element.hidden};
     });
+    var prototypeControls = Array.from(document.querySelectorAll('[data-sqr-prototype-only]'));
 
     function setView(viewName) {
         // Retired views ('esg') fall back to 'tracker'.
@@ -3232,6 +3235,7 @@
             // Do not close the Bootstrap collapse or clear any Tracker filters.
             control.element.hidden = activeView !== 'tracker' || control.wasHidden;
         });
+        prototypeControls.forEach(function (element) { element.hidden = activeView !== 'prototype'; });
         document.dispatchEvent(new CustomEvent('sqr:performance-view', {detail: {view: activeView}}));
         try { window.localStorage.setItem(storageKey, activeView); } catch (error) {}
     }
@@ -3359,7 +3363,7 @@
     }
 
     function updateBadgeState() {
-        document.querySelectorAll('.sqr-badge-filter').forEach(function (badge) {
+        document.querySelectorAll('#sqr-badge-filters .sqr-badge-filter').forEach(function (badge) {
             var badgeFilter = badge.dataset.sqrFilter || '';
             var isActive = false;
             if (badgeFilter === 'my_assigned') {
@@ -3583,7 +3587,7 @@
         clearTimeout(searchDebounceTimer);
         searchDebounceTimer = setTimeout(applyFilter, 180);
     }
-    document.querySelectorAll('.sqr-badge-filter').forEach(function (badge) {
+    document.querySelectorAll('#sqr-badge-filters .sqr-badge-filter').forEach(function (badge) {
         badge.addEventListener('click', function () {
             var filter = badge.dataset.sqrFilter || '';
             // Total badge always shows full list (clears My Assigned + status presets).

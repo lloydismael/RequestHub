@@ -2384,6 +2384,37 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             req.ack_first_iso = ack_time.isoformat() if ack_time else ""
             req.is_acknowledged = bool(ack_time)
 
+    @staticmethod
+    def _request_search_haystack(req: Request) -> str:
+        parts = [
+            req.reference_code,
+            req.account.name if req.account_id else "",
+            req.account_manager,
+            req.description,
+            req.teams_chat_topic,
+            req.get_engagement_type_display(),
+            req.get_product_category_display(),
+            req.get_priority_display(),
+            req.get_status_display(),
+        ]
+        for person in (req.requestor, req.engineer, req.backup_engineer):
+            if person:
+                parts.extend([person.get_full_name(), person.username, person.email])
+        return " ".join(str(part) for part in parts if part).casefold()
+
+    @classmethod
+    def _search_requests(cls, requests: list[Request], query: str) -> list[Request]:
+        """Match every whitespace-separated term against the whole request, not just the visible page."""
+        terms = [term for term in query.casefold().split() if term]
+        if not terms:
+            return requests
+        results = []
+        for req in requests:
+            haystack = cls._request_search_haystack(req)
+            if all(term in haystack for term in terms):
+                results.append(req)
+        return results
+
     def _build_admin_dashboard_context(self, user) -> dict:
         """Shared admin/PM-ESG dashboard table + metrics context (full page + live poll)."""
         metric_keys = [
@@ -2454,7 +2485,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         today = timezone.now().astimezone(MANILA_TZ).date()
         all_requests = list(requests)
-        filtered_requests = self._filter_requests_by_metric(all_requests, metric_filter, today)
+        search_query = (self.request.GET.get("q") or "").strip()[:200]
+        if search_query:
+            # A search spans every request matching the other filters, regardless of the metric card.
+            filtered_requests = self._search_requests(all_requests, search_query)
+        else:
+            filtered_requests = self._filter_requests_by_metric(all_requests, metric_filter, today)
         display_requests, list_meta = self._limit_dashboard_rows(filtered_requests)
         # Annotate only rows that will render — keeps live poll/table HTML light.
         self._annotate_acknowledgement_status(display_requests)
@@ -2543,7 +2579,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "filter_toggle_link": filter_toggle_link,
             "metrics": {key: len(metric_buckets[key]) for key in metric_keys},
             "metric_links": metric_links,
-            "active_metric_filter": metric_filter,
+            "active_metric_filter": "" if search_query else metric_filter,
+            "dashboard_search_query": search_query,
             "pm_esg_tab": pm_esg_tab,
             "pm_esg_tab_links": pm_esg_tab_links,
             "dashboard_live_version": live_version,
@@ -3595,6 +3632,8 @@ class DashboardLiveDataView(LoginRequiredMixin, View):
                 "changed": True,
                 "version": context.get("dashboard_live_version") or live_version,
                 "request_count": len(context.get("requests") or []),
+                "total_count": context.get("requests_total_count", 0),
+                "search_query": context.get("dashboard_search_query", ""),
                 "html_metrics": html_metrics,
                 "html_rows": html_rows,
             }
@@ -7413,6 +7452,8 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         if query:
             terms = [term for term in query.split() if term]
             for term in terms:
+                lowered = term.lower()
+                matching_roles = [value for value, label in User.Roles.choices if lowered in str(label).lower()]
                 qs = qs.filter(
                     Q(first_name__icontains=term)
                     | Q(last_name__icontains=term)
@@ -7420,6 +7461,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                     | Q(email__icontains=term)
                     | Q(department__icontains=term)
                     | Q(role__icontains=term)
+                    | Q(role__in=matching_roles)
                 )
         qs = qs.order_by("first_name", "last_name", "username")
         paginator = Paginator(qs, 50)

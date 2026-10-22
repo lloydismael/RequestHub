@@ -29,7 +29,7 @@
         loaded: false, loadedAt: 0, viewer: null, schema: null, options: {}, records: [], byPk: {},
         specs: {}, sections: {}, labels: {}, selectedPk: null, tab: 'summary', shown: PAGE_SIZE,
         dirtyClassic: false, history: {},
-        filters: {stage: 'all', search: '', status: '', sort: 'attention', mine: false, density: 'comfortable'}
+        filters: {stage: 'all', search: ''}
     };
     var inFlight = null;
     var toastTimer = 0;
@@ -37,9 +37,8 @@
 
     function $(id) { return document.getElementById('sqr-proto-' + id); }
     var el = {
-        pipeline: $('pipeline'), body: $('body'), items: $('items'), count: $('count'), more: $('more'),
-        editor: $('editor'), search: $('search'), status: $('status'), sort: $('sort'), mine: $('mine'),
-        mineWrap: $('mine-wrap'), reset: $('reset'),
+        pipeline: $('pipeline'), body: $('body'), items: $('items'), more: $('more'),
+        editor: $('editor'), search: $('search'),
         toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
         approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
     };
@@ -146,68 +145,54 @@
         return rec.attention.some(function (flag) { return flag.tone === 'danger'; }) ||
             (state.viewer.is_pm && rec.status === 'submitted');
     }
-    function isMine(rec) {
-        return rec.approver_id === state.viewer.pk || rec.values.assigned_pm === String(state.viewer.pk);
-    }
     function baseMatches(rec) {
         var f = state.filters;
-        if (f.status && rec.status !== f.status) return false;
-        if (f.mine && state.viewer.is_pm && !isMine(rec)) return false;
         if (f.search) {
             var terms = f.search.toLowerCase().split(/\s+/).filter(Boolean);
             for (var i = 0; i < terms.length; i += 1) if (rec.search.indexOf(terms[i]) === -1) return false;
         }
         return true;
     }
+    function isMine(rec) { return !!state.viewer && rec.approver_id === state.viewer.pk; }
     function stageMatches(rec) {
         var stage = state.filters.stage;
         if (stage === 'all') return true;
+        if (stage === 'mine') return state.viewer.is_pm ? isMine(rec) : true;
         if (stage === 'attention') return needsAction(rec);
         return rec.stage === stage;
     }
     function attentionScore(rec) {
         return rec.attention.reduce(function (sum, flag) { return sum + (flag.tone === 'danger' ? 3 : flag.tone === 'warning' ? 2 : 0); }, 0);
     }
-    var SORTERS = {
-        attention: function (a, b) { return attentionScore(b) - attentionScore(a) || SORTERS.newest(a, b); },
-        newest: function (a, b) { return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.pk - a.pk; },
-        oldest: function (a, b) { return -SORTERS.newest(a, b); },
-        value: function (a, b) { return (parseFloat(b.total) || 0) - (parseFloat(a.total) || 0); },
-        target: function (a, b) {
-            if (!a.target_date && !b.target_date) return SORTERS.newest(a, b);
-            if (!a.target_date) return 1;
-            if (!b.target_date) return -1;
-            return a.target_date < b.target_date ? -1 : a.target_date > b.target_date ? 1 : 0;
-        }
-    };
+    function newestFirst(a, b) { return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.pk - a.pk; }
+    function needsAttentionFirst(a, b) { return attentionScore(b) - attentionScore(a) || newestFirst(a, b); }
     function visibleRecords() {
-        return state.records.filter(function (rec) { return baseMatches(rec) && stageMatches(rec); })
-            .sort(SORTERS[state.filters.sort] || SORTERS.attention);
+        return state.records.filter(function (rec) { return baseMatches(rec) && stageMatches(rec); }).sort(needsAttentionFirst);
     }
 
     /* ── pipeline strip ──────────────────────────────────────────── */
+    var STAGE_TONES = {all: 'secondary', mine: 'primary', attention: 'danger', opportunity: 'primary', delivery: 'success', billing: 'warning', closed: 'secondary'};
     function renderPipeline() {
         var pool = state.records.filter(baseMatches);
-        var defs = [{key: 'all', label: 'All SQRs', test: function () { return true; }},
-            {key: 'attention', label: 'Needs action', test: needsAction}];
+        var defs = [{key: 'all', label: 'All SQRs', test: function () { return true; }}];
+        if (state.viewer.is_pm) defs.push({key: 'mine', label: 'My Assigned SQR', icon: 'bi-person-check-fill', test: isMine});
+        defs.push({key: 'attention', label: 'Needs action', test: needsAction});
         state.schema.stages.forEach(function (stage) {
             defs.push({key: stage[0], label: stage[1], test: function (rec) { return rec.stage === stage[0]; }});
         });
         el.pipeline.replaceChildren.apply(el.pipeline, defs.map(function (def) {
             var matching = pool.filter(def.test);
             var total = matching.reduce(function (sum, rec) { return sum + (parseFloat(rec.total) || 0); }, 0);
+            var tone = STAGE_TONES[def.key] || 'secondary';
             return h('button', {
-                type: 'button', class: 'sqr-proto__stage', dataset: {stage: def.key},
+                type: 'button', class: 'badge bg-' + tone + '-subtle text-' + tone + ' border border-' + tone + '-subtle sqr-badge-filter',
+                dataset: {stage: def.key}, title: compactPeso(total),
                 'aria-pressed': state.filters.stage === def.key ? 'true' : 'false',
                 on: {click: function () {
                     state.filters.stage = state.filters.stage === def.key ? 'all' : def.key;
                     state.shown = PAGE_SIZE; savePrefs(); renderAll();
                 }}
-            }, [
-                h('span', {class: 'sqr-proto__stage-label', text: def.label}),
-                h('span', {class: 'sqr-proto__stage-count', text: matching.length}),
-                h('span', {class: 'sqr-proto__stage-value', text: compactPeso(total)})
-            ]);
+            }, [def.icon ? icon(def.icon, 'me-1') : null, def.label + ': ' + matching.length]);
         }));
     }
 
@@ -238,16 +223,11 @@
         var activePk = el.items.contains(document.activeElement) && document.activeElement.dataset ? document.activeElement.dataset.pk : null;
         var rows = visibleRecords();
         var slice = rows.slice(0, state.shown);
-        el.items.dataset.density = state.filters.density;
-        el.items.replaceChildren.apply(el.items, slice.map(function (rec) { return h('li', null, cardFor(rec)); }));
+        var children = slice.map(function (rec) { return h('li', null, cardFor(rec)); });
+        if (!rows.length) children.push(h('li', {class: 'sqr-proto__count', text: state.records.length ? 'No matches.' : 'No SQRs yet.'}));
+        el.items.replaceChildren.apply(el.items, children);
         el.more.hidden = rows.length <= slice.length;
         el.more.textContent = 'Show ' + Math.min(PAGE_SIZE, rows.length - slice.length) + ' more';
-        el.count.textContent = rows.length
-            ? 'Showing ' + slice.length + ' of ' + rows.length + ' SQR' + (rows.length === 1 ? '' : 's')
-            : (state.records.length ? 'No matches.' : 'No SQRs yet.');
-        document.querySelectorAll('.sqr-proto__density button').forEach(function (button) {
-            button.setAttribute('aria-pressed', button.dataset.density === state.filters.density ? 'true' : 'false');
-        });
         if (activePk) {
             var again = el.items.querySelector('.sqr-proto__card[data-pk="' + activePk + '"]');
             if (again) again.focus({preventScroll: true});
@@ -296,15 +276,16 @@
         var states = stepStates(rec);
         var actions = [];
         if (rec.perms.edit_form) actions.push(h('a', {class: 'btn btn-outline-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), 'Edit submission']));
-        if (rec.values.sqr_folder_link) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.values.sqr_folder_link, target: '_blank', rel: 'noopener'}, [icon('bi-folder2-open', 'me-2'), 'SQR documents']));
-        if (rec.linked_request) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.linked_request.url, target: '_blank', rel: 'noopener'}, [icon('bi-box-arrow-up-right', 'me-2'), rec.linked_request.code]));
+        var newTab = function () { return h('span', {class: 'visually-hidden', text: ' (opens in a new tab)'}); };
+        if (rec.values.sqr_folder_link) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.values.sqr_folder_link, target: '_blank', rel: 'noopener'}, [icon('bi-folder2-open', 'me-2'), 'SQR documents', icon('bi-box-arrow-up-right', 'ms-2 sqr-proto__ext'), newTab()]));
+        if (rec.linked_request) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.linked_request.url, target: '_blank', rel: 'noopener'}, [icon('bi-link-45deg', 'me-2'), rec.linked_request.code, icon('bi-box-arrow-up-right', 'ms-2 sqr-proto__ext'), newTab()]));
         if (rec.perms.delete) actions.push(h('a', {class: 'btn btn-outline-danger', href: rec.urls.delete}, [icon('bi-trash', 'me-2'), 'Delete']));
 
         var next = rec.next_step;
         var nextActions = [];
         if (next.action === 'review' && canWorkflow) {
             if (rec.status !== 'reviewed') nextActions.push(h('button', {type: 'button', class: 'btn btn-primary', on: {click: function () { openApprove(rec.pk); }}}, [icon('bi-patch-check', 'me-2'), 'Approve']));
-            if (rec.status !== 'for_revision') nextActions.push(h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { openRevise(rec.pk); }}}, [icon('bi-arrow-repeat', 'me-2'), 'Request revision']));
+            if (rec.status !== 'for_revision') nextActions.push(h('button', {type: 'button', class: 'btn btn-outline-danger', on: {click: function () { openRevise(rec.pk); }}}, [icon('bi-arrow-repeat', 'me-2'), 'Request revision']));
         }
         if (next.action === 'edit' && rec.perms.edit_form) nextActions.push(h('a', {class: 'btn btn-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), 'Edit submission']));
 
@@ -312,7 +293,6 @@
         return [
             h('div', {class: 'sqr-proto__ed-head'}, [
                 h('div', {style: 'min-width:0'}, [
-                    h('p', {class: 'sqr-proto__ed-ref', text: rec.ref}),
                     h('h3', {class: 'sqr-proto__ed-title', text: rec.account}),
                     h('p', {class: 'sqr-proto__ed-sub', text: rec.service})
                 ]),
@@ -327,6 +307,7 @@
             })),
             h('div', {class: 'sqr-proto__next', dataset: {tone: next.tone}}, [
                 h('div', null, [
+                    h('p', {class: 'sqr-proto__next-eyebrow', text: 'Next step'}),
                     h('p', {class: 'sqr-proto__next-title', text: next.title}),
                     next.hint ? h('p', {class: 'sqr-proto__next-hint', text: next.hint}) : null
                 ]),
@@ -463,7 +444,7 @@
             h('span', {class: 'sqr-proto__label'}, [spec.label, !canWorkflow ? h('span', {class: 'sqr-proto__lock', title: lockReason(rec, spec)}, [icon('bi-lock-fill'), h('span', {class: 'visually-hidden', text: lockReason(rec, spec)})]) : null]),
             h('div', {class: 'sqr-proto__control', style: 'flex-wrap:wrap'}, [badge('status', rec.status)].concat(canWorkflow ? [
                 rec.status !== 'reviewed' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', on: {click: function () { openApprove(rec.pk); }}}, 'Approve') : null,
-                rec.status !== 'for_revision' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', on: {click: function () { openRevise(rec.pk); }}}, 'Request revision') : null,
+                rec.status !== 'for_revision' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-danger', on: {click: function () { openRevise(rec.pk); }}}, 'Request revision') : null,
                 rec.status !== 'submitted' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-secondary', on: {click: function () { saveStatus(rec.pk, 'submitted', wrap); }}}, 'Back to processing') : null
             ] : [])),
             h('div', {class: 'sqr-proto__state', 'aria-live': 'polite'})
@@ -499,37 +480,131 @@
     }
 
     /* ── editor: summary + history ───────────────────────────────── */
-    function fact(label, value) {
-        return h('div', {class: 'sqr-proto__fact'}, [h('dt', {text: label}), h('dd', null, value === '' || value === null || value === undefined ? '\u2014' : value)]);
+    // Opens the tab holding a field, then scrolls to and focuses it.
+    function goToField(tab, key) {
+        setTab(tab);
+        var wrap = el.editor.querySelector('[data-field-key="' + key + '"]');
+        if (!wrap) return;
+        wrap.scrollIntoView({block: 'center', behavior: 'smooth'});
+        var control = wrap.querySelector('input, select, textarea, button');
+        if (control) control.focus({preventScroll: true});
+        wrap.dataset.spotlight = 'true';
+        window.setTimeout(function () { delete wrap.dataset.spotlight; }, 2200);
+    }
+    function fieldTab(key) { return (state.specs[key] || {}).tab || 'opportunity'; }
+    function canEditField(rec, key) { return rec.editable.indexOf(key) !== -1; }
+    // Don't invite edits to delivery/billing fields before the proposal is won.
+    function canSetNow(rec, key) {
+        if (!canEditField(rec, key)) return false;
+        var tab = fieldTab(key);
+        if (tab === 'delivery') return rec.stage !== 'opportunity';
+        if (tab === 'billing') return rec.stage !== 'opportunity';
+        return true;
+    }
+
+    // Missing or overdue items for the current stage. Only approved SQRs get this list;
+    // earlier states are already covered by the "Next step" banner.
+    function todoItems(rec) {
+        var items = [];
+        if (rec.status !== 'reviewed' || rec.stage === 'closed') return items;
+        var v = rec.values;
+        function add(key, title, hint, tone) {
+            items.push({key: key, tab: fieldTab(key), title: title, hint: hint, tone: tone || 'warning', canEdit: canEditField(rec, key)});
+        }
+        function flag(name) { return rec.attention.filter(function (item) { return item.key === name; })[0]; }
+        if (rec.stage === 'opportunity') {
+            var validity = flag('validity');
+            if (validity) add('proposal_status', validity.label, 'Confirm with the customer, then update the Proposal Status.', validity.tone);
+            if (!v.proposal_status) add('proposal_status', 'Set the Proposal Status', 'Record where the customer stands: pending, negotiation, won, lost or canceled.');
+            if (!rec.total) add('sse_manhrs', 'Add pricing', 'There is no total price yet. Enter the man-hours or maintenance amount.');
+        } else if (rec.stage === 'delivery') {
+            if (flag('overdue')) add('delivery_target_finish_date', 'Delivery is overdue', 'Update the target finish date or the progress.', 'danger');
+            if (!v.assigned_sse) add('assigned_sse', 'Assign an SSE', 'Choose who will deliver the work.');
+            if (!v.delivery_start_date) add('delivery_start_date', 'Set the delivery start date', 'Needed to plan the delivery.');
+            if (!v.delivery_target_finish_date) add('delivery_target_finish_date', 'Set the target finish date', 'Needed to track overdue work.');
+            if (!v.overall_status) add('overall_status', 'Set the overall status', 'Planning, in progress, on hold, completed or cancelled.');
+            if (!v.delivery_health) add('delivery_health', 'Set the health status', 'On track, off track or at risk.');
+            if (!v.delivery_progress) add('delivery_progress', 'Update the progress', 'Enter the % complete.', 'info');
+        } else if (rec.stage === 'billing') {
+            if (!v.delivery_completion_signed_date) add('delivery_completion_signed_date', 'Record the completion sign-off date', 'Add it once the customer signs off the delivery.');
+            if (!v.po_pnl_date) add('po_pnl_date', 'Add the PO / PNL date', 'Required before billing.');
+            if (!v.revenue_reference_no) add('revenue_reference_no', 'Add the billing reference', 'Invoice or internal billing reference number.');
+            add('revenue_status', 'Mark as Billed', 'Do this once billing is done.', 'info');
+        }
+        return items;
+    }
+    function todoCounts(rec) {
+        var counts = {};
+        todoItems(rec).forEach(function (item) { counts[item.tab] = (counts[item.tab] || 0) + 1; });
+        return counts;
+    }
+    function renderTodo(rec) {
+        var items = todoItems(rec);
+        if (rec.stage === 'closed' || rec.status !== 'reviewed') return null;
+        var heading = h('h4', null, ['Action items', items.length ? h('span', {class: 'sqr-proto__pill', text: items.length}) : null]);
+        if (!items.length) {
+            return h('section', {class: 'sqr-proto__section sqr-proto__todo', 'aria-label': 'Action items', dataset: {empty: 'true'}}, [
+                heading, h('p', {class: 'sqr-proto__todo-clear'}, [icon('bi-check-circle-fill'), 'Nothing is missing for this stage.'])
+            ]);
+        }
+        return h('section', {class: 'sqr-proto__section sqr-proto__todo', 'aria-label': 'Action items'}, [
+            heading,
+            h('ul', {class: 'sqr-proto__todo-list'}, items.map(function (item) {
+                var row = h('li', {class: 'sqr-proto__todo-item', dataset: {tone: item.tone}}, [
+                    icon(item.tone === 'danger' ? 'bi-exclamation-octagon-fill' : item.tone === 'info' ? 'bi-info-circle-fill' : 'bi-exclamation-triangle-fill'),
+                    h('div', {class: 'sqr-proto__todo-text'}, [h('p', {class: 'sqr-proto__todo-title', text: item.title}), h('p', {class: 'sqr-proto__todo-hint', text: item.hint})])
+                ]);
+                row.append(item.canEdit
+                    ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', on: {click: function () { goToField(item.tab, item.key); }}}, [(state.specs[item.key] || {}).label ? 'Go to ' + state.specs[item.key].label : 'Open ' + (STAGE_NAMES[item.tab] || '') + ' tab', icon('bi-arrow-right', 'ms-2')])
+                    : h('span', {class: 'sqr-proto__todo-lock'}, [icon('bi-lock-fill'), 'Not editable by you']));
+                return row;
+            }))
+        ]);
+    }
+
+    // `key` makes an empty value actionable: it becomes a link to the field when the viewer can edit it.
+    function fact(label, value, rec, key) {
+        var empty = value === '' || value === null || value === undefined;
+        var content = empty ? '\u2014' : value;
+        if (empty && rec && key && canSetNow(rec, key)) {
+            content = h('button', {type: 'button', class: 'sqr-proto__set', on: {click: function () { goToField(fieldTab(key), key); }}}, [icon('bi-plus-circle', 'me-1'), 'Set ', h('span', {class: 'visually-hidden', text: label})]);
+        }
+        return h('div', {class: 'sqr-proto__fact', dataset: {empty: empty ? 'true' : null}}, [h('dt', {text: label}), h('dd', null, content)]);
     }
     function renderSummary(rec) {
         var v = rec.values;
         var timeline = [
             ['SQR submitted', fmtDate(rec.created_at)], ['Approved', v.reviewed_at], ['Validity due', v.validity_due_date],
-            ['Delivery start', fmtDate(v.delivery_start_date)], ['Target finish', fmtDate(v.delivery_target_finish_date)],
-            ['Actual finish', fmtDate(v.delivery_actual_finish_date)], ['Completion signed', fmtDate(v.delivery_completion_signed_date)],
-            ['PO / PNL', fmtDate(v.po_pnl_date)], ['Billed', fmtDate(v.revenue_date)]
+            ['Delivery start', fmtDate(v.delivery_start_date), 'delivery_start_date'], ['Target finish', fmtDate(v.delivery_target_finish_date), 'delivery_target_finish_date'],
+            ['Actual finish', fmtDate(v.delivery_actual_finish_date), 'delivery_actual_finish_date'], ['Completion signed', fmtDate(v.delivery_completion_signed_date), 'delivery_completion_signed_date'],
+            ['PO / PNL', fmtDate(v.po_pnl_date), 'po_pnl_date'], ['Billed', fmtDate(v.revenue_date), 'revenue_date']
         ];
         return [
+            renderTodo(rec),
             h('section', {class: 'sqr-proto__section', 'aria-label': 'Key facts'}, [
                 h('h4', {text: 'At a glance'}),
                 h('dl', {class: 'sqr-proto__facts'}, [
                     fact('Total price', rec.total ? peso(rec.total) : ''),
                     fact('SQR status', badge('status', rec.status)),
-                    fact('Proposal', badge('proposal_status', rec.proposal_status)),
-                    fact('Delivery', badge('overall_status', rec.overall_status)),
-                    fact('Health', badge('delivery_health', rec.delivery_health)),
-                    fact('Progress', rec.progress === null || rec.progress === undefined ? '' : rec.progress + '%'),
+                    fact('Proposal', badge('proposal_status', rec.proposal_status), rec, 'proposal_status'),
+                    fact('Delivery', badge('overall_status', rec.overall_status), rec, 'overall_status'),
+                    fact('Health', badge('delivery_health', rec.delivery_health), rec, 'delivery_health'),
+                    fact('Progress', rec.progress === null || rec.progress === undefined ? '' : rec.progress + '%', rec, 'delivery_progress'),
                     fact('Billing', rec.stage === 'opportunity' || (rec.stage === 'closed' && rec.closed_reason !== 'billed') ? '' : badge('revenue_status', rec.revenue_status)),
                     fact('Requester', rec.requester), fact('Approver', rec.approver),
-                    fact('Assigned PM', rec.assigned_pm_name), fact('Assigned SSE', rec.assigned_sse_name),
+                    fact('Assigned PM', rec.assigned_pm_name, rec, 'assigned_pm'), fact('Assigned SSE', rec.assigned_sse_name, rec, 'assigned_sse'),
                     fact('Scope', rec.scope), fact('Group', rec.group)
                 ])
             ]),
             h('section', {class: 'sqr-proto__section', 'aria-label': 'Key dates'}, [
                 h('h4', {text: 'Key dates'}),
                 h('ul', {class: 'sqr-proto__timeline'}, timeline.map(function (row) {
-                    return h('li', {dataset: {done: row[1] ? 'true' : 'false'}}, [icon(row[1] ? 'bi-check-circle-fill' : 'bi-circle'), row[0], h('span', {text: row[1] || 'Not set'})]);
+                    var done = !!row[1];
+                    var tail = h('span', {text: row[1] || 'Not set'});
+                    if (!done && row[2] && canSetNow(rec, row[2])) {
+                        tail = h('button', {type: 'button', class: 'sqr-proto__set', on: {click: function () { goToField(fieldTab(row[2]), row[2]); }}}, [icon('bi-calendar-plus', 'me-1'), 'Set date', h('span', {class: 'visually-hidden', text: ' for ' + row[0]})]);
+                    }
+                    return h('li', {dataset: {done: done ? 'true' : 'false'}}, [icon(done ? 'bi-check-circle-fill' : 'bi-circle'), row[0], tail]);
                 }))
             ])
         ];
@@ -584,18 +659,20 @@
         var rec = record(state.selectedPk);
         if (!rec) return;
         var tabs = tabList(rec);
+        var counts = todoCounts(rec);
         if (!tabs.some(function (t) { return t[0] === state.tab; })) state.tab = 'summary';
         el.editor.replaceChildren(
             h('button', {type: 'button', class: 'btn btn-outline-secondary sqr-proto__back', on: {click: backToList}}, [icon('bi-arrow-left', 'me-2'), 'All SQRs']),
             h('div', {class: 'sqr-proto__chrome'}, renderChrome(rec)),
             h('div', {class: 'sqr-proto__tabs', role: 'tablist', 'aria-label': 'Record sections'}, tabs.map(function (tab) {
                 var selected = tab[0] === state.tab;
+                var pending = counts[tab[0]];
                 return h('button', {
                     type: 'button', role: 'tab', class: 'sqr-proto__tab', id: 'sqr-proto-tab-' + tab[0],
                     'aria-selected': selected ? 'true' : 'false', 'aria-controls': 'sqr-proto-panel', tabindex: selected ? '0' : '-1',
-                    dataset: {tab: tab[0]}, text: tab[1],
+                    dataset: {tab: tab[0]},
                     on: {click: function () { setTab(tab[0]); }, keydown: tabKeys}
-                });
+                }, [tab[1], pending ? h('span', {class: 'sqr-proto__pill', title: pending + ' to do'}, [pending, h('span', {class: 'visually-hidden', text: ' to do'})]) : null]);
             })),
             h('div', {class: 'sqr-proto__panel', id: 'sqr-proto-panel', role: 'tabpanel', tabindex: '-1'})
         );
@@ -607,7 +684,7 @@
         if (!rec || !panel) return;
         panel.setAttribute('aria-labelledby', 'sqr-proto-tab-' + state.tab);
         panel.replaceChildren();
-        if (state.tab === 'summary') panel.append.apply(panel, renderSummary(rec));
+        if (state.tab === 'summary') panel.append.apply(panel, renderSummary(rec).filter(Boolean));
         else if (state.tab === 'history') renderHistory(rec, panel);
         else panel.append.apply(panel, renderFormTab(rec, state.tab));
     }
@@ -781,14 +858,10 @@
         });
         index(data.records);
         state.history = {};
-        if (!state.loaded && !loadPrefs()) state.filters.mine = root.dataset.defaultMine === '1' && data.viewer.is_pm;
+        if (!state.loaded) loadPrefs();
         state.loaded = true;
         state.loadedAt = Date.now();
-        el.mineWrap.hidden = !data.viewer.is_pm;
         el.search.value = state.filters.search;
-        el.status.value = state.filters.status;
-        el.sort.value = state.filters.sort;
-        el.mine.checked = state.filters.mine;
         renderAll();
         if (state.selectedPk && record(state.selectedPk)) {
             var focused = el.editor.contains(document.activeElement);
@@ -800,14 +873,13 @@
     }
     function load(background) {
         if (inFlight) return inFlight;
-        if (!background) el.count.textContent = 'Loading\u2026';
+        if (!background && !state.loaded) el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: 'Loading\u2026'}));
         inFlight = api(ENDPOINT, {cache: 'no-store'}).then(function (res) {
             if (!res.ok) throw new Error(res.data.error || 'Unable to load SQR data.');
             apply(res.data);
         }).catch(function (error) {
             if (!state.loaded) {
-                el.count.textContent = error.message;
-                el.items.replaceChildren(h('li', null, h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again')));
+                el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: error.message}), h('li', null, h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again')));
             } else showToast(error.message, {tone: 'error'});
         }).then(function () { inFlight = null; });
         return inFlight;
@@ -819,18 +891,7 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(function () { state.filters.search = el.search.value.trim(); state.shown = PAGE_SIZE; savePrefs(); renderAll(); }, 150);
     });
-    el.status.addEventListener('change', function () { state.filters.status = el.status.value; state.shown = PAGE_SIZE; savePrefs(); renderAll(); });
-    el.sort.addEventListener('change', function () { state.filters.sort = el.sort.value; savePrefs(); renderList(); });
-    el.mine.addEventListener('change', function () { state.filters.mine = el.mine.checked; state.shown = PAGE_SIZE; savePrefs(); renderAll(); });
     el.more.addEventListener('click', function () { state.shown += PAGE_SIZE; renderList(); });
-    el.reset.addEventListener('click', function () {
-        state.filters = {stage: 'all', search: '', status: '', sort: 'attention', mine: false, density: state.filters.density};
-        el.search.value = ''; el.status.value = ''; el.sort.value = 'attention'; el.mine.checked = false;
-        state.shown = PAGE_SIZE; savePrefs(); renderAll();
-    });
-    document.querySelectorAll('.sqr-proto__density button').forEach(function (button) {
-        button.addEventListener('click', function () { state.filters.density = button.dataset.density; savePrefs(); renderList(); });
-    });
     el.items.addEventListener('keydown', function (event) {
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
         var cards = Array.prototype.slice.call(el.items.querySelectorAll('.sqr-proto__card'));

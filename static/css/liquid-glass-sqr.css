@@ -2397,6 +2397,7 @@ body.dark-mode.sqr-page .sqr-perf-card--yellow {
 
 /* Action-first PM snapshot dashboard. No chart framework or animated surfaces. */
 body.sqr-page [data-sqr-tracker-only][hidden],
+body.sqr-page [data-sqr-prototype-only][hidden],
 body.sqr-page .sqr-pm[hidden],
 body.sqr-page .sqr-pm [hidden],
 body.sqr-page .sqr-pm-focus-notice[hidden] {

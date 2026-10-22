@@ -606,6 +606,32 @@ class UserManagementSearchTests(TestCase):
         self.assertEqual(query, "ali")
         self.assertEqual(usernames[:2], ["alice", "alina"])
 
+    def test_user_search_covers_users_beyond_first_page(self):
+        for index in range(60):
+            User.objects.create_user(
+                username=f"bulk{index:02d}",
+                password="pass12345",
+                role=User.Roles.REQUESTOR,
+                first_name="Bulk",
+                last_name=f"User{index:02d}",
+            )
+        User.objects.create_user(
+            username="zz-needle",
+            password="pass12345",
+            role=User.Roles.REQUESTOR,
+            first_name="Zelda",
+            last_name="Needle",
+        )
+
+        page_obj, _ = UserManagementView()._paginate_users(RequestFactory().get("/management/"))
+        self.assertNotIn("zz-needle", [user.username for user in page_obj.object_list])
+
+        page_obj, query = UserManagementView()._paginate_users(
+            RequestFactory().get("/management/", {"user_q": "zelda needle"})
+        )
+        self.assertEqual([user.username for user in page_obj.object_list], ["zz-needle"])
+        self.assertEqual(query, "zelda needle")
+
 
 class RequestStatusValidationTests(TestCase):
     def setUp(self):
@@ -895,7 +921,7 @@ class DashboardViewTests(TestCase):
         self.assertIn('aria-pressed="false"', content)
         self.assertIn("window.reapplyDashboardEngineerHighlight", content)
 
-    def test_dashboard_search_preserves_server_sort_when_query_is_empty(self):
+    def test_dashboard_search_is_server_side_and_keeps_sort_links(self):
         admin = User.objects.create_user(
             username="admin_dashboard_sort",
             password="pass12345",
@@ -906,13 +932,16 @@ class DashboardViewTests(TestCase):
 
         response = self.client.get(
             reverse("hub:dashboard"),
-            {"sort": "engineer", "direction": "asc"},
+            {"sort": "engineer", "direction": "asc", "q": "nomatch-xyz"},
         )
 
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
-        self.assertIn("const filtered = !q", content)
-        self.assertIn("? state.records.map(function (record) {", content)
+        self.assertIn("function runSearch()", content)
+        self.assertNotIn("const filtered = !q", content)
+        self.assertIn('value="nomatch-xyz"', content)
+        self.assertIn("No requests match your search.", content)
+        self.assertIn("q=nomatch-xyz", content)
 
     def test_sqr_page_includes_compact_toolbar_search_control(self):
         self.client.force_login(self.pm_esg)
@@ -1352,6 +1381,45 @@ class DashboardLiveDataViewTests(TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn(self.request_obj.reference_code, payload["html_rows"])
         self.assertGreaterEqual(payload["request_count"], 1)
+
+    def test_search_finds_requests_beyond_row_limit_and_metric_filter(self):
+        older = Request.objects.create(
+            requestor=self.requestor,
+            account=Account.objects.create(name="Zyxwv Unique Account"),
+            account_manager="Live Requestor",
+            product_category="Azure",
+            engagement_type=Request.Engagement.SUPPORT,
+            priority=Request.Priority.MEDIUM,
+            engineer=self.engineer,
+            status=Request.Status.COMPLETED,
+            end_date=timezone.now().date(),
+            description="old finished request",
+        )
+        with patch.object(DashboardView, "LIST_ROW_LIMIT", 1):
+            request = self.factory.get(reverse("hub:dashboard-live"), data={"q": "zyxwv"})
+            request.user = self.admin
+            payload = json.loads(DashboardLiveDataView.as_view()(request).content)
+            unfiltered = self.factory.get(reverse("hub:dashboard-live"))
+            unfiltered.user = self.admin
+            unfiltered_payload = json.loads(DashboardLiveDataView.as_view()(unfiltered).content)
+
+        self.assertIn(older.reference_code, payload["html_rows"])
+        self.assertNotIn(self.request_obj.reference_code, payload["html_rows"])
+        self.assertEqual(payload["total_count"], 1)
+        self.assertEqual(payload["search_query"], "zyxwv")
+        self.assertNotIn(older.reference_code, unfiltered_payload["html_rows"])
+
+    def test_search_matches_people_and_requires_all_terms(self):
+        request = self.factory.get(reverse("hub:dashboard-live"), data={"q": "engineer_live live"})
+        request.user = self.admin
+        payload = json.loads(DashboardLiveDataView.as_view()(request).content)
+        self.assertIn(self.request_obj.reference_code, payload["html_rows"])
+
+        request = self.factory.get(reverse("hub:dashboard-live"), data={"q": "engineer_live nomatchterm"})
+        request.user = self.admin
+        payload = json.loads(DashboardLiveDataView.as_view()(request).content)
+        self.assertNotIn(self.request_obj.reference_code, payload["html_rows"])
+        self.assertEqual(payload["total_count"], 0)
 
 
 class OnHoldRoleTests(TestCase):
