@@ -31,8 +31,7 @@ body:not(.page-login) .navbar {
     --nav-ink-hover: #082e68;
     --nav-active-ink: #063b8a;
     --nav-veil:
-        radial-gradient(ellipse at 10% 50%, rgba(73, 143, 255, 0.12), transparent 31%),
-        linear-gradient(112deg, rgba(229, 242, 255, 0.72), rgba(244, 249, 255, 0.64) 48%, rgba(208, 229, 255, 0.68));
+        linear-gradient(112deg, rgba(229, 242, 255, 0.9), rgba(244, 249, 255, 0.86) 48%, rgba(208, 229, 255, 0.88));
     --nav-border: rgba(102, 151, 211, 0.64);
     --nav-text-shadow: 0 1px 0 rgba(255, 255, 255, 0.92);
     --nav-hover-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(204, 229, 255, 0.42));
@@ -47,8 +46,7 @@ body.dark-mode:not(.page-login) .navbar {
     --nav-ink-hover: #ffffff;
     --nav-active-ink: #ffffff;
     --nav-veil:
-        radial-gradient(ellipse at 12% 50%, rgba(69, 122, 222, 0.15), transparent 32%),
-        linear-gradient(112deg, rgba(18, 30, 53, 0.82), rgba(5, 12, 27, 0.76) 55%, rgba(24, 38, 63, 0.8));
+        linear-gradient(112deg, rgba(18, 30, 53, 0.94), rgba(5, 12, 27, 0.92) 55%, rgba(24, 38, 63, 0.94));
     --nav-border: rgba(154, 187, 235, 0.3);
     --nav-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
     --nav-hover-bg: linear-gradient(135deg, rgba(126, 174, 255, 0.22), rgba(255, 255, 255, 0.1));
@@ -62,8 +60,7 @@ body.dark-mode:not(.page-login) .navbar[data-nav-surface="light"] {
     --nav-ink-hover: #082e68;
     --nav-active-ink: #063b8a;
     --nav-veil:
-        radial-gradient(ellipse at 10% 50%, rgba(73, 143, 255, 0.12), transparent 31%),
-        linear-gradient(112deg, rgba(229, 242, 255, 0.82), rgba(244, 249, 255, 0.76) 48%, rgba(208, 229, 255, 0.8));
+        linear-gradient(112deg, rgba(229, 242, 255, 0.92), rgba(244, 249, 255, 0.88) 48%, rgba(208, 229, 255, 0.9));
     --nav-border: rgba(102, 151, 211, 0.64);
     --nav-text-shadow: 0 1px 0 rgba(255, 255, 255, 0.92);
     --nav-hover-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62), rgba(204, 229, 255, 0.42));
@@ -88,8 +85,8 @@ body.dark-mode:not(.page-login) .navbar {
     box-shadow:
         0 14px 34px -20px rgba(15, 45, 94, 0.52),
         0 2px 6px rgba(36, 74, 130, 0.1) !important;
-    -webkit-backdrop-filter: blur(9px) saturate(1.7) contrast(1.08);
-    backdrop-filter: blur(9px) saturate(1.7) contrast(1.08);
+    -webkit-backdrop-filter: blur(14px) saturate(1.3);
+    backdrop-filter: blur(14px) saturate(1.3);
     isolation: isolate;
     overflow: visible;
 }

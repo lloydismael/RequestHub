@@ -58,6 +58,7 @@ from .form_editor_views import (
     FormEditorActionView, FormEditorCatalogView, FormEditorDetailView,
     FormEditorHistoryView, FormEditorPreviewView, FormEditorPeopleView,
 )
+from .outlook_views import OutlookCallbackView, OutlookDraftView
 
 app_name = "hub"
 
@@ -109,6 +110,8 @@ urlpatterns = [
     path("sqr/<int:pk>/approval-email/", SqrApprovalOutlookRedirectView.as_view(), name="sqr-approval-email"),
     path("sqr/<int:pk>/approval-email/formatted-draft/", SqrApprovalFormattedDraftView.as_view(), name="sqr-approval-email-formatted-draft"),
     path("sqr/<int:pk>/approval-email/eml/", SqrApprovalEmlDownloadView.as_view(), name="sqr-approval-email-eml"),
+    path("sqr/<int:pk>/approval-email/microsoft/", OutlookDraftView.as_view(), name="sqr-approval-email-microsoft"),
+    path("sqr/outlook/callback/", OutlookCallbackView.as_view(), name="sqr-outlook-callback"),
     path("sqr/<int:pk>/review/", SqrReviewUpdateView.as_view(), name="sqr-review"),
     path("management/", UserManagementView.as_view(), name="management"),
     path("management/forms/", FormEditorCatalogView.as_view(), name="form-editor"),

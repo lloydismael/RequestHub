@@ -6,8 +6,8 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=19">
 {% if active_sqr_tab != 'reports' %}
-<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=3">
-<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=5" defer></script>
+<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=4">
+<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=6" defer></script>
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
 <script src="{% static 'js/sqr-performance.js' %}?v=2" defer></script>
@@ -2198,7 +2198,7 @@
 
 {# ── Inline cell editing JS (Admin / PM-ESG) ──────────────────────────── #}
 {% if is_pm %}
-<script src="{% static 'hub/sqr_approval_autocopy.js' %}"></script>
+<script src="{% static 'hub/sqr_approval_autocopy.js' %}?v=2"></script>
 <script>
 (function () {
     'use strict';
