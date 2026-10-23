@@ -10,7 +10,16 @@
         <dt>To</dt><dd>{{ email_recipients|join:"; " }}</dd>
         <dt>Subject</dt><dd>{{ email_subject }}</dd>
     </dl>
+    {% if microsoft_draft_url %}
+    <p>Request Hub can place the complete formatted email, with recipients, subject and logo, straight into your Microsoft 365 Drafts. Review it in Outlook and press Send.</p>
+    <form method="post" action="{{ microsoft_draft_url }}" id="sqr-email-microsoft" class="mb-3"{% if microsoft_draft_autostart %} data-autostart="true"{% endif %} data-key="{{ submission.pk }}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary"><i class="bi bi-envelope-open me-2" aria-hidden="true"></i>Create Outlook draft</button>
+    </form>
+    <p class="text-muted">If that does not work, use the manual options below.</p>
+    {% else %}
     <p>Copy the formatted body, open your email draft, then paste into the message using <kbd>Ctrl</kbd> + <kbd>V</kbd>. Outlook must be your default mail app. Formatting support varies by browser and Outlook version.</p>
+    {% endif %}
     <div class="d-flex flex-wrap gap-2 mb-3">
         <button type="button" class="btn btn-primary" id="sqr-email-copy">Copy formatted body</button>
         <a class="btn btn-outline-primary" href="{{ compose_url }}" id="sqr-email-open">Open email draft</a>
@@ -26,5 +35,5 @@
     {{ email_html|json_script:"sqr-email-html" }}
     {{ email_plain_text|json_script:"sqr-email-text" }}
 </div>
-<script src="{% static 'hub/sqr_approval_preview.js' %}"></script>
+<script src="{% static 'hub/sqr_approval_preview.js' %}?v=2"></script>
 {% endblock %}

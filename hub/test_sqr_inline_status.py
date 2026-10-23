@@ -63,6 +63,89 @@ const vm = require('node:vm');
         result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_approval_submits_microsoft_draft_form_instead_of_mailto(self):
+        source = (Path(settings.BASE_DIR) / "static" / "hub" / "sqr_approval_autocopy.js").read_text(encoding="utf-8")
+        script = """
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+(async () => {
+    for (const action of ['/sqr/7/approval-email/microsoft/', '//evil.example/steal/']) {
+        const window = {location: {href: ''}};
+        const appended = [];
+        let submitted = null;
+        const created = () => ({
+            children: [],
+            appendChild(child) { this.children.push(child); },
+            submit() { submitted = this; }
+        });
+        const microsoft = {
+            getAttribute: name => name === 'action' ? action : '7',
+            querySelector: () => ({value: 'token-123'})
+        };
+        vm.runInNewContext(SOURCE, {
+            window,
+            navigator: {},
+            ClipboardItem: class {},
+            Blob,
+            document: {
+                getElementById: () => null,
+                createElement: created,
+                body: {appendChild: node => appended.push(node)},
+                querySelector: () => ({prepend() {}})
+            },
+            DOMParser: class {parseFromString() {return {getElementById(id) {
+                if (id === 'sqr-email-html') return {textContent: JSON.stringify('<table>Approved</table>')};
+                if (id === 'sqr-email-text') return {textContent: JSON.stringify('Approved')};
+                if (id === 'sqr-email-microsoft') return microsoft;
+                return {getAttribute: () => 'mailto:reviewer@example.com?subject=Approved'};
+            }}}},
+            fetch: async () => ({ok: true, text: async () => 'preview'})
+        });
+        await window.startSqrApprovalDraft().complete('/preview/');
+        if (action.startsWith('/sqr/')) {
+            assert.equal(window.location.href, '');
+            assert.ok(submitted);
+            assert.equal(submitted.method, 'post');
+            assert.equal(submitted.action, action);
+            assert.equal(submitted.children[0].name, 'csrfmiddlewaretoken');
+            assert.equal(submitted.children[0].value, 'token-123');
+        } else {
+            assert.equal(submitted, null);
+            assert.equal(window.location.href, '/preview/');
+        }
+    }
+})().catch(error => {console.error(error); process.exitCode = 1;});
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_preview_autostarts_microsoft_draft_once_after_sign_in(self):
+        source = (Path(settings.BASE_DIR) / "static" / "hub" / "sqr_approval_preview.js").read_text(encoding="utf-8")
+        script = """
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const store = {};
+let submits = 0;
+function run(autostart) {
+    const form = {
+        getAttribute: name => name === 'data-autostart' ? (autostart ? 'true' : null) : '7',
+        submit() { submits++; }
+    };
+    vm.runInNewContext(SOURCE, {
+        window: {sessionStorage: {getItem: key => store[key] || null, setItem: (key, value) => { store[key] = value; }}},
+        document: {getElementById: id => id === 'sqr-email-microsoft' ? form : null}
+    });
+}
+run(false);
+assert.equal(submits, 0);
+run(true);
+assert.equal(submits, 1);
+run(true);
+assert.equal(submits, 1);
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_preview_clipboard_html_plain_and_manual_fallbacks(self):
         source = (Path(settings.BASE_DIR) / "static" / "hub" / "sqr_approval_preview.js").read_text(encoding="utf-8")
         script = """

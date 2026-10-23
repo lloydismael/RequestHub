@@ -1676,6 +1676,41 @@ class SqrApprovalEmailTemplateTests(TestCase):
         self.assertEqual(self.submission.status, SqrSubmission.Status.APPROVED)
         self.assertIn("no-store", response["Cache-Control"])
 
+    def test_preview_offers_microsoft_draft_only_when_configured(self):
+        from cryptography.fernet import Fernet
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        self.client.force_login(self.pm)
+        url = reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk])
+        microsoft = reverse("hub:sqr-approval-email-microsoft", args=[self.submission.pk])
+        self.assertEqual(microsoft, f"/sqr/{self.submission.pk}/approval-email/microsoft/")
+        self.assertEqual(reverse("hub:sqr-outlook-callback"), "/sqr/outlook/callback/")
+
+        with override_settings(SQR_OUTLOOK_CLIENT_ID=""):
+            response = self.client.get(url)
+        self.assertEqual(response.context["microsoft_draft_url"], "")
+        self.assertNotContains(response, 'id="sqr-email-microsoft"')
+
+        configured = dict(
+            SQR_OUTLOOK_TENANT_ID="11111111-1111-1111-1111-111111111111",
+            SQR_OUTLOOK_CLIENT_ID="22222222-2222-2222-2222-222222222222",
+            SQR_OUTLOOK_CLIENT_SECRET="test-client-secret",
+            SQR_OUTLOOK_REDIRECT_URI="https://example.com/sqr/outlook/callback/",
+            SQR_OUTLOOK_TOKEN_KEY=Fernet.generate_key().decode(),
+            SESSION_ENGINE="django.contrib.sessions.backends.db",
+        )
+        with override_settings(**configured):
+            response = self.client.get(url)
+            resumed = self.client.get(url + "?outlook=1")
+        self.assertEqual(response.context["microsoft_draft_url"], microsoft)
+        self.assertContains(response, 'id="sqr-email-microsoft"')
+        self.assertContains(response, f'action="{microsoft}"')
+        self.assertContains(response, "csrfmiddlewaretoken")
+        self.assertNotContains(response, 'data-autostart="true"')
+        self.assertContains(resumed, 'data-autostart="true"')
+        self.assertContains(response, "Copy formatted body")
+
     def test_eml_retains_unsent_html_and_plain_text_parts(self):
         import base64
         from email import policy

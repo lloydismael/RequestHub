@@ -36,6 +36,23 @@
                     var composeUrl = preview.getElementById('sqr-email-open').getAttribute('href');
                     if (!composeUrl || !composeUrl.startsWith('mailto:')) throw new Error('Invalid compose link.');
                     resolveBody({html: html, text: text});
+                    var microsoftForm = preview.getElementById('sqr-email-microsoft');
+                    var microsoftUrl = microsoftForm ? microsoftForm.getAttribute('action') : '';
+                    var csrfField = microsoftForm && microsoftForm.querySelector ? microsoftForm.querySelector('input[name="csrfmiddlewaretoken"]') : null;
+                    // Microsoft 365 builds the whole draft server side, so no paste step is needed.
+                    if (microsoftUrl && microsoftUrl.charAt(0) === '/' && microsoftUrl.charAt(1) !== '/' && csrfField) {
+                        var submitForm = document.createElement('form');
+                        submitForm.method = 'post';
+                        submitForm.action = microsoftUrl;
+                        var token = document.createElement('input');
+                        token.type = 'hidden';
+                        token.name = 'csrfmiddlewaretoken';
+                        token.value = csrfField.value;
+                        submitForm.appendChild(token);
+                        document.body.appendChild(submitForm);
+                        submitForm.submit();
+                        return;
+                    }
                     if (!await copied) {
                         window.location.href = previewUrl;
                         return;

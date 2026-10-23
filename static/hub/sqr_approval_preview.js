@@ -1,5 +1,17 @@
 (function () {
     'use strict';
+    var microsoftForm = document.getElementById('sqr-email-microsoft');
+    if (microsoftForm && microsoftForm.getAttribute('data-autostart') === 'true') {
+        // After Microsoft sign-in, continue automatically once; the guard stops a sign-in redirect loop.
+        var guardKey = 'sqr-outlook-resume-' + microsoftForm.getAttribute('data-key');
+        var lastResume = 0;
+        try { lastResume = Number(window.sessionStorage.getItem(guardKey)) || 0; } catch (error) {}
+        if (Date.now() - lastResume > 120000) {
+            try { window.sessionStorage.setItem(guardKey, String(Date.now())); } catch (error) {}
+            microsoftForm.submit();
+            return;
+        }
+    }
     var button = document.getElementById('sqr-email-copy');
     if (!button) return;
     var feedback = document.getElementById('sqr-email-feedback');

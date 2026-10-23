@@ -171,8 +171,7 @@ body.account-themed.authenticated.dark-mode:not(.page-login) .navbar[data-nav-su
     --nav-ink-hover: color-mix(in srgb, var(--account-accent) 65%, #020617);
     --nav-active-ink: color-mix(in srgb, var(--account-accent) 75%, #020617);
     --nav-veil:
-        radial-gradient(ellipse at 10% 50%, color-mix(in srgb, var(--account-c2) 20%, transparent), transparent 31%),
-        linear-gradient(112deg, color-mix(in srgb, var(--account-accent) 12%, rgba(255, 255, 255, 0.76)), color-mix(in srgb, var(--account-accent) 4%, rgba(255, 255, 255, 0.66)) 48%, color-mix(in srgb, var(--account-c2) 16%, rgba(255, 255, 255, 0.72)));
+        linear-gradient(112deg, color-mix(in srgb, var(--account-accent) 12%, rgba(255, 255, 255, 0.92)), color-mix(in srgb, var(--account-accent) 4%, rgba(255, 255, 255, 0.88)) 48%, color-mix(in srgb, var(--account-c2) 16%, rgba(255, 255, 255, 0.9)));
     --nav-border: color-mix(in srgb, var(--account-accent) 42%, rgba(255, 255, 255, 0.4));
     --nav-hover-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.62), color-mix(in srgb, var(--account-accent) 16%, transparent));
     --nav-active-bg: linear-gradient(135deg, color-mix(in srgb, var(--account-accent) 26%, transparent), color-mix(in srgb, var(--account-c2) 30%, transparent));
@@ -184,8 +183,7 @@ body.account-themed.authenticated.dark-mode:not(.page-login) .navbar:not([data-n
     --nav-ink-hover: #ffffff;
     --nav-active-ink: #ffffff;
     --nav-veil:
-        radial-gradient(ellipse at 12% 50%, color-mix(in srgb, var(--account-c2) 22%, transparent), transparent 32%),
-        linear-gradient(112deg, color-mix(in srgb, var(--account-accent) 26%, rgba(18, 30, 53, 0.84)), color-mix(in srgb, var(--account-accent) 12%, rgba(5, 12, 27, 0.78)) 55%, color-mix(in srgb, var(--account-c2) 20%, rgba(24, 38, 63, 0.82)));
+        linear-gradient(112deg, color-mix(in srgb, var(--account-accent) 26%, rgba(18, 30, 53, 0.95)), color-mix(in srgb, var(--account-accent) 12%, rgba(5, 12, 27, 0.93)) 55%, color-mix(in srgb, var(--account-c2) 20%, rgba(24, 38, 63, 0.95)));
     --nav-border: color-mix(in srgb, var(--account-dark-accent) 34%, transparent);
     --nav-hover-bg: linear-gradient(135deg, color-mix(in srgb, var(--account-dark-accent) 26%, transparent), rgba(255, 255, 255, 0.1));
     --nav-active-bg: color-mix(in srgb, var(--account-accent) 55%, transparent);

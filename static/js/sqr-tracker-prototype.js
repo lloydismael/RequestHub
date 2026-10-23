@@ -538,6 +538,38 @@
         todoItems(rec).forEach(function (item) { counts[item.tab] = (counts[item.tab] || 0) + 1; });
         return counts;
     }
+    // Flags the fields behind the open action items so the tab shows where to act.
+    function applyTodoMarks(rec) {
+        var byKey = {};
+        todoItems(rec).forEach(function (item) {
+            var entry = byKey[item.key];
+            if (!entry) byKey[item.key] = {tone: item.tone, hints: [item.title + ': ' + item.hint]};
+            else {
+                entry.hints.push(item.title + ': ' + item.hint);
+                if (item.tone === 'danger') entry.tone = 'danger';
+            }
+        });
+        el.editor.querySelectorAll('[data-field-key]').forEach(function (wrap) {
+            var item = byKey[wrap.dataset.fieldKey];
+            var label = wrap.querySelector('.sqr-proto__label');
+            var old = wrap.querySelector('.sqr-proto__todo-flag');
+            if (old) old.remove();
+            if (!item || !label) { delete wrap.dataset.todo; delete wrap.dataset.todoTone; return; }
+            wrap.dataset.todo = 'true';
+            wrap.dataset.todoTone = item.tone;
+            var text = item.hints.length > 1 ? item.hints.length + ' action items' : 'Action needed';
+            label.append(h('span', {class: 'sqr-proto__todo-flag', title: item.hints.join('\n')}, [icon('bi-exclamation-circle-fill'), text]));
+        });
+    }
+    function refreshTabPills(rec) {
+        var counts = todoCounts(rec);
+        el.editor.querySelectorAll('.sqr-proto__tab').forEach(function (button) {
+            var old = button.querySelector('.sqr-proto__pill');
+            if (old) old.remove();
+            var pending = counts[button.dataset.tab];
+            if (pending) button.append(h('span', {class: 'sqr-proto__pill', title: pending + ' to do'}, [pending, h('span', {class: 'visually-hidden', text: ' to do'})]));
+        });
+    }
     function renderTodo(rec) {
         var items = todoItems(rec);
         if (rec.stage === 'closed' || rec.status !== 'reviewed') return null;
@@ -686,7 +718,7 @@
         panel.replaceChildren();
         if (state.tab === 'summary') panel.append.apply(panel, renderSummary(rec).filter(Boolean));
         else if (state.tab === 'history') renderHistory(rec, panel);
-        else panel.append.apply(panel, renderFormTab(rec, state.tab));
+        else { panel.append.apply(panel, renderFormTab(rec, state.tab)); applyTodoMarks(rec); }
     }
     function setTab(tab, focus) {
         state.tab = tab;
@@ -821,7 +853,9 @@
         var sameAccess = JSON.stringify(previous.editable) === JSON.stringify(rec.editable) && previous.locked === rec.locked;
         var chrome = el.editor.querySelector('.sqr-proto__chrome');
         if (chrome) chrome.replaceChildren.apply(chrome, renderChrome(rec).filter(Boolean));
+        refreshTabPills(rec);
         if (!sameAccess || state.tab === 'summary') { renderPanel(); return; }
+        applyTodoMarks(rec);
         el.editor.querySelectorAll('[data-field-key]').forEach(function (wrap) {
             var spec = state.specs[wrap.dataset.fieldKey];
             if (!spec) return;

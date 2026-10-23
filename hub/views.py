@@ -106,6 +106,7 @@ from .mixins import (
 from .services import request_lifecycle
 from .services.sqr_performance import build_sqr_performance_snapshot
 from .services import sqr_prototype
+from .services.outlook_drafts import outlook_is_configured
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
@@ -4999,6 +5000,8 @@ class SqrApprovalFormattedDraftView(LoginRequiredMixin, View):
             "email_html": context["html_preview"],
             "email_plain_text": context["plain_text"],
             "compose_url": _build_sqr_approval_mailto_url(compose_context),
+            "microsoft_draft_url": reverse("hub:sqr-approval-email-microsoft", args=[submission.pk]) if outlook_is_configured() else "",
+            "microsoft_draft_autostart": request.GET.get("outlook") == "1",
         })
         patch_cache_control(response, private=True, no_store=True)
         return response
