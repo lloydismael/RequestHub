@@ -302,7 +302,7 @@ jobs:
           printf '%s\n' "$MIGRATION_ENV_FILE" > "$PRODUCTION_ENV_FILE"
 
       - name: Sign in to Azure using federation
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
