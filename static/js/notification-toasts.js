@@ -16,18 +16,15 @@
     var queued = new Set();
     var channel = null;
 
-    try {
-        if (window.localStorage.getItem(cursorKey) === null) {
-            window.localStorage.setItem(cursorKey, String(Math.max(parseInt(config.dataset.initialCursor, 10) || 0, 0)));
-        }
-    } catch (_) {
-        config.dataset.memoryCursor = String(Math.max(parseInt(config.dataset.initialCursor, 10) || 0, 0));
-    }
+    // Never replay the unread backlog from before this page was opened.
+    writeCursor(config.dataset.initialCursor, false);
 
     function readCursor() {
         try {
             var value = window.localStorage.getItem(cursorKey);
-            return value === null ? null : Math.max(parseInt(value, 10) || 0, 0);
+            return value === null
+                ? parseInt(config.dataset.memoryCursor, 10) || 0
+                : Math.max(parseInt(value, 10) || 0, 0);
         } catch (_) {
             return config.dataset.memoryCursor ? parseInt(config.dataset.memoryCursor, 10) || 0 : null;
         }

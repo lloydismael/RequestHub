@@ -117,6 +117,8 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 - Email templates live in `templates/hub/emails/`; they use inline CSS and table-based layouts for Outlook compatibility and escape user-entered content. Existing recipients, subjects, notification triggers, and ACS delivery configuration are unchanged; no migration or new dependency is required.
 - Validate changes with `python manage.py test hub.test_engineer_emails hub.test_pm_esg_emails hub.test_notification_urls`. Before production rollout, send controlled test emails to Outlook and Gmail and check mobile/dark-mode rendering; browser previews do not verify email-client behavior.
 - In-app notification center for assignment events and workflow changes
+- Live toasts show only unread request/assignment notifications arriving after the page opens. Existing unread items stay in the notification center; refreshing, navigating, or dismissing a toast does not replay them or mark them read.
+- Toast regression checks: `python manage.py test hub.tests.NotificationToastTests --settings=request_hub.settings_ci` and `node --test scripts_check/test_notification_toasts.cjs`.
 - Communication action log (Teams, Outlook, Phone) with channel tagging
 - Optional Teams chat topic field per request
 
