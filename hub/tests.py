@@ -1215,6 +1215,55 @@ class NotificationToastTests(TestCase):
             reverse("hub:notification-follow", args=[newer.pk]),
         )
 
+    def test_toast_endpoint_excludes_read_events_and_does_not_replay_cursor(self):
+        self.client.force_login(self.admin)
+        read_event = Notification.objects.create(
+            recipient=self.admin,
+            related_request=self.request_obj,
+            event_type=Notification.EventType.NEW_REQUEST,
+            message="Already read request",
+            is_read=True,
+        )
+        unread_event = Notification.objects.create(
+            recipient=self.admin,
+            related_request=self.request_obj,
+            event_type=Notification.EventType.ASSIGNMENT,
+            message="Unread assignment",
+        )
+        endpoint = reverse("hub:notification-toast-data")
+
+        baseline = self.client.get(endpoint).json()
+        self.assertEqual(baseline["events"], [])
+        self.assertEqual(baseline["next_cursor"], unread_event.pk)
+
+        payload = self.client.get(endpoint, {"cursor": read_event.pk - 1}).json()
+        self.assertEqual([event["id"] for event in payload["events"]], [unread_event.pk])
+        self.assertEqual(payload["next_cursor"], unread_event.pk)
+        replay = self.client.get(endpoint, {"cursor": payload["next_cursor"]}).json()
+        self.assertEqual(replay["events"], [])
+        unread_event.refresh_from_db()
+        self.assertFalse(unread_event.is_read)
+
+    def test_toast_baseline_includes_read_events_without_replaying_old_unread(self):
+        self.client.force_login(self.admin)
+        Notification.objects.create(
+            recipient=self.admin,
+            related_request=self.request_obj,
+            event_type=Notification.EventType.NEW_REQUEST,
+            message="Old unread request",
+        )
+        latest = Notification.objects.create(
+            recipient=self.admin,
+            related_request=self.request_obj,
+            event_type=Notification.EventType.ASSIGNMENT,
+            message="Already read assignment",
+            is_read=True,
+        )
+        endpoint = reverse("hub:notification-toast-data")
+        baseline = self.client.get(endpoint).json()
+        self.assertEqual(baseline["next_cursor"], latest.pk)
+        self.assertEqual(self.client.get(endpoint, {"cursor": latest.pk}).json()["events"], [])
+
     def test_toast_endpoint_rejects_invalid_cursor_and_requires_login(self):
         anonymous = self.client.get(reverse("hub:notification-toast-data"))
         self.assertEqual(anonymous.status_code, 302)
@@ -1238,7 +1287,7 @@ class NotificationToastTests(TestCase):
         self.assertContains(response, 'data-notification-toast-config')
         self.assertContains(response, f'data-initial-cursor="{event.pk}"')
         self.assertContains(response, 'notification-toasts')
-        self.assertContains(response, '?v=2')
+        self.assertRegex(response.content.decode(), r'notification-toasts(?:\.[a-f0-9]+)?\.js\?v=3')
 
     def test_engineer_completed_filter_orders_recent_first(self):
         engineer = User.objects.create_user(

@@ -3668,7 +3668,7 @@ class NotificationToastDataView(LoginRequiredMixin, View):
         except (TypeError, ValueError):
             return JsonResponse({"ok": False, "error": "Invalid cursor"}, status=400)
 
-        rows = list(queryset.filter(id__gt=cursor)[: self.PAGE_SIZE + 1])
+        rows = list(queryset.filter(id__gt=cursor, is_read=False)[: self.PAGE_SIZE + 1])
         has_more = len(rows) > self.PAGE_SIZE
         rows = rows[: self.PAGE_SIZE]
         events = [
