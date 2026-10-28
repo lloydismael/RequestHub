@@ -2299,7 +2299,9 @@ class SqrExportTests(TestCase):
         "Discount Rate (%)",
         "Discount Amount",
         "Total Price",
+        "Remarks",
         "SQR Status",
+        "Hold Reason",
         "Approval Date",
         "Validity Due Date",
         "Proposal Status",
@@ -2429,8 +2431,14 @@ class SqrExportTests(TestCase):
             "History",
         ])
 
-    def test_sqr_export_keeps_original_headers(self):
-        self._create_submission(customer_name="SQR Account", project_title="SQR Service")
+    def test_sqr_export_includes_remarks_and_hold_reason(self):
+        self._create_submission(
+            customer_name="SQR Account",
+            project_title="SQR Service",
+            remarks="Primary proposal",
+            status=SqrSubmission.Status.ON_HOLD,
+            hold_reason="Awaiting customer confirmation",
+        )
 
         response = self.client.get(f"{reverse('hub:sqr-export')}?report=sqr")
 
@@ -2440,6 +2448,10 @@ class SqrExportTests(TestCase):
         assert sheet is not None
         self.assertEqual(sheet.title, "SQR")
         self.assertEqual([cell.value for cell in sheet[1]], self.SQR_HEADERS)
+        row = dict(zip(self.SQR_HEADERS, [cell.value for cell in sheet[2]]))
+        self.assertEqual(row["Remarks"], "Primary proposal")
+        self.assertEqual(row["SQR Status"], "On Hold")
+        self.assertEqual(row["Hold Reason"], "Awaiting customer confirmation")
 
     def _create_submission(self, **overrides):
         data = {

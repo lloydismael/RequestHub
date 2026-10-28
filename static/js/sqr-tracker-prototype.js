@@ -16,7 +16,7 @@
     var STALE_MS = 60000;
 
     var BADGES = {
-        status: {submitted: 'warning', for_revision: 'danger', reviewed: 'success'},
+        status: {submitted: 'warning', for_revision: 'danger', reviewed: 'success', on_hold: 'muted'},
         proposal_status: {submitted_pending: 'primary', negotiation_review: 'info', closed_won: 'success', closed_lost: 'danger', closed_canceled: 'muted'},
         delivery_health: {on_track: 'success', off_track: 'warning', at_risk: 'danger', completed: 'primary', cancelled: 'muted'},
         overall_status: {planning: 'info', in_progress: 'primary', on_hold: 'muted', completed: 'success', cancelled: 'danger'},
@@ -136,12 +136,14 @@
         post(undo.url).then(function (res) {
             if (!res.ok) throw new Error(res.data.error || 'Unable to undo this change.');
             markClassicStale();
-            return refreshRecord(undo.pk).then(function () { showToast('Change undone.'); });
+            delete state.history[undo.pk];
+            return refreshRecord(undo.pk, res.data).then(function () { showToast('Change undone.'); });
         }).catch(function (error) { showToast(error.message, {tone: 'error'}); });
     });
 
     /* ── filtering / sorting ─────────────────────────────────────── */
     function needsAction(rec) {
+        if (rec.status === 'on_hold') return false;
         return rec.attention.some(function (flag) { return flag.tone === 'danger'; }) ||
             (state.viewer.is_pm && rec.status === 'submitted');
     }
@@ -159,6 +161,7 @@
         if (stage === 'all') return true;
         if (stage === 'mine') return state.viewer.is_pm ? isMine(rec) : true;
         if (stage === 'attention') return needsAction(rec);
+        if (stage === 'on_hold') return rec.status === 'on_hold';
         return rec.stage === stage;
     }
     function attentionScore(rec) {
@@ -177,6 +180,7 @@
         var defs = [{key: 'all', label: 'All SQRs', test: function () { return true; }}];
         if (state.viewer.is_pm) defs.push({key: 'mine', label: 'My Assigned SQR', icon: 'bi-person-check-fill', test: isMine});
         defs.push({key: 'attention', label: 'Needs action', test: needsAction});
+        defs.push({key: 'on_hold', label: 'On Hold', test: function (rec) { return rec.status === 'on_hold'; }});
         state.schema.stages.forEach(function (stage) {
             defs.push({key: stage[0], label: stage[1], test: function (rec) { return rec.stage === stage[0]; }});
         });
@@ -288,6 +292,7 @@
             if (rec.status !== 'for_revision') nextActions.push(h('button', {type: 'button', class: 'btn btn-outline-danger', on: {click: function () { openRevise(rec.pk); }}}, [icon('bi-arrow-repeat', 'me-2'), 'Request revision']));
         }
         if (next.action === 'edit' && rec.perms.edit_form) nextActions.push(h('a', {class: 'btn btn-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), 'Edit submission']));
+        if (next.action === 'status' && canWorkflow) nextActions.push(h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { goToField('opportunity', 'status'); }}}, 'Change SQR status'));
 
         var flags = rec.attention.filter(function (flag) { return flag.key !== 'revision' && flag.key !== 'awaiting'; });
         return [
@@ -372,6 +377,7 @@
         }
         var text = displayText(rec, spec);
         node.dataset.empty = text ? 'false' : 'true';
+        if (spec.multiline) { node.style.whiteSpace = 'pre-wrap'; node.style.overflowWrap = 'anywhere'; }
         node.textContent = text || '\u2014';
     }
     function setControl(control, rec, spec) {
@@ -408,7 +414,7 @@
     function renderField(rec, spec) {
         var editable = rec.editable.indexOf(spec.key) !== -1;
         var id = 'sqr-proto-f-' + rec.pk + '-' + spec.key;
-        var wide = spec.type === 'textarea';
+        var wide = spec.type === 'textarea' || spec.multiline;
         var wrap = h('div', {class: 'sqr-proto__field' + (wide ? ' sqr-proto__field--wide' : ''), dataset: {fieldKey: spec.key, state: 'idle', emphasis: spec.emphasis ? 'true' : null}});
         if (spec.workflow) { renderStatusBlock(wrap, rec, spec); return wrap; }
         var lockedInput = !editable && isInput(spec);
@@ -434,21 +440,68 @@
             fillReadonly(box, rec, spec);
             wrap.append(box);
         }
+        if (spec.hint) wrap.append(h('p', {class: 'sqr-proto__meta', text: spec.hint}));
         wrap.append(h('div', {class: 'sqr-proto__state', 'aria-live': 'polite'}));
         return wrap;
     }
 
     function renderStatusBlock(wrap, rec, spec) {
         var canWorkflow = rec.editable.indexOf('status') !== -1;
+        var id = 'sqr-proto-status-' + rec.pk;
         wrap.replaceChildren(
-            h('span', {class: 'sqr-proto__label'}, [spec.label, !canWorkflow ? h('span', {class: 'sqr-proto__lock', title: lockReason(rec, spec)}, [icon('bi-lock-fill'), h('span', {class: 'visually-hidden', text: lockReason(rec, spec)})]) : null]),
-            h('div', {class: 'sqr-proto__control', style: 'flex-wrap:wrap'}, [badge('status', rec.status)].concat(canWorkflow ? [
-                rec.status !== 'reviewed' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', on: {click: function () { openApprove(rec.pk); }}}, 'Approve') : null,
-                rec.status !== 'for_revision' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-danger', on: {click: function () { openRevise(rec.pk); }}}, 'Request revision') : null,
-                rec.status !== 'submitted' ? h('button', {type: 'button', class: 'btn btn-sm btn-outline-secondary', on: {click: function () { saveStatus(rec.pk, 'submitted', wrap); }}}, 'Back to processing') : null
-            ] : [])),
-            h('div', {class: 'sqr-proto__state', 'aria-live': 'polite'})
+            h(canWorkflow ? 'label' : 'span', {class: 'sqr-proto__label', for: canWorkflow ? id : null}, spec.label),
+            h('div', {class: 'sqr-proto__control'}, badge('status', rec.status))
         );
+        if (canWorkflow) {
+            var select = buildControl(rec, spec, id);
+            var reasonId = id + '-hold-reason';
+            var hintId = reasonId + '-hint';
+            var errorId = reasonId + '-error';
+            var reason = h('textarea', {id: reasonId, rows: 3, required: true, 'aria-describedby': hintId + ' ' + errorId, value: rec.values.hold_reason || ''});
+            var error = h('p', {id: errorId, class: 'sqr-proto__meta', role: 'alert', hidden: true});
+            var confirm = h('button', {type: 'button', class: 'btn btn-sm btn-outline-secondary', text: 'Place On Hold'});
+            var hold = h('div', {hidden: true}, [
+                h('label', {class: 'sqr-proto__label', for: reasonId, text: 'Hold reason (required)'}),
+                h('div', {class: 'sqr-proto__control'}, reason),
+                h('p', {id: hintId, class: 'sqr-proto__meta', text: 'Explain the pause. This does not change Remarks, opportunity or delivery status.'}),
+                error, confirm
+            ]);
+            select.addEventListener('change', function () {
+                var value = select.value;
+                hold.hidden = value !== 'on_hold';
+                error.hidden = true;
+                reason.removeAttribute('aria-invalid');
+                if (value === 'on_hold') { reason.focus(); return; }
+                select.value = record(rec.pk).status;
+                if (value === rec.status) return;
+                if (value === 'reviewed') openApprove(rec.pk);
+                else if (value === 'for_revision') openRevise(rec.pk);
+                else if (value === 'submitted') saveStatus(rec.pk, value, wrap);
+            });
+            confirm.addEventListener('click', function () {
+                var value = reason.value.trim();
+                if (!value) {
+                    error.textContent = 'Enter a nonblank hold reason.';
+                    error.hidden = false;
+                    reason.setAttribute('aria-invalid', 'true');
+                    reason.focus();
+                    return;
+                }
+                confirm.disabled = true;
+                select.disabled = true;
+                save(rec.pk, 'status', 'on_hold', wrap, {holdReason: value}).catch(function (failure) {
+                    confirm.disabled = false;
+                    select.disabled = false;
+                    error.textContent = failure.message;
+                    error.hidden = false;
+                    reason.setAttribute('aria-invalid', 'true');
+                    reason.focus();
+                });
+            });
+            wrap.append(h('div', {class: 'sqr-proto__control'}, select), hold,
+                h('p', {class: 'sqr-proto__meta', text: 'On Hold pauses this SQR. Resume manually by selecting processing, revision or approval; existing approval and revision dialogs still apply.'}));
+        }
+        wrap.append(h('div', {class: 'sqr-proto__state', 'aria-live': 'polite'}));
     }
 
     function sectionsForTab(tab) {
@@ -495,7 +548,7 @@
     function canEditField(rec, key) { return rec.editable.indexOf(key) !== -1; }
     // Don't invite edits to delivery/billing fields before the proposal is won.
     function canSetNow(rec, key) {
-        if (!canEditField(rec, key)) return false;
+        if (!canEditField(rec, key) || rec.status === 'on_hold') return false;
         var tab = fieldTab(key);
         if (tab === 'delivery') return rec.stage !== 'opportunity';
         if (tab === 'billing') return rec.stage !== 'opportunity';
@@ -625,7 +678,9 @@
                     fact('Billing', rec.stage === 'opportunity' || (rec.stage === 'closed' && rec.closed_reason !== 'billed') ? '' : badge('revenue_status', rec.revenue_status)),
                     fact('Requester', rec.requester), fact('Approver', rec.approver),
                     fact('Assigned PM', rec.assigned_pm_name, rec, 'assigned_pm'), fact('Assigned SSE', rec.assigned_sse_name, rec, 'assigned_sse'),
-                    fact('Scope', rec.scope), fact('Group', rec.group)
+                    fact('Scope', rec.scope), fact('Group', rec.group),
+                    fact('Remarks (SSE filing identifier)', h('span', {style: 'white-space:pre-wrap;overflow-wrap:anywhere', text: v.remarks || '\u2014'})),
+                    fact('Hold reason (retained)', h('span', {style: 'white-space:pre-wrap;overflow-wrap:anywhere', text: v.hold_reason || '\u2014'}))
                 ])
             ]),
             h('section', {class: 'sqr-proto__section', 'aria-label': 'Key dates'}, [
@@ -777,13 +832,14 @@
         if (wrap) setFieldState(wrap, 'saving');
         var payload = {field: key, value: value};
         if (extra.reviewNotes !== undefined) payload.review_notes = extra.reviewNotes;
+        if (extra.holdReason !== undefined) payload.hold_reason = extra.holdReason;
         return post(rec.urls.inline, payload).then(function (res) {
             if (!res.ok) throw new Error(res.data.error || 'Could not save this change.');
             markClassicStale();
             delete state.history[pk];
             var message = 'Saved ' + label + '.';
             if (res.data.workflow_side_effect_warning && res.data.workflow_side_effect_message) message += ' ' + res.data.workflow_side_effect_message;
-            return refreshRecord(pk).then(function () {
+            return refreshRecord(pk, key === 'status' ? res.data : null).then(function () {
                 var fresh = state.selectedPk === pk ? el.editor.querySelector('[data-field-key="' + key + '"]') : null;
                 if (fresh) setFieldState(fresh, 'saved');
                 showToast(message, res.data.undo_url ? {undo: {url: res.data.undo_url, pk: pk}} : null);
@@ -866,11 +922,14 @@
             if (box) fillReadonly(box, rec, spec);
         });
     }
-    function refreshRecord(pk) {
+    function refreshRecord(pk, workflowResponse) {
         return api(ENDPOINT + '?pk=' + encodeURIComponent(pk), {cache: 'no-store'}).then(function (res) {
             if (!res.ok) throw new Error(res.data.error || 'Unable to refresh this SQR.');
             var previous = record(pk);
             var fresh = res.data.record;
+            if (workflowResponse && Object.prototype.hasOwnProperty.call(workflowResponse, 'hold_reason')) {
+                fresh.values.hold_reason = workflowResponse.hold_reason;
+            }
             state.records = state.records.map(function (rec) { return rec.pk === pk ? fresh : rec; });
             state.byPk[pk] = fresh;
             renderAll();

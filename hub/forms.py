@@ -764,6 +764,7 @@ class SqrSubmissionForm(forms.ModelForm):
             "project_details",
             "sse_manhrs",
             "sqr_folder_link",
+            "remarks",
         ]
         labels = {
             "customer_name": "Account Name",
@@ -792,6 +793,11 @@ class SqrSubmissionForm(forms.ModelForm):
             "sqr_folder_link": forms.URLInput(attrs={
                 "class": "form-control",
                 "placeholder": "https://example.com/sqr-folder",
+            }),
+            "remarks": forms.Textarea(attrs={
+                "class": "form-control",
+                "rows": 3,
+                "placeholder": "Option 1 – Primary proposal, or Option 2 – Alternative proposal",
             }),
         }
 
@@ -824,6 +830,7 @@ class SqrSubmissionForm(forms.ModelForm):
         if isinstance(widget, AvatarSelect):
             widget.avatar_mapping = _build_avatar_mapping(reviewer_qs)
         self.fields["project_title"].help_text = "Project Name / Engagement Name"
+        self.fields["remarks"].help_text = "Optional: identify the proposed option or add filing context. Hold reasons are entered separately by PM/Admin."
 
         # Build approver user-ID map: group → pk of matching PM user
         approver_id_by_group = {}

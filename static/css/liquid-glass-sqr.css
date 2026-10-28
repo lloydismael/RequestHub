@@ -960,11 +960,23 @@ body.sqr-page .sqr-tracker td.sqr-col-wide {
     max-width: 220px;
 }
 
-body.sqr-page .sqr-tracker tr > :nth-child(40),
+body.sqr-page .sqr-tracker td.sqr-remarks-cell,
+body.sqr-page .sqr-tracker .sqr-hold-details {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+body.sqr-page .sqr-tracker td.sqr-remarks-cell,
+body.sqr-page .sqr-tracker td.sqr-status-cell {
+    min-width: 180px;
+    max-width: 280px;
+}
+
+body.sqr-page .sqr-tracker tr > :nth-child(41),
 body.sqr-page .sqr-esg-table tr > :nth-child(28) { max-width: 130px; min-width: 0; }
-body.sqr-page .sqr-tracker tr > :nth-child(42),
-body.sqr-page .sqr-esg-table tr > :nth-child(30) { max-width: 100px; min-width: 0; }
 body.sqr-page .sqr-tracker tr > :nth-child(43),
+body.sqr-page .sqr-esg-table tr > :nth-child(30) { max-width: 100px; min-width: 0; }
+body.sqr-page .sqr-tracker tr > :nth-child(44),
 body.sqr-page .sqr-esg-table tr > :nth-child(29) { max-width: 150px; min-width: 0; }
 body.sqr-page .sqr-esg-table tr > :nth-child(11) { min-width: 120px; }
 body.sqr-page .sqr-esg-table tr > :nth-child(31) { min-width: 135px; max-width: 220px; }
@@ -1090,19 +1102,19 @@ body.sqr-page .sqr-tracker tbody tr.sqr-row--revision td.col-sticky-0::before {
 }
 
 /* Closed-lost disabled delivery/revenue band */
-body.sqr-page .sqr-row--closed-lost td:nth-child(n+24):nth-child(-n+43) {
+body.sqr-page .sqr-row--closed-lost td:nth-child(n+25):nth-child(-n+44) {
     background-color: #e8edf4 !important;
     color: #475569 !important;
     cursor: not-allowed;
 }
-body.sqr-page .sqr-row--closed-lost td:nth-child(n+24):nth-child(-n+43) > * {
+body.sqr-page .sqr-row--closed-lost td:nth-child(n+25):nth-child(-n+44) > * {
     opacity: 0.72;
     filter: none;
 }
-body.sqr-page .sqr-row--closed-lost td:nth-child(n+24):nth-child(-n+43):hover {
+body.sqr-page .sqr-row--closed-lost td:nth-child(n+25):nth-child(-n+44):hover {
     outline: none !important;
 }
-body.dark-mode.sqr-page .sqr-row--closed-lost td:nth-child(n+24):nth-child(-n+43) {
+body.dark-mode.sqr-page .sqr-row--closed-lost td:nth-child(n+25):nth-child(-n+44) {
     background-color: #1a2230 !important;
     color: #94a3b8 !important;
 }

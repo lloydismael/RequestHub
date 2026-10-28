@@ -94,6 +94,7 @@
                                 <option value="submitted">For Processing</option>
                                 <option value="for_revision">For Revision</option>
                                 <option value="reviewed">Approved</option>
+                                <option value="on_hold">On Hold</option>
                             </select>
                         </div>
                         <div class="col-12 col-md-6 col-lg-2">
@@ -210,6 +211,7 @@
                 <button type="button" class="badge bg-success-subtle text-success border border-success-subtle sqr-badge-filter" data-sqr-filter="status:reviewed">
                     <i class="bi bi-check2-circle me-1"></i>Approved: {{ proposal_counts.approved }}
                 </button>
+                <button type="button" class="badge bg-secondary-subtle text-secondary border border-secondary-subtle sqr-badge-filter" data-sqr-filter="status:on_hold">On Hold: {{ proposal_counts.on_hold }}</button>
                 {% if proposal_counts.submitted_pending %}
                 <button type="button" class="badge bg-primary-subtle text-primary border border-primary-subtle sqr-badge-filter" data-sqr-filter="proposal_status:submitted_pending">
                     <i class="bi bi-send me-1"></i>Submitted: {{ proposal_counts.submitted_pending }}
@@ -578,8 +580,7 @@
                             <th class="sqr-stage-frozen col-sticky-2"></th>
                             <th class="sqr-stage-frozen col-sticky-3"></th>
                             <th class="sqr-stage-frozen col-sticky-4 col-sticky-border"></th>
-                            {# F(RQ ID) + G-W = 18 cols, Opportunity Stage #}
-                            <th colspan="18" class="sqr-stage-proposal text-center">
+                            <th colspan="19" class="sqr-stage-proposal text-center">
                                 <i class="bi bi-file-earmark-text me-1"></i>Opportunity Stage
                             </th>
                             {# X-AJ = cols 24-36 = 13 cols, Service Delivery Stage #}
@@ -614,6 +615,7 @@
                             <th class="sqr-stage-proposal">Discount Rate</th>
                             <th class="sqr-stage-proposal">Discount Amount</th>
                             <th class="sqr-stage-proposal">Total Price</th>
+                            <th class="sqr-stage-proposal">Remarks</th>
                             <th class="sqr-stage-proposal">SQR Status</th>
                             <th class="sqr-stage-proposal">Approval Date</th>
                             <th class="sqr-stage-proposal">Validity Due Date</th>
@@ -745,8 +747,8 @@
                             <td class="text-end small" data-sqr-computed="discount_amount" data-sqr-row-pk="{{ item.pk }}">{% if item.computed_discount_amount %}&#8369;{{ item.computed_discount_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
                             {# S: Total Price #}
                             <td class="text-end small fw-semibold" data-sqr-computed="total_price" data-sqr-row-pk="{{ item.pk }}">{% if item.computed_total_price %}&#8369;{{ item.computed_total_price|floatformat:2|intcomma }}{% elif item.quotation_total_price %}&#8369;{{ item.quotation_total_price|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
-                            {# T: SQR Status #}
-                            <td{% if is_pm %} class="sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="status" data-sqr-type="select" data-sqr-value="{{ item.status|default:'' }}"{% endif %}>
+                            <td class="small sqr-remarks-cell">{{ item.remarks|default:"–" }}</td>
+                            <td class="sqr-status-cell{% if is_pm %} sqr-inline-cell{% endif %}" data-sqr-hold-reason="{{ item.hold_reason|default:'' }}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="status" data-sqr-type="select" data-sqr-value="{{ item.status|default:'' }}"{% endif %}>
                                 <span class="sqr-display">
                                 {% if item.status == 'submitted' %}
                                     <span class="badge bg-warning-subtle text-warning border border-warning-subtle">For Processing</span>
@@ -754,10 +756,17 @@
                                     <span class="badge bg-danger-subtle text-danger border border-danger-subtle">For Revision</span>
                                 {% elif item.status == 'reviewed' %}
                                     <span class="badge bg-success-subtle text-success border border-success-subtle">Approved</span>
+                                {% elif item.status == 'on_hold' %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">On Hold</span>
                                 {% else %}
                                     <span class="text-muted small">{{ item.status }}</span>
                                 {% endif %}
                                 </span>
+                                <div class="small mt-2 sqr-hold-details" data-sqr-hold-details{% if not item.hold_reason %} hidden{% endif %}>
+                                    <strong data-sqr-hold-label>{% if item.status == 'on_hold' %}Hold Reason{% else %}Previous Hold Reason{% endif %}:</strong>
+                                    <span data-sqr-hold-text>{{ item.hold_reason }}</span>
+                                </div>
+                                {% if is_pm %}<button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-sqr-edit-hold{% if item.status != 'on_hold' %} hidden{% endif %}>Edit hold reason</button>{% endif %}
                             </td>
                             {# U: Approval Date #}
                             <td class="small" data-sqr-computed="reviewed_at">{{ item.reviewed_at|date:"M d, Y"|default:"&ndash;" }}</td>
@@ -1047,7 +1056,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="44" class="text-center text-muted py-5">
+                            <td colspan="45" class="text-center text-muted py-5">
                                 <i class="bi bi-inbox fs-2 d-block mb-2"></i>No SQR submissions yet.
                             </td>
                         </tr>
@@ -2353,7 +2362,7 @@
 
     /* Choice maps — value → label (for display after save) */
     var LABELS = {
-        status: {submitted:'For Processing', for_revision:'For Revision', reviewed:'Approved'},
+        status: {submitted:'For Processing', for_revision:'For Revision', reviewed:'Approved', on_hold:'On Hold'},
         proposal_status: {submitted_pending:'Submitted', negotiation_review:'On Review', closed_won:'Closed-Won', closed_lost:'Closed-Lost', closed_canceled:'Closed-Canceled'},
         overall_status: {on_hold:'On Hold', planning:'Planning', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled'},
         delivery_health: {on_track:'On Track', off_track:'Off Track', at_risk:'At Risk', completed:'Completed', cancelled:'Cancelled'},
@@ -2364,7 +2373,7 @@
         revenue_declaration: {declared:'Declared', not_yet:'Not Yet'},
     };
     var CHOICES = {
-        status: [['','—'],['submitted','For Processing'],['for_revision','For Revision'],['reviewed','Approved']],
+        status: [['','— Select Status —'],['submitted','For Processing'],['for_revision','For Revision'],['reviewed','Approved'],['on_hold','On Hold']],
         proposal_status: [['','—'],['submitted_pending','Submitted'],['negotiation_review','On Review'],['closed_won','Closed-Won'],['closed_lost','Closed-Lost'],['closed_canceled','Closed-Canceled']],
         overall_status: [['','—'],['on_hold','On Hold'],['planning','Planning'],['in_progress','In Progress'],['completed','Completed'],['cancelled','Cancelled']],
         delivery_health: [['','—'],['on_track','On Track'],['off_track','Off Track'],['at_risk','At Risk'],['completed','Completed'],['cancelled','Cancelled']],
@@ -2416,6 +2425,9 @@
         } else if (statusValue === 'for_revision') {
             badge.className += ' bg-danger-subtle text-danger border border-danger-subtle';
             badge.textContent = 'For Revision';
+        } else if (statusValue === 'on_hold') {
+            badge.className += ' bg-secondary-subtle text-secondary border border-secondary-subtle';
+            badge.textContent = 'On Hold';
         } else {
             badge.className += ' bg-warning-subtle text-warning border border-warning-subtle';
             badge.textContent = 'For Processing';
@@ -2429,6 +2441,7 @@
         if (field === 'status') {
             if (value === 'reviewed')     return '<span class="badge bg-success-subtle text-success border border-success-subtle">Approved</span>';
             if (value === 'for_revision') return '<span class="badge bg-danger-subtle text-danger border border-danger-subtle">For Revision</span>';
+            if (value === 'on_hold') return '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">On Hold</span>';
             return '<span class="badge bg-warning-subtle text-warning border border-warning-subtle">For Processing</span>';
         }
         if (field === 'proposal_status') {
@@ -2679,6 +2692,7 @@
         cell.dataset.sqrValue = normalizedValue;
         if (field === 'status') {
             renderStatusBadge(displayEl, normalizedValue);
+            cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[normalizedValue] || normalizedValue) + '. Press Enter to edit.');
         } else if (['proposal_status', 'overall_status', 'delivery_health', 'revenue_declaration',
                     'revenue_status', 'delivery_progress', 'revenue_remarks', 'revenue_overview',
                     'key_updates_risks'].indexOf(field) !== -1) {
@@ -2698,7 +2712,20 @@
             row.dataset.sqrProposalStatus = normalizedValue;
         }
         if (field === 'status' && row) {
+            row.dataset.sqrStatus = normalizedValue;
+            if ('hold_reason' in data) cell.dataset.sqrHoldReason = data.hold_reason || '';
+            var holdDetails = cell.querySelector('[data-sqr-hold-details]');
+            if (holdDetails) {
+                holdDetails.hidden = !cell.dataset.sqrHoldReason;
+                holdDetails.querySelector('[data-sqr-hold-text]').textContent = cell.dataset.sqrHoldReason || '';
+                holdDetails.querySelector('[data-sqr-hold-label]').textContent = normalizedValue === 'on_hold' ? 'Hold Reason:' : 'Previous Hold Reason:';
+            }
+            var editHoldButton = cell.querySelector('[data-sqr-edit-hold]');
+            if (editHoldButton) editHoldButton.hidden = normalizedValue !== 'on_hold';
             row.classList.toggle('sqr-row--revision', normalizedValue === 'for_revision');
+            var holdBadge = document.querySelector('[data-sqr-filter="status:on_hold"]');
+            if (holdBadge) holdBadge.textContent = 'On Hold: ' + document.querySelectorAll('.sqr-tracker tbody tr[data-sqr-status="on_hold"]').length;
+            if (typeof window.applySqrTableFilter === 'function') window.applySqrTableFilter();
             var dateCell = row.querySelector('td.col-sticky-0');
             if (dateCell) {
                 var dateText = dateCell.textContent.trim();
@@ -2906,6 +2933,7 @@
         var payload = {field: field, value: value};
         if (reviewNotes !== undefined && reviewNotes !== null) payload.review_notes = reviewNotes;
         options = options || {};
+        if (options.holdReason !== undefined) payload.hold_reason = options.holdReason;
         fetch(url, {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
@@ -2918,8 +2946,10 @@
             if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Unable to save this change.');
             applyInlineUpdateResponse(pk, field, value, cell, displayEl, result.data, options);
             showUndoToast({pk: pk, field: field, cell: cell, displayEl: displayEl, data: result.data});
+            if (options.onSuccess) options.onSuccess(result.data);
         })
-        .catch(function() {
+        .catch(function(error) {
+            if (options.onError) options.onError(error.message || 'Unable to save this change.');
             if (options.draftTransfer) options.draftTransfer.cancel();
             cell.classList.remove('sqr-saving');
             cell.classList.add('sqr-error');
@@ -2941,6 +2971,7 @@
         if (displayEl) displayEl.style.display = 'none';
 
         var widget = buildWidget(field, currentValue);
+        if (field === 'status') widget.setAttribute('aria-label', 'SQR Status');
         cell.appendChild(widget);
 
         function commit() {
@@ -2949,7 +2980,10 @@
             widget.remove();
             if (displayEl) displayEl.style.display = '';
             if (newVal !== currentValue) {
-                if (field === 'status' && newVal === 'for_revision') {
+                if (field === 'status' && !newVal) return;
+                if (field === 'status' && newVal === 'on_hold') {
+                    openHoldModal(cell, displayEl || cell);
+                } else if (field === 'status' && newVal === 'for_revision') {
                     openRevisionModal(pk, newVal, cell, displayEl || cell, cell);
                 } else if (field === 'status' && newVal === 'reviewed') {
                     queueApprovalChoice(pk, newVal, cell, displayEl || cell, currentValue);
@@ -3016,6 +3050,84 @@
             });
         }
     }
+
+    function openHoldModal(cell, displayEl) {
+        var modal = document.getElementById('sqr-hold-modal');
+        var form = document.getElementById('sqr-hold-form');
+        var reason = document.getElementById('sqr-hold-reason');
+        var error = document.getElementById('sqr-hold-error');
+        var confirm = document.getElementById('sqr-hold-confirm');
+        if (!modal || !form || !reason) return;
+        var previousFocus = cell.contains(document.activeElement) ? document.activeElement : cell;
+        reason.value = cell.dataset.sqrHoldReason || '';
+        reason.classList.remove('is-invalid');
+        reason.removeAttribute('aria-invalid');
+        error.textContent = '';
+        error.hidden = true;
+        confirm.disabled = false;
+        modal.classList.add('requestor-modal--visible');
+        modal.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('requestor-modal-open');
+        reason.focus();
+
+        function close() {
+            if (confirm.disabled) return;
+            modal.classList.remove('requestor-modal--visible');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('requestor-modal-open');
+            document.removeEventListener('keydown', onKey);
+            if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+        }
+        function showError(message) {
+            confirm.disabled = false;
+            error.textContent = message;
+            error.hidden = false;
+            reason.classList.add('is-invalid');
+            reason.setAttribute('aria-invalid', 'true');
+            reason.focus();
+        }
+        function onKey(event) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                close();
+            } else if (event.key === 'Tab') {
+                var controls = Array.from(modal.querySelectorAll('button:not([disabled]), textarea'));
+                var first = controls[0];
+                var last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) {
+                    event.preventDefault();
+                    last.focus();
+                } else if (!event.shiftKey && document.activeElement === last) {
+                    event.preventDefault();
+                    first.focus();
+                }
+            }
+        }
+        document.addEventListener('keydown', onKey);
+        modal.querySelectorAll('[data-sqr-hold-close]').forEach(function(button) { button.onclick = close; });
+        form.onsubmit = function(event) {
+            event.preventDefault();
+            if (!reason.value.trim()) {
+                showError('Hold Reason is required when status is On Hold.');
+                return;
+            }
+            if (confirm.disabled) return;
+            confirm.disabled = true;
+            saveField(cell.dataset.sqrPk, 'status', 'on_hold', cell, displayEl, null, {
+                holdReason: reason.value.trim(),
+                onSuccess: function() { confirm.disabled = false; close(); },
+                onError: showError
+            });
+        };
+    }
+
+    document.querySelectorAll('[data-sqr-edit-hold]').forEach(function(button) {
+        button.addEventListener('click', function(event) {
+            event.stopPropagation();
+            var cell = button.closest('[data-sqr-field="status"]');
+            if (cell) openHoldModal(cell, cell.querySelector('.sqr-display'));
+        });
+    });
 
     function openRevisionModal(pk, statusVal, cell, displayEl, triggerCell) {
         var modal     = document.getElementById('sqr-revision-modal');
@@ -3086,6 +3198,16 @@
     }
 
     document.querySelectorAll('.sqr-inline-cell').forEach(function(cell) {
+        if (cell.dataset.sqrField === 'status') {
+            cell.tabIndex = 0;
+            cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[cell.dataset.sqrValue] || cell.dataset.sqrValue) + '. Press Enter to edit.');
+            cell.addEventListener('keydown', function(event) {
+                if (event.target === cell && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    activateCell(cell);
+                }
+            });
+        }
         cell.title = isClosedLostLockedCell(cell)
             ? 'Locked because Proposal Status is Closed Lost'
             : 'Click to edit';
@@ -3541,7 +3663,10 @@
             window.invalidateRequestHubScrollGeometry(activeRows.panel);
         }
     }
-    window.applySqrTableFilter = applyFilter;
+    window.applySqrTableFilter = function () {
+        if (rowCache) rowCache = new WeakMap();
+        applyFilter();
+    };
 
     window.focusSqrTrackerProject = function (pk) {
         var exactPk = String(pk == null ? '' : pk);
@@ -3717,6 +3842,26 @@
 
 {# ── For Revision Comments Modal (PM/Admin inline edit) ───────────────── #}
 {% if is_pm %}
+<div class="requestor-modal" id="sqr-hold-modal" aria-hidden="true">
+    <div class="requestor-modal__backdrop" data-sqr-hold-close></div>
+    <div class="requestor-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sqr-hold-title" aria-describedby="sqr-hold-description" style="max-width:500px;">
+        <div class="requestor-modal__header">
+            <h2 class="h5 mb-0" id="sqr-hold-title">On Hold — Add a Reason</h2>
+            <button type="button" class="btn-close" data-sqr-hold-close aria-label="Close"></button>
+        </div>
+        <form id="sqr-hold-form" class="requestor-modal__body" novalidate>
+            <p class="text-muted small" id="sqr-hold-description">Explain why this quotation request is paused. SSE Remarks will remain unchanged. To resume, manually select the appropriate SQR status.</p>
+            <label class="form-label fw-semibold" for="sqr-hold-reason">Hold Reason <span class="text-danger" aria-hidden="true">*</span></label>
+            <textarea id="sqr-hold-reason" class="form-control" rows="4" required aria-required="true" aria-describedby="sqr-hold-error" placeholder="For example: Awaiting customer confirmation before proceeding."></textarea>
+            <div id="sqr-hold-error" class="invalid-feedback d-block" role="alert" hidden></div>
+            <div class="d-flex gap-2 justify-content-end mt-3">
+                <button type="button" class="btn btn-outline-secondary" data-sqr-hold-close>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="sqr-hold-confirm">Save On Hold</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div class="requestor-modal" id="sqr-revision-modal" aria-hidden="true">
     <div class="requestor-modal__backdrop" id="sqr-revision-backdrop"></div>
     <div class="requestor-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sqr-revision-title" style="max-width:500px;">

@@ -74,6 +74,15 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 
 ## Features
 
+### SQR Remarks and On Hold
+- SSEs can enter optional **Remarks** when filing or editing an SQR, for example “Option 1 – Primary proposal” or “Option 2 – Alternative proposal.” Each SQR keeps its own remarks; these examples are not dropdown choices or an enforced two-submission rule.
+- The tracker displays **Remarks** immediately before **SQR Status** within Opportunity Stage. Remarks and hold reasons are also visible in the alternate tracker.
+- **PM-ESG/Admin only** can select **On Hold**, enter a required **Hold Reason**, and save the status and reason together. The hold reason is separate from SSE Remarks and can be edited while held.
+- To resume, PM-ESG/Admin manually selects **For Processing**, **For Revision**, or **Approved**. The last hold reason remains visible for reference, and status/reason changes are recorded in SQR history and undo. Existing revision and approval actions still apply when those statuses are selected.
+- Pausing does not automatically change proposal/opportunity stage or delivery Overall Status, clear existing approval dates, or send approval/revision advisories. Delivery **Overall Status → On Hold** remains a separate field.
+- Standard Excel exports include Remarks and Hold Reason. Imports preserve both separately and reject On Hold rows without a reason; older standard tracker layouts remain supported.
+- Apply the additive migration before using the updated app: `python manage.py migrate`. Existing SQR records and statuses are preserved.
+
 ### Personal Settings
 - **My Profile → Settings** groups account preferences into Appearance, Accessibility, Experience, Performance, and Session cards.
 - Change multiple switches, then choose **Save Changes**. **Discard Changes** restores the saved values; unsuccessful saves keep your selections for retry. Saving reloads the page to apply preferences.

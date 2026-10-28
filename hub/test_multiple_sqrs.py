@@ -214,16 +214,25 @@ class ConcurrentMultipleSqrTests(MultipleSqrFixtures, TransactionTestCase):
         first = self.create_sqr()
         original = (first.pk, first.reference_code, first.linked_request_id, first.project_title)
         executor = MigrationExecutor(connection)
-        executor.migrate(previous)
+        leaf_migrations = executor.loader.graph.leaf_nodes()
         try:
+            executor.migrate(previous)
             executor = MigrationExecutor(connection)
             executor.migrate(current)
-            first.refresh_from_db()
+            historical_sqr = executor.loader.project_state(current).apps.get_model("hub", "SqrSubmission")
+            first = historical_sqr.objects.get(pk=original[0])
             self.assertEqual((first.pk, first.reference_code, first.linked_request_id, first.project_title), original)
-            second = self.create_sqr()
+            values = {
+                field.attname: getattr(first, field.attname)
+                for field in historical_sqr._meta.local_fields if not field.primary_key
+            }
+            values["sequence_number"] += 1
+            values["reference_code"] = f"SQR-{first.year}-{values['sequence_number']:05d}"
+            second = historical_sqr.objects.create(**values)
+            self.assertEqual(second.linked_request_id, first.linked_request_id)
             self.assertNotEqual(first.reference_code, second.reference_code)
         finally:
-            MigrationExecutor(connection).migrate(current)
+            MigrationExecutor(connection).migrate(leaf_migrations)
 
     def test_concurrent_numbering_same_and_different_requests(self):
         if connection.vendor != "postgresql":
