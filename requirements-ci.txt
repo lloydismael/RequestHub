@@ -1,3 +1,2 @@
--r requirements.lock
 # Lets Django's parallel test runner report real tracebacks instead of aborting.
 tblib==3.2.2

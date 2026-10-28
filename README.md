@@ -343,7 +343,7 @@ request-hub/
 +-- manage.py
 +-- requirements.txt
 +-- requirements.lock
-+-- requirements-ci.txt        # requirements.lock + test-only tooling (tblib)
++-- requirements-ci.txt        # test-only tooling (tblib)
 +-- LICENSE
 ```
 
@@ -527,7 +527,7 @@ The `Container Security` GitHub Actions workflow runs on every push to `dev` or 
 
 Three independent jobs validate each change:
 
-- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements-ci.txt` (`requirements.lock` plus the test-only `tblib`) with a pip cache, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, and runs the complete Django test suite in parallel with migrations enabled. Tests use `request_hub.settings_ci`, which only swaps the password hasher for a fast one; every other check uses the real settings.
+- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements.lock` and `requirements-ci.txt` (the runtime dependencies and test-only `tblib`) with a pip cache, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, and runs the complete Django test suite in parallel with migrations enabled. Tests use `request_hub.settings_ci`, which only swaps the password hasher for a fast one; every other check uses the real settings.
 - **Python dependency audit** checks dependencies with `pip-audit`.
 - **Build, scan, and publish SBOM** builds the Docker image without pushing it, generates an SPDX SBOM, and fails on fixable HIGH/CRITICAL vulnerabilities found by Trivy. Dependency layers are restored from the GitHub Actions cache; OS packages are refreshed on every build, so security fixes are never served from cache. Generated scan reports and SBOM artifacts are retained for 14 days, including after scan failures. Fork PRs retain report artifacts without attempting a privileged code-scanning upload.
 
@@ -535,7 +535,7 @@ CI uses only test credentials and an isolated database. It does not publish cont
 
 To run manually, open **Actions > Container Security > Run workflow** and select the branch containing this workflow. Commit and push local changes before testing them on GitHub.
 
-To reproduce Django validation, install `requirements-ci.txt` in a Python 3.12 virtual environment and configure a disposable PostgreSQL database with database-creation privileges. Do not use a production database or a live `.env`. Set test-only `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=True`, `DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,testserver`, `DJANGO_PUBLIC_BASE_URL=https://esgrequesthub.com`, and the `DB_*` connection values. The canonical URL is needed by existing email-format assertions; it does not connect CI to production. For a local non-TLS test database, use `DB_SSLMODE=disable` and `DB_CONN_MAX_AGE=0`. Leave ACS and Graph credentials unset.
+To reproduce Django validation, install `requirements.lock` and `requirements-ci.txt` in a Python 3.12 virtual environment and configure a disposable PostgreSQL database with database-creation privileges. Do not use a production database or a live `.env`. Set test-only `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=True`, `DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,testserver`, `DJANGO_PUBLIC_BASE_URL=https://esgrequesthub.com`, and the `DB_*` connection values. The canonical URL is needed by existing email-format assertions; it does not connect CI to production. For a local non-TLS test database, use `DB_SSLMODE=disable` and `DB_CONN_MAX_AGE=0`. Leave ACS and Graph credentials unset.
 
 Run these commands in order:
 
