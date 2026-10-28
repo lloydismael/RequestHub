@@ -261,38 +261,100 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 let invalidations = 0;
 let choices = 0;
-const LABELS = {};
+let filterApplications = 0;
+let trackerRows = [];
+const holdFilterBadge = {textContent: ''};
+const LABELS = {status: {
+    submitted: 'For Processing', for_revision: 'For Revision',
+    reviewed: 'Approved', on_hold: 'On Hold'
+}};
 const document = {
     createElement: () => ({className: '', textContent: ''}),
-    dispatchEvent: () => { invalidations++; }
+    dispatchEvent: () => { invalidations++; },
+    querySelector(selector) {
+        assert.equal(selector, '[data-sqr-filter="status:on_hold"]');
+        return holdFilterBadge;
+    },
+    querySelectorAll(selector) {
+        assert.equal(selector, '.sqr-tracker tbody tr[data-sqr-status="on_hold"]');
+        return trackerRows.filter(row => row.dataset.sqrStatus === 'on_hold');
+    }
 };
-const window = {location: {href: ''}};
+const window = {
+    location: {href: ''},
+    applySqrTableFilter() { filterApplications++; }
+};
 const CustomEvent = function(type) { this.type = type; };
 const setTimeout = () => {};
 function openApprovalChoiceModal() { choices++; }
 """ + "function renderStatusBadge(" + display_helpers + "function applyInlineUpdateResponse(" + response_handler + """
-for (const [status, action, undone, label, url] of [
+for (const [status, action, undone, label, url, reason = '', hasControls = true] of [
     ['reviewed', 'draft', false, 'Approved', 'mailto:reviewer@example.com'],
     ['reviewed', 'eml', false, 'Approved', '/sqr/225/approval-email/eml/'],
     ['reviewed', '', false, 'Approved', ''],
     ['submitted', 'draft', true, 'For Processing', ''],
-    ['for_revision', '', false, 'For Revision', '']
+    ['for_revision', '', false, 'For Revision', ''],
+    ['on_hold', 'draft', false, 'On Hold', '', 'Customer <scope> & budget pending'],
+    ['submitted', 'draft', true, 'For Processing', '', 'Retained previous reason'],
+    ['on_hold', 'draft', true, 'On Hold', '', 'Restored hold reason'],
+    ['on_hold', '', false, 'On Hold', '', 'Hold without edit controls', false]
 ]) {
     window.location.href = '';
-    const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => null};
+    const toggles = {};
+    const row = {
+        dataset: {sqrStatus: 'submitted'},
+        classList: {toggle(name, active) { toggles[name] = active; }},
+        querySelector: () => null
+    };
+    trackerRows = [row, {dataset: {sqrStatus: 'on_hold'}}];
+    const holdText = {textContent: ''};
+    const holdLabel = {textContent: ''};
+    const holdDetails = {
+        hidden: true,
+        querySelector(selector) {
+            if (selector === '[data-sqr-hold-text]') return holdText;
+            assert.equal(selector, '[data-sqr-hold-label]');
+            return holdLabel;
+        }
+    };
+    const editHoldButton = {hidden: true};
+    const attributes = {};
+    const cell = {
+        dataset: {}, classList: {add() {}, remove() {}}, closest: () => row,
+        setAttribute(name, value) { attributes[name] = value; },
+        querySelector(selector) {
+            if (!hasControls) return null;
+            if (selector === '[data-sqr-hold-details]') return holdDetails;
+            assert.equal(selector, '[data-sqr-edit-hold]');
+            return editHoldButton;
+        }
+    };
     const display = {textContent: '', appendChild(badge) { this.badge = badge; }};
-    applyInlineUpdateResponse('225', 'status', status, cell, display, {
+    applyInlineUpdateResponse('225', 'status', 'old', cell, display, {
         field_value: status,
+        hold_reason: reason,
         undone,
         approval_email_draft_url: 'mailto:reviewer@example.com',
         approval_email_eml_url: '/sqr/225/approval-email/eml/'
     }, {approvalEmailAction: action});
     assert.equal(cell.dataset.sqrValue, status);
+    assert.equal(cell.dataset.sqrHoldReason, reason);
+    assert.equal(row.dataset.sqrStatus, status);
+    assert.equal(toggles['sqr-row--revision'], status === 'for_revision');
     assert.equal(display.badge.textContent, label);
+    assert.equal(attributes['aria-label'], 'SQR Status: ' + label + '. Press Enter to edit.');
     assert.equal(window.location.href, url);
+    assert.equal(holdFilterBadge.textContent, 'On Hold: ' + (status === 'on_hold' ? 2 : 1));
+    if (hasControls) {
+        assert.equal(holdDetails.hidden, !reason);
+        assert.equal(holdText.textContent, reason);
+        assert.equal(holdLabel.textContent, status === 'on_hold' ? 'Hold Reason:' : 'Previous Hold Reason:');
+        assert.equal(editHoldButton.hidden, status !== 'on_hold');
+    }
 }
 assert.equal(choices, 1);
-assert.equal(invalidations, 5);
+assert.equal(invalidations, 9);
+assert.equal(filterApplications, 9);
 for (const [field, value, label] of [
     ['proposal_status', 'submitted_pending', 'Submitted'],
     ['proposal_status', 'negotiation_review', 'On Review'],

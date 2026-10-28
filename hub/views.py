@@ -2757,7 +2757,9 @@ def _get_sqr_export_columns():
         ("Discount Rate (%)", lambda s: float(s.discount_rate) if s.discount_rate is not None else ""),
         ("Discount Amount", lambda s: float(s.computed_discount_amount) if s.computed_discount_amount is not None else ""),
         ("Total Price", lambda s: float(s.computed_total_price) if s.computed_total_price is not None else ""),
+        ("Remarks", lambda s: s.remarks or ""),
         ("SQR Status", lambda s: s.get_status_display() if hasattr(s, "get_status_display") else s.status),
+        ("Hold Reason", lambda s: s.hold_reason or ""),
         ("Approval Date", lambda s: _date(s.reviewed_at.date()) if s.reviewed_at else ""),
         ("Validity Due Date", lambda s: _date(s.validity_due_date)),
         ("Proposal Status", lambda s: s.get_proposal_status_display() if hasattr(s, "get_proposal_status_display") else (s.proposal_status or "")),
@@ -3121,6 +3123,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             "processing": sum(1 for s in all_submissions if s.status == SqrSubmission.Status.FOR_PROCESSING),
             "for_revision": sum(1 for s in all_submissions if s.status == SqrSubmission.Status.FOR_REVISION),
             "approved": sum(1 for s in all_submissions if s.status == SqrSubmission.Status.APPROVED),
+            "on_hold": sum(1 for s in all_submissions if s.status == SqrSubmission.Status.ON_HOLD),
             "submitted_pending": sum(
                 1 for s in all_submissions
                 if s.proposal_status == SqrSubmission.ProposalStatus.SUBMITTED_PENDING
@@ -3236,6 +3239,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                 ("For Processing", proposal_counts["processing"]),
                 ("For Revision", proposal_counts["for_revision"]),
                 ("Approved", proposal_counts["approved"]),
+                ("On Hold", proposal_counts["on_hold"]),
             ]
             sqr_reports_status_chart = {
                 "labels": [label for label, total in status_rows if total],
@@ -3875,7 +3879,10 @@ class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
 
     def form_valid(self, form):
         original = SqrSubmission.objects.get(pk=self.object.pk)
-        response = super().form_valid(form)
+        self.object = form.save(commit=False)
+        save_fields = list(form._meta.fields) + ["pm_manhrs", "pm_amount", "sse_amount", "updated_at"]
+        save_configured_instance(form, self.object, update_fields=save_fields)
+        response = HttpResponseRedirect(self.get_success_url())
         changed_fields = []
         for field in form.changed_data:
             if hasattr(self.object, field):
@@ -3937,6 +3944,8 @@ SQR_HISTORY_FIELD_LABELS = {
     "managed_support_amount": "Maintenance Amt.",
     "discount_rate": "Discount Rate",
     "status": "SQR Status",
+    "remarks": "Remarks",
+    "hold_reason": "Hold Reason",
     "reviewed_at": "Approval Date",
     "reviewed_by": "Reviewed By",
     "review_notes": "Review Notes",
@@ -4055,7 +4064,7 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
     _ADMIN_ALLOWED = frozenset([
         "customer_name", "customer_company", "customer_contact",
         "project_title", "project_details", "sse_manhrs",
-        "pm_manhrs", "discount_rate", "status", "proposal_status",
+        "pm_manhrs", "discount_rate", "status", "hold_reason", "remarks", "proposal_status",
         "po_pnl_date", "delivery_start_date", "overall_status", "delivery_health",
         "delivery_progress", "key_updates_risks", "delivery_target_finish_date",
         "delivery_actual_finish_date", "delivery_completion_signed_date",
@@ -4064,7 +4073,7 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         "managed_support_amount", "assigned_pm", "assigned_sse", "linked_request",
     ])
     _PM_ESG_ALLOWED = frozenset([
-        "project_details", "sse_manhrs", "pm_manhrs", "discount_rate", "status", "proposal_status",
+        "project_details", "sse_manhrs", "pm_manhrs", "discount_rate", "status", "hold_reason", "proposal_status",
         "po_pnl_date", "delivery_start_date", "overall_status", "delivery_health",
         "delivery_progress", "key_updates_risks", "delivery_target_finish_date",
         "delivery_actual_finish_date", "delivery_completion_signed_date",
@@ -4110,7 +4119,7 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         if field in ("project_details", "customer_company"):
             tracked.add("managed_support_amount")
         if field == "status":
-            tracked.update(["reviewed_at", "reviewed_by", "validity_due_date", "review_notes", "assigned_pm"])
+            tracked.update(["reviewed_at", "reviewed_by", "validity_due_date", "review_notes", "assigned_pm", "hold_reason"])
         return sorted(tracked)
 
     @classmethod
@@ -4174,6 +4183,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             response_data["undo_expires_at"] = change.expires_at.isoformat()
         if undone:
             response_data["undone"] = True
+        if field == "status" or field == "hold_reason":
+            response_data["hold_reason"] = submission.hold_reason
         if field == "status":
             response_data["workflow_side_effect_warning"] = True
             response_data["workflow_side_effect_message"] = (
@@ -4235,9 +4246,20 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         except (ValueError, KeyError):
             return JsonResponse({"ok": False, "error": "Invalid request"}, status=400)
 
+        if not isinstance(data, dict):
+            return JsonResponse({"ok": False, "error": "Invalid request"}, status=400)
         field = data.get("field", "")
         value = data.get("value", "")
         review_notes_override = data.get("review_notes", None)  # supplied when status → for_revision
+        hold_reason_override = data.get("hold_reason", None)
+
+        if field == "status":
+            if not isinstance(value, str) or value not in SqrSubmission.Status.values:
+                return JsonResponse({"ok": False, "error": "Invalid SQR status"}, status=400)
+            if value == SqrSubmission.Status.ON_HOLD:
+                if not isinstance(hold_reason_override, str) or not hold_reason_override.strip():
+                    return JsonResponse({"ok": False, "error": "Hold Reason is required when status is On Hold."}, status=400)
+                hold_reason_override = hold_reason_override.strip()
 
         if not field or field not in allowed:
             return JsonResponse({"ok": False, "error": "Field not allowed"}, status=400)
@@ -4247,6 +4269,13 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         )
         old_status = submission.status
         original_submission = SqrSubmission.objects.get(pk=pk)
+
+        if field == "hold_reason":
+            if not isinstance(value, str):
+                return JsonResponse({"ok": False, "error": "Invalid Hold Reason"}, status=400)
+            value = value.strip()
+            if submission.status == SqrSubmission.Status.ON_HOLD and not value:
+                return JsonResponse({"ok": False, "error": "Hold Reason is required when status is On Hold."}, status=400)
 
         if (
             submission.proposal_status in (
@@ -4334,10 +4363,13 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
                 if not submission.assigned_pm_id:
                     submission.assigned_pm_id = submission.pm_esg_reviewer_id
                     save_fields.append("assigned_pm")
-            else:
+            elif coerced != SqrSubmission.Status.ON_HOLD:
                 submission.reviewed_at = None
                 submission.validity_due_date = None
                 save_fields += ["reviewed_at", "validity_due_date"]
+            if coerced == SqrSubmission.Status.ON_HOLD:
+                submission.hold_reason = hold_reason_override
+                save_fields.append("hold_reason")
             # Save review_notes when status → for_revision (provided by the comments modal)
             if coerced == SqrSubmission.Status.FOR_REVISION and review_notes_override is not None:
                 submission.review_notes = review_notes_override
@@ -6406,11 +6438,18 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
         engineer_lookup = self._build_user_lookup(engineer_users)
 
         start_row = self._detect_data_start_row(worksheet)
+        legacy_headers = [header for header in self.EXPECTED_HEADERS if header not in {"Remarks", "Hold Reason"}]
+        if start_row == 2:
+            canonical_headers = {_normalize_import_text(header): header for header in self.EXPECTED_HEADERS}
+            header_values = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), [])
+            headers = [canonical_headers.get(_normalize_import_text(value), self._stringify(value)) for value in header_values]
+        else:
+            headers = legacy_headers if worksheet.max_column <= len(legacy_headers) else self.EXPECTED_HEADERS
         candidate_rows = list(
             worksheet.iter_rows(
                 min_row=start_row,
                 max_row=worksheet.max_row,
-                max_col=len(self.EXPECTED_HEADERS),
+                max_col=max(worksheet.max_column, len(headers)),
                 values_only=True,
             )
         )
@@ -6436,7 +6475,7 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
                 continue
             row_data = {
                 header: row[idx] if idx < len(row) else None
-                for idx, header in enumerate(self.EXPECTED_HEADERS)
+                for idx, header in enumerate(headers) if header
             }
             try:
                 row_payloads.append(
@@ -6633,6 +6672,9 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
         assigned_sse = self._parse_user_lenient(row_data.get("Assigned SSE"), engineer_lookup)
 
         status = self._parse_choice_lenient(row_data.get("SQR Status"), self.STATUS_MAP) or SqrSubmission.Status.FOR_PROCESSING
+        hold_reason = self._stringify(row_data.get("Hold Reason"))
+        if status == SqrSubmission.Status.ON_HOLD and not hold_reason:
+            raise ValueError("Hold Reason is required when status is On Hold.")
         proposal_status = self._parse_choice_lenient(row_data.get("Proposal Status"), self.PROPOSAL_STATUS_MAP)
         overall_status = self._parse_choice_lenient(row_data.get("Overall Status"), self.OVERALL_STATUS_MAP)
         delivery_health = self._parse_choice_lenient(row_data.get("Health Status"), self.DELIVERY_HEALTH_MAP)
@@ -6699,7 +6741,7 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
                 row_data.get("Billing Status") or row_data.get("Revenue Status")
             ),
             "revenue_remarks": self._stringify(
-                row_data.get("PO Remarks") or row_data.get("Remarks")
+                row_data.get("PO Remarks") if "PO Remarks" in row_data else row_data.get("Remarks")
             ),
             "revenue_overview": self._stringify(
                 row_data.get("Billing Remarks") or row_data.get("Revenue Declaration")
@@ -6707,13 +6749,14 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
             "revenue_declaration": revenue_declaration,
             "status": status,
             "documentation_links": "",
-            "remarks": "",
+            "remarks": self._stringify(row_data.get("Remarks")) if "PO Remarks" in row_data or "Hold Reason" in row_data else "",
+            "hold_reason": hold_reason,
             "reference_code": sqr_id,
             "year": reference_meta["year"],
             "sequence_number": reference_meta["sequence_number"],
         }
 
-        if status == SqrSubmission.Status.APPROVED:
+        if status == SqrSubmission.Status.APPROVED or (status == SqrSubmission.Status.ON_HOLD and approval_date):
             reviewed_at = self._to_datetime(approval_date) or timezone.now()
             data["reviewed_at"] = reviewed_at
             data["reviewed_by"] = actor

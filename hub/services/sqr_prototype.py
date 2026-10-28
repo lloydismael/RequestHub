@@ -69,6 +69,8 @@ FIELD_SPECS = [
     _field("requester", "Requester", "readonly", "opportunity", "Request details"),
     _field("approver", "Approver", "readonly", "opportunity", "Request details"),
     _field("sqr_folder_link", "SQR document link", "link", "opportunity", "Request details"),
+    _field("remarks", "Remarks", "readonly", "opportunity", "Request details",
+           multiline=True, hint="Optional SSE filing identifier. Edit through Edit submission."),
 
     _field("sse_manhrs", "SSE man-hours", "number", "opportunity", "Pricing", unit="hrs", min=0),
     _field("sse_amount", "SSE amount", "computed", "opportunity", "Pricing", format="money"),
@@ -84,6 +86,8 @@ FIELD_SPECS = [
 
     _field("status", "SQR status", "select", "opportunity", "Approval",
            choices=_choices(Status), workflow=True),
+    _field("hold_reason", "Hold reason (retained)", "readonly", "opportunity", "Approval",
+           multiline=True, hint="Separate from Remarks; retained after manual resumption."),
     _field("reviewed_at", "Approval date", "computed", "opportunity", "Approval", format="text"),
     _field("validity_due_date", "Validity due date", "computed", "opportunity", "Approval", format="text"),
     _field("proposal_status", "Proposal status", "select", "opportunity", "Approval",
@@ -186,6 +190,8 @@ def derive_stage(submission: SqrSubmission) -> tuple[str, str]:
 
 def derive_attention(submission: SqrSubmission, stage: str, today: date) -> list[dict]:
     flags: list[dict] = []
+    if submission.status == Status.ON_HOLD:
+        return [{"key": "hold", "label": "On Hold", "tone": "muted"}]
     if submission.status == Status.FOR_REVISION:
         flags.append({"key": "revision", "label": "Revision requested", "tone": "danger"})
     elif submission.status == Status.FOR_PROCESSING:
@@ -215,6 +221,12 @@ def derive_attention(submission: SqrSubmission, stage: str, today: date) -> list
 
 def derive_next_step(submission: SqrSubmission, stage: str, closed_reason: str, *, is_pm: bool) -> dict:
     """Plain-language guidance; `action` lets the client render workflow buttons."""
+    if submission.status == Status.ON_HOLD:
+        return {"tone": "muted", "title": "SQR On Hold",
+                "hint": ("Use SQR status to manually resume processing, request revision, or approve. "
+                         "Opportunity and delivery statuses remain unchanged." if is_pm else
+                         "Paused until a PM or Admin manually changes SQR status. See the hold reason below."),
+                "action": "status" if is_pm else ""}
     if submission.status == Status.FOR_REVISION:
         if is_pm:
             return {"tone": "danger", "title": "Waiting for revision",
@@ -270,6 +282,8 @@ def _values(submission: SqrSubmission) -> dict:
         "requester": _user_name(submission.engineer),
         "approver": _user_name(submission.pm_esg_reviewer),
         "sqr_folder_link": submission.sqr_folder_link or "",
+        "remarks": submission.remarks or "",
+        "hold_reason": submission.hold_reason or "",
         "sse_manhrs": _decimal(submission.sse_manhrs),
         "sse_amount": _money(submission.sse_amount),
         "pm_manhrs": _decimal(submission.effective_pm_manhrs),
@@ -373,7 +387,8 @@ def serialize_record(
         "search": " ".join(filter(None, [
             submission.reference_code, submission.customer_name, submission.project_title,
             submission.customer_company, submission.customer_contact, values["requester"],
-            values["approver"], linked.reference_code if linked else "",
+            values["approver"], values["remarks"], values["hold_reason"],
+            linked.reference_code if linked else "",
         ])).lower(),
     }
     if is_pm:

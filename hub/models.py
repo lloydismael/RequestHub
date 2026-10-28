@@ -549,6 +549,7 @@ class SqrSubmission(models.Model):
         FOR_PROCESSING = "submitted", "For Processing"
         FOR_REVISION = "for_revision", "For Revision"
         APPROVED = "reviewed", "Approved"
+        ON_HOLD = "on_hold", "On Hold"
 
     class ProposalStatus(models.TextChoices):
         SUBMITTED_PENDING = "submitted_pending", "Submitted"
@@ -611,6 +612,7 @@ class SqrSubmission(models.Model):
     documentation_links = models.TextField(help_text="One link per line.")
     sqr_folder_link = models.URLField(blank=True)
     remarks = models.TextField(blank=True)
+    hold_reason = models.TextField(blank=True)
     quotation_total_price = models.DecimalField(
         max_digits=14,
         decimal_places=2,
