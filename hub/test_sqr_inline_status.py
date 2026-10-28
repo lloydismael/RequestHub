@@ -12,6 +12,59 @@ from django.test import SimpleTestCase
 
 @skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
 class SqrInlineStatusScriptTests(SimpleTestCase):
+    def test_revision_email_only_saves_without_opening_teams(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        source = "function openRevisionModal" + template.split("function openRevisionModal", 1)[1].split(
+            "    document.querySelectorAll('.sqr-inline-cell')", 1
+        )[0]
+        self.assertIn('id="sqr-revision-email-only"', template)
+        self.assertIn("Submit Email Notification Only", template)
+        script = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const saves = [], chats = [];
+const nodes = {};
+const classes = () => ({add() {}, remove() {}});
+for (const id of ['modal', 'notes', 'confirm', 'email-only', 'cancel', 'close', 'backdrop']) {
+    nodes['sqr-revision-' + id] = {
+        handlers: new Set(), classList: classes(), setAttribute() {}, focus() {},
+        addEventListener(type, fn) { this.handlers.add(fn); },
+        removeEventListener(type, fn) { this.handlers.delete(fn); },
+        click() { for (const fn of [...this.handlers]) fn(); }
+    };
+}
+const cell = {closest: () => ({dataset: {
+    sqrRef: 'SQR-7', sqrCustomer: 'Customer', engineerEmail: 'engineer@example.com',
+    pmEmail: 'pm@example.com', engineerName: 'Engineer'
+}})};
+const context = {
+    document: {getElementById: id => nodes[id], body: {classList: classes()}},
+    window: {open: (...args) => chats.push(args)}, setTimeout: fn => fn(),
+    saveField: (...args) => saves.push(args)
+};
+vm.runInNewContext(SOURCE, context);
+for (const action of ['email-only', 'confirm', 'cancel', 'email-only']) {
+    context.openRevisionModal('7', 'for_revision', cell, cell, cell);
+    assert.equal(nodes['sqr-revision-notes'].value, '');
+    nodes['sqr-revision-notes'].value = '  Please revise scope.  ';
+    nodes['sqr-revision-' + action].click();
+    for (const id of ['confirm', 'email-only', 'cancel', 'close', 'backdrop']) {
+        assert.equal(nodes['sqr-revision-' + id].handlers.size, 0);
+    }
+}
+assert.equal(saves.length, 3);
+for (const args of saves) {
+    assert.equal(args[0], '7');
+    assert.equal(args[1], 'status');
+    assert.equal(args[2], 'for_revision');
+    assert.equal(args[5], 'Please revise scope.');
+}
+assert.equal(chats.length, 1);
+assert.ok(chats[0][0].startsWith('https://teams.microsoft.com/'));
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_automatic_clipboard_starts_before_fetch_and_launches_after_copy(self):
         source = (Path(settings.BASE_DIR) / "static" / "hub" / "sqr_approval_autocopy.js").read_text(encoding="utf-8")
         script = """

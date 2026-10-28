@@ -241,6 +241,10 @@ Notification ── recipient → User · related_request → Request · event: 
 
 ---
 
+## SQR Revision Notifications
+
+In the SQR revision comments dialog, **Submit Email Notification Only** saves the comments, sets the SQR to **For Revision**, and emails the assigned engineer without opening Teams. **Submit & Notify Engineer** retains the email notification and Teams chat behavior. Email delivery requires the configured ACS email service.
+
 ## Application Flow
 
 ```

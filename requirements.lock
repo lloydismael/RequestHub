@@ -4,7 +4,7 @@ Pillow==13.0.0
 azure-communication-email==1.0.0
 msal==1.37.0
 cryptography==50.0.1
-msgpack==1.2.1
+msgpack==1.2.3
 requests==2.33.0
 python-dotenv==1.2.2
 gunicorn==23.0.0

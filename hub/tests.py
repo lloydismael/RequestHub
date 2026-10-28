@@ -2013,6 +2013,31 @@ class SqrInlineUndoTests(TestCase):
     def _undo(self, change):
         return self.client.post(reverse("hub:sqr-inline-undo", args=[self.submission.pk, change.pk]))
 
+    @patch("hub.views._send_sqr_for_revision_email")
+    def test_revision_submission_saves_comments_and_emails_assigned_engineer(self, send_email):
+        response = self.client.post(
+            reverse("hub:sqr-inline-update", args=[self.submission.pk]),
+            data=json.dumps({
+                "field": "status",
+                "value": "for_revision",
+                "review_notes": "Please revise the project scope.",
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, SqrSubmission.Status.FOR_REVISION)
+        self.assertEqual(self.submission.review_notes, "Please revise the project scope.")
+        self.assertEqual(self.submission.reviewed_by, self.pm)
+        send_email.assert_called_once()
+        emailed_submission = send_email.call_args.args[0]
+        self.assertEqual(emailed_submission.engineer, self.engineer)
+        self.assertEqual(emailed_submission.review_notes, self.submission.review_notes)
+        self.assertEqual(send_email.call_args.args[1], "SQR PM")
+        self.assertTrue(SqrSubmissionChange.objects.filter(submission=self.submission, field="status").exists())
+
     def test_inline_update_creates_undo_change(self):
         response = self._inline_update("pm_manhrs", "16")
 

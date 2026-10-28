@@ -3017,6 +3017,7 @@
         var modal     = document.getElementById('sqr-revision-modal');
         var notesArea = document.getElementById('sqr-revision-notes');
         var confirmBtn = document.getElementById('sqr-revision-confirm');
+        var emailOnlyBtn = document.getElementById('sqr-revision-email-only');
         var cancelBtn  = document.getElementById('sqr-revision-cancel');
         var closeBtn   = document.getElementById('sqr-revision-close');
         var backdrop   = document.getElementById('sqr-revision-backdrop');
@@ -3041,6 +3042,7 @@
             modal.setAttribute('aria-hidden', 'true');
             document.body.classList.remove('requestor-modal-open');
             confirmBtn.removeEventListener('click', onConfirm);
+            if (emailOnlyBtn) emailOnlyBtn.removeEventListener('click', onEmailOnly);
             cancelBtn.removeEventListener('click', onCancel);
             if (closeBtn)  closeBtn.removeEventListener('click', onCancel);
             if (backdrop)  backdrop.removeEventListener('click', onCancel);
@@ -3061,16 +3063,19 @@
             window.open(teamsUrl, '_blank', 'noopener');
         }
 
-        function onConfirm() {
+        function submitRevision(notifyTeams) {
             var notes = notesArea.value.trim();
             closeModal();
             saveField(pk, 'status', statusVal, cell, displayEl, notes);
-            openTeamsRevisionChat(notes);
+            if (notifyTeams) openTeamsRevisionChat(notes);
         }
 
+        function onConfirm() { submitRevision(true); }
+        function onEmailOnly() { submitRevision(false); }
         function onCancel() { closeModal(); }
 
         confirmBtn.addEventListener('click', onConfirm);
+        if (emailOnlyBtn) emailOnlyBtn.addEventListener('click', onEmailOnly);
         cancelBtn.addEventListener('click', onCancel);
         if (closeBtn) closeBtn.addEventListener('click', onCancel);
         if (backdrop) backdrop.addEventListener('click', onCancel);
@@ -3728,11 +3733,14 @@
                 </label>
                 <textarea id="sqr-revision-notes" class="form-control" rows="6"
                     placeholder="e.g. Please update the project scope and revise the SSE man-hours. The current estimate appears underquoted for an Implementation engagement. Ensure the documentation links are also attached before resubmitting."></textarea>
-                <div class="form-text">These notes will be saved to the SQR record and emailed to the engineer.</div>
+                <div class="form-text">Both submit options save these notes, set the SQR to For Revision, and email the engineer. Email Notification Only does not open Teams.</div>
             </div>
-            <div class="d-flex gap-2 justify-content-end">
+            <div class="d-flex flex-wrap gap-2 justify-content-end">
                 <button type="button" class="btn btn-outline-secondary" id="sqr-revision-cancel">
                     <i class="bi bi-x me-1"></i>Cancel
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="sqr-revision-email-only">
+                    <i class="bi bi-envelope me-1" aria-hidden="true"></i>Submit Email Notification Only
                 </button>
                 <button type="button" class="btn btn-danger" id="sqr-revision-confirm">
                     <i class="bi bi-send me-1"></i>Submit &amp; Notify Engineer
