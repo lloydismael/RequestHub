@@ -124,6 +124,7 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 
 ### 🧾 SQR (Service Quotation Request)
 - Engineers and reviewers manage SQR entries directly from the tracker
+- Inline saves and Undo preserve proposal/delivery/billing status badges and formatted notes instead of displaying HTML tags; ordinary text fields remain plain text.
 - The assigned engineer can create multiple separate SQRs under the same RQ ID without a fixed limit. Backup assignment alone does not permit creation. Each SQR keeps its own unique ID, approval, pricing, history, delivery, performance, and billing lifecycle; request management displays all linked SQRs within the viewer's existing access scope.
 - Apply migration `0052_allow_multiple_sqrs_per_request` before enabling repeated RQ links. Existing submissions are preserved. After multiple SQRs share an RQ ID, reversing this migration requires resolving duplicate links first; prefer a forward fix and never delete or merge submissions automatically.
 - Tracks quotation details, SSE/PM man-hours, managed support amount, discounting, approval metadata, and revenue fields

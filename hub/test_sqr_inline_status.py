@@ -261,6 +261,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 let invalidations = 0;
 let choices = 0;
+const LABELS = {};
 const document = {
     createElement: () => ({className: '', textContent: ''}),
     dispatchEvent: () => { invalidations++; }
@@ -292,6 +293,47 @@ for (const [status, action, undone, label, url] of [
 }
 assert.equal(choices, 1);
 assert.equal(invalidations, 5);
+for (const [field, value, label] of [
+    ['proposal_status', 'submitted_pending', 'Submitted'],
+    ['proposal_status', 'negotiation_review', 'On Review'],
+    ['proposal_status', 'closed_won', 'Closed-Won'],
+    ['proposal_status', 'closed_lost', 'Closed-Lost'],
+    ['proposal_status', 'closed_canceled', 'Closed-Canceled'],
+    ['proposal_status', '', '\\u2013'],
+    ['overall_status', 'planning', 'Planning'],
+    ['delivery_health', 'on_track', 'On Track'],
+    ['revenue_declaration', 'declared', 'Declared'],
+    ['revenue_status', 'billed', 'Billed'],
+    ['delivery_progress', '60', '60%'],
+    ['delivery_progress', '<img src=x onerror=alert(1)>', '\\u2013'],
+    ['revenue_remarks', '<img>\\n& note', '&lt;img&gt;<br>&amp; note'],
+    ['revenue_overview', '<img>\\n& note', '&lt;img&gt;<br>&amp; note'],
+    ['key_updates_risks', '<img>\\n& note', '&lt;img&gt;<br>&amp; note']
+]) {
+    for (const undone of [false, true]) {
+        const row = {dataset: {}, classList: {toggle() {}}, querySelector: () => null};
+        const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => row};
+        const display = {
+            innerHTML: '',
+            set textContent(value) { assert.fail('Formatted display was assigned as literal text'); }
+        };
+        applyInlineUpdateResponse('225', field, 'old', cell, display, {field_value: value, undone});
+        assert.equal(cell.dataset.sqrValue, value);
+        assert.ok(display.innerHTML.includes(label), display.innerHTML);
+        assert.ok(!display.innerHTML.includes('<img'), display.innerHTML);
+        if (field === 'proposal_status') assert.equal(row.dataset.sqrProposalStatus, value);
+    }
+}
+for (const field of ['customer_name', 'project_title', 'revenue_reference_no']) {
+    const value = '<img src=x onerror=alert(1)>';
+    const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => null};
+    const display = {
+        textContent: '',
+        set innerHTML(value) { assert.fail('Plain text must not be rendered as HTML'); }
+    };
+    applyInlineUpdateResponse('225', field, value, cell, display, {});
+    assert.equal(display.textContent, value);
+}
 """
         result = subprocess.run(
             [shutil.which("node"), "-"], input=script, text=True,
