@@ -2477,7 +2477,7 @@
         if (field === 'delivery_progress') {
             if (value === '' || value === null || value === undefined) return '<span class="text-muted small">\u2013</span>';
             var pct = parseInt(value, 10);
-            if (isNaN(pct)) return value + '%';
+            if (isNaN(pct)) return '<span class="text-muted small">\u2013</span>';
             var barClass = pct >= 100 ? 'bg-success' : pct >= 60 ? 'bg-info' : pct >= 30 ? 'bg-warning' : 'bg-danger';
             return '<div class="d-flex align-items-center gap-2">'
                 + '<div class="progress flex-grow-1" style="height:6px;min-width:60px;">'
@@ -2679,6 +2679,10 @@
         cell.dataset.sqrValue = normalizedValue;
         if (field === 'status') {
             renderStatusBadge(displayEl, normalizedValue);
+        } else if (['proposal_status', 'overall_status', 'delivery_health', 'revenue_declaration',
+                    'revenue_status', 'delivery_progress', 'revenue_remarks', 'revenue_overview',
+                    'key_updates_risks'].indexOf(field) !== -1) {
+            displayEl.innerHTML = getDisplay(field, normalizedValue, cell);
         } else {
             displayEl.textContent = getDisplay(field, normalizedValue, cell);
         }
