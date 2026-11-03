@@ -2436,6 +2436,14 @@
         container.appendChild(badge);
     }
 
+    function renderMultilineText(container, value) {
+        container.textContent = '';
+        String(value).split(/\r\n?|\n/).forEach(function(line, index) {
+            if (index) container.appendChild(document.createElement('br'));
+            container.appendChild(document.createTextNode(line));
+        });
+    }
+
     function getDisplay(field, value) {
         if (!value && value !== 0) return '\u2013';
         if (field === 'status') {
@@ -2479,7 +2487,7 @@
             return '<span class="text-muted small">\u2013</span>';
         }
         if (field === 'revenue_remarks' || field === 'revenue_overview' || field === 'key_updates_risks') {
-            return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+            return String(value);
         }
         if (field === 'assigned_pm') return PM_USER_MAP[String(value)] || '\u2013';
         if (field === 'assigned_sse') return SSE_USER_MAP[String(value)] || '\u2013';
@@ -2693,9 +2701,10 @@
         if (field === 'status') {
             renderStatusBadge(displayEl, normalizedValue);
             cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[normalizedValue] || normalizedValue) + '. Press Enter to edit.');
+        } else if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].indexOf(field) !== -1) {
+            renderMultilineText(displayEl, getDisplay(field, normalizedValue, cell));
         } else if (['proposal_status', 'overall_status', 'delivery_health', 'revenue_declaration',
-                    'revenue_status', 'delivery_progress', 'revenue_remarks', 'revenue_overview',
-                    'key_updates_risks'].indexOf(field) !== -1) {
+                    'revenue_status', 'delivery_progress'].indexOf(field) !== -1) {
             displayEl.innerHTML = getDisplay(field, normalizedValue, cell);
         } else {
             displayEl.textContent = getDisplay(field, normalizedValue, cell);
