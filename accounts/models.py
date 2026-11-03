@@ -3,6 +3,7 @@ from uuid import uuid4
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
+from django.utils import timezone
 from .storage import DatabaseMediaStorage
 from .themes import custom_theme_style, custom_theme_vars
 
@@ -64,6 +65,39 @@ class RecoveryPreview(models.Model):
     snapshot = models.ForeignKey(BackupSnapshot, null=True, blank=True, on_delete=models.SET_NULL)
     payload = models.JSONField()
     consumed_at = models.DateTimeField(null=True, blank=True)
+
+
+class SignInLog(models.Model):
+    """One row per sign-in session or failed sign-in attempt."""
+
+    class Outcome(models.TextChoices):
+        SIGNED_IN = "signed_in", "Signed in"
+        FAILED = "failed", "Failed"
+
+    class EndReason(models.TextChoices):
+        SIGNED_OUT = "signed_out", "Signed out"
+        IDLE_TIMEOUT = "idle_timeout", "Idle timeout"
+
+    user = models.ForeignKey("User", null=True, blank=True, on_delete=models.SET_NULL, related_name="sign_in_logs")
+    username = models.CharField(max_length=150, blank=True)
+    role = models.CharField(max_length=20, blank=True)
+    outcome = models.CharField(max_length=20, choices=Outcome.choices, default=Outcome.SIGNED_IN)
+    failure_reason = models.CharField(max_length=120, blank=True)
+    session_key = models.CharField(max_length=40, blank=True, db_index=True)
+    started_at = models.DateTimeField(default=timezone.now, db_index=True)
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    signed_out_at = models.DateTimeField(null=True, blank=True)
+    end_reason = models.CharField(max_length=20, choices=EndReason.choices, blank=True)
+    ip_address = models.CharField(max_length=45, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+    browser = models.CharField(max_length=40, blank=True)
+    operating_system = models.CharField(max_length=40, blank=True)
+    device_type = models.CharField(max_length=20, blank=True)
+
+    class Meta:
+        ordering = ["-started_at", "-pk"]
+        verbose_name = "sign-in log"
+        verbose_name_plural = "sign-in logs"
 
 
 class User(AbstractUser):

@@ -55,7 +55,13 @@ from django.views.generic import DetailView, DeleteView, ListView, TemplateView,
 from urllib.parse import quote, urlencode
 
 from accounts.forms import UserManagementForm
-from accounts.models import User
+from accounts.models import SignInLog, User
+from accounts.sign_in_log import (
+    SIGN_IN_STATUS_CHOICES,
+    annotate_sign_in_logs,
+    filter_sign_in_logs,
+    summarize_sign_ins,
+)
 
 REQUESTOR_ROLES = set(User.REQUESTOR_ROLES)
 REQUEST_CREATOR_ROLES = set(getattr(User, "REQUEST_CREATOR_ROLES", User.REQUESTOR_ROLES))
@@ -7604,7 +7610,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             user_search_query=user_search_query,
         )
         active_tab = request.GET.get("tab", "users")
-        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "forms"} else "users"
+        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "activity", "forms"} else "users"
         context["form_catalog"] = catalog()
         for user in context["users"]:
             user.editor_form = UserManagementForm(instance=user)
@@ -7792,6 +7798,29 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             "users_page_obj": users_page_obj,
             "user_search_query": user_search_query,
             "role_choices": User.Roles.choices,
+            **self._build_activity_context(),
+        }
+
+    def _build_activity_context(self):
+        now = timezone.now()
+        query = (self.request.GET.get("activity_q") or "").strip()
+        status = self.request.GET.get("activity_status") or "all"
+        if status not in dict(SIGN_IN_STATUS_CHOICES):
+            status = "all"
+        logs = filter_sign_in_logs(SignInLog.objects.select_related("user"), query=query, status=status, now=now)
+        paginator = Paginator(logs, 50)
+        try:
+            page_obj = paginator.page(self.request.GET.get("activity_page") or 1)
+        except InvalidPage:
+            page_obj = paginator.page(1)
+        page_obj.object_list = annotate_sign_in_logs(page_obj.object_list, now)
+        return {
+            "activity_logs_page_obj": page_obj,
+            "activity_query": query,
+            "activity_status": status,
+            "activity_status_choices": SIGN_IN_STATUS_CHOICES,
+            "activity_base_query": urlencode({"tab": "activity", "activity_q": query, "activity_status": status}),
+            "activity_summary": summarize_sign_ins(now),
         }
 
     @staticmethod

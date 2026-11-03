@@ -33,6 +33,14 @@
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link {% if active_tab == 'activity' %}active{% endif %}"
+                        id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity-pane"
+                        type="button" role="tab" aria-controls="activity-pane"
+                        aria-selected="{% if active_tab == 'activity' %}true{% else %}false{% endif %}">
+                    <i class="bi bi-clock-history me-1"></i>Activity logs
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <a class="nav-link {% if active_tab == 'forms' %}active{% endif %}" id="forms-tab"
                    href="{% url 'hub:management' %}?tab=forms" data-bs-toggle="tab" data-bs-target="#forms-pane"
                    role="tab" aria-controls="forms-pane"
@@ -534,6 +542,158 @@
         </form>
     </div>
 
+    {# ══════════════════ ACTIVITY LOGS PANE ══════════════════ #}
+    <div class="tab-pane {% if active_tab == 'activity' %}show active{% endif %}"
+         id="activity-pane" role="tabpanel" aria-labelledby="activity-tab" tabindex="0">
+
+        {# Summary #}
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-lg-3">
+                <div class="glass-card p-3 h-100">
+                    <div class="small text-uppercase text-muted fw-semibold">Active now</div>
+                    <div class="h4 mb-0 fw-semibold">{{ activity_summary.active }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="glass-card p-3 h-100">
+                    <div class="small text-uppercase text-muted fw-semibold">Sign-ins (24h)</div>
+                    <div class="h4 mb-0 fw-semibold">{{ activity_summary.signed_in_24h }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="glass-card p-3 h-100">
+                    <div class="small text-uppercase text-muted fw-semibold">Failed attempts (24h)</div>
+                    <div class="h4 mb-0 fw-semibold text-danger">{{ activity_summary.failed_24h }}</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="glass-card p-3 h-100">
+                    <div class="small text-uppercase text-muted fw-semibold">Recorded sign-ins</div>
+                    <div class="h4 mb-0 fw-semibold">{{ activity_summary.total }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card overflow-hidden p-0">
+            {# Toolbar: search + status filter #}
+            <form method="get" action="{% url 'hub:management' %}" class="mgmt-toolbar management-dashboard-toolbar" role="search">
+                <input type="hidden" name="tab" value="activity">
+                <div class="mgmt-search-box">
+                    <i class="bi bi-search mgmt-search-icon"></i>
+                    <input type="search" name="activity_q" class="mgmt-search-input" value="{{ activity_query }}"
+                           placeholder="Search name, username, IP, browser…" autocomplete="off" aria-label="Search activity logs">
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <select name="activity_status" class="form-select form-select-sm w-auto pe-5" aria-label="Filter by status">
+                        {% for value, label in activity_status_choices %}
+                            <option value="{{ value }}" {% if value == activity_status %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm lg-btn lg-btn--accent">
+                        <i class="bi bi-funnel-fill me-1"></i>Apply
+                    </button>
+                </div>
+            </form>
+
+            <div class="table-responsive dashboard-table-wrapper mgmt-table-wrapper">
+                <table class="table mgmt-table align-middle mb-0">
+                    <thead class="mgmt-thead">
+                        <tr>
+                            <th scope="col" class="mgmt-th">User</th>
+                            <th scope="col" class="mgmt-th">Status</th>
+                            <th scope="col" class="mgmt-th">Signed in</th>
+                            <th scope="col" class="mgmt-th">Signed out / last seen</th>
+                            <th scope="col" class="mgmt-th">Session length</th>
+                            <th scope="col" class="mgmt-th">Device &amp; browser</th>
+                            <th scope="col" class="mgmt-th">IP address</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in activity_logs_page_obj.object_list %}
+                            <tr class="mgmt-row align-middle">
+                                <td>
+                                    <div class="fw-semibold">{{ log.display_name }}</div>
+                                    {% if log.username and log.username != log.display_name %}
+                                        <div class="text-muted small font-monospace">{{ log.username }}</div>
+                                    {% endif %}
+                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                        {% if log.role_label %}
+                                            <span class="badge mgmt-role-badge mgmt-role-badge--{{ log.role }}">{{ log.role_label }}</span>
+                                        {% endif %}
+                                        {% if log.department %}
+                                            <span class="badge text-bg-secondary">{{ log.department }}</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge {{ log.status_badge }}">{{ log.status_label }}</span>
+                                    {% if log.failure_reason %}
+                                        <div class="small text-muted mt-1">{{ log.failure_reason }}</div>
+                                    {% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    <span class="small">{{ log.started_at|timezone:"Asia/Manila"|date:"M d, Y" }}</span>
+                                    <div class="small font-monospace opacity-75">{{ log.started_at|timezone:"Asia/Manila"|date:"h:i:s A" }}</div>
+                                </td>
+                                <td class="text-nowrap">
+                                    {% if log.end_at %}
+                                        <span class="small">{{ log.end_at|timezone:"Asia/Manila"|date:"M d, Y" }}</span>
+                                        <div class="small font-monospace opacity-75">{{ log.end_at|timezone:"Asia/Manila"|date:"h:i:s A" }}</div>
+                                    {% elif log.status == 'active' %}
+                                        <span class="small text-success"><i class="bi bi-circle-fill me-1" style="font-size:.5rem"></i>In session</span>
+                                    {% else %}
+                                        <span class="text-muted small">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    <span class="font-monospace fw-semibold"{% if log.is_live %} data-live-elapsed="{{ log.elapsed_seconds }}"{% endif %}>{{ log.elapsed_label }}</span>
+                                    {% if log.status == 'inactive' %}
+                                        <div class="small text-muted">until last seen</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="small">{{ log.browser|default:"Unknown browser" }} · {{ log.operating_system|default:"Unknown OS" }}</div>
+                                    <div class="small text-muted" title="{{ log.user_agent }}">{{ log.device_type|default:"Unknown device" }}</div>
+                                </td>
+                                <td><span class="small font-monospace">{{ log.ip_address|default:"—" }}</span></td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-5">
+                                    <i class="bi bi-clock-history display-6 d-block mb-2 opacity-50"></i>
+                                    No sign-in activity matches these filters.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mgmt-card-footer">
+                <span class="mgmt-limit-note">{% if activity_logs_page_obj.paginator.count %}Showing {{ activity_logs_page_obj.start_index }}–{{ activity_logs_page_obj.end_index }} of {{ activity_logs_page_obj.paginator.count }}{% endif %}</span>
+                <div class="mgmt-pagination">
+                    {% if activity_logs_page_obj.paginator.num_pages > 1 %}
+                        {% if activity_logs_page_obj.has_previous %}
+                            <a class="btn btn-sm btn-outline-secondary mgmt-page-btn"
+                               href="?{{ activity_base_query }}&activity_page={{ activity_logs_page_obj.previous_page_number }}"
+                               aria-label="Previous page"><i class="bi bi-chevron-left"></i></a>
+                        {% else %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary mgmt-page-btn" disabled><i class="bi bi-chevron-left"></i></button>
+                        {% endif %}
+                        <span class="mgmt-page-label">Page {{ activity_logs_page_obj.number }} / {{ activity_logs_page_obj.paginator.num_pages }}</span>
+                        {% if activity_logs_page_obj.has_next %}
+                            <a class="btn btn-sm btn-outline-secondary mgmt-page-btn"
+                               href="?{{ activity_base_query }}&activity_page={{ activity_logs_page_obj.next_page_number }}"
+                               aria-label="Next page"><i class="bi bi-chevron-right"></i></a>
+                        {% else %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary mgmt-page-btn" disabled><i class="bi bi-chevron-right"></i></button>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="tab-pane {% if active_tab == 'forms' %}show active{% endif %}"
          id="forms-pane" role="tabpanel" aria-labelledby="forms-tab" tabindex="0">
         <h2 class="h5 mb-3">Form Editor</h2>
@@ -796,6 +956,38 @@
         });
     }
 
+    /* ── Activity logs: auto-apply status filter + live session timers ── */
+    function initActivityLogs() {
+        var pane = document.getElementById('activity-pane');
+        if (!pane) return;
+
+        var statusSelect = pane.querySelector('select[name="activity_status"]');
+        if (statusSelect) {
+            statusSelect.addEventListener('change', function () { statusSelect.form.submit(); });
+        }
+
+        var timers = Array.from(pane.querySelectorAll('[data-live-elapsed]'));
+        if (!timers.length) return;
+
+        function pad(value) { return (value < 10 ? '0' : '') + value; }
+        function formatElapsed(total) {
+            var hours = Math.floor(total / 3600);
+            var minutes = Math.floor((total % 3600) / 60);
+            var seconds = total % 60;
+            if (hours) return hours + 'h ' + pad(minutes) + 'm ' + pad(seconds) + 's';
+            if (minutes) return minutes + 'm ' + pad(seconds) + 's';
+            return seconds + 's';
+        }
+
+        setInterval(function () {
+            timers.forEach(function (el) {
+                var next = Number(el.dataset.liveElapsed) + 1;
+                el.dataset.liveElapsed = next;
+                el.textContent = formatElapsed(next);
+            });
+        }, 1000);
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         initUserLiveSearch();
         initTab('accounts-tbody', 'account-search', 'account-count-badge', 'account-limit-note', 'account-pagination', 'accounts-save-btn', '#accounts-pane form');
@@ -810,6 +1002,7 @@
             newUserBtn.addEventListener('click', createUserModal.open);
         }
         initManageModal(manageUserModal);
+        initActivityLogs();
     });
 }());
 </script>

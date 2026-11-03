@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import ProfileUpdateView, StoredFileServeView
+from .views import ProfileUpdateView, SignInHeartbeatView, StoredFileServeView
 from .recovery_views import (
     BackupDataView, RestoreDataView, ValidateBackupView, SnapshotDownloadView,
     SnapshotRestorePreviewView, DeletedRequestRecoveryView,
@@ -10,6 +10,7 @@ app_name = "accounts"
 
 urlpatterns = [
     path("profile/", ProfileUpdateView.as_view(), name="update"),
+    path("sign-in/heartbeat/", SignInHeartbeatView.as_view(), name="sign-in-heartbeat"),
     path("media/<path:name>", StoredFileServeView.as_view(), name="media"),
     path("backup/", BackupDataView.as_view(), name="backup"),
     path("restore/", RestoreDataView.as_view(), name="restore"),

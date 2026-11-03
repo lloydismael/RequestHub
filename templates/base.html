@@ -707,11 +707,41 @@
     </div>
     {% endif %}
 
+    {% if request.user.is_authenticated %}
+    {# Reports user activity so Management > Activity logs can tell live sessions from abandoned ones. #}
+    <script>
+    (function () {
+        var HEARTBEAT_URL = '{% url "accounts:sign-in-heartbeat" %}';
+        var CSRF_TOKEN = '{{ csrf_token }}';
+        var SEND_INTERVAL_MS = 60 * 1000;
+        var lastSentAt = 0;
+
+        function sendHeartbeat() {
+            var now = Date.now();
+            if (now - lastSentAt < SEND_INTERVAL_MS) return;
+            lastSentAt = now;
+            fetch(HEARTBEAT_URL, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-CSRFToken': CSRF_TOKEN },
+                keepalive: true
+            }).catch(function () { lastSentAt = 0; });
+        }
+
+        sendHeartbeat();
+        ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function (evt) {
+            document.addEventListener(evt, sendHeartbeat, { passive: true });
+        });
+    })();
+    </script>
+    {% endif %}
+
     {% if request.user.is_authenticated and request.user.idle_timeout_enabled %}
     {# ── Auto-logout idle warning ── #}
     {# Hidden form used to POST to the logout URL (CSRF-safe) #}
     <form id="alo-logout-form" action="{% url 'logout' %}" method="post" style="display:none">
         {% csrf_token %}
+        <input type="hidden" name="reason" value="idle">
     </form>
 
     <div class="alo-overlay" id="aloOverlay" role="dialog" aria-modal="true" aria-labelledby="aloTitle">

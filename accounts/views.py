@@ -16,6 +16,7 @@ import json
 
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
+from accounts.sign_in_log import client_ip as _client_ip, touch_sign_in_session
 from .recovery_views import BackupDataView, RestoreDataView, recovery_context
 
 from .forms import (
@@ -30,13 +31,6 @@ _PROFILE_PHOTO_PREFIX = "profile_photos/"
 LOGIN_THROTTLE_LIMIT = 5
 LOGIN_THROTTLE_TIMEOUT = 15 * 60
 LOGIN_THROTTLE_MESSAGE = "Too many failed login attempts. Try again later."
-
-
-def _client_ip(request) -> str:
-    forwarded = (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
-    if forwarded:
-        return forwarded.split(",")[0].strip() or request.META.get("REMOTE_ADDR") or "unknown"
-    return request.META.get("REMOTE_ADDR") or "unknown"
 
 
 def _safe_download_filename(filename: str) -> str:
@@ -229,6 +223,14 @@ class RoleLoginView(LoginView):
             if self._is_throttled():
                 form.add_error(None, LOGIN_THROTTLE_MESSAGE)
         return super().form_invalid(form)
+
+
+class SignInHeartbeatView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        touch_sign_in_session(request.session.session_key)
+        return HttpResponse(status=204)
 
 
 class StoredFileServeView(LoginRequiredMixin, View):
