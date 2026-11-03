@@ -269,7 +269,8 @@ const LABELS = {status: {
     reviewed: 'Approved', on_hold: 'On Hold'
 }};
 const document = {
-    createElement: () => ({className: '', textContent: ''}),
+    createElement: tagName => ({tagName: tagName.toUpperCase(), className: '', textContent: ''}),
+    createTextNode: textContent => ({nodeType: 3, textContent}),
     dispatchEvent: () => { invalidations++; },
     querySelector(selector) {
         assert.equal(selector, '[data-sqr-filter="status:on_hold"]');
@@ -368,21 +369,30 @@ for (const [field, value, label] of [
     ['revenue_status', 'billed', 'Billed'],
     ['delivery_progress', '60', '60%'],
     ['delivery_progress', '<img src=x onerror=alert(1)>', '\\u2013'],
-    ['revenue_remarks', '<img>\\n& note', '&lt;img&gt;<br>&amp; note'],
-    ['revenue_overview', '<img>\\n& note', '&lt;img&gt;<br>&amp; note'],
-    ['key_updates_risks', '<img>\\n& note', '&lt;img&gt;<br>&amp; note']
+    ['revenue_remarks', '<img>\\n& note', '<img>\\n& note'],
+    ['revenue_overview', '<img>\\n& note', '<img>\\n& note'],
+    ['key_updates_risks', '<img>\\n& note', '<img>\\n& note']
 ]) {
     for (const undone of [false, true]) {
         const row = {dataset: {}, classList: {toggle() {}}, querySelector: () => null};
         const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => row};
         const display = {
-            innerHTML: '',
-            set textContent(value) { assert.fail('Formatted display was assigned as literal text'); }
+            children: [],
+            appendChild(node) { this.children.push(node); this.badge = node; },
+            get innerHTML() { return this.html || ''; },
+            set innerHTML(value) { this.html = value; },
+            set textContent(value) { this.children = []; this.text = value; this.html = ''; }
         };
         applyInlineUpdateResponse('225', field, 'old', cell, display, {field_value: value, undone});
         assert.equal(cell.dataset.sqrValue, value);
-        assert.ok(display.innerHTML.includes(label), display.innerHTML);
-        assert.ok(!display.innerHTML.includes('<img'), display.innerHTML);
+        if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].includes(field)) {
+            const renderedText = display.children.map(node => node.tagName === 'BR' ? '\\n' : node.textContent).join('');
+            assert.equal(renderedText, label);
+            assert.equal(display.children.some(node => node.tagName === 'IMG'), false);
+        } else {
+            assert.ok(display.innerHTML.includes(label), display.innerHTML);
+            assert.ok(!display.innerHTML.includes('<img'), display.innerHTML);
+        }
         if (field === 'proposal_status') assert.equal(row.dataset.sqrProposalStatus, value);
     }
 }
