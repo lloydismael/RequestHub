@@ -251,3 +251,6 @@ SQR_OUTLOOK_CLIENT_ID = os.getenv("SQR_OUTLOOK_CLIENT_ID", "").strip()
 SQR_OUTLOOK_CLIENT_SECRET = os.getenv("SQR_OUTLOOK_CLIENT_SECRET", "").strip()
 SQR_OUTLOOK_REDIRECT_URI = os.getenv("SQR_OUTLOOK_REDIRECT_URI", "").strip()
 SQR_OUTLOOK_TOKEN_KEY = os.getenv("SQR_OUTLOOK_TOKEN_KEY", "").strip()
+# PFX certificate takes precedence over SQR_OUTLOOK_CLIENT_SECRET when the file exists.
+SQR_OUTLOOK_CERT_PATH = os.getenv("SQR_OUTLOOK_CERT_PATH", "").strip()
+SQR_OUTLOOK_CERT_PASSWORD = os.getenv("SQR_OUTLOOK_CERT_PASSWORD", "")

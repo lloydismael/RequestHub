@@ -1,11 +1,15 @@
 """Delegated mailbox drafts; never sends mail or overwrites an existing draft."""
 import hashlib
+import os
 import uuid
+from functools import lru_cache
 from urllib.parse import quote, urlsplit
 
 import msal
 import requests
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, pkcs12
 from django.conf import settings
 from django.db import transaction
 
@@ -25,11 +29,32 @@ class OutlookSignInRequired(OutlookError):
     pass
 
 
-SETUP_MESSAGE = "Microsoft 365 drafts need setup: configure SQR_OUTLOOK_TENANT_ID, CLIENT_ID, CLIENT_SECRET, REDIRECT_URI and TOKEN_KEY, with a separate Web app and delegated Mail.ReadWrite permission. Use server-side sessions."
+SETUP_MESSAGE = "Microsoft 365 drafts need setup: configure SQR_OUTLOOK_TENANT_ID, CLIENT_ID, CLIENT_SECRET or CERT_PATH, REDIRECT_URI and TOKEN_KEY, with a separate Web app and delegated Mail.ReadWrite permission. Use server-side sessions."
 
 
 def digest(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+@lru_cache(maxsize=2)
+def _certificate_credential(path, password, mtime_ns):
+    # mtime_ns is in the cache key so replacing the PFX takes effect without a restart.
+    with open(path, "rb") as handle:
+        key, certificate, _ = pkcs12.load_key_and_certificates(handle.read(), password or None)
+    if key is None or certificate is None:
+        raise ValueError("PFX file has no private key")
+    return {
+        "private_key": key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode("ascii"),
+        "thumbprint": certificate.fingerprint(hashes.SHA1()).hex(),
+    }
+
+
+def _client_credential():
+    path = settings.SQR_OUTLOOK_CERT_PATH
+    if path and os.path.isfile(path):
+        password = settings.SQR_OUTLOOK_CERT_PASSWORD.encode("utf-8")
+        return _certificate_credential(path, password, os.stat(path).st_mtime_ns)
+    return settings.SQR_OUTLOOK_CLIENT_SECRET or None
 
 
 def outlook_is_configured():
@@ -42,11 +67,11 @@ def outlook_is_configured():
         valid_scheme = url.scheme == "https" or (
             settings.DEBUG and url.scheme == "http" and url.hostname in {"localhost", "127.0.0.1", "::1"}
         )
-        return bool(settings.SQR_OUTLOOK_CLIENT_SECRET and valid_scheme and url.hostname
+        return bool(_client_credential() and valid_scheme and url.hostname
                     and not url.username and not url.password and not url.query and not url.fragment
                     and url.path == "/sqr/outlook/callback/" and url.port != 0
                     and settings.SESSION_ENGINE != "django.contrib.sessions.backends.signed_cookies")
-    except (AttributeError, ValueError, TypeError, UnicodeError):
+    except (AttributeError, OSError, ValueError, TypeError, UnicodeError):
         return False
 
 
@@ -67,7 +92,7 @@ def client_and_cache(encrypted_cache=None):
             raise OutlookSignInRequired("Microsoft 365 connection expired. Sign in again.") from None
     app = msal.ConfidentialClientApplication(
         settings.SQR_OUTLOOK_CLIENT_ID,
-        client_credential=settings.SQR_OUTLOOK_CLIENT_SECRET,
+        client_credential=_client_credential(),
         authority=f"https://login.microsoftonline.com/{settings.SQR_OUTLOOK_TENANT_ID}",
         token_cache=cache, timeout=TIMEOUT, enable_pii_log=False,
     )

@@ -29,7 +29,7 @@ def _get_view_name(request):
 def _is_password_change_exempt(view_name: str) -> bool:
     if not view_name:
         return False
-    exempt = {"accounts:update", "logout", "login", "healthz"}
+    exempt = {"accounts:update", "accounts:sign-in-heartbeat", "logout", "login", "healthz"}
     if view_name in exempt:
         return True
     if view_name.startswith("admin:"):

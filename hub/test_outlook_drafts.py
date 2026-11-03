@@ -1,9 +1,17 @@
+import datetime
+import os
+import tempfile
 from copy import deepcopy
 from datetime import timedelta
 from unittest.mock import Mock, patch
 
 import requests
+from cryptography import x509
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.x509.oid import NameOID
 from django.contrib.messages import get_messages
 from django.http import HttpResponse
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -31,6 +39,18 @@ TENANT = "11111111-1111-1111-1111-111111111111"
 CLIENT = "22222222-2222-2222-2222-222222222222"
 OID = "33333333-3333-3333-3333-333333333333"
 LINK = "https://outlook.office.com/mail/drafts/id/draft-1"
+
+
+def make_pfx(password=b"pfx-pass"):
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "request-hub-sqr-test")])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
+            .public_key(key.public_key()).serial_number(x509.random_serial_number())
+            .not_valid_before(now).not_valid_after(now + datetime.timedelta(days=1))
+            .sign(key, hashes.SHA256()))
+    data = pkcs12.serialize_key_and_certificates(b"sqr", key, cert, None, serialization.BestAvailableEncryption(password))
+    return data, cert
 
 
 @override_settings(ROOT_URLCONF=__name__, SQR_OUTLOOK_TENANT_ID=TENANT,
@@ -342,6 +362,38 @@ class OutlookDraftTests(TestCase):
             with self.subTest(link=link), self.assertRaises(service.OutlookError):
                 service.safe_draft_link(link)
         self.assertEqual(service.safe_draft_link("https://outlook.office365.com/mail/drafts"), "https://outlook.office365.com/mail/drafts")
+
+
+@override_settings(ROOT_URLCONF=__name__, SQR_OUTLOOK_TENANT_ID=TENANT,
+                   SQR_OUTLOOK_CLIENT_ID=CLIENT, SQR_OUTLOOK_CLIENT_SECRET="",
+                   SQR_OUTLOOK_REDIRECT_URI="https://example.com/sqr/outlook/callback/",
+                   SQR_OUTLOOK_TOKEN_KEY=Fernet.generate_key().decode(),
+                   SESSION_ENGINE="django.contrib.sessions.backends.db")
+class OutlookCertificateCredentialTests(TestCase):
+    def setUp(self):
+        data, self.cert = make_pfx()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.pfx_path = os.path.join(tmp.name, "sqr.pfx")
+        with open(self.pfx_path, "wb") as handle:
+            handle.write(data)
+
+    def test_certificate_configures_msal_without_client_secret(self):
+        with override_settings(SQR_OUTLOOK_CERT_PATH=self.pfx_path, SQR_OUTLOOK_CERT_PASSWORD="pfx-pass"):
+            self.assertTrue(service.outlook_is_configured())
+            with patch.object(service.msal, "ConfidentialClientApplication") as app_class:
+                service.client_and_cache()
+        credential = app_class.call_args.kwargs["client_credential"]
+        self.assertEqual(credential["thumbprint"], self.cert.fingerprint(hashes.SHA1()).hex())
+        self.assertTrue(credential["private_key"].startswith("-----BEGIN PRIVATE KEY-----"))
+
+    def test_wrong_password_or_missing_file_is_not_configured(self):
+        with override_settings(SQR_OUTLOOK_CERT_PATH=self.pfx_path, SQR_OUTLOOK_CERT_PASSWORD="wrong"):
+            self.assertFalse(service.outlook_is_configured())
+        missing = os.path.join(os.path.dirname(self.pfx_path), "missing.pfx")
+        with override_settings(SQR_OUTLOOK_CERT_PATH=missing, SQR_OUTLOOK_CERT_PASSWORD="pfx-pass"):
+            self.assertFalse(service.outlook_is_configured())
+
 
 @override_settings(SQR_OUTLOOK_TOKEN_KEY=Fernet.generate_key().decode())
 class OutlookConcurrentDraftTests(TransactionTestCase):

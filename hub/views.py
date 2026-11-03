@@ -55,7 +55,13 @@ from django.views.generic import DetailView, DeleteView, ListView, TemplateView,
 from urllib.parse import quote, urlencode
 
 from accounts.forms import UserManagementForm
-from accounts.models import User
+from accounts.models import SignInLog, User
+from accounts.sign_in_log import (
+    SIGN_IN_STATUS_CHOICES,
+    annotate_sign_in_logs,
+    filter_sign_in_logs,
+    summarize_sign_ins,
+)
 
 REQUESTOR_ROLES = set(User.REQUESTOR_ROLES)
 REQUEST_CREATOR_ROLES = set(getattr(User, "REQUEST_CREATOR_ROLES", User.REQUESTOR_ROLES))
@@ -106,7 +112,10 @@ from .mixins import (
 from .services import request_lifecycle
 from .services.sqr_performance import build_sqr_performance_snapshot
 from .services import sqr_prototype
-from .services.outlook_drafts import outlook_is_configured
+from .services import outlook_threads
+from .services.outlook_drafts import (
+    OutlookError, OutlookSignInRequired, access_token, outlook_is_configured, require_configuration,
+)
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
@@ -144,6 +153,47 @@ def _safe_return_url(request, fallback_name):
     ):
         return target
     return reverse(fallback_name)
+
+
+def _request_connect_url(request_obj, return_url):
+    return f"{reverse('hub:request-outlook-connect', args=[request_obj.pk])}?{urlencode({'next': return_url})}"
+
+
+def _microsoft_sign_in_redirect(request, request_obj, return_url):
+    """Redirect to Microsoft sign-in before a lifecycle change is recorded, when the mailbox is not connected."""
+    if not outlook_is_configured():
+        return None
+    try:
+        access_token(request, require_configuration(request))
+    except OutlookSignInRequired:
+        return HttpResponseRedirect(_request_connect_url(request_obj, return_url))
+    except OutlookError:
+        pass
+    return None
+
+
+def _microsoft_request_draft(request, request_obj, create_draft, return_url):
+    """Create the draft inside the request's email thread. Returns (response, warning); (None, "") means use mailto."""
+    if not outlook_is_configured():
+        return None, ""
+    try:
+        token, _ = access_token(request, require_configuration(request))
+        link, anchored = create_draft(token)
+    except OutlookSignInRequired:
+        return HttpResponseRedirect(_request_connect_url(request_obj, return_url)), ""
+    except outlook_threads.AcknowledgementPending as exc:
+        messages.error(request, str(exc))
+        return HttpResponseRedirect(return_url), ""
+    except (OutlookError, requests.RequestException):
+        return None, "Microsoft 365 draft could not be created, so a basic email was opened instead. It may not join the request thread."
+    RequestCommunication.objects.create(
+        request=request_obj,
+        user=request.user,
+        channel=RequestCommunication.Channel.OUTLOOK,
+    )
+    if not anchored:
+        messages.info(request, "No earlier request email was found in your mailbox, so this email starts a new thread.")
+    return HttpResponseRedirect(link), ""
 
 
 def _format_sqr_approval_greeting(requestor_name: str) -> str:
@@ -1170,7 +1220,7 @@ def notify_engineer_assignment_email(
     due_display = request_obj.due_date.strftime("%b %d, %Y") if request_obj.due_date else "Not set"
     detail_url = f"{settings.PUBLIC_BASE_URL}{request_obj.get_absolute_url()}"
 
-    subject = f"[Request Hub] New assignment - {request_obj.reference_code or 'Request'}"
+    subject = outlook_threads.assignment_subject(request_obj.reference_code)
     body_lines = [
         "You have been assigned a request in Request Hub.",
         "",
@@ -5773,8 +5823,7 @@ class RequestOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequiredMixi
 
         recipients = ",".join(sorted(to_addresses))
         cc_field = ",".join(sorted(cc_addresses))
-        account_name = request_obj.account.name if request_obj.account else "Request"
-        subject = quote(f"Re: {request_obj.reference_code} · {account_name}")
+        subject = quote(outlook_threads.acknowledgement_subject(request_obj))
 
         requestor = request_obj.requestor
         if requestor:
@@ -5823,7 +5872,7 @@ class RequestOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequiredMixi
                 "If you have additional information or questions, simply reply to this email and we'll continue the thread.\n"
             )
 
-        body = quote(
+        body_text = (
             body_template.format(
                 requestor_name=requestor_name,
                 reference=request_obj.reference_code,
@@ -5834,6 +5883,20 @@ class RequestOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequiredMixi
                 assigned_engineer=assigned_engineer_name,
             )
         )
+        body = quote(body_text)
+
+        response, warning = _microsoft_request_draft(
+            request,
+            request_obj,
+            lambda token: outlook_threads.create_acknowledgement_draft(
+                token, request_obj, to=sorted(to_addresses), cc=sorted(cc_addresses), body=body_text,
+            ),
+            redirect_target,
+        )
+        if response is not None:
+            return response
+        if warning:
+            messages.warning(request, warning)
 
         RequestCommunication.objects.create(
             request=request_obj,
@@ -5909,9 +5972,8 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
         cc_field = ",".join(sorted(cc_addresses))
 
         # Match the acknowledgement subject exactly so Outlook can group the request emails together.
-        account_name = request_obj.account.name if request_obj.account else "Request"
-        ack_subject = f"Re: {request_obj.reference_code} · {account_name}"
-        subject = quote(ack_subject)
+        subject_text = outlook_threads.acknowledgement_subject(request_obj)
+        subject = quote(subject_text)
 
         requestor = request_obj.requestor
         if requestor:
@@ -5936,7 +5998,7 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
             "ESG"
         )
 
-        body = quote(
+        body_text = (
             body_template.format(
                 requestor_name=requestor_name,
                 description=description_line,
@@ -5944,6 +6006,20 @@ class RequestClosingOutlookRedirectView(AdminOrEngineerRequiredMixin, LoginRequi
                 detail_url=detail_url,
             )
         )
+        body = quote(body_text)
+
+        response, warning = _microsoft_request_draft(
+            request,
+            request_obj,
+            lambda token: outlook_threads.create_closing_draft(
+                token, request_obj, to=sorted(to_addresses), cc=sorted(cc_addresses), body=body_text,
+            ),
+            redirect_target,
+        )
+        if response is not None:
+            return response
+        if warning:
+            messages.warning(request, warning)
 
         RequestCommunication.objects.create(
             request=request_obj,
@@ -7534,7 +7610,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             user_search_query=user_search_query,
         )
         active_tab = request.GET.get("tab", "users")
-        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "forms"} else "users"
+        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "activity", "forms"} else "users"
         context["form_catalog"] = catalog()
         for user in context["users"]:
             user.editor_form = UserManagementForm(instance=user)
@@ -7722,6 +7798,29 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             "users_page_obj": users_page_obj,
             "user_search_query": user_search_query,
             "role_choices": User.Roles.choices,
+            **self._build_activity_context(),
+        }
+
+    def _build_activity_context(self):
+        now = timezone.now()
+        query = (self.request.GET.get("activity_q") or "").strip()
+        status = self.request.GET.get("activity_status") or "all"
+        if status not in dict(SIGN_IN_STATUS_CHOICES):
+            status = "all"
+        logs = filter_sign_in_logs(SignInLog.objects.select_related("user"), query=query, status=status, now=now)
+        paginator = Paginator(logs, 50)
+        try:
+            page_obj = paginator.page(self.request.GET.get("activity_page") or 1)
+        except InvalidPage:
+            page_obj = paginator.page(1)
+        page_obj.object_list = annotate_sign_in_logs(page_obj.object_list, now)
+        return {
+            "activity_logs_page_obj": page_obj,
+            "activity_query": query,
+            "activity_status": status,
+            "activity_status_choices": SIGN_IN_STATUS_CHOICES,
+            "activity_base_query": urlencode({"tab": "activity", "activity_q": query, "activity_status": status}),
+            "activity_summary": summarize_sign_ins(now),
         }
 
     @staticmethod
@@ -8070,6 +8169,9 @@ class RequestLifecycleAcknowledgeView(LoginRequiredMixin, View):
             )
             return redirect("hub:request-manage-collab", pk=pk)
 
+        sign_in_response = _microsoft_sign_in_redirect(request, request_obj, _safe_return_url(request, "hub:dashboard"))
+        if sign_in_response is not None:
+            return sign_in_response
         try:
             request_lifecycle.acknowledge_request(
                 pk,
