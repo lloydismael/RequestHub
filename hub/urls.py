@@ -58,7 +58,7 @@ from .form_editor_views import (
     FormEditorActionView, FormEditorCatalogView, FormEditorDetailView,
     FormEditorHistoryView, FormEditorPreviewView, FormEditorPeopleView,
 )
-from .outlook_views import OutlookCallbackView, OutlookDraftView
+from .outlook_views import OutlookCallbackView, OutlookDraftView, RequestOutlookConnectView
 
 app_name = "hub"
 
@@ -80,6 +80,7 @@ urlpatterns = [
     path("requests/<int:pk>/teams-chat/", RequestTeamsRedirectView.as_view(), name="request-teams"),
     path("requests/<int:pk>/outlook/", RequestOutlookRedirectView.as_view(), name="request-outlook"),
     path("requests/<int:pk>/outlook/closing/", RequestClosingOutlookRedirectView.as_view(), name="request-outlook-closing"),
+    path("requests/<int:pk>/outlook/connect/", RequestOutlookConnectView.as_view(), name="request-outlook-connect"),
     path("requests/<int:pk>/delete/", RequestDeleteView.as_view(), name="request-delete"),
     path("requests/<int:pk>/restore/", RequestRestoreView.as_view(), name="request-restore"),
     path("notifications/", NotificationListView.as_view(), name="notifications"),

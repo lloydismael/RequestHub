@@ -22,6 +22,8 @@ venv/
 # Local environment and secrets
 .env
 .env.*
+*.pfx
+*.p12
 
 # Local build/test outputs
 .pytest_cache/

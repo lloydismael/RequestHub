@@ -11,3 +11,5 @@ media/
 .env
 .env.*
 !.env.example
+*.pfx
+*.p12
