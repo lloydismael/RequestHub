@@ -876,7 +876,7 @@
         save(pk, 'status', 'reviewed', el.editor.querySelector('[data-field-key="status"]')).then(function (data) {
             var url = choice === 'eml' ? data.approval_email_eml_url : data.approval_email_draft_url;
             if (!url) { if (transfer) transfer.cancel(); return; }
-            if (transfer) transfer.complete(url);
+            if (transfer) transfer.complete(url, {microsoftUrl: data.approval_email_microsoft_url, csrfToken: CSRF});
             else window.location.href = url;
         }).catch(function () { if (transfer) transfer.cancel(); });
     });

@@ -130,6 +130,7 @@ SQR_APPROVAL_SERVICE_COMPONENT = "Systems Support & Maintenance Service - 1 Year
 SQR_APPROVAL_LOGO_URL = "https://raw.githubusercontent.com/lloydismael/request-hub/dev/static/img/phil-data-full-logo.png"
 SQR_APPROVAL_LOGO_PATH = Path(settings.BASE_DIR) / "static" / "img" / "phil-data-full-logo.png"
 SQR_APPROVAL_LOGO_CID = "sqr-approval-logo@request-hub"
+SQR_APPROVAL_MAILTO_BODY_URL_LIMIT = 8000
 SQR_APPROVAL_INCLUDED_SERVICES = [
     "Proactive System Health Checks",
     "System/Platform Patching (scheduled)",
@@ -4229,6 +4230,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             response_data["approval_email_draft_url"] = approval_urls["draft"]
         if approval_urls.get("eml"):
             response_data["approval_email_eml_url"] = approval_urls["eml"]
+        if approval_urls.get("microsoft"):
+            response_data["approval_email_microsoft_url"] = approval_urls["microsoft"]
         if change is not None:
             response_data["change_id"] = change.pk
             response_data["undo_url"] = reverse("hub:sqr-inline-undo", args=[submission.pk, change.pk])
@@ -4476,6 +4479,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         ):
             approval_urls["draft"] = reverse("hub:sqr-approval-email-formatted-draft", args=[submission.pk])
             approval_urls["eml"] = reverse("hub:sqr-approval-email-eml", args=[submission.pk])
+            if outlook_is_configured():
+                approval_urls["microsoft"] = reverse("hub:sqr-approval-email-microsoft", args=[submission.pk])
 
         response_data = self._build_inline_response(
             submission,
@@ -5077,6 +5082,8 @@ class SqrApprovalFormattedDraftView(LoginRequiredMixin, View):
 
         context = _get_sqr_approval_email_context(submission)
         compose_context = {**context, "plain_text": ""}
+        # Outlook needs CRLF line breaks; very long mailto links are not launched reliably.
+        body_url = _build_sqr_approval_mailto_url({**context, "plain_text": context["plain_text"].replace("\n", "\r\n")})
         response = render(request, "hub/sqr_approval_preview.html", {
             "submission": submission,
             "email_subject": context["subject"],
@@ -5084,6 +5091,7 @@ class SqrApprovalFormattedDraftView(LoginRequiredMixin, View):
             "email_html": context["html_preview"],
             "email_plain_text": context["plain_text"],
             "compose_url": _build_sqr_approval_mailto_url(compose_context),
+            "compose_body_url": body_url if len(body_url) <= SQR_APPROVAL_MAILTO_BODY_URL_LIMIT else "",
             "microsoft_draft_url": reverse("hub:sqr-approval-email-microsoft", args=[submission.pk]) if outlook_is_configured() else "",
             "microsoft_draft_autostart": request.GET.get("outlook") == "1",
         })

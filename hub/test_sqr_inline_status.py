@@ -71,10 +71,10 @@ assert.ok(chats[0][0].startsWith('https://teams.microsoft.com/'));
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 (async () => {
-    for (const mode of ['success', 'denied', 'unsupported', 'fetch-failed', 'cancel']) {
+    for (const withBody of [false, true]) for (const mode of ['success', 'denied', 'unsupported', 'fetch-failed', 'cancel']) {
         const events = [];
         const window = {location: {href: ''}};
-        const notice = {setAttribute() {}, appendChild() {}};
+        let notice = null;
         const clipboard = {async write(items) {
             events.push('write-start');
             if (mode === 'denied') throw new Error('Denied');
@@ -89,11 +89,17 @@ const vm = require('node:vm');
             navigator: mode === 'unsupported' ? {} : {clipboard},
             ClipboardItem: class {constructor(data) {this.data = data;}},
             Blob,
-            document: {getElementById: () => null, createElement: () => notice, querySelector: () => ({prepend() {}})},
+            document: {getElementById: () => null, createElement: () => {
+                const created = {setAttribute() {}, appendChild() {}};
+                notice = notice || created;
+                return created;
+            }, querySelector: () => ({prepend() {}})},
             DOMParser: class {parseFromString() {return {getElementById(id) {
                 if (id === 'sqr-email-html') return {textContent: JSON.stringify('<table>Approved</table>')};
                 if (id === 'sqr-email-text') return {textContent: JSON.stringify('Approved')};
-                return {getAttribute: () => 'mailto:reviewer@example.com?subject=Approved'};
+                return {getAttribute: name => name === 'href'
+                    ? 'mailto:reviewer@example.com?subject=Approved&body='
+                    : (withBody ? 'mailto:reviewer@example.com?subject=Approved&body=Approved' : null)};
             }}}},
             fetch: async () => {events.push('fetch'); return {ok: mode !== 'fetch-failed', text: async () => 'preview'};}
         });
@@ -107,8 +113,66 @@ const vm = require('node:vm');
             assert.equal(events.includes('fetch'), false);
         } else {
             await transfer.complete('/preview/');
-            assert.equal(window.location.href, mode === 'success' ? 'mailto:reviewer@example.com?subject=Approved' : '/preview/');
+            const copied = mode === 'success';
+            const launch = withBody
+                ? 'mailto:reviewer@example.com?subject=Approved&body=Approved'
+                : 'mailto:reviewer@example.com?subject=Approved&body=';
+            // The compose window opens with the body whenever it is available; otherwise copying is required.
+            const expected = mode === 'fetch-failed' || (!withBody && !copied) ? '/preview/' : launch;
+            assert.equal(window.location.href, expected);
+            if (expected === launch) {
+                assert.match(notice.textContent, withBody ? /text body filled in/ : /Paste into Outlook/);
+                assert.equal(/formatted layout/.test(notice.textContent), withBody && copied);
+            }
             if (mode === 'success') assert.deepEqual(events, ['write-start', 'fetch', 'copied']);
+        }
+    }
+})().catch(error => {console.error(error); process.exitCode = 1;});
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_approval_submits_microsoft_draft_directly_without_loading_preview(self):
+        source = (Path(settings.BASE_DIR) / "static" / "hub" / "sqr_approval_autocopy.js").read_text(encoding="utf-8")
+        script = """
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+(async () => {
+    for (const microsoftUrl of ['/sqr/7/approval-email/microsoft/', '//evil.example/steal/']) {
+        const window = {location: {href: ''}};
+        const events = [];
+        let submitted = null;
+        vm.runInNewContext(SOURCE, {
+            window,
+            navigator: {clipboard: {async write(items) {
+                try { await items[0].data['text/html']; } catch (error) { events.push('clipboard-skipped'); }
+            }}},
+            ClipboardItem: class {constructor(data) {this.data = data;}},
+            Blob,
+            document: {
+                getElementById: () => null,
+                createElement: () => ({children: [], appendChild(child) { this.children.push(child); }, submit() { submitted = this; }}),
+                body: {appendChild() {}},
+                querySelector: () => ({prepend() {}})
+            },
+            DOMParser: class {parseFromString() {return {getElementById: () => ({
+                textContent: JSON.stringify('x'), getAttribute: () => 'mailto:reviewer@example.com'
+            })}}},
+            fetch: async () => {events.push('fetch'); return {ok: true, text: async () => 'preview'};}
+        });
+        await window.startSqrApprovalDraft().complete('/preview/', {microsoftUrl, csrfToken: 'token-123'});
+        await new Promise(resolve => setImmediate(resolve));
+        if (microsoftUrl.startsWith('/sqr/')) {
+            assert.deepEqual(events, ['clipboard-skipped']);
+            assert.equal(window.location.href, '');
+            assert.equal(submitted.method, 'post');
+            assert.equal(submitted.action, microsoftUrl);
+            assert.equal(submitted.children[0].name, 'csrfmiddlewaretoken');
+            assert.equal(submitted.children[0].value, 'token-123');
+        } else {
+            // An off-site action is ignored and the normal preview flow runs.
+            assert.equal(submitted, null);
+            assert.ok(events.includes('fetch'));
         }
     }
 })().catch(error => {console.error(error); process.exitCode = 1;});
@@ -150,7 +214,7 @@ const vm = require('node:vm');
                 if (id === 'sqr-email-html') return {textContent: JSON.stringify('<table>Approved</table>')};
                 if (id === 'sqr-email-text') return {textContent: JSON.stringify('Approved')};
                 if (id === 'sqr-email-microsoft') return microsoft;
-                return {getAttribute: () => 'mailto:reviewer@example.com?subject=Approved'};
+                return {getAttribute: name => name === 'href' ? 'mailto:reviewer@example.com?subject=Approved&body=' : null};
             }}}},
             fetch: async () => ({ok: true, text: async () => 'preview'})
         });

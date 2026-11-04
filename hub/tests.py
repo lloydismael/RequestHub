@@ -1725,7 +1725,28 @@ class SqrApprovalEmailTemplateTests(TestCase):
         self.assertEqual(self.submission.status, SqrSubmission.Status.APPROVED)
         self.assertIn("no-store", response["Cache-Control"])
 
-    def test_preview_offers_microsoft_draft_only_when_configured(self):
+    @override_settings(DEBUG=True)
+    def test_preview_offers_mailto_with_plain_text_body_unless_too_long(self):
+        from urllib.parse import parse_qs, unquote, urlsplit
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        self.client.force_login(self.pm)
+        url = reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk])
+        response = self.client.get(url)
+        body_url = response.context["compose_body_url"]
+        self.assertContains(response, 'data-body-href="mailto:')
+        self.assertEqual(urlsplit(body_url).scheme, "mailto")
+        self.assertIn("%0D%0A", body_url)
+        body = parse_qs(urlsplit(body_url).query)["body"][0]
+        self.assertIn("SQR Approval Advisory", body)
+        self.assertIn("Total Professional Services Investment: PHP 79,000.00", unquote(body))
+        self.assertNotIn("body", parse_qs(urlsplit(response.context["compose_url"]).query))
+
+        with patch("hub.views.SQR_APPROVAL_MAILTO_BODY_URL_LIMIT", 100):
+            response = self.client.get(url)
+        self.assertEqual(response.context["compose_body_url"], "")
+        self.assertNotContains(response, "data-body-href")
         from cryptography.fernet import Fernet
 
         self.submission.status = SqrSubmission.Status.APPROVED
@@ -2075,10 +2096,31 @@ class SqrInlineUndoTests(TestCase):
         self.assertIsNotNone(change.undone_at)
         self.assertEqual(change.undone_by, self.pm)
 
+    def test_approval_response_offers_direct_microsoft_draft_when_configured(self):
+        from cryptography.fernet import Fernet
+
+        configured = dict(
+            SQR_OUTLOOK_TENANT_ID="11111111-1111-1111-1111-111111111111",
+            SQR_OUTLOOK_CLIENT_ID="22222222-2222-2222-2222-222222222222",
+            SQR_OUTLOOK_CLIENT_SECRET="test-client-secret",
+            SQR_OUTLOOK_REDIRECT_URI="https://example.com/sqr/outlook/callback/",
+            SQR_OUTLOOK_TOKEN_KEY=Fernet.generate_key().decode(),
+            SESSION_ENGINE="django.contrib.sessions.backends.db",
+        )
+        with override_settings(**configured):
+            response = self._inline_update("status", SqrSubmission.Status.APPROVED)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["approval_email_microsoft_url"],
+            reverse("hub:sqr-approval-email-microsoft", args=[self.submission.pk]),
+        )
+
     def test_status_undo_restores_status_metadata_with_warning(self):
-        response = self._inline_update("status", SqrSubmission.Status.APPROVED)
+        with override_settings(SQR_OUTLOOK_CLIENT_ID=""):
+            response = self._inline_update("status", SqrSubmission.Status.APPROVED)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["approval_email_draft_url"], reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk]))
+        self.assertNotIn("approval_email_microsoft_url", response.json())
         change = SqrSubmissionChange.objects.get(pk=response.json()["change_id"])
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.status, SqrSubmission.Status.APPROVED)
