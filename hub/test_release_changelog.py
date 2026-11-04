@@ -96,6 +96,8 @@ class ClassifyTests(SimpleTestCase):
         self.assertTrue(is_excluded("Docs", "see [Skip Changelog]"))
         self.assertTrue(is_excluded("Docs [skip changelog]", ""))
         self.assertFalse(is_excluded("Initial plan for exports", ""))
+        self.assertTrue(is_excluded("", ""))
+        self.assertTrue(is_excluded("   ", "some body"))
 
 
 class ValidateManifestTests(SimpleTestCase):
@@ -167,6 +169,21 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         commit(repo, "Fix - Café 日本語")
         manifest = build_manifest("v1", "HEAD", repo, baseline=base)
         self.assertEqual(manifest["commits"][0]["title"], "Café 日本語")
+
+    def test_empty_subject_commit_is_skipped(self):
+        repo = self.make_repo()
+        base = commit(repo, "Baseline")
+        sha_a = commit(repo, "Feature - A")
+        git(repo, "commit", "--allow-empty", "--allow-empty-message", "-m", "")
+        sha_b = commit(repo, "Fix - B")
+        manifest = build_manifest("v1", "HEAD", repo, baseline=base)
+        self.assertEqual(
+            manifest["commits"],
+            [
+                {"sha": sha_b, "type": "fixed", "title": "B"},
+                {"sha": sha_a, "type": "new", "title": "A"},
+            ],
+        )
 
     def test_cap_keeps_newest(self):
         repo = self.make_repo()

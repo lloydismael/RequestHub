@@ -59,6 +59,8 @@ def classify(subject):
 
 
 def is_excluded(subject, body):
+    if not subject.strip():
+        return True
     if subject.strip().lower() == "initial plan":
         return True
     return "[skip changelog]" in f"{subject}\n{body}".lower()
