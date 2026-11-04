@@ -1,6 +1,6 @@
 # Automatic changelog from releases: design
 
-Date: 2026-11-04. Status: awaiting approval. Size: small (builds on the existing Changelogs feature).
+Date: 2026-11-04. Status: approved. Size: small (builds on the existing Changelogs feature).
 
 ## Intent
 
