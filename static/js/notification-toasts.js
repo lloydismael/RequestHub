@@ -37,8 +37,42 @@
         if (broadcast && channel) channel.postMessage({ cursor: cursor });
     }
 
+    var TOAST_LIFETIME_MS = 12000;
+    var TOAST_EXIT_MS = 320;
+
     function removeToast(toast) {
         if (toast && toast.parentNode) toast.parentNode.removeChild(toast);
+    }
+
+    function dismissToast(toast) {
+        if (!toast || !toast.parentNode) return;
+        if (toast.classList && toast.classList.contains('notification-toast--leaving')) return;
+        if (toast.classList) toast.classList.add('notification-toast--leaving');
+        window.setTimeout(function () { removeToast(toast); }, TOAST_EXIT_MS);
+    }
+
+    function scheduleDismiss(toast) {
+        var remaining = TOAST_LIFETIME_MS;
+        var startedAt = Date.now();
+        var timer = null;
+
+        function start() {
+            startedAt = Date.now();
+            timer = window.setTimeout(function () { dismissToast(toast); }, remaining);
+        }
+
+        function pause() {
+            if (timer === null) return;
+            window.clearTimeout(timer);
+            timer = null;
+            remaining = Math.max(remaining - (Date.now() - startedAt), 0);
+        }
+
+        toast.addEventListener('mouseenter', pause);
+        toast.addEventListener('focusin', pause);
+        toast.addEventListener('mouseleave', start);
+        toast.addEventListener('focusout', start);
+        start();
     }
 
     function createElement(tag, className, text) {
@@ -67,7 +101,7 @@
         var close = createElement('button', 'notification-toast__close', '×');
         close.type = 'button';
         close.setAttribute('aria-label', 'Dismiss notification');
-        close.addEventListener('click', function () { removeToast(toast); });
+        close.addEventListener('click', function () { dismissToast(toast); });
         header.appendChild(title);
         header.appendChild(close);
 
@@ -83,7 +117,7 @@
         toast.appendChild(message);
         toast.appendChild(actions);
         region.appendChild(toast);
-        window.setTimeout(function () { removeToast(toast); }, 12000);
+        scheduleDismiss(toast);
     }
 
     function processPayload(data) {

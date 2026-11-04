@@ -7997,13 +7997,15 @@ class NotificationListView(LoginRequiredMixin, ListView):
         base_qs = request.user.notifications.all()
         if getattr(request.user, "role", None) in ADMIN_PANEL_ROLES:
             base_qs = base_qs.filter(source__icontains="new request")
-        page = Paginator(
-            Changelog.objects.filter(is_published=True, release_date__lte=timezone.localdate()), 10,
-        ).get_page(request.GET.get("page"))
+        changelog_qs = Changelog.objects.filter(
+            is_published=True, release_date__lte=timezone.localdate(),
+        )
+        page = Paginator(changelog_qs, 10).get_page(request.GET.get("page"))
         return render(request, self.template_name, {
             "active_tab": "changelogs", "changelogs": page, "page_obj": page,
             "is_paginated": page.has_other_pages(),
             "unread_count": base_qs.filter(is_read=False).count(), "total_count": base_qs.count(),
+            "changelog_count": changelog_qs.count(),
         })
 
     def get_queryset(self):
@@ -8059,6 +8061,9 @@ class NotificationListView(LoginRequiredMixin, ListView):
             base_qs = base_qs.filter(source__icontains="new request")
         context["unread_count"] = base_qs.filter(is_read=False).count()
         context["total_count"] = base_qs.count()
+        context["changelog_count"] = Changelog.objects.filter(
+            is_published=True, release_date__lte=timezone.localdate(),
+        ).count()
         context["current_filter"] = self._filter_read
         context["current_category"] = self._filter_category
 
