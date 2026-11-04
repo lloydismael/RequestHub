@@ -61,6 +61,13 @@
 .cl-screenshot img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: contain; background: rgba(128, 128, 128, .08); }
 .cl-screenshot > span { display: block; padding: .5rem 1rem; font-size: .8rem; text-decoration: underline; }
 .cl-panel__text { padding: 1rem; line-height: 1.65; }
+.cl-changes { padding: 1rem; border: 1px solid var(--rh-border, rgba(128, 128, 128, .3)); border-left: 3px solid var(--brand-primary); border-radius: 1rem; background: var(--rh-surface, rgba(128, 128, 128, .05)); }
+.cl-change-group + .cl-change-group { margin-top: 1rem; }
+.cl-change-group h5, .cl-change-group summary { margin-bottom: .25rem; }
+.cl-change-group summary { cursor: pointer; }
+.cl-change-group ul { margin: 0; padding-left: 1.25rem; }
+.cl-change-group li { overflow-wrap: anywhere; }
+.cl-count { display: inline-block; min-width: 1.5rem; padding: 0 .4rem; border-radius: 999px; background: rgba(128, 128, 128, .15); color: var(--rh-text-secondary); font-size: .75rem; text-align: center; }
 .cl-prose, .cl-entry__header > div { min-width: 0; overflow-wrap: anywhere; }
 .cl-empty { padding: 3rem 1.5rem; text-align: center; }
 .cl-management { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 1.5rem; align-items: start; }

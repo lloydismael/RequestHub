@@ -110,6 +110,49 @@ class ChangelogTests(TestCase):
             with self.subTest(changes=changes):
                 self.assertEqual(self.automatic(changes=changes, release_sha=None).change_groups, [])
 
+    def feed(self):
+        return self.client.get(self.notifications, {"tab": "changelogs"})
+
+    def test_automatic_entry_lists_changes_by_group(self):
+        self.automatic()
+        response = self.feed()
+        self.assertContains(response, "What changed")
+        for title in ("Shiny export", "Quicker list", "Typo fix", "Dependency bump"):
+            self.assertContains(response, title)
+        self.assertContains(response, '<details class="cl-change-group">')
+        self.assertNotContains(response, '<details class="cl-change-group" open')
+        self.assertNotContains(response, "cl-comparison")
+        self.assertNotContains(response, "bi-arrow-right")
+        self.assertContains(response, "v56.0")
+
+    def test_change_titles_are_escaped(self):
+        title = "<script>alert(1)</script>"
+        commits = [{"sha": "1" * 40, "type": "new", "title": title}]
+        self.automatic(changes={"commits": commits})
+        response = self.feed()
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+        self.assertNotContains(response, title)
+
+    def test_long_unbroken_title_renders_whole(self):
+        title = "x" * 200
+        self.automatic(changes={"commits": [{"sha": "1" * 40, "type": "fixed", "title": title}]})
+        self.assertContains(self.feed(), title)
+
+    def test_manual_entry_is_unchanged(self):
+        self.entry(is_published=True)
+        response = self.feed()
+        self.assertContains(response, "cl-comparison")
+        self.assertContains(response, "bi-arrow-right")
+        self.assertNotContains(response, "What changed")
+
+    def test_changes_and_comparison_coexist(self):
+        self.automatic(
+            previous_version="v55.1", before_text="Old way.", after_text="New way.",
+        )
+        response = self.feed()
+        self.assertContains(response, "What changed")
+        self.assertContains(response, "cl-comparison")
+
     def test_management_has_changelogs_tab(self):
         response = self.client.get(self.management, {"tab": "changelogs"})
         self.assertContains(response, 'id="changelogs-tab"')
