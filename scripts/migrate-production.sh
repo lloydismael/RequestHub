@@ -41,12 +41,21 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-state=$(az postgres flexible-server show --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_POSTGRES_SERVER" --query state -o tsv)
-retention=$(az postgres flexible-server show --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_POSTGRES_SERVER" --query backup.backupRetentionDays -o tsv)
-restore_date=$(az postgres flexible-server show --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_POSTGRES_SERVER" --query backup.earliestRestoreDate -o tsv)
-test "$state" = Ready
-[[ "$retention" =~ ^[0-9]+$ ]] && (( retention >= 7 ))
-test -n "$restore_date" || { echo 'No point-in-time restore metadata available' >&2; exit 1; }
+database_state=$(az postgres flexible-server show --subscription "$AZURE_SUBSCRIPTION_ID" --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_POSTGRES_SERVER" --query '{state:state,retention:backup.backupRetentionDays,restoreDate:backup.earliestRestoreDate}' -o json)
+printf '%s' "$database_state" | python3 -c '
+import json
+import sys
+try:
+    state = json.load(sys.stdin)
+    if state["state"] != "Ready":
+        raise ValueError("Database server is not Ready")
+    if type(state["retention"]) is not int or state["retention"] < 7:
+        raise ValueError("Database backup retention must be at least seven days")
+    if not isinstance(state["restoreDate"], str) or not state["restoreDate"].strip():
+        raise ValueError("No point-in-time restore metadata available")
+except (ValueError, KeyError, TypeError):
+    raise SystemExit("Invalid database backup state; require Ready, retention >= 7, and restore metadata")
+'
 timing 'Database state and backup checks'
 
 existing=$(az postgres flexible-server firewall-rule list "${server_args[@]}" --query "[?name=='$rule'].name | [0]" -o tsv)

@@ -25,12 +25,25 @@ resource="/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/$AZURE_RESOURCE_G
 mode=$(az resource show --ids "$resource/config/web" --api-version 2025-03-01 --query properties.linuxFxVersion -o tsv)
 test "$mode" = sitecontainers || { echo 'Only confirmed sitecontainers mode is supported' >&2; exit 1; }
 container="$resource/sitecontainers/$AZURE_MAIN_CONTAINER"
-test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.isMain -o tsv)" = true || { echo '::error::Configured sitecontainer is not the main container'; exit 1; }
-test "$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.targetPort -o tsv)" = 8000 || { echo '::error::Main container targetPort must be 8000'; exit 1; }
+container_state=$(az resource show --ids "$container" --api-version 2025-03-01 --query 'properties.{isMain:isMain,targetPort:targetPort,image:image}' -o json)
+previous=$(printf '%s' "$container_state" | python3 -c '
+import json
+import sys
+try:
+    state = json.load(sys.stdin)
+    if state["isMain"] is not True:
+        raise ValueError("Configured sitecontainer is not the main container")
+    if type(state["targetPort"]) is not int or state["targetPort"] != 8000:
+        raise ValueError("Main container targetPort must be 8000")
+    image = state["image"]
+    if not isinstance(image, str) or not image.strip():
+        raise ValueError("No previous image configured for rollback")
+except (ValueError, KeyError, TypeError):
+    raise SystemExit("Invalid main container state; require isMain=true, targetPort=8000, and a rollback image")
+sys.stdout.write(image)
+')
 migration_setting=$(az webapp config appsettings list --name "$AZURE_WEBAPP_NAME" --resource-group "$AZURE_RESOURCE_GROUP" --query "[?name=='RUN_MIGRATIONS'].value | [0]" -o tsv)
 test "$migration_setting" = false || { echo "::error::Web App RUN_MIGRATIONS must be false; current value: ${migration_setting:-unset}. Configure controlled migration execution before changing this setting."; exit 1; }
-previous=$(az resource show --ids "$container" --api-version 2025-03-01 --query properties.image -o tsv)
-test -n "$previous" || { echo '::error::No previous image configured for rollback'; exit 1; }
 docker pull "$previous"
 previous=$(docker image inspect "$previous" --format '{{index .RepoDigests 0}}')
 test -n "$previous"

@@ -33,6 +33,24 @@ az() {
         *'firewall-rule create'*)
             [[ "$*" == *'--start-ip-address 203.0.113.10 --end-ip-address 203.0.113.10'* ]] || return 1 ;;
         *'firewall-rule delete'*) [[ "$SCENARIO" != cleanup-failure ]] ;;
+        *'properties.{isMain:isMain,targetPort:targetPort,image:image}'*)
+            case "$SCENARIO" in
+                missing-container-fields) echo '{}' ;;
+                malformed-container) echo invalid-json ;;
+                not-main) printf '{"isMain":false,"targetPort":8000,"image":"%s"}\n' "$OLD_IMAGE" ;;
+                wrong-port) printf '{"isMain":true,"targetPort":9000,"image":"%s"}\n' "$OLD_IMAGE" ;;
+                missing-image) echo '{"isMain":true,"targetPort":8000,"image":""}' ;;
+                *) printf '{"isMain":true,"targetPort":8000,"image":"%s"}\n' "$OLD_IMAGE" ;;
+            esac ;;
+        *'{state:state,retention:backup.backupRetentionDays,restoreDate:backup.earliestRestoreDate}'*)
+            case "$SCENARIO" in
+                non-ready) echo '{"state":"Updating","retention":7,"restoreDate":"2026-10-14T00:00:00Z"}' ;;
+                low-retention) echo '{"state":"Ready","retention":6,"restoreDate":"2026-10-14T00:00:00Z"}' ;;
+                missing-backup) echo '{"state":"Ready","retention":7,"restoreDate":null}' ;;
+                missing-db-fields) echo '{}' ;;
+                malformed-db) echo invalid-json ;;
+                *) echo '{"state":"Ready","retention":7,"restoreDate":"2026-10-14T00:00:00Z"}' ;;
+            esac ;;
         *'--query state'*) echo Ready ;;
         *backup.backupRetentionDays*) echo 7 ;;
         *backup.earliestRestoreDate*)
@@ -67,9 +85,13 @@ docker() {
 }
 
 python3() {
+    if [[ "${1:-}" == -c ]]; then
+        command python "$@"
+        return
+    fi
     cat >/dev/null
     echo 'mock verification' >> "$MOCK_LOG"
-    [[ "$SCENARIO" != verification-failure ]]
+    [[ "$SCENARIO" != verification-failure && "$SCENARIO" != rollback-unhealthy ]]
 }
 
 curl() {
@@ -102,15 +124,11 @@ esac
 
 export -f gh az docker python3 curl git
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for scenario in success no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
+for scenario in success no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy missing-container-fields malformed-container not-main wrong-port missing-image non-ready low-retention missing-db-fields malformed-db; do
     export SCENARIO="$scenario"
     : > "$MOCK_LOG"
     rm -f "$PRODUCTION_ENV_FILE.firewall"
     printf '%s' "$OLD_IMAGE" > "$MOCK_IMAGE"
-    if [[ "$scenario" == rollback-unhealthy ]]; then
-        python3() { cat >/dev/null; return 1; }
-        export -f python3
-    fi
     exit_status=0
     bash "$script_dir/deploy-production.sh" > "$workspace/output" 2>&1 || exit_status=$?
     case "$scenario" in
@@ -139,7 +157,7 @@ for scenario in success no-migrations unknown-revision diverged stale classic ta
             test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1
             grep -q 'Temporary firewall cleanup failed: github-cd-123-1' "$workspace/output"
             test -f "$PRODUCTION_ENV_FILE.firewall" ;;
-        stale|classic|tag-mismatch|missing-backup|migration-failure)
+        stale|classic|tag-mismatch|missing-backup|migration-failure|missing-container-fields|malformed-container|not-main|wrong-port|missing-image|non-ready|low-retention|missing-db-fields|malformed-db)
             test "$exit_status" != 0
             test "$(cat "$MOCK_IMAGE")" = "$OLD_IMAGE"
             ! grep -q 'az resource update' "$MOCK_LOG" ;;
@@ -152,9 +170,16 @@ for scenario in success no-migrations unknown-revision diverged stale classic ta
                 grep -q 'operator recovery is required' "$workspace/output"
             fi ;;
     esac
-    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != tag-mismatch && "$scenario" != missing-backup && "$scenario" != no-migrations ]]; then
-        grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
-        grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
+    case "$scenario" in
+        success|unknown-revision|diverged|migration-failure|cleanup-failure|verification-failure|rollback-unhealthy)
+            grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
+            grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
+            test "$(grep -c 'az postgres flexible-server show' "$MOCK_LOG")" = 1 ;;
+        non-ready|low-retention|missing-backup|missing-db-fields|malformed-db)
+            ! grep -q 'firewall-rule create' "$MOCK_LOG" ;;
+    esac
+    if [[ "$scenario" == success || "$scenario" == no-migrations ]]; then
+        test "$(grep -Fc 'properties.{isMain:isMain,targetPort:targetPort,image:image}' "$MOCK_LOG")" = 1
     fi
     if [[ "$scenario" != cleanup-failure ]]; then
         test ! -e "$PRODUCTION_ENV_FILE.firewall"
