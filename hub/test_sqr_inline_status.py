@@ -375,13 +375,27 @@ let choices = 0;
 let filterApplications = 0;
 let trackerRows = [];
 const holdFilterBadge = {textContent: ''};
+const createNode = tagName => ({
+    tagName: tagName.toUpperCase(), className: '', style: {}, children: [], _text: '',
+    set textContent(value) { this._text = String(value); this.children = []; },
+    get textContent() { return this._text + this.children.map(child => child.textContent).join(''); },
+    appendChild(child) { this.children.push(child); },
+    setAttribute() {}
+});
+function containsElement(node, tagName) {
+    return node.tagName === tagName || node.children.some(child => containsElement(child, tagName));
+}
 const LABELS = {status: {
     submitted: 'For Processing', for_revision: 'For Revision',
     reviewed: 'Approved', on_hold: 'On Hold'
-}};
+}, proposal_status: {
+    submitted_pending: 'Submitted', negotiation_review: 'On Review',
+    closed_won: 'Closed-Won', closed_lost: 'Closed-Lost', closed_canceled: 'Closed-Canceled'
+}, overall_status: {planning: 'Planning'}, delivery_health: {on_track: 'On Track'},
+revenue_declaration: {declared: 'Declared'}, revenue_status: {billed: 'Billed'}};
 const document = {
-    createElement: tagName => ({tagName: tagName.toUpperCase(), className: '', textContent: ''}),
-    createTextNode: textContent => ({nodeType: 3, textContent}),
+    createElement: createNode,
+    createTextNode: textContent => Object.assign(createNode('#text'), {textContent}),
     dispatchEvent: () => { invalidations++; },
     querySelector(selector) {
         assert.equal(selector, '[data-sqr-filter="status:on_hold"]');
@@ -487,23 +501,16 @@ for (const [field, value, label] of [
     for (const undone of [false, true]) {
         const row = {dataset: {}, classList: {toggle() {}}, querySelector: () => null};
         const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => row};
-        const display = {
-            children: [],
-            appendChild(node) { this.children.push(node); this.badge = node; },
-            get innerHTML() { return this.html || ''; },
-            set innerHTML(value) { this.html = value; },
-            set textContent(value) { this.children = []; this.text = value; this.html = ''; }
-        };
+        const display = createNode('div');
         applyInlineUpdateResponse('225', field, 'old', cell, display, {field_value: value, undone});
         assert.equal(cell.dataset.sqrValue, value);
         if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].includes(field)) {
             const renderedText = display.children.map(node => node.tagName === 'BR' ? '\\n' : node.textContent).join('');
             assert.equal(renderedText, label);
-            assert.equal(display.children.some(node => node.tagName === 'IMG'), false);
         } else {
-            assert.ok(display.innerHTML.includes(label), display.innerHTML);
-            assert.ok(!display.innerHTML.includes('<img'), display.innerHTML);
+            assert.ok(display.textContent.includes(label), display.textContent);
         }
+        assert.equal(containsElement(display, 'IMG'), false);
         if (field === 'proposal_status') assert.equal(row.dataset.sqrProposalStatus, value);
     }
 }
