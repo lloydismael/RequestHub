@@ -6,13 +6,15 @@
 
 It is disabled unless repository variable `CD_ENABLED` is exactly `true`. This is the only activation switch. Do not enable it until every prerequisite below has been reviewed. Production releases have no staging or reviewer gate, as requested; a restart or failed deployment can directly affect users.
 
-The eligibility summary distinguishes **DISABLED** (switch unset/false) from **INELIGIBLE** (upstream CI is not a successful trusted master push). Eligible runs first execute a hosted **Check production configuration** job. Missing values fail that job with configuration names only, before image building or publishing. Configuration checks require production debug settings and database TLS but do not prove permissions or recovery readiness.
+The **Check release eligibility and configuration** job combines the two preflight stages in one hosted runner allocation. Its summary distinguishes **DISABLED** (switch unset/false) from **INELIGIBLE** (upstream CI is not a successful trusted master push). Only eligible runs execute the configuration step. Missing values fail that job with configuration names only, before image building or publishing. Its `ready` output becomes `true` only after configuration succeeds; disabled/ineligible runs return `false`. Configuration checks require production debug settings and database TLS but do not prove permissions or recovery readiness.
+
+The combined job uses the `production` environment earlier than before. If environment reviewers or branch restrictions are added, they apply before eligibility is explained, including disabled/ineligible upstream completions. Review that behavior before rollout; no repository or environment settings are changed by this optimization. Image publishing still requires successful trusted master-push CI, and the deploy job retains its own production environment.
 
 The workflow serializes releases without cancelling an active one and rejects superseded commits before publishing/deploying. CI keeps its own cancellation policy. Use branch protection to restrict changes to `master` and require all three CI jobs plus review. Restrict the GitHub `production` environment to the default `master` branch. The environment ref is the downstream workflow's default-branch ref, not the upstream merge ref.
 
 ## Offline regression checks
 
-CI runs `bash scripts/test-deploy-production.sh` before the full Django suite. It uses synthetic settings and mocks GitHub, Azure, Docker, and HTTP calls; it never deploys or connects to production. Run it in Linux or Git Bash. Git Bash uses a narrowly scoped test-only permission shim for its synthetic env file because Windows cannot enforce Unix mode 0600; production scripts and Linux CI retain the actual mode check. Node toast behavior tests also run in the existing Django CI job, without npm packages.
+CI runs `bash scripts/test-deploy-production.sh`, `bash scripts/test-ci-routing.sh`, and `bash scripts/test-release-preflight.sh` before the full Django suite. It uses synthetic settings and mocks GitHub, Azure, Docker, and HTTP calls; it never deploys or connects to production. Run it in Linux or Git Bash. Git Bash uses a narrowly scoped test-only permission shim for its synthetic env file because Windows cannot enforce Unix mode 0600; production scripts and Linux CI retain the actual mode check. Node toast behavior tests also run in the existing Django CI job, without npm packages.
 
 ## Measuring release latency
 

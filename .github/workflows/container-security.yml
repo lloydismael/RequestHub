@@ -154,6 +154,7 @@ jobs:
           node --test scripts_check/test_notification_toasts.cjs
           bash scripts/test-deploy-production.sh
           bash scripts/test-ci-routing.sh
+          bash scripts/test-release-preflight.sh
 
       # Test-only settings use a fast password hasher; the checks above run against
       # the real settings. Tests run in parallel across the runner's CPUs.
