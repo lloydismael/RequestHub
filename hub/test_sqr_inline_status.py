@@ -12,6 +12,53 @@ from django.test import SimpleTestCase
 
 @skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
 class SqrInlineStatusScriptTests(SimpleTestCase):
+    def test_structured_display_renders_untrusted_values_as_text(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        self.assertIn("renderStructuredDisplay(displayEl, field, normalizedValue);", template)
+        self.assertNotIn("displayEl.innerHTML = getDisplay", template)
+        self.assertNotIn("pmDisp.innerHTML", template)
+        labels = template.split("var LABELS = ", 1)[1].split(";\n    var CHOICES", 1)[0]
+        styles = template.split("var BADGE_STYLES = ", 1)[1].split(";\n    var BADGE_ICONS", 1)[0]
+        icons = template.split("var BADGE_ICONS = ", 1)[1].split(";\n\n    function renderStructuredDisplay", 1)[0]
+        renderer = "function renderStructuredDisplay" + template.split(
+            "function renderStructuredDisplay", 1
+        )[1].split("\n    function getDisplay", 1)[0]
+        source = (
+            "var LABELS = " + labels + ";\n"
+            "var BADGE_STYLES = " + styles + ";\n"
+            "var BADGE_ICONS = " + icons + ";\n"
+            + renderer
+        )
+        script = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+class Element {
+    constructor(name) { this.name = name; this.children = []; this.attributes = {}; this.style = {}; }
+    set textContent(value) { this.text = String(value); this.children = []; }
+    get textContent() { return (this.text || '') + this.children.map(child => child.textContent).join(''); }
+    appendChild(child) { this.children.push(child); }
+    setAttribute(name, value) { this.attributes[name] = String(value); }
+}
+const document = {
+    createElement: name => new Element(name),
+    createTextNode: text => { const node = new Element('#text'); node.textContent = text; return node; }
+};
+const context = {document};
+vm.runInNewContext(SOURCE, context);
+const display = new Element('div');
+context.renderStructuredDisplay(display, 'proposal_status', '<img src=x onerror=alert(1)>');
+assert.equal(display.textContent, '–');
+assert.equal(display.children[0].name, 'span');
+context.renderStructuredDisplay(display, 'proposal_status', 'closed_won');
+assert.equal(display.textContent, 'Closed-Won');
+assert.equal(display.children[0].children[0].name, 'i');
+context.renderStructuredDisplay(display, 'delivery_progress', '50<img src=x onerror=alert(1)>');
+assert.equal(display.textContent, '50%');
+assert.equal(display.children[0].children[0].children[0].style.width, '50%');
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_revision_email_only_saves_without_opening_teams(self):
         template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
         source = "function openRevisionModal" + template.split("function openRevisionModal", 1)[1].split(
@@ -328,12 +375,27 @@ let choices = 0;
 let filterApplications = 0;
 let trackerRows = [];
 const holdFilterBadge = {textContent: ''};
+const createNode = tagName => ({
+    tagName: tagName.toUpperCase(), className: '', style: {}, children: [], _text: '',
+    set textContent(value) { this._text = String(value); this.children = []; },
+    get textContent() { return this._text + this.children.map(child => child.textContent).join(''); },
+    appendChild(child) { this.children.push(child); },
+    setAttribute() {}
+});
+function containsElement(node, tagName) {
+    return node.tagName === tagName || node.children.some(child => containsElement(child, tagName));
+}
 const LABELS = {status: {
     submitted: 'For Processing', for_revision: 'For Revision',
     reviewed: 'Approved', on_hold: 'On Hold'
-}};
+}, proposal_status: {
+    submitted_pending: 'Submitted', negotiation_review: 'On Review',
+    closed_won: 'Closed-Won', closed_lost: 'Closed-Lost', closed_canceled: 'Closed-Canceled'
+}, overall_status: {planning: 'Planning'}, delivery_health: {on_track: 'On Track'},
+revenue_declaration: {declared: 'Declared'}, revenue_status: {billed: 'Billed'}};
 const document = {
-    createElement: () => ({className: '', textContent: ''}),
+    createElement: createNode,
+    createTextNode: textContent => Object.assign(createNode('#text'), {textContent}),
     dispatchEvent: () => { invalidations++; },
     querySelector(selector) {
         assert.equal(selector, '[data-sqr-filter="status:on_hold"]');
@@ -432,21 +494,23 @@ for (const [field, value, label] of [
     ['revenue_status', 'billed', 'Billed'],
     ['delivery_progress', '60', '60%'],
     ['delivery_progress', '<img src=x onerror=alert(1)>', '\\u2013'],
-    ['revenue_remarks', '<img>\\n& note', '&lt;img&gt;<br>&amp; note'],
-    ['revenue_overview', '<img>\\n& note', '&lt;img&gt;<br>&amp; note'],
-    ['key_updates_risks', '<img>\\n& note', '&lt;img&gt;<br>&amp; note']
+    ['revenue_remarks', '<img>\\n& note', '<img>\\n& note'],
+    ['revenue_overview', '<img>\\n& note', '<img>\\n& note'],
+    ['key_updates_risks', '<img>\\n& note', '<img>\\n& note']
 ]) {
     for (const undone of [false, true]) {
         const row = {dataset: {}, classList: {toggle() {}}, querySelector: () => null};
         const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => row};
-        const display = {
-            innerHTML: '',
-            set textContent(value) { assert.fail('Formatted display was assigned as literal text'); }
-        };
+        const display = createNode('div');
         applyInlineUpdateResponse('225', field, 'old', cell, display, {field_value: value, undone});
         assert.equal(cell.dataset.sqrValue, value);
-        assert.ok(display.innerHTML.includes(label), display.innerHTML);
-        assert.ok(!display.innerHTML.includes('<img'), display.innerHTML);
+        if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].includes(field)) {
+            const renderedText = display.children.map(node => node.tagName === 'BR' ? '\\n' : node.textContent).join('');
+            assert.equal(renderedText, label);
+        } else {
+            assert.ok(display.textContent.includes(label), display.textContent);
+        }
+        assert.equal(containsElement(display, 'IMG'), false);
         if (field === 'proposal_status') assert.equal(row.dataset.sqrProposalStatus, value);
     }
 }

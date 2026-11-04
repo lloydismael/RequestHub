@@ -240,7 +240,7 @@ jobs:
         run: test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
 
       - name: Sign in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -310,14 +310,14 @@ jobs:
           printf '%s\n' "$MIGRATION_ENV_FILE" > "$PRODUCTION_ENV_FILE"
 
       - name: Sign in to Azure using federation
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Sign in to Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}

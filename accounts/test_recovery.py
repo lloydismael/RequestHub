@@ -142,7 +142,7 @@ class RecoveryCenterTests(TransactionTestCase):
         from accounts import recovery
         from accounts.models import RecoveryPreview
         Account.objects.create(name="Protected")
-        _, payload = self.create_backup()
+        payload = recovery.build_payload()
         preview, _ = recovery.create_preview(self.user, payload)
         other = User.objects.create_user(username="other-admin", role=User.Roles.ADMIN)
         with self.assertRaises(recovery.RecoveryError):

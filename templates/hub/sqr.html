@@ -2437,6 +2437,123 @@
         container.appendChild(badge);
     }
 
+    function renderMultilineText(container, value) {
+        container.textContent = '';
+        String(value).split(/\r\n?|\n/).forEach(function(line, index) {
+            if (index) container.appendChild(document.createElement('br'));
+            container.appendChild(document.createTextNode(line));
+        });
+    }
+
+    var BADGE_STYLES = {
+        proposal_status: {
+            submitted_pending: 'bg-primary-subtle text-primary border border-primary-subtle',
+            negotiation_review: 'bg-info-subtle text-info border border-info-subtle',
+            closed_won: 'bg-success-subtle text-success border border-success-subtle',
+            closed_lost: 'bg-danger-subtle text-danger border border-danger-subtle',
+            closed_canceled: 'bg-secondary-subtle text-secondary border border-secondary-subtle'
+        },
+        overall_status: {
+            on_hold: 'bg-secondary-subtle text-secondary border border-secondary-subtle',
+            planning: 'bg-info-subtle text-info border border-info-subtle',
+            in_progress: 'bg-primary-subtle text-primary border border-primary-subtle',
+            completed: 'bg-success-subtle text-success border border-success-subtle',
+            cancelled: 'bg-danger-subtle text-danger border border-danger-subtle'
+        },
+        delivery_health: {
+            on_track: 'bg-success-subtle text-success border border-success-subtle',
+            off_track: 'bg-warning-subtle text-warning border border-warning-subtle',
+            at_risk: 'bg-danger-subtle text-danger border border-danger-subtle',
+            completed: 'bg-primary-subtle text-primary border border-primary-subtle',
+            cancelled: 'bg-secondary-subtle text-secondary border border-secondary-subtle'
+        },
+        revenue_declaration: {
+            declared: 'bg-success-subtle text-success border border-success-subtle',
+            not_yet: 'bg-warning-subtle text-warning border border-warning-subtle'
+        },
+        revenue_status: {
+            billed: 'bg-success-subtle text-success border border-success-subtle',
+            not_yet_billed: 'bg-warning-subtle text-warning border border-warning-subtle'
+        }
+    };
+    var BADGE_ICONS = {
+        proposal_status: {
+            closed_won: 'bi bi-trophy me-1',
+            closed_lost: 'bi bi-x-circle me-1',
+            closed_canceled: 'bi bi-slash-circle me-1'
+        },
+        delivery_health: {
+            on_track: 'bi bi-check-circle me-1',
+            off_track: 'bi bi-exclamation-triangle me-1',
+            at_risk: 'bi bi-shield-exclamation me-1',
+            completed: 'bi bi-patch-check me-1',
+            cancelled: 'bi bi-slash-circle me-1'
+        },
+        revenue_status: {
+            billed: 'bi bi-check2-circle me-1',
+            not_yet_billed: 'bi bi-clock me-1'
+        }
+    };
+
+    function renderStructuredDisplay(container, field, value) {
+        container.textContent = '';
+        if (field === 'delivery_progress') {
+            var pct = parseInt(value, 10);
+            if (value === '' || value === null || value === undefined || isNaN(pct)) {
+                var empty = document.createElement('span');
+                empty.className = 'text-muted small';
+                empty.textContent = '\u2013';
+                container.appendChild(empty);
+                return;
+            }
+            var barClass = pct >= 100 ? 'bg-success' : pct >= 60 ? 'bg-info' : pct >= 30 ? 'bg-warning' : 'bg-danger';
+            var wrapper = document.createElement('div');
+            wrapper.className = 'd-flex align-items-center gap-2';
+            var progress = document.createElement('div');
+            progress.className = 'progress flex-grow-1';
+            progress.style.height = '6px';
+            progress.style.minWidth = '60px';
+            var bar = document.createElement('div');
+            bar.className = 'progress-bar ' + barClass;
+            bar.setAttribute('role', 'progressbar');
+            bar.style.width = pct + '%';
+            bar.setAttribute('aria-valuenow', pct);
+            bar.setAttribute('aria-valuemin', '0');
+            bar.setAttribute('aria-valuemax', '100');
+            progress.appendChild(bar);
+            wrapper.appendChild(progress);
+            var label = document.createElement('span');
+            label.className = 'small fw-semibold';
+            label.textContent = pct + '%';
+            wrapper.appendChild(label);
+            container.appendChild(wrapper);
+            return;
+        }
+
+        var styles = BADGE_STYLES[field];
+        var labels = LABELS[field];
+        if (!styles || !labels
+                || !Object.prototype.hasOwnProperty.call(styles, value)
+                || !Object.prototype.hasOwnProperty.call(labels, value)) {
+            var placeholder = document.createElement('span');
+            placeholder.className = 'text-muted small';
+            placeholder.textContent = '\u2013';
+            container.appendChild(placeholder);
+            return;
+        }
+
+        var badge = document.createElement('span');
+        badge.className = 'badge ' + styles[value];
+        var icons = BADGE_ICONS[field];
+        if (icons && Object.prototype.hasOwnProperty.call(icons, value)) {
+            var icon = document.createElement('i');
+            icon.className = icons[value];
+            badge.appendChild(icon);
+        }
+        badge.appendChild(document.createTextNode(labels[value]));
+        container.appendChild(badge);
+    }
+
     function getDisplay(field, value) {
         if (!value && value !== 0) return '\u2013';
         if (field === 'status') {
@@ -2480,7 +2597,7 @@
             return '<span class="text-muted small">\u2013</span>';
         }
         if (field === 'revenue_remarks' || field === 'revenue_overview' || field === 'key_updates_risks') {
-            return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+            return String(value);
         }
         if (field === 'assigned_pm') return PM_USER_MAP[String(value)] || '\u2013';
         if (field === 'assigned_sse') return SSE_USER_MAP[String(value)] || '\u2013';
@@ -2694,10 +2811,11 @@
         if (field === 'status') {
             renderStatusBadge(displayEl, normalizedValue);
             cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[normalizedValue] || normalizedValue) + '. Press Enter to edit.');
+        } else if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].indexOf(field) !== -1) {
+            renderMultilineText(displayEl, getDisplay(field, normalizedValue, cell));
         } else if (['proposal_status', 'overall_status', 'delivery_health', 'revenue_declaration',
-                    'revenue_status', 'delivery_progress', 'revenue_remarks', 'revenue_overview',
-                    'key_updates_risks'].indexOf(field) !== -1) {
-            displayEl.innerHTML = getDisplay(field, normalizedValue, cell);
+                    'revenue_status', 'delivery_progress'].indexOf(field) !== -1) {
+            renderStructuredDisplay(displayEl, field, normalizedValue);
         } else {
             displayEl.textContent = getDisplay(field, normalizedValue, cell);
         }
@@ -2750,7 +2868,7 @@
             if (pmCell) {
                 pmCell.dataset.sqrValue = data.pm_manhrs;
                 var pmDisp = pmCell.querySelector('.sqr-display');
-                if (pmDisp) pmDisp.innerHTML = getDisplay('pm_manhrs', data.pm_manhrs, pmCell);
+                if (pmDisp) pmDisp.textContent = getDisplay('pm_manhrs', data.pm_manhrs, pmCell);
             }
         }
         if ('pm_amount' in data) {
