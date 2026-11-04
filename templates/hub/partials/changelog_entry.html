@@ -1,0 +1,41 @@
+<article class="glass-card cl-entry" aria-labelledby="changelog-{{ entry.pk }}-title">
+    <header class="cl-entry__header">
+        <div>
+            <div class="cl-release-meta">
+                <span class="cl-version">{{ entry.previous_version }} <i class="bi bi-arrow-right" aria-hidden="true"></i><span class="visually-hidden">to</span> {{ entry.new_version }}</span>
+                <time datetime="{{ entry.release_date|date:'Y-m-d' }}">{{ entry.release_date|date:"M j, Y" }}</time>
+            </div>
+            <h3 class="h4 mt-3 mb-2" id="changelog-{{ entry.pk }}-title">{{ entry.title }}</h3>
+        </div>
+        <span class="cl-label"><i class="bi bi-stars" aria-hidden="true"></i> What's new</span>
+    </header>
+    <div class="cl-prose text-muted mb-4">{{ entry.summary|linebreaksbr }}</div>
+    <div class="cl-comparison">
+        <section class="cl-panel cl-panel--before" aria-labelledby="before-{{ entry.pk }}">
+            <div class="cl-panel__heading">
+                <h4 id="before-{{ entry.pk }}" class="h6 mb-0"><i class="bi bi-clock-history" aria-hidden="true"></i> Before</h4>
+                <span>{{ entry.previous_version }}</span>
+            </div>
+            {% if entry.before_image %}
+                <a class="cl-screenshot" href="{{ entry.before_image.url }}" aria-label="View full before screenshot for {{ entry.title }}">
+                    <img src="{{ entry.before_image.url }}" alt="Before: {{ entry.title }} ({{ entry.previous_version }})" loading="lazy" decoding="async">
+                    <span><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full screenshot</span>
+                </a>
+            {% endif %}
+            <div class="cl-panel__text cl-prose">{{ entry.before_text|linebreaksbr }}</div>
+        </section>
+        <section class="cl-panel cl-panel--after" aria-labelledby="after-{{ entry.pk }}">
+            <div class="cl-panel__heading">
+                <h4 id="after-{{ entry.pk }}" class="h6 mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> After</h4>
+                <span>{{ entry.new_version }}</span>
+            </div>
+            {% if entry.after_image %}
+                <a class="cl-screenshot" href="{{ entry.after_image.url }}" aria-label="View full after screenshot for {{ entry.title }}">
+                    <img src="{{ entry.after_image.url }}" alt="After: {{ entry.title }} ({{ entry.new_version }})" loading="lazy" decoding="async">
+                    <span><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full screenshot</span>
+                </a>
+            {% endif %}
+            <div class="cl-panel__text cl-prose">{{ entry.after_text|linebreaksbr }}</div>
+        </section>
+    </div>
+</article>

@@ -24,6 +24,7 @@ MODEL_LABELS = (
     "hub.sqrprojectperformance", "hub.sqrsubmissionhistory", "hub.notification",
     "hub.statuslog", "hub.formdefinition", "hub.formversion", "hub.formanswerset",
     "hub.formeditorauditevent",
+    "hub.changelog",
 )
 EXCLUDED_MODEL_LABELS = (
     "hub.outlookconnection", "hub.outlookoauthattempt", "hub.outlooksqrdraft",

@@ -63,6 +63,8 @@ from .outlook_views import OutlookCallbackView, OutlookDraftView, RequestOutlook
 app_name = "hub"
 
 urlpatterns = [
+    path("management/changelogs/new/", UserManagementView.as_view(), {"changelog_editor": True}, name="changelog-create"),
+    path("management/changelogs/<int:pk>/edit/", UserManagementView.as_view(), {"changelog_editor": True}, name="changelog-edit"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("dashboard/live/", DashboardLiveDataView.as_view(), name="dashboard-live"),
     path("dashboard/toasts/", NotificationToastDataView.as_view(), name="notification-toast-data"),

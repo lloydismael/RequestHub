@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -10,8 +11,40 @@ from django.db import connections, models, router, transaction
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
+from accounts.storage import DatabaseMediaStorage
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
+
+
+def changelog_image_upload_to(instance, filename):
+    extension = filename.rsplit(".", 1)[-1].lower()
+    return f"changelogs/{uuid4().hex}.{extension}"
+
+
+class Changelog(models.Model):
+    title = models.CharField(max_length=200)
+    previous_version = models.CharField(max_length=50)
+    new_version = models.CharField(max_length=50)
+    release_date = models.DateField(default=timezone.localdate)
+    summary = models.TextField()
+    before_text = models.TextField(blank=True)
+    after_text = models.TextField(blank=True)
+    before_image = models.ImageField(
+        upload_to=changelog_image_upload_to, storage=DatabaseMediaStorage(), blank=True,
+    )
+    after_image = models.ImageField(
+        upload_to=changelog_image_upload_to, storage=DatabaseMediaStorage(), blank=True,
+    )
+    is_published = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-release_date", "-pk"]
+
+    def __str__(self):
+        return self.title
+
 
 class Account(models.Model):
     name = models.CharField(max_length=255, unique=True)
