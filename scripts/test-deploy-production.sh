@@ -19,6 +19,19 @@ chmod 600 "$PRODUCTION_ENV_FILE"
 
 gh() {
     echo "gh $*" >> "$MOCK_LOG"
+    if [[ "$*" != "api repos/$GITHUB_REPOSITORY/git/ref/heads/master --jq .object.sha" ]]; then
+        echo 'unexpected end of JSON input' >&2
+        return 1
+    fi
+    if [[ "$SCENARIO" == api-failure ]]; then
+        echo 'unexpected end of JSON input' >&2
+        return 1
+    fi
+    if [[ "$SCENARIO" == empty-ref ]]; then return 0; fi
+    if [[ "$SCENARIO" == stale-after-migration ]] && grep -q 'manage.py migrate' "$MOCK_LOG"; then
+        echo outdated
+        return 0
+    fi
     if [[ "$SCENARIO" == stale ]]; then echo outdated; else echo "$RELEASE_SHA"; fi
 }
 
@@ -89,7 +102,7 @@ git() {
 
 export -f gh az docker python3 curl git
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for scenario in success no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
+for scenario in success no-migrations unknown-revision diverged stale api-failure empty-ref stale-after-migration classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do
     export SCENARIO="$scenario"
     : > "$MOCK_LOG"
     rm -f "$PRODUCTION_ENV_FILE.firewall"
@@ -126,10 +139,16 @@ for scenario in success no-migrations unknown-revision diverged stale classic ta
             test "$(grep -c 'az resource update' "$MOCK_LOG")" = 1
             grep -q 'Temporary firewall cleanup failed: github-cd-123-1' "$workspace/output"
             test -f "$PRODUCTION_ENV_FILE.firewall" ;;
-        stale|classic|tag-mismatch|missing-backup|migration-failure)
+        stale|api-failure|empty-ref|stale-after-migration|classic|tag-mismatch|missing-backup|migration-failure)
             test "$exit_status" != 0
             test "$(cat "$MOCK_IMAGE")" = "$OLD_IMAGE"
-            ! grep -q 'az resource update' "$MOCK_LOG" ;;
+            ! grep -q 'az resource update' "$MOCK_LOG"
+            case "$scenario" in
+                stale|api-failure|empty-ref) ! grep -Eq '^(az|docker) ' "$MOCK_LOG" ;;
+                stale-after-migration)
+                    grep -q 'manage.py migrate --noinput' "$MOCK_LOG"
+                    test "$(grep -c '^gh ' "$MOCK_LOG")" = 2 ;;
+            esac ;;
         verification-failure|rollback-unhealthy)
             test "$exit_status" != 0
             test "$(cat "$MOCK_IMAGE")" = "$OLD_IMAGE"
@@ -139,7 +158,7 @@ for scenario in success no-migrations unknown-revision diverged stale classic ta
                 grep -q 'operator recovery is required' "$workspace/output"
             fi ;;
     esac
-    if [[ "$scenario" != stale && "$scenario" != classic && "$scenario" != tag-mismatch && "$scenario" != missing-backup && "$scenario" != no-migrations ]]; then
+    if [[ "$scenario" != stale && "$scenario" != api-failure && "$scenario" != empty-ref && "$scenario" != classic && "$scenario" != tag-mismatch && "$scenario" != missing-backup && "$scenario" != no-migrations ]]; then
         grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
         grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
     fi
