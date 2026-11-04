@@ -12,6 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from accounts.storage import DatabaseMediaStorage
+from .release_changelog import GROUPS
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -36,6 +37,8 @@ class Changelog(models.Model):
         upload_to=changelog_image_upload_to, storage=DatabaseMediaStorage(), blank=True,
     )
     is_published = models.BooleanField(default=False)
+    release_sha = models.CharField(max_length=40, unique=True, null=True, editable=False)
+    changes = models.JSONField(default=dict, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -44,6 +47,30 @@ class Changelog(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def is_automatic(self):
+        return bool(self.release_sha)
+
+    @property
+    def has_comparison(self):
+        return any((self.before_text, self.after_text, self.before_image, self.after_image))
+
+    @property
+    def change_groups(self):
+        commits = self.changes.get("commits") if isinstance(self.changes, dict) else None
+        if not isinstance(commits, list):
+            return []
+        titles = {key: [] for key, _ in GROUPS}
+        for item in commits:
+            if not isinstance(item, dict) or item.get("type") not in titles:
+                continue
+            if isinstance(item.get("title"), str):
+                titles[item["type"]].append(item["title"])
+        return [
+            {"key": key, "label": label, "titles": titles[key]}
+            for key, label in GROUPS if titles[key]
+        ]
 
 
 class Account(models.Model):

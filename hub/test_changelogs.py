@@ -4,11 +4,13 @@ from io import BytesIO
 from PIL import Image
 from django.apps import apps
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import StoredFile, User
+from hub.release_changelog import GROUPS
 
 
 def screenshot(name="screen.png"):
@@ -53,6 +55,60 @@ class ChangelogTests(TestCase):
         data = self.payload()
         data.update(overrides)
         return self.model().objects.create(**data)
+
+    def automatic(self, **overrides):
+        commits = [
+            {"sha": "1" * 40, "type": "new", "title": "Shiny export"},
+            {"sha": "2" * 40, "type": "improved", "title": "Quicker list"},
+            {"sha": "3" * 40, "type": "fixed", "title": "Typo fix"},
+            {"sha": "4" * 40, "type": "maintenance", "title": "Dependency bump"},
+        ]
+        data = self.payload(
+            title="What's new in v56.0", previous_version="", new_version="v56.0",
+            before_text="", after_text="",
+        )
+        data.update(release_sha="c" * 40, changes={"commits": commits}, is_published=True)
+        data.update(overrides)
+        return self.model().objects.create(**data)
+
+    def test_release_sha_is_unique_but_nullable(self):
+        self.entry(release_sha=None)
+        self.entry(release_sha=None)
+        self.automatic(release_sha="a" * 40)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.automatic(release_sha="a" * 40)
+
+    def test_is_automatic_and_has_comparison(self):
+        manual = self.entry()
+        self.assertFalse(manual.is_automatic)
+        self.assertTrue(manual.has_comparison)
+        auto = self.automatic()
+        self.assertTrue(auto.is_automatic)
+        self.assertFalse(auto.has_comparison)
+        auto.after_text = "Now with exports."
+        self.assertTrue(auto.has_comparison)
+
+    def test_change_groups(self):
+        commits = [
+            {"sha": "1" * 40, "type": "maintenance", "title": "Bump"},
+            {"sha": "2" * 40, "type": "fixed", "title": "Fix"},
+            {"sha": "3" * 40, "type": "new", "title": "First new"},
+            {"sha": "4" * 40, "type": "new", "title": "Second new"},
+            {"sha": "5" * 40, "type": "improved", "title": "Better"},
+        ]
+        groups = self.automatic(changes={"commits": commits}).change_groups
+        self.assertEqual([g["key"] for g in groups], ["new", "improved", "fixed", "maintenance"])
+        self.assertEqual([g["label"] for g in groups], [label for _, label in GROUPS])
+        self.assertEqual(groups[0]["titles"], ["First new", "Second new"])
+
+    def test_change_groups_tolerates_malformed_changes(self):
+        for changes in (
+            {}, [], {"commits": "x"},
+            {"commits": [1, {"type": "zzz", "title": "t"}, {"type": "new"}]},
+        ):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.automatic(changes=changes, release_sha=None).change_groups, [])
 
     def test_management_has_changelogs_tab(self):
         response = self.client.get(self.management, {"tab": "changelogs"})
