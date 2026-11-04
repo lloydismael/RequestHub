@@ -13,3 +13,4 @@ media/
 !.env.example
 *.pfx
 *.p12
+hub/release_changelog_manifest.json
