@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 function dashboard() {
     const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hub', 'dashboard.html'), 'utf8');
-    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)]
+    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)]
         .map(match => match[1]).find(source => source.includes('window.applyDashboardRows'));
     const timers = [];
     const focused = {};
@@ -25,7 +25,7 @@ function dashboard() {
 
 test('live search preserves its query in sort links and resets pagination', async () => {
     const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hub', 'dashboard.html'), 'utf8');
-    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\s*>/gi)].map(match => match[1])
+    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map(match => match[1])
         .find(source => source.includes('function runSearch()'));
     const events = {};
     const input = {value: 'needle', dataset: {}, addEventListener: (name, fn) => { events[name] = fn; }};
