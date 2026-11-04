@@ -12,6 +12,53 @@ from django.test import SimpleTestCase
 
 @skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
 class SqrInlineStatusScriptTests(SimpleTestCase):
+    def test_structured_display_renders_untrusted_values_as_text(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        self.assertIn("renderStructuredDisplay(displayEl, field, normalizedValue);", template)
+        self.assertNotIn("displayEl.innerHTML = getDisplay", template)
+        self.assertNotIn("pmDisp.innerHTML", template)
+        labels = template.split("var LABELS = ", 1)[1].split(";\n    var CHOICES", 1)[0]
+        styles = template.split("var BADGE_STYLES = ", 1)[1].split(";\n    var BADGE_ICONS", 1)[0]
+        icons = template.split("var BADGE_ICONS = ", 1)[1].split(";\n\n    function renderStructuredDisplay", 1)[0]
+        renderer = "function renderStructuredDisplay" + template.split(
+            "function renderStructuredDisplay", 1
+        )[1].split("\n    function getDisplay", 1)[0]
+        source = (
+            "var LABELS = " + labels + ";\n"
+            "var BADGE_STYLES = " + styles + ";\n"
+            "var BADGE_ICONS = " + icons + ";\n"
+            + renderer
+        )
+        script = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+class Element {
+    constructor(name) { this.name = name; this.children = []; this.attributes = {}; this.style = {}; }
+    set textContent(value) { this.text = String(value); this.children = []; }
+    get textContent() { return (this.text || '') + this.children.map(child => child.textContent).join(''); }
+    appendChild(child) { this.children.push(child); }
+    setAttribute(name, value) { this.attributes[name] = String(value); }
+}
+const document = {
+    createElement: name => new Element(name),
+    createTextNode: text => { const node = new Element('#text'); node.textContent = text; return node; }
+};
+const context = {document};
+vm.runInNewContext(SOURCE, context);
+const display = new Element('div');
+context.renderStructuredDisplay(display, 'proposal_status', '<img src=x onerror=alert(1)>');
+assert.equal(display.textContent, '–');
+assert.equal(display.children[0].name, 'span');
+context.renderStructuredDisplay(display, 'proposal_status', 'closed_won');
+assert.equal(display.textContent, 'Closed-Won');
+assert.equal(display.children[0].children[0].name, 'i');
+context.renderStructuredDisplay(display, 'delivery_progress', '50<img src=x onerror=alert(1)>');
+assert.equal(display.textContent, '50%');
+assert.equal(display.children[0].children[0].children[0].style.width, '50%');
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_revision_email_only_saves_without_opening_teams(self):
         template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
         source = "function openRevisionModal" + template.split("function openRevisionModal", 1)[1].split(
