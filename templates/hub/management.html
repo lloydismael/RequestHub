@@ -1,9 +1,8 @@
 {% extends "base.html" %}
-{% load tz form_customization static %}
+{% load tz form_customization %}
 
 {% block title %}Management · Request Hub{% endblock %}
 {% block body_class %}management-page{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}">{% endblock %}
 
 {% block content %}
 
@@ -47,13 +46,6 @@
                    role="tab" aria-controls="forms-pane"
                    aria-selected="{% if active_tab == 'forms' %}true{% else %}false{% endif %}">
                     <i class="bi bi-ui-checks me-1"></i>Forms
-                </a>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link {% if active_tab == 'changelogs' %}active{% endif %}"
-                   id="changelogs-tab" href="{% url 'hub:management' %}?tab=changelogs"
-                   {% if active_tab == 'changelogs' %}aria-current="page"{% endif %}>
-                    <i class="bi bi-journal-richtext me-1" aria-hidden="true"></i>Changelogs
                 </a>
             </li>
         </ul>
@@ -708,11 +700,6 @@
         <p class="text-muted">Customize presentation and custom fields without changing business permissions. Drafts are private until published.</p>
         {% include 'hub/form_editor_catalog_items.html' %}
     </div>
-    {% if active_tab == 'changelogs' %}
-        <div class="tab-pane show active" id="changelogs-pane" aria-labelledby="changelogs-tab">
-            {% include 'hub/partials/changelog_management.html' %}
-        </div>
-    {% endif %}
 </div>
 
 {# ── Search + pagination + Manage modal JS ── #}

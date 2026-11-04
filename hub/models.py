@@ -135,6 +135,7 @@ class Request(models.Model):
         choices=[
             ("Azure", "Azure"),
             ("M365", "M365"),
+            ("Microsoft", "Microsoft"),
             ("VMware", "VMware"),
             ("Omnissa", "Omnissa"),
             ("Hybrid", "Hybrid"),

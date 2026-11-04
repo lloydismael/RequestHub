@@ -516,6 +516,7 @@ class RequestAdminForm(forms.ModelForm):
             "account_name",
             "request_date",
             "requestor",
+            "product_category",
             "priority",
             "status",
             "engineer",
@@ -525,6 +526,7 @@ class RequestAdminForm(forms.ModelForm):
             "description",
         ]
         widgets = {
+            "product_category": forms.Select(attrs={"class": "form-select", "aria-label": "Product category"}),
             "priority": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
             "due_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
@@ -542,6 +544,7 @@ class RequestAdminForm(forms.ModelForm):
                 "account_name",
                 "request_date",
                 "requestor",
+                "product_category",
                 "priority",
                 "status",
                 "engineer",
