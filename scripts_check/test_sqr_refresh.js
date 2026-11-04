@@ -25,7 +25,7 @@ function tracker() {
 
 test('filter navigation does not reopen onboarding or steal filter focus', () => {
     const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hub', 'sqr.html'), 'utf8');
-    const script = [...template.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1])
+    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map(match => match[1])
         .find(source => source.includes("var storageKey = 'requestHub.sqr.hideNewVersionNotice'"));
     let visible = false;
     let focusCalls = 0;
