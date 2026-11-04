@@ -144,6 +144,32 @@ To clear a suspected stale cache, delete the `request-hub-image` entries under *
 | SARIF permission error | Repository code-scanning availability and token permissions; report artifacts remain separate evidence |
 | A run is cancelled | A newer run for the same workflow/ref superseded it |
 
+## Measuring latency and duplicate work
+
+Use `scripts/analyze_actions_runs.py` to analyze exported REST metadata without network access or third-party dependencies. The run input is a JSON array of REST run objects; the jobs input maps string run IDs to arrays of REST job objects. Store raw exports outside the repository. Example PowerShell export (replace `$out` with an existing private artifacts directory):
+
+```powershell
+$out = Join-Path $env:TEMP 'request-hub-actions'
+New-Item -ItemType Directory -Force $out | Out-Null
+$runs = @()
+$jobs = @{}
+foreach ($workflow in 'container-security.yml', 'production-release.yml') {
+    $page = gh api "repos/lloydismael/request-hub/actions/workflows/$workflow/runs?status=completed&per_page=20" | ConvertFrom-Json
+    foreach ($run in $page.workflow_runs) {
+        $runs += $run
+        $detail = gh api "repos/lloydismael/request-hub/actions/runs/$($run.id)/jobs?per_page=100" | ConvertFrom-Json
+        $jobs[[string]$run.id] = @($detail.jobs)
+    }
+}
+ConvertTo-Json -InputObject $runs -Depth 30 | Set-Content (Join-Path $out 'runs.json') -Encoding UTF8
+ConvertTo-Json -InputObject $jobs -Depth 30 | Set-Content (Join-Path $out 'jobs.json') -Encoding UTF8
+python scripts\analyze_actions_runs.py --runs (Join-Path $out 'runs.json') --jobs (Join-Path $out 'jobs.json')
+```
+
+Check every `gh` command's exit status before interpreting a capture. Fetch additional job pages if a run has more than 100 jobs. The analyzer separates total elapsed time (`updated_at - created_at`), time to the first job, individual job durations, and summed job execution. Summed parallel job time is **not** wall-clock time or billed minutes. Missing/incomplete jobs remain explicitly unknown; failed/cancelled runs and incomplete successes do not enter successful latency statistics. Nearest-rank p95 is reported only with at least 20 complete successful samples in a category. Matching push/PR SHAs identify duplicate candidates; PR merge SHAs can differ, so this count is a lower bound.
+
+November 5, 2026 baseline, 20 completed Container Security runs: master push median **79.5s** (4 successful samples), dev push **83s** (3), dev PR **95s** (2). Five matching push/PR SHA groups occurred in this sample. These small groups do not establish p95 or prospective savings. Run 41909403539 lasted 885s but has zero accessible jobs/checks and no log; its cause remains unresolved, not a proven test timeout. Check workflow validation annotations, PR approval banners, and runner availability if it recurs.
+
 ## Completion checklist
 
 - A `dev` push runs all three jobs on the expected commit.

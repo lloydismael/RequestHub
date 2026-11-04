@@ -10,6 +10,14 @@ The eligibility summary distinguishes **DISABLED** (switch unset/false) from **I
 
 The workflow serializes releases without cancelling an active one and rejects superseded commits before publishing/deploying. CI keeps its own cancellation policy. Use branch protection to restrict changes to `master` and require all three CI jobs plus review. Restrict the GitHub `production` environment to the default `master` branch. The environment ref is the downstream workflow's default-branch ref, not the upstream merge ref.
 
+## Measuring release latency
+
+Use the offline analyzer and export commands in [the CI testing guide](ci-workflow-testing.md#measuring-latency-and-duplicate-work). Annotate individual release REST objects with `migration_window: "executed"` or `"skipped"` only when the controlled-deployment timing log proves it; otherwise the analyzer reports `unknown`. Never infer skipped migrations merely from a fast release.
+
+A November 5, 2026 capture of 20 completed releases contained 16 successful complete samples, with an overall downstream median of **210.5s**. This mixes migration and non-migration runs; it is not a category-specific baseline or p95. The examined non-migration release spent 83s in production verification; the migration release spent 65s creating its temporary firewall rule and 85s in verification. Actual check/migrate execution was 9s. End-to-end CI-to-release time was about 4.7 and 6.3 minutes respectively.
+
+Keep `[timing]` markers for Azure checks/image pulls, database state/backup checks, firewall create/delete, connectivity, check/migrate, image restart, and production verification. Collect at least ten ordinary non-migration releases during normal activity before assessing startup changes; do not deploy solely to create samples. Preserve revision, database readiness, and login checks while correlating timings with redacted App Service startup logs. Offline validation cannot prove a live speed improvement.
+
 ## Numbered Docker tags
 
 The image remains `lloydismael12/request-hub`. The workflow reads existing Docker Hub tags, chooses the highest matching numbered tag, and increments its single-digit patch: `v51.8` to `v51.9`, then `v52.0`. It refuses to allocate a release if no baseline is found. Registry tags are authoritative; local image listings are not.
