@@ -145,6 +145,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
+          fetch-depth: 0
 
       - name: Allocate next numbered tag
         id: version
@@ -176,6 +177,13 @@ jobs:
               output.write(f'version={version}\n')
           print(f'Allocated {version}; latest will not be changed')
           PY
+
+      - name: Generate release changelog manifest
+        continue-on-error: true
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_REVISION: ${{ github.event.workflow_run.head_sha }}
+        run: python -m hub.release_changelog --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

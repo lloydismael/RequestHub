@@ -61,7 +61,7 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 ## Deployment sequence
 
 1. A successful trusted `master` CI run triggers a serialized release. Check eligibility and production configuration before building or publishing.
-2. Allocate an unused numbered tag; build, generate SBOM, and scan the exact image. Failed security checks prevent publishing/deployment, while generated evidence is retained for 30 days.
+2. Allocate an unused numbered tag; generate the release changelog manifest (a failure there only warns); build, generate SBOM, and scan the exact image. Failed security checks prevent publishing/deployment, while generated evidence is retained for 30 days.
 3. Publish the scanned image and pass its version, commit, and digest to the production job.
 4. Verify current `master` and prepare the temporary protected migration configuration.
 5. Authenticate to Azure using OIDC and to Docker Hub using the scoped token.
@@ -77,6 +77,19 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 `/release/` exposes only version/revision metadata. `APP_REVISION` is baked from the build commit; remove any stale platform override before activation. `APP_VERSION` can also be overridden by existing App Settings, so the commit/digest is the authoritative verification signal; reconcile an existing version override deliberately before enabling numbered-version reporting.
 
 `/readyz/` checks a database connection with `SELECT 1`. `/healthz/` remains database-independent. Static collection remains at runtime in this implementation, using the existing startup default; build-time static collection is not enabled. Do not set `RUN_COLLECTSTATIC=false` unless static assets have been prepared independently.
+
+## Release changelog
+
+Each release publishes its own entry under **Management → Changelogs**, with no manual step.
+
+- **Manifest.** In the `release-image` job, the step "Generate release changelog manifest" runs `python -m hub.release_changelog` after the tag is allocated and before the image is built. It writes the git-ignored `hub/release_changelog_manifest.json`, which `COPY . .` bakes into the image (`.dockerignore` has no rule for it). The step is `continue-on-error`: a failure only warns, and the image is built without a manifest. The checkout uses `fetch-depth: 0` so the full history is available.
+- **Range.** The generator lists `git log --no-merges BASELINE..revision`, capped at 500 commits. `BASELINE` is the v55.1 release (`a0f37126304c245797c346abf2df664e25fa5310`) and the range is cumulative on purpose: commits already logged are dropped when the entry is created. If the baseline is missing or not an ancestor of the release commit, the generator prints `error: ...`, exits 1, and writes nothing. Merge commits are ignored.
+- **Classification.** A subject such as `Prefix - text`, `prefix: text`, or `prefix(scope): text` is classified by its prefix, which is then stripped. `Feature`/`Feat` → New; `Fix`/`Bugfix`/`Hotfix` → Fixed; `Docs`, `Test`, `Chore`, `CI`, `Build`, `Refactor`, `Style` → Maintenance; `Enhancement`/`Improvement`/`Perf` → Improved. Without a prefix, a subject starting "Fix " is Fixed, one starting "Bump " is Maintenance, and anything else is Improved and kept as written. Titles are capped at 200 characters.
+- **Skipping.** A commit whose subject or body contains `[skip changelog]` (any case) is left out, as is the subject "Initial plan". Put the tag in the commit message of changes that users should not see.
+- **Sync at start.** When the container starts, `entrypoint.sh` runs `python manage.py sync_release_changelog` if the manifest file exists. The sync is limited to 60 seconds, and a failure or timeout prints `Release changelog sync failed; continuing startup` and the app still starts. It is independent of `RUN_MIGRATIONS`: production keeps `RUN_MIGRATIONS=false` and still syncs. Set `RUN_CHANGELOG_SYNC=false` to turn it off (`true` is the default; any other value stops startup). The entry therefore appears when the new container starts, not when the image is built.
+- **One entry per release.** The command creates one published entry per release revision and skips commits already stored on any entry, so repeated starts print `Nothing new to log`. A corrupt manifest exits non-zero with `Invalid release manifest: ...`. The entry date is the manifest's generation time in Asia/Manila.
+- **Editing.** Admins can edit an automatic entry's title and text. To remove one, unpublish it rather than deleting it, so it is not recreated from the same commits. A release that is rolled back after its new container started keeps its published entry; edit or unpublish it under **Management → Changelogs**.
+- **First release.** The first release after this feature is merged lists everything since v55.1. It also ships migration 0056 (adds `release_sha` and `changes` to changelog entries), so it runs the full migration window.
 
 ## Release speed and timing
 

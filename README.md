@@ -27,13 +27,15 @@ Admin accounts can open **Management → Form Editor** to save and publish form 
 
 ## Changelogs
 
-Admins can open **Management → Changelogs** to create, edit, preview, publish, or return release entries to draft. Each entry has a title, previous/new version, release date, summary, and Before / After descriptions and screenshots. Publishing requires both descriptions and screenshots; screenshots accept PNG, JPEG, or WebP up to 5 MB each. Use screenshots without confidential customer information.
+Admins can open **Management → Changelogs** to create, edit, preview, publish, or return release entries to draft. Each entry has a title, previous/new version, release date, summary, and Before / After descriptions and screenshots. Manual entries need both descriptions and screenshots before they can be published; automatic entries (below) can be published as they are, and a Before / After comparison is optional for them. Screenshots accept PNG, JPEG, or WebP up to 5 MB each. Use screenshots without confidential customer information.
 
 Signed-in users can read published entries under **Notifications → Changelogs**, newest release first, with side-by-side comparisons on desktop and stacked panels on mobile. Future-dated entries appear on their release date (Asia/Manila). Drafts and their screenshots are admin-only; changelogs do not affect notification unread counts.
 
 Apply `python manage.py migrate` and `python manage.py collectstatic --noinput` before deployment. Screenshots use the existing database-backed file storage. Recovery snapshots include changelog records but exclude screenshot contents, like other media; preserve the application database to retain uploaded images.
 
-Release entries can also ship with the code: migration `hub/migrations/0055_v55_1_release_changelogs.py` publishes the **v55.0 → v55.1** changes (SQR approval emails open with the body filled in; sign-in footer year) with Before / After screenshots stored in `hub/changelog_assets/v55.1/`. To log a later release the same way, add its screenshots under `hub/changelog_assets/<version>/` and a similar data migration, or create the entry in **Management → Changelogs**.
+Release entries can also ship with the code: migration `hub/migrations/0055_v55_1_release_changelogs.py` publishes the **v55.0 → v55.1** changes (SQR approval emails open with the body filled in; sign-in footer year) with Before / After screenshots stored in `hub/changelog_assets/v55.1/`.
+
+Later releases log themselves: the release job lists the commits since the previous release, and the new container publishes one **What's new in vNN.N** entry with those changes grouped as New, Improved, Fixed, and Maintenance. Add `[skip changelog]` to a commit message to leave it out. Admins can edit an automatic entry, or unpublish it, under **Management → Changelogs**. Details are in [docs/cd-workflow-testing.md](docs/cd-workflow-testing.md#release-changelog).
 
 ## Latest Release Snapshot
 
