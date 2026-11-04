@@ -240,6 +240,33 @@ class PrototypeTabRenderTests(TestCase):
         cls.pm = User.objects.create_user(username="tab-pm", role=User.Roles.PM_ESG)
         cls.engineer = User.objects.create_user(username="tab-eng", role=User.Roles.ENGINEER)
 
+    def test_pm_can_navigate_to_tracker_and_reports_from_either_page(self):
+        self.client.force_login(self.pm)
+        for tab in ("table", "reports"):
+            with self.subTest(tab=tab):
+                response = self.client.get(reverse("hub:sqr"), {"tab": tab})
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, "To SQR Tracker", count=1)
+                self.assertContains(response, "To Reports", count=1)
+                for destination, label, icon, style in (
+                    ("table", "To SQR Tracker", "bi-table", "btn-primary lg-btn--accent"),
+                    ("reports", "To Reports", "bi-bar-chart-line-fill", "btn-outline-primary lg-btn--ghost"),
+                ):
+                    href = "/sqr/" if destination == "table" else "/sqr/?tab=reports"
+                    current = ' aria-current="page"' if tab == destination else ""
+                    self.assertContains(
+                        response,
+                        f'<a href="{href}" class="btn btn-sm sqr-toggle-btn lg-btn {style}"{current}>'
+                        f'<i class="bi {icon} me-1" aria-hidden="true"></i>{label}</a>',
+                        html=True,
+                    )
+
+    def test_engineer_does_not_get_pm_navigation_buttons(self):
+        self.client.force_login(self.engineer)
+        response = self.client.get(reverse("hub:sqr"))
+        self.assertNotContains(response, "To SQR Tracker")
+        self.assertNotContains(response, "To Reports")
+
     def test_every_sqr_role_gets_the_prototype_tab_and_panel(self):
         for user in (self.pm, self.engineer):
             with self.subTest(role=user.role):
