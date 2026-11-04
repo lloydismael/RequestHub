@@ -46,7 +46,7 @@
                 {{ changelog_form.is_published }}
                 <label class="form-check-label fw-semibold" for="{{ changelog_form.is_published.id_for_label }}">{{ changelog_form.is_published.label }}</label>
             </div>
-            <p class="form-text mb-3">Publishing requires both descriptions and screenshots. Future-dated releases stay hidden until their release date. Uncheck to return to draft.</p>
+            <p class="form-text mb-3">{% if changelog_entry.is_automatic %}Automatic entries can be published as they are. Add all four Before / After fields to show a comparison.{% else %}Publishing requires both descriptions and screenshots.{% endif %} Future-dated releases stay hidden until their release date. Uncheck to return to draft.</p>
             <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-primary" type="submit">Save changelog</button>
                 {% if changelog_entry %}<a class="btn btn-outline-secondary" href="{% url 'hub:management' %}?tab=changelogs">Cancel / New entry</a>{% endif %}
@@ -59,9 +59,10 @@
             <div class="glass-card cl-history-entry">
                 <div class="cl-entry__header">
                     <div class="cl-prose">
-                        <span class="badge {% if entry.is_published %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if entry.is_published %}Published / scheduled{% else %}Draft{% endif %}</span>
+                        <span class="badge {% if entry.is_published %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if entry.is_published %}Published / scheduled{% else %}Draft{% endif %}</span>{% if entry.is_automatic %}
+                        <span class="badge text-bg-info">Automatic</span>{% endif %}
                         <h4 class="h6 my-2">{{ entry.title }}</h4>
-                        <p class="text-muted small mb-0">{{ entry.previous_version }} &rarr; {{ entry.new_version }} &middot; {{ entry.release_date|date:"M j, Y" }}</p>
+                        <p class="text-muted small mb-0">{% if entry.previous_version %}{{ entry.previous_version }} &rarr; {% endif %}{{ entry.new_version }} &middot; {{ entry.release_date|date:"M j, Y" }}</p>
                     </div>
                     <a class="btn btn-outline-primary btn-sm" href="{% url 'hub:changelog-edit' entry.pk %}" aria-label="Edit {{ entry.title }}">Edit</a>
                 </div>

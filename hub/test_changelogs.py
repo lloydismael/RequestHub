@@ -261,6 +261,56 @@ class ChangelogTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get(url).status_code, 302)
 
+    def test_automatic_entry_saves_published_without_previous_version_or_comparison(self):
+        entry = self.automatic()
+        response = self.client.post(
+            reverse("hub:changelog-edit", args=[entry.pk]),
+            self.payload(
+                previous_version="", before_text="", after_text="", title="Edited", is_published="on",
+            ),
+        )
+        self.assertEqual(response.status_code, 302)
+        saved = self.model().objects.get(pk=entry.pk)
+        self.assertEqual(saved.title, "Edited")
+        self.assertTrue(saved.is_published)
+        self.assertEqual(saved.release_sha, "c" * 40)
+        self.assertEqual(saved.changes, entry.changes)
+
+    def test_partial_comparison_on_automatic_entry_is_rejected(self):
+        entry = self.automatic()
+        response = self.client.post(
+            reverse("hub:changelog-edit", args=[entry.pk]),
+            self.payload(previous_version="", before_text="x", after_text="", is_published="on"),
+        )
+        self.assertEqual(response.status_code, 200)
+        errors = response.context["changelog_form"].errors
+        for name in ("after_text", "before_image", "after_image"):
+            self.assertEqual(errors[name], ["This field is required before publishing."])
+
+    def test_new_manual_entry_still_requires_previous_version(self):
+        response = self.client.post(
+            reverse("hub:changelog-create"), self.payload(previous_version=""),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This field is required.")
+
+    def test_management_marks_automatic_entries(self):
+        automatic = self.automatic()
+        manual = self.entry()
+        badge = '<span class="badge text-bg-info">Automatic</span>'
+        response = self.client.get(self.management, {"tab": "changelogs"})
+        self.assertContains(response, badge, count=1)
+        self.assertContains(response, "v1 &rarr; v2")
+        self.assertNotContains(response, "&rarr; v56.0")
+        response = self.client.get(reverse("hub:changelog-edit", args=[automatic.pk]))
+        self.assertContains(response, "Automatic entries can be published as they are.")
+        self.assertNotContains(response, "Publishing requires both descriptions and screenshots.")
+        self.assertNotContains(response, "Required for publishing.")
+        response = self.client.get(reverse("hub:changelog-edit", args=[manual.pk]))
+        self.assertContains(response, "Publishing requires both descriptions and screenshots.")
+        self.assertNotContains(response, "Automatic entries can be published as they are.")
+        self.assertContains(response, "Required for publishing.")
+
     def test_feed_pagination_preserves_tab_and_empty_state(self):
         self.client.force_login(self.reader)
         response = self.client.get(self.notifications, {"tab": "changelogs"})

@@ -43,14 +43,21 @@ class ChangelogForm(forms.ModelForm):
             )
         for name in ("before_image", "after_image"):
             self.fields[name].widget.attrs["accept"] = "image/png,image/jpeg,image/webp"
-            self.fields[name].help_text = "PNG, JPEG or WebP, up to 5 MB. Required for publishing."
+            self.fields[name].help_text = "PNG, JPEG or WebP, up to 5 MB."
+            if not self.instance.is_automatic:
+                self.fields[name].help_text += " Required for publishing."
+        if self.instance.is_automatic:
+            self.fields["previous_version"].required = False
 
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("previous_version") == cleaned.get("new_version") and cleaned.get("new_version"):
             self.add_error("new_version", "The new version must differ from the previous version.")
+        names = ("before_text", "after_text", "before_image", "after_image")
+        if self.instance.is_automatic and not any(cleaned.get(name) for name in names):
+            return cleaned
         if cleaned.get("is_published"):
-            for name in ("before_text", "after_text", "before_image", "after_image"):
+            for name in names:
                 if name not in self.errors and not cleaned.get(name):
                     self.add_error(name, "This field is required before publishing.")
         return cleaned
