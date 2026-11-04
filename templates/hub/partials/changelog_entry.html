@@ -2,7 +2,7 @@
     <header class="cl-entry__header">
         <div>
             <div class="cl-release-meta">
-                <span class="cl-version">{{ entry.previous_version }} <i class="bi bi-arrow-right" aria-hidden="true"></i><span class="visually-hidden">to</span> {{ entry.new_version }}</span>
+                <span class="cl-version">{% if entry.previous_version %}{{ entry.previous_version }} <i class="bi bi-arrow-right" aria-hidden="true"></i><span class="visually-hidden">to</span> {% endif %}{{ entry.new_version }}</span>
                 <time datetime="{{ entry.release_date|date:'Y-m-d' }}">{{ entry.release_date|date:"M j, Y" }}</time>
             </div>
             <h3 class="h4 mt-3 mb-2" id="changelog-{{ entry.pk }}-title">{{ entry.title }}</h3>
@@ -10,6 +10,29 @@
         <span class="cl-label"><i class="bi bi-stars" aria-hidden="true"></i> What's new</span>
     </header>
     <div class="cl-prose text-muted mb-4">{{ entry.summary|linebreaksbr }}</div>
+    {% with groups=entry.change_groups %}
+    {% if groups %}
+    <div class="cl-changes mb-4">
+        <section aria-labelledby="changes-{{ entry.pk }}">
+            <h4 id="changes-{{ entry.pk }}" class="h6 mb-3"><i class="bi bi-list-check" aria-hidden="true"></i> What changed</h4>
+            {% for group in groups %}
+                {% if group.key == "maintenance" %}
+                <details class="cl-change-group">
+                    <summary><span class="h6">{{ group.label }}</span> <span class="cl-count">{{ group.titles|length }}</span></summary>
+                    <ul>{% for title in group.titles %}<li>{{ title }}</li>{% endfor %}</ul>
+                </details>
+                {% else %}
+                <section class="cl-change-group" aria-labelledby="changes-{{ entry.pk }}-{{ group.key }}">
+                    <h5 id="changes-{{ entry.pk }}-{{ group.key }}" class="h6">{{ group.label }} <span class="cl-count">{{ group.titles|length }}</span></h5>
+                    <ul>{% for title in group.titles %}<li>{{ title }}</li>{% endfor %}</ul>
+                </section>
+                {% endif %}
+            {% endfor %}
+        </section>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% if entry.has_comparison %}
     <div class="cl-comparison">
         <section class="cl-panel cl-panel--before" aria-labelledby="before-{{ entry.pk }}">
             <div class="cl-panel__heading">
@@ -38,4 +61,5 @@
             <div class="cl-panel__text cl-prose">{{ entry.after_text|linebreaksbr }}</div>
         </section>
     </div>
+    {% endif %}
 </article>

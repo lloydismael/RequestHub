@@ -14,6 +14,15 @@ case "${RUN_MIGRATIONS:-true}" in
     false) ;;
     *) echo "RUN_MIGRATIONS must be true or false" >&2; exit 1 ;;
 esac
+case "${RUN_CHANGELOG_SYNC:-true}" in
+    true)
+        if [ -f hub/release_changelog_manifest.json ]; then
+            timeout 60 python manage.py sync_release_changelog || echo "Release changelog sync failed; continuing startup" >&2
+        fi
+        ;;
+    false) ;;
+    *) echo "RUN_CHANGELOG_SYNC must be true or false" >&2; exit 1 ;;
+esac
 
 if [ "$#" -gt 0 ]; then
 	exec "$@"
