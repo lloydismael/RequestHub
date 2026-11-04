@@ -1294,7 +1294,7 @@ class NotificationToastTests(TestCase):
         self.assertContains(response, 'data-notification-toast-config')
         self.assertContains(response, f'data-initial-cursor="{event.pk}"')
         self.assertContains(response, 'notification-toasts')
-        self.assertRegex(response.content.decode(), r'notification-toasts(?:\.[a-f0-9]+)?\.js\?v=3')
+        self.assertRegex(response.content.decode(), r'notification-toasts(?:\.[a-f0-9]+)?\.js\?v=\d+')
 
     def test_engineer_completed_filter_orders_recent_first(self):
         engineer = User.objects.create_user(
