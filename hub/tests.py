@@ -11,7 +11,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.core.management import call_command
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -56,6 +56,13 @@ from hub.services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
 )
+
+
+class ProductCategoryChoiceTests(SimpleTestCase):
+    def test_microsoft_is_a_product_category_choice(self):
+        choices = dict(Request._meta.get_field("product_category").choices)
+
+        self.assertEqual(choices["Microsoft"], "Microsoft")
 
 
 class AssignmentEmailTests(TestCase):
@@ -2732,6 +2739,7 @@ class AdminAccountChangeTests(TestCase):
                 "account_name": existing.name,
                 "request_date": "2026-08-01",
                 "requestor": str(self.requestor.pk),
+                "product_category": "Azure",
                 "priority": Request.Priority.MEDIUM,
                 "status": self.request_obj.status,
                 "engineer": "",
@@ -2767,6 +2775,8 @@ class AdminAccountChangeTests(TestCase):
         self.assertIn(target.name, html)
         self.assertIn("account-autocomplete", html)
         self.assertIn("initAccountAutocompletes", html)
+        self.assertRegex(html, r'<select[^>]*name="product_category"')
+        self.assertIn('<option value="Veeam">Veeam</option>', html)
 
         post = self.factory.post(
             reverse("hub:request-manage", args=[self.request_obj.pk]),
@@ -2776,6 +2786,7 @@ class AdminAccountChangeTests(TestCase):
                 "account_name": target.name,
                 "request_date": "2026-08-01",
                 "requestor": str(self.requestor.pk),
+                "product_category": "M365",
                 "priority": Request.Priority.MEDIUM,
                 "status": self.request_obj.status,
                 "engineer": "",
@@ -2794,6 +2805,7 @@ class AdminAccountChangeTests(TestCase):
         self.request_obj.refresh_from_db()
         self.assertEqual(self.request_obj.account_id, target.pk)
         self.assertEqual(self.request_obj.account.name, "Admin Reassigned Account")
+        self.assertEqual(self.request_obj.product_category, "M365")
 
     def test_delete_user_account_blocks_when_user_has_protected_requests(self):
         engineer = User.objects.create_user(

@@ -31,6 +31,7 @@ class RequestPeopleValidationTests(TestCase):
                 "account_name": self.account.name,
                 "request_date": timezone.localdate().isoformat(),
                 "requestor": str(owner.pk),
+                "product_category": request.product_category,
                 "priority": request.priority,
                 "status": request.status,
                 "engineer": str(assignee.pk),
