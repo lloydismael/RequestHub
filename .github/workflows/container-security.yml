@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - master
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
     branches:
       - dev
@@ -21,8 +22,72 @@ permissions:
   contents: read
 
 jobs:
+  classify-event:
+    name: Classify CI event
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions:
+      pull-requests: read
+    outputs:
+      run_full_ci: ${{ steps.route.outputs.run_full_ci }}
+    steps:
+      - name: Classify CI event
+        id: route
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_full_ci=true
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/dev ]; then
+            response="$RUNNER_TEMP/ci-open-pulls.json"
+            if gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f base=master -f "head=${GITHUB_REPOSITORY%%/*}:dev" -f per_page=100 > "$response"; then
+              if matched=$(python3 - "$response" <<'PY'
+          import json
+          import os
+          import sys
+          try:
+              with open(sys.argv[1], encoding='utf-8') as source:
+                  pulls = json.load(source)
+              if not isinstance(pulls, list):
+                  raise ValueError('Expected PR array')
+              matched = False
+              for pull in pulls:
+                  head, base = pull['head'], pull['base']
+                  matched |= (
+                      pull['state'] == 'open'
+                      and head['repo']['full_name'] == os.environ['GITHUB_REPOSITORY']
+                      and head['ref'] == 'dev'
+                      and head['sha'] == os.environ['GITHUB_SHA']
+                      and base['repo']['full_name'] == os.environ['GITHUB_REPOSITORY']
+                      and base['ref'] == 'master'
+                  )
+              print('true' if matched else 'false')
+          except (OSError, ValueError, KeyError, TypeError):
+              raise SystemExit('PR lookup response could not be validated')
+          PY
+              ); then
+                if [ "$matched" = true ]; then
+                  run_full_ci=false
+                fi
+              else
+                echo '::notice::PR response validation failed; running full CI.'
+              fi
+            else
+              echo '::notice::PR lookup failed; running full CI.'
+            fi
+            rm -f "$response"
+          fi
+          echo "run_full_ci=$run_full_ci" >> "$GITHUB_OUTPUT"
+          if [ "$run_full_ci" = false ]; then
+            echo 'Full CI is running on the open master PR merge ref for this dev commit. This branch routing result is not PR validation.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Full CI required for this event.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   django-validation:
     name: Django Validation
+    needs: classify-event
+    if: ${{ !cancelled() && (needs.classify-event.result != 'success' || needs.classify-event.outputs.run_full_ci != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
@@ -85,8 +150,10 @@ jobs:
 
       - name: Run fast regression checks
         run: |
+          python -m unittest discover -s scripts -p test_analyze_actions_runs.py
           node --test scripts_check/test_notification_toasts.cjs
           bash scripts/test-deploy-production.sh
+          bash scripts/test-ci-routing.sh
 
       # Test-only settings use a fast password hasher; the checks above run against
       # the real settings. Tests run in parallel across the runner's CPUs.
@@ -101,6 +168,8 @@ jobs:
 
   dependency-audit:
     name: Python dependency audit
+    needs: classify-event
+    if: ${{ !cancelled() && (needs.classify-event.result != 'success' || needs.classify-event.outputs.run_full_ci != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -122,6 +191,8 @@ jobs:
 
   image-scan:
     name: Build, scan, and publish SBOM
+    needs: classify-event
+    if: ${{ !cancelled() && (needs.classify-event.result != 'success' || needs.classify-event.outputs.run_full_ci != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:

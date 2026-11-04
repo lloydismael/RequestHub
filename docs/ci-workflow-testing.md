@@ -6,11 +6,13 @@ The workflow is `.github/workflows/container-security.yml`, displayed as **Conta
 
 | Trigger | Result |
 | --- | --- |
-| Push any commit to `dev` or `master` | Run all three CI jobs |
-| Open or update a pull request targeting `master` | Run all three CI jobs |
-| Run workflow manually | Run the workflow version on the selected branch |
+| Push to `master` | Run all three validation jobs after event classification |
+| Push to `dev` without a matching open master PR | Run all three validation jobs |
+| Push to `dev` with a same-repository master PR at the exact pushed SHA | Lightweight classification; the three heavy jobs are skipped in this branch run |
+| Open, update, reopen, edit, or mark a master PR ready for review | Run all three jobs against the PR merge ref, including draft PRs |
+| Run workflow manually | Run all three jobs on the selected branch |
 
-There are no path filters. Application, template, and documentation changes all trigger CI on these branches. Runs for the same workflow/ref cancel superseded runs.
+There are no path filters. Application, template, and documentation changes all trigger CI on these branches. Runs for the same workflow/ref cancel superseded runs; a dev branch run cannot cancel its PR merge run. The read-only classifier checks open state, exact head/base repository and branch, and head SHA. An unavailable or malformed PR lookup falls back to full validation. If the classifier itself fails, the heavy jobs still attempt validation and the workflow remains failed rather than hiding that error. A lightweight successful dev routing run is **not** a passing PR validation signal; always inspect the PR's own checks. Master CI never skips heavy validation.
 
 CI builds and scans a Docker image but does not push it to a registry or deploy the application. No production secrets are needed. PostgreSQL is disposable and uses CI-only credentials. The canonical public URL supports email-format assertions; it does not enable real email delivery or connect the database to production.
 
@@ -21,9 +23,11 @@ flowchart TD
 	PUSH["Push to dev or master"] --> START["Container Security workflow"]
 	PR["Open or update PR targeting master"] --> START
 	MANUAL["Manual run on selected branch"] --> START
-	START --> DJANGO["Django Validation<br/>Python 3.12 + disposable PostgreSQL 16"]
-	START --> AUDIT["Python dependency audit<br/>pip-audit"]
-	START --> BUILD["Build Docker image<br/>No registry push"]
+	START --> ROUTE["Read-only event classification"]
+	ROUTE -->|Full validation| DJANGO["Django Validation<br/>Python 3.12 + disposable PostgreSQL 16"]
+	ROUTE -->|Full validation| AUDIT["Python dependency audit<br/>pip-audit"]
+	ROUTE -->|Full validation| BUILD["Build Docker image<br/>No registry push"]
+	ROUTE -->|Dev push with matching master PR| PRCHECKS["Heavy branch jobs skipped<br/>Inspect separate PR merge checks"]
 
 	DJANGO --> CONFIG["Install dependencies and pip check<br/>Django and production-security checks"]
 	CONFIG --> MIGRATIONS["Check for missing migrations"]
@@ -44,7 +48,7 @@ flowchart TD
 	RED --> PUSH
 ```
 
-The three jobs run independently. Any failed job makes CI fail, including a build or scanner error. Upload steps can still preserve files after a failure but cannot turn that failure into a pass. Reports are uploaded only when they exist; fork PRs skip the privileged code-scanning upload. Production deployment and image publishing are not part of this workflow.
+When full validation is required, the three heavy jobs run independently after classification. Any failed job makes CI fail, including a build or scanner error. Upload steps can still preserve files after a failure but cannot turn that failure into a pass. Reports are uploaded only when they exist; fork PRs skip the privileged code-scanning upload. Production deployment and image publishing are not part of this workflow.
 
 ## 1. Publish the correct workflow version
 
@@ -75,7 +79,7 @@ Only use the last command when the commit is on `dev` and `origin` is the intend
 2. Open https://github.com/lloydismael/RequestHub/actions.
 3. Select **Container Security**.
 4. Open the run for your commit. Confirm the event is **push**, the branch is `dev`, and the commit SHA matches your push.
-5. Confirm that the run contains **Django Validation**, **Python dependency audit**, and **Build, scan, and publish SBOM**. Missing Django Validation usually means you ran an older workflow version.
+5. Confirm **Classify CI event** completed. With no matching open master PR, **Django Validation**, **Python dependency audit**, and **Build, scan, and publish SBOM** must run. With a matching PR at the pushed SHA, those branch jobs are skipped; inspect the separate PR merge-ref run for all three validation results.
 
 No pull request is required for this test. Do not push to `master` merely to test CI.
 
@@ -94,7 +98,7 @@ Re-running an old failed run tests that run's original commit, not your latest l
 
 1. Open a pull request with **base: master** and **compare: dev** after publishing your changes.
 2. Check the PR's **Checks** tab for the three jobs and confirm the event is **pull_request**.
-3. Push an additional reviewed change to `dev` if you need to verify that PR updates rerun checks. A push can create both a branch run and a PR run; that is expected.
+3. Push an additional reviewed change to `dev` if you need to verify that PR updates rerun checks. Both a lightweight branch run and a full PR run are expected when the lookup matches. A lookup failure or stale PR SHA intentionally runs full CI twice rather than risking missing coverage.
 4. Do not merge until required checks and review requirements pass. You do not need to merge simply to test the PR trigger.
 
 GitHub normally tests the PR merge ref, so its checkout SHA can differ from the branch-head SHA. Verify the PR/run association rather than expecting those SHAs to match.
@@ -172,7 +176,9 @@ November 5, 2026 baseline, 20 completed Container Security runs: master push med
 
 ## Completion checklist
 
-- A `dev` push runs all three jobs on the expected commit.
+- A standalone `dev` push runs all three validation jobs on the expected commit.
+- A matching open-PR `dev` push skips heavy branch jobs while its separate PR merge run executes all three jobs.
+- API failure, malformed lookup, and stale PR head SHA fall back to full branch validation.
 - A PR targeting `master` runs all three jobs.
 - Manual execution works when the default branch exposes the trigger.
 - Configuration, migration, static-file, and PostgreSQL test gates pass.
