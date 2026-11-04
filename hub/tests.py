@@ -2582,15 +2582,14 @@ class SqrMyAssignedFilterTests(TestCase):
         view.setup(request)
         return view.get_context_data()
 
-    def test_pm_esg_defaults_to_my_assigned_filter_but_keeps_all_rows(self):
+    def test_pm_esg_defaults_to_my_assigned_page_but_keeps_full_totals(self):
         context = self._context_for(self.pm)
 
         self.assertTrue(context["default_my_assigned_filter"])
         self.assertTrue(context["is_pm_esg"])
         self.assertEqual(context["my_assigned_sqr_count"], 1)
         self.assertEqual(context["sqr_current_user_id"], self.pm.pk)
-        # Full report access remains: both assigned and unassigned rows are still in the page.
-        self.assertEqual(len(context["proposal_submissions"]), 2)
+        self.assertEqual(len(context["proposal_submissions"]), 1)
         self.assertEqual(context["proposal_counts"]["total"], 2)
 
     def test_admin_does_not_default_to_my_assigned_filter(self):

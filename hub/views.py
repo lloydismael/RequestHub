@@ -1821,17 +1821,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     # Metrics/reports still use the full filtered set before this limit.
     LIST_ROW_LIMIT = 100
 
-    @staticmethod
-    def _limit_dashboard_rows(requests: list[Request], limit: int | None = None) -> tuple[list[Request], dict]:
-        """Return display rows capped at LIST_ROW_LIMIT plus list-meta context."""
-        row_limit = DashboardView.LIST_ROW_LIMIT if limit is None else limit
-        total = len(requests)
-        display_rows = requests[:row_limit]
-        return display_rows, {
-            "requests_total_count": total,
-            "requests_displayed_count": len(display_rows),
-            "requests_list_limited": total > row_limit,
-            "requests_list_limit": row_limit,
+    def _limit_dashboard_rows(self, requests: list[Request]) -> tuple[list[Request], dict]:
+        from hub.services.pagination import paginate
+        page, metadata = paginate(requests, self.request.GET)
+        rows = list(page.object_list)
+        return rows, {
+            **metadata,
+            "requests_total_count": page.paginator.count,
+            "requests_displayed_count": len(rows),
+            "requests_list_limited": page.paginator.num_pages > 1,
+            "requests_list_limit": page.paginator.per_page,
         }
 
     @staticmethod
@@ -2494,69 +2493,21 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         elif pm_esg_tab == "my_requests":
             queryset = queryset.filter(requestor=user)
         filter_form = AdminRequestFilterForm(self.request.GET or None)
-        filtered_queryset = filter_form.filter_queryset(queryset)
-        requests = filter_form.filter_sequence(filtered_queryset)
+        from hub.services.dashboard_queries import dashboard_data
+        from hub.context_processors import new_ticket_count
+
+        data = dashboard_data(queryset, filter_form, self.request.GET, metric_filter,
+                              timezone.now().astimezone(MANILA_TZ).date())
         filters_active = filter_form.has_active_filters()
         show_filters = self.request.GET.get("show_filters") == "1"
-
-        if not isinstance(requests, list):
-            requests = list(requests)
-
-        sort_map = {
-            "reference_code": lambda req: (req.reference_code or "").lower(),
-            "account": lambda req: (req.account.name.lower() if req.account else ""),
-            "account_manager": _admin_sort_account_manager_key,
-            "engineer": _admin_sort_engineer_key,
-            "backup_engineer": _admin_sort_backup_engineer_key,
-            "engagement": lambda req: req.engagement_type or "",
-            "product_category": lambda req: req.product_category or "",
-            "status": lambda req: req.status or "",
-            "created": lambda req: req.created_at,
-            "end_date": lambda req: _admin_sort_date_key(req.end_date),
-            "days": lambda req: req.days_since_creation,
-            "due": lambda req: _admin_sort_date_key(req.due_date),
-        }
-
-        default_sort = "created"
-        default_direction = "desc"
-        sort_key = self.request.GET.get("sort", default_sort)
-        direction = self.request.GET.get("direction", default_direction)
-        if sort_key not in sort_map:
-            sort_key = default_sort
-        if direction not in {"asc", "desc"}:
-            direction = default_direction
-        reverse = direction == "desc"
-
-        key_fn = sort_map[sort_key]
-        requests.sort(key=key_fn, reverse=reverse)
-
-        null_field_map = {"end_date": "end_date", "due": "due_date"}
-        if sort_key in null_field_map:
-            field_name = null_field_map[sort_key]
-            ordered = [req for req in requests if getattr(req, field_name) is not None]
-            ordered.extend(req for req in requests if getattr(req, field_name) is None)
-            requests = ordered
-
-        today = timezone.now().astimezone(MANILA_TZ).date()
-        all_requests = list(requests)
-        search_query = (self.request.GET.get("q") or "").strip()[:200]
-        if search_query:
-            # A search spans every request matching the other filters, regardless of the metric card.
-            filtered_requests = self._search_requests(all_requests, search_query)
-        else:
-            filtered_requests = self._filter_requests_by_metric(all_requests, metric_filter, today)
-        display_requests, list_meta = self._limit_dashboard_rows(filtered_requests)
-        # Annotate only rows that will render — keeps live poll/table HTML light.
+        sort_key = data["current_sort"]
+        direction = data["current_direction"]
+        search_query = data["dashboard_search_query"]
+        display_requests = data["requests"]
         self._annotate_acknowledgement_status(display_requests)
 
-        overdue_count = sum(1 for req in all_requests if req.admin_days_overdue)
-        status_counts = {
-            "all": len(all_requests),
-            "ongoing": sum(1 for req in all_requests if req.status == Request.Status.ONGOING),
-            "completed": sum(1 for req in all_requests if req.status == Request.Status.COMPLETED),
-        }
-
-        columns = list(sort_map.keys())
+        columns = ["reference_code", "account", "account_manager", "engineer", "backup_engineer",
+                   "engagement", "product_category", "status", "created", "end_date", "days", "due"]
         next_directions = {}
         for column in columns:
             if column == sort_key:
@@ -2586,17 +2537,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         filter_toggle_link = f"?{toggle_encoded}" if toggle_encoded else ("?" if show_filters else "?show_filters=1")
 
         metric_links = {}
-        metric_buckets = {}
         for key in metric_keys:
             params = self.request.GET.copy()
             params.pop("version", None)
+            params.pop("page", None)
             if params.get("metric_filter") == key:
                 params.pop("metric_filter", None)
             else:
                 params["metric_filter"] = key
             encoded_params = params.urlencode()
             metric_links[key] = f"?{encoded_params}" if encoded_params else "?"
-            metric_buckets[key] = self._filter_requests_by_metric(all_requests, key, today)
 
         pm_esg_tab_links = {}
         if user.role == PM_ESG_ROLE:
@@ -2610,19 +2560,15 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 encoded = params.urlencode()
                 pm_esg_tab_links[key] = f"?{encoded}" if encoded else "?"
 
-        live_version = self._admin_dashboard_live_version(user)
+        live_version = self._admin_dashboard_live_version(user, self.request.GET)
 
         return {
+            **data,
             "role": User.Roles.ADMIN,
             "is_admin_ui": True,
             "is_pm_esg": user.role == PM_ESG_ROLE,
             "requests": display_requests,
-            "overdue_count": overdue_count,
-            "status_counts": status_counts,
-            "new_ticket_count": user.notifications.filter(
-                is_read=False,
-                source__icontains="new request",
-            ).count(),
+            "new_ticket_count": new_ticket_count(self.request),
             "current_sort": sort_key,
             "current_direction": direction,
             "sort_next": next_directions,
@@ -2631,18 +2577,16 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             "filters_active": filters_active or (metric_filter and metric_filter != "open"),
             "show_filters": show_filters,
             "filter_toggle_link": filter_toggle_link,
-            "metrics": {key: len(metric_buckets[key]) for key in metric_keys},
             "metric_links": metric_links,
             "active_metric_filter": "" if search_query else metric_filter,
             "dashboard_search_query": search_query,
             "pm_esg_tab": pm_esg_tab,
             "pm_esg_tab_links": pm_esg_tab_links,
             "dashboard_live_version": live_version,
-            **list_meta,
         }
 
     @staticmethod
-    def _admin_dashboard_live_version(user) -> str:
+    def _admin_dashboard_live_version(user, params=None) -> str:
         """Fingerprint active + deleted request watermarks so soft-delete/restore poll correctly."""
 
         def _iso(value) -> str:
@@ -2662,6 +2606,10 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             _iso(deleted_stats.get("max_updated")),
             str(getattr(user, "pk", "") or ""),
         ]
+        from hashlib import sha256
+        query_items = sorted((key, value) for key, value in (params.items() if params else [])
+                             if key != "version")
+        parts.append(sha256(repr(query_items).encode()).hexdigest()[:16])
         return "|".join(parts)
 
     def _annotate_engineer_activity(self, requests: list[Request]) -> None:
@@ -3168,6 +3116,30 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             )
             _refresh_sqr_request_account_map(form)
 
+        if active_tab != "reports" and not kwargs.get("force_reports"):
+            from hub.services.sqr_queries import tracker_page
+            context.update(tracker_page(self.get_queryset(), self.request.GET, user, timezone.localdate()))
+            context.update({
+                "can_create_sqr": can_create, "can_review_sqr": can_review, "is_pm": is_pm,
+                "is_admin": is_admin, "is_pm_esg": user.role == PM_ESG_ROLE,
+                "sqr_current_user_id": user.pk, "sqr_form": form,
+                "sqr_import_form": SqrImportForm() if is_admin else None,
+                "sqr_edit_form": _make_sqr_edit_form(user) if can_create else None,
+                "sqr_form_has_errors": bool(form and form.is_bound and form.errors),
+                "active_sqr_tab": active_tab,
+                "sqr_pm_users": list(User.objects.filter(role=User.Roles.PM_ESG)
+                    .values("pk", "first_name", "last_name", "username").order_by("first_name", "last_name")) if is_pm else [],
+                "sqr_sse_users": list(User.objects.filter(role__in=[User.Roles.ENGINEER, User.Roles.ON_HOLD])
+                    .values("pk", "first_name", "last_name", "username").order_by("first_name", "last_name")) if is_pm else [],
+                "sqr_rq_options": list(Request.objects.order_by("-id")[:300].values("pk", "reference_code")) if is_pm else [],
+            })
+            if is_pm:
+                context["sqr_json_scripts"] = format_html("{}{}{}",
+                    json_script(context["sqr_pm_users"], "sgr-pm-users"),
+                    json_script(context["sqr_sse_users"], "sgr-sse-users"),
+                    json_script(context["sqr_rq_options"], "sgr-rq-options"))
+            return context
+
         all_submissions = list(self.get_queryset())
 
         # ── Proposal Stage ──────────────────────────────────────────────────
@@ -3652,7 +3624,7 @@ class DashboardLiveDataView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
 
         client_version = (request.GET.get("version") or "").strip()
-        live_version = DashboardView._admin_dashboard_live_version(request.user)
+        live_version = DashboardView._admin_dashboard_live_version(request.user, request.GET)
         if client_version and client_version == live_version:
             return JsonResponse(
                 {
@@ -3694,6 +3666,8 @@ class DashboardLiveDataView(LoginRequiredMixin, View):
                 "search_query": context.get("dashboard_search_query", ""),
                 "html_metrics": html_metrics,
                 "html_rows": html_rows,
+                "html_pagination": render_to_string("hub/partials/pagination.html",
+                    {**context, "pagination_id": "dashboard-live-pagination"}, request=request),
             }
         )
 
@@ -3805,6 +3779,14 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
             is_admin=user.role == User.Roles.ADMIN,
             is_engineer=user.role in ENGINEER_ACCESS_ROLES,
         )
+        page = None
+        pipeline = None
+        if raw_pk is None and "page" in request.GET:
+            from hub.services.sqr_queries import prototype_page
+            page, pipeline = prototype_page(queryset, request.GET, user, timezone.localdate())
+            if request.GET.get("summary") == "1":
+                return JsonResponse({"ok": True, "pipeline": pipeline})
+            queryset = page.object_list
         records = [serialize(submission) for submission in queryset]
         if raw_pk is not None:
             if not records:
@@ -3828,6 +3810,9 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
             },
             "options": options,
             "records": records,
+            **({"pipeline": pipeline, "pagination": {"page": page.number,
+                "total": page.paginator.count, "has_next": page.has_next(),
+                "page_size": page.paginator.per_page}} if page is not None else {}),
         })
 
 
@@ -3842,7 +3827,7 @@ class SqrReportsDataView(LoginRequiredMixin, View):
         report_view.request = request
         report_view.args = args
         report_view.kwargs = kwargs
-        context = report_view.get_context_data()
+        context = report_view.get_context_data(force_reports=True)
         html = render_to_string("hub/partials/sqr_reports.html", context, request=request)
         return JsonResponse({"ok": True, "html": html})
 

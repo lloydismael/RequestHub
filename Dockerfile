@@ -60,6 +60,10 @@ ENV APP_VERSION=${APP_VERSION} \
 
 USER app
 
+# Static collection needs no database and its build-only DEBUG flag is not persisted.
+RUN DJANGO_DEBUG=True python manage.py collectstatic --noinput
+ENV RUN_COLLECTSTATIC=false
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \

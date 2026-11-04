@@ -11,13 +11,13 @@
     function normalizeDelaySeconds(raw, index) {
         var delay = parseFloat(raw);
         if (!Number.isFinite(delay)) {
-            return index * 0.06;
+            return Math.min(index * 0.01, 0.02);
         }
         // Login uses fractional seconds (0.12). Management/Reports use ms (40, 80…).
         if (delay > 5) {
             delay = delay / 1000;
         }
-        return Math.max(0, delay);
+        return Math.min(0.02, Math.max(0, delay));
     }
 
     function primeEntrance() {

@@ -12,7 +12,7 @@
     var CSRF = root.dataset.csrf;
     var STORE_KEY = 'requestHub.sqr.prototype';
     var VIEW_KEY = 'requestHub.sqr.tableView';
-    var PAGE_SIZE = 40;
+    var PAGE_SIZE = 50;
     var STALE_MS = 60000;
 
     var BADGES = {
@@ -28,10 +28,13 @@
     var state = {
         loaded: false, loadedAt: 0, viewer: null, schema: null, options: {}, records: [], byPk: {},
         specs: {}, sections: {}, labels: {}, selectedPk: null, tab: 'summary', shown: PAGE_SIZE,
-        dirtyClassic: false, history: {},
+        dirtyClassic: false, history: {}, pipeline: {}, pagination: null,
         filters: {stage: 'all', search: ''}
     };
+    loadPrefs();
     var inFlight = null;
+    var loadController = null;
+    var loadVersion = 0;
     var toastTimer = 0;
     var pendingUndo = null;
 
@@ -186,7 +189,8 @@
         });
         el.pipeline.replaceChildren.apply(el.pipeline, defs.map(function (def) {
             var matching = pool.filter(def.test);
-            var total = matching.reduce(function (sum, rec) { return sum + (parseFloat(rec.total) || 0); }, 0);
+            var summary = state.pipeline[def.key];
+            var total = summary ? parseFloat(summary.total) : matching.reduce(function (sum, rec) { return sum + (parseFloat(rec.total) || 0); }, 0);
             var tone = STAGE_TONES[def.key] || 'secondary';
             return h('button', {
                 type: 'button', class: 'badge bg-' + tone + '-subtle text-' + tone + ' border border-' + tone + '-subtle sqr-badge-filter',
@@ -194,9 +198,9 @@
                 'aria-pressed': state.filters.stage === def.key ? 'true' : 'false',
                 on: {click: function () {
                     state.filters.stage = state.filters.stage === def.key ? 'all' : def.key;
-                    state.shown = PAGE_SIZE; savePrefs(); renderAll();
+                    state.shown = PAGE_SIZE; savePrefs(); load(false);
                 }}
-            }, [def.icon ? icon(def.icon, 'me-1') : null, def.label + ': ' + matching.length]);
+            }, [def.icon ? icon(def.icon, 'me-1') : null, def.label + ': ' + (summary ? summary.count : matching.length)]);
         }));
     }
 
@@ -230,8 +234,8 @@
         var children = slice.map(function (rec) { return h('li', null, cardFor(rec)); });
         if (!rows.length) children.push(h('li', {class: 'sqr-proto__count', text: state.records.length ? 'No matches.' : 'No SQRs yet.'}));
         el.items.replaceChildren.apply(el.items, children);
-        el.more.hidden = rows.length <= slice.length;
-        el.more.textContent = 'Show ' + Math.min(PAGE_SIZE, rows.length - slice.length) + ' more';
+        el.more.hidden = state.pagination ? !state.pagination.has_next : rows.length <= slice.length;
+        el.more.textContent = 'Show more';
         if (activePk) {
             var again = el.items.querySelector('.sqr-proto__card[data-pk="' + activePk + '"]');
             if (again) again.focus({preventScroll: true});
@@ -934,9 +938,23 @@
             state.byPk[pk] = fresh;
             renderAll();
             if (state.selectedPk === pk && previous) syncEditor(fresh, previous);
+            return refreshPipeline();
         });
     }
-    function apply(data) {
+    function refreshPipeline() {
+        var filterKey = JSON.stringify(state.filters);
+        var params = new URLSearchParams({page: '1', summary: '1', q: state.filters.search, stage: state.filters.stage});
+        return api(ENDPOINT + '?' + params.toString(), {cache: 'no-store'}).then(function (res) {
+            if (!res.ok) throw new Error('Unable to refresh pipeline totals.');
+            if (filterKey !== JSON.stringify(state.filters)) return;
+            state.pipeline = res.data.pipeline;
+            renderPipeline();
+        });
+    }
+    function apply(data, append) {
+        var selected = record(state.selectedPk);
+        state.pipeline = data.pipeline || {};
+        state.pagination = data.pagination || null;
         state.viewer = data.viewer;
         state.schema = data.schema;
         state.options = data.options;
@@ -949,9 +967,16 @@
                 spec.choices.forEach(function (choice) { state.labels[spec.key][choice[0]] = choice[1]; });
             }
         });
-        index(data.records);
+        var seen = {};
+        var records = (append ? state.records.concat(data.records) : data.records).filter(function (rec) {
+            if (seen[rec.pk]) return false;
+            seen[rec.pk] = true;
+            return true;
+        });
+        index(records);
+        if (selected && !record(selected.pk)) state.byPk[selected.pk] = selected;
+        state.shown = records.length;
         state.history = {};
-        if (!state.loaded) loadPrefs();
         state.loaded = true;
         state.loadedAt = Date.now();
         el.search.value = state.filters.search;
@@ -964,17 +989,30 @@
             el.body.dataset.mode = 'list';
         }
     }
-    function load(background) {
-        if (inFlight) return inFlight;
+    function load(background, append) {
+        if (inFlight && (background || append)) return inFlight;
+        if (loadController) loadController.abort();
+        var version = ++loadVersion;
+        loadController = new AbortController();
+        var params = new URLSearchParams();
+        params.set('page', append && state.pagination ? state.pagination.page + 1 : 1);
+        params.set('page_size', PAGE_SIZE);
+        params.set('stage', state.filters.stage);
+        params.set('q', state.filters.search);
         if (!background && !state.loaded) el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: 'Loading\u2026'}));
-        inFlight = api(ENDPOINT, {cache: 'no-store'}).then(function (res) {
+        el.more.disabled = true;
+        inFlight = api(ENDPOINT + '?' + params.toString(), {cache: 'no-store', signal: loadController.signal}).then(function (res) {
+            if (version !== loadVersion) return;
             if (!res.ok) throw new Error(res.data.error || 'Unable to load SQR data.');
-            apply(res.data);
+            apply(res.data, append);
         }).catch(function (error) {
+            if (version !== loadVersion || error.name === 'AbortError') return;
             if (!state.loaded) {
                 el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: error.message}), h('li', null, h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again')));
             } else showToast(error.message, {tone: 'error'});
-        }).then(function () { inFlight = null; });
+        }).then(function () {
+            if (version === loadVersion) { inFlight = null; el.more.disabled = false; }
+        });
         return inFlight;
     }
 
@@ -982,9 +1020,9 @@
     var searchTimer = 0;
     el.search.addEventListener('input', function () {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(function () { state.filters.search = el.search.value.trim(); state.shown = PAGE_SIZE; savePrefs(); renderAll(); }, 150);
+        searchTimer = setTimeout(function () { state.filters.search = el.search.value.trim(); state.shown = PAGE_SIZE; savePrefs(); load(false); }, 250);
     });
-    el.more.addEventListener('click', function () { state.shown += PAGE_SIZE; renderList(); });
+    el.more.addEventListener('click', function () { load(false, true); });
     el.items.addEventListener('keydown', function (event) {
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
         var cards = Array.prototype.slice.call(el.items.querySelectorAll('.sqr-proto__card'));

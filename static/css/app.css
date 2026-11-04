@@ -8151,7 +8151,7 @@ body.theme-switching .login-card__sheen {
 }
 
 ::view-transition-group(request-hub-page) {
-    animation-duration: 360ms;
+    animation-duration: 180ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -8161,7 +8161,7 @@ body.theme-switching .login-card__sheen {
 
 ::view-transition-old(request-hub-page),
 ::view-transition-new(request-hub-page) {
-    animation-duration: 360ms;
+    animation-duration: 180ms;
     animation-fill-mode: both;
     mix-blend-mode: normal;
     transform-origin: center top;

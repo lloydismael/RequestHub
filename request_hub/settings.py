@@ -72,8 +72,21 @@ INSTALLED_APPS = [
     "hub.apps.HubConfig",
 ]
 
+PAGE_PERFORMANCE_ENABLED = (
+    os.getenv("DJANGO_PAGE_PERFORMANCE_ENABLED", "false").lower() == "true"
+    and (DEBUG or os.getenv("DJANGO_ENVIRONMENT", "").lower() == "staging")
+)
+if PAGE_PERFORMANCE_ENABLED:
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {"performance_console": {"class": "logging.StreamHandler"}},
+        "loggers": {"hub.performance": {"handlers": ["performance_console"], "level": "INFO", "propagate": False}},
+    }
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "hub.middleware.PagePerformanceMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

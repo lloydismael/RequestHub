@@ -900,16 +900,20 @@ body.dark-mode .page-login .login-card__logo {
 /* -- Entrance (CSS baseline; Motion One enhances when available) -- */
 
 .lg-enter {
-    opacity: 0;
-    transform: translateY(14px) scale(0.985);
+    opacity: 1;
+    transform: none;
 }
 
 .lg-enter-ready .lg-enter {
-    animation: lg-rise var(--lg-dur-lg) var(--ease-ios-out) forwards;
+    animation: lg-rise 180ms var(--ease-ios-out) forwards;
     animation-delay: var(--lg-delay, 0s);
 }
 
 @keyframes lg-rise {
+    from {
+        opacity: 0.96;
+        transform: translateY(4px);
+    }
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -918,8 +922,8 @@ body.dark-mode .page-login .login-card__logo {
 
 /* Card itself gets a slightly richer arrival */
 .lg-enter-ready .login-card.lg-enter {
-    animation-name: lg-card-arrive;
-    animation-duration: var(--lg-dur-xl);
+    animation-name: lg-rise;
+    animation-duration: 180ms;
 }
 
 @keyframes lg-card-arrive {
