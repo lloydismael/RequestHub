@@ -31,9 +31,15 @@ class AnalyzeRunsTests(unittest.TestCase):
             'completed_at': '2026-11-04T20:01:45Z', **changes,
         }
 
+    def full_jobs(self):
+        return [self.job_fixture(name) for name in (
+            'Django Validation', 'Python dependency audit', 'Build, scan, and publish SBOM',
+        )]
+
     def test_parallel_jobs_are_not_added_to_elapsed_time(self):
         result = self.summarize([self.run_fixture()], {'1': [
-            self.job_fixture(), self.job_fixture('Image scan'),
+            self.job_fixture(), self.job_fixture('Build, scan, and publish SBOM'),
+            self.job_fixture('Python dependency audit', completed_at='2026-11-04T20:00:05Z'),
         ]})
         record = result['runs'][0]
         self.assertEqual(record['elapsed_seconds'], 120)
@@ -64,7 +70,7 @@ class AnalyzeRunsTests(unittest.TestCase):
     def test_failed_and_cancelled_runs_are_not_success_samples(self):
         runs = [self.run_fixture(), self.run_fixture(2, conclusion='failure'),
                 self.run_fixture(3, conclusion='cancelled')]
-        result = self.summarize(runs, {str(number): [self.job_fixture()] for number in (1, 2, 3)})
+        result = self.summarize(runs, {str(number): self.full_jobs() for number in (1, 2, 3)})
         self.assertEqual(result['groups'][0]['success_samples'], 1)
         self.assertEqual(result['groups'][0]['median_seconds'], 120)
         self.assertEqual(result['groups'][0]['conclusions'], {'success': 1, 'failure': 1, 'cancelled': 1})
@@ -72,7 +78,7 @@ class AnalyzeRunsTests(unittest.TestCase):
     def test_p95_requires_twenty_complete_success_samples(self):
         for count, expected in [(19, None), (20, 120)]:
             runs = [self.run_fixture(n) for n in range(count)]
-            jobs = {str(n): [self.job_fixture()] for n in range(count)}
+            jobs = {str(n): self.full_jobs() for n in range(count)}
             result = self.summarize(runs, jobs)
             self.assertEqual(result['groups'][0]['p95_seconds'], expected)
 
@@ -125,6 +131,44 @@ class AnalyzeRunsTests(unittest.TestCase):
     def test_nonstring_timestamps_remain_unknown(self):
         result = self.summarize([self.run_fixture(updated_at=123)], {'1': [self.job_fixture()]})
         self.assertIsNone(result['runs'][0]['elapsed_seconds'])
+        self.assertEqual(result['groups'][0]['success_samples'], 0)
+
+    def test_preflight_only_releases_do_not_mix_with_deployments(self):
+        names = ['Build and publish numbered release', 'Migrate and update production image']
+        result = self.summarize([
+            self.run_fixture(1, name='Production Release'),
+            self.run_fixture(2, name='Production Release', updated_at='2026-11-04T20:00:10Z'),
+        ], {
+            '1': [self.job_fixture(name) for name in names + ['Check release eligibility', 'Check production configuration']],
+            '2': [self.job_fixture('Check release eligibility', completed_at='2026-11-04T20:00:10Z')]
+                 + [{'name': name, 'conclusion': 'skipped'} for name in names + ['Check production configuration']],
+        })
+        self.assertEqual(result['runs'][0]['release_stage'], 'deployed')
+        self.assertEqual(result['runs'][1]['release_stage'], 'preflight-only')
+        groups = {group['release_stage']: group for group in result['groups']}
+        self.assertEqual(groups['deployed']['median_seconds'], 120)
+        self.assertEqual(groups['deployed']['success_samples'], 1)
+        self.assertEqual(groups['preflight-only']['median_seconds'], 10)
+
+    def test_no_job_release_does_not_claim_it_deployed(self):
+        result = self.summarize([self.run_fixture(name='Production Release')], {})
+        self.assertEqual(result['runs'][0]['release_stage'], 'unknown')
+        self.assertEqual(result['groups'][0]['success_samples'], 0)
+
+    def test_partial_export_has_unknown_total_and_is_not_success_sample(self):
+        result = self.summarize([self.run_fixture()], {'1': [self.job_fixture()]})
+        self.assertEqual(result['runs'][0]['evidence'], 'incomplete-jobs')
+        self.assertIsNone(result['runs'][0]['job_execution_seconds'])
+        self.assertEqual(result['runs'][0]['jobs'][0]['seconds'], 100)
+        self.assertEqual(result['groups'][0]['success_samples'], 0)
+
+    def test_missing_release_preflight_marks_export_incomplete(self):
+        result = self.summarize([self.run_fixture(name='Production Release')], {'1': [
+            self.job_fixture('Build and publish numbered release'),
+            self.job_fixture('Migrate and update production image'),
+        ]})
+        self.assertEqual(result['runs'][0]['evidence'], 'incomplete-jobs')
+        self.assertIsNone(result['runs'][0]['job_execution_seconds'])
         self.assertEqual(result['groups'][0]['success_samples'], 0)
 
     def test_cli_reads_metadata_without_network(self):

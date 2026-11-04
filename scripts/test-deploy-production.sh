@@ -37,10 +37,11 @@ az() {
             case "$SCENARIO" in
                 missing-container-fields) echo '{}' ;;
                 malformed-container) echo invalid-json ;;
-                not-main) printf '{"isMain":false,"targetPort":8000,"image":"%s"}\n' "$OLD_IMAGE" ;;
-                wrong-port) printf '{"isMain":true,"targetPort":9000,"image":"%s"}\n' "$OLD_IMAGE" ;;
-                missing-image) echo '{"isMain":true,"targetPort":8000,"image":""}' ;;
-                *) printf '{"isMain":true,"targetPort":8000,"image":"%s"}\n' "$OLD_IMAGE" ;;
+                not-main) printf '{"isMain":false,"targetPort":"8000","image":"%s"}\n' "$OLD_IMAGE" ;;
+                wrong-port) printf '{"isMain":true,"targetPort":"9000","image":"%s"}\n' "$OLD_IMAGE" ;;
+                missing-image) echo '{"isMain":true,"targetPort":"8000","image":""}' ;;
+                integer-port) printf '{"isMain":true,"targetPort":8000,"image":"%s"}\n' "$OLD_IMAGE" ;;
+                *) printf '{"isMain":true,"targetPort":"8000","image":"%s"}\n' "$OLD_IMAGE" ;;
             esac ;;
         *'{state:state,retention:backup.backupRetentionDays,restoreDate:backup.earliestRestoreDate}'*)
             case "$SCENARIO" in
@@ -124,7 +125,7 @@ esac
 
 export -f gh az docker python3 curl git
 script_dir=$(cd "$(dirname "$0")" && pwd)
-for scenario in success no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy missing-container-fields malformed-container not-main wrong-port missing-image non-ready low-retention missing-db-fields malformed-db; do
+for scenario in success integer-port no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy missing-container-fields malformed-container not-main wrong-port missing-image non-ready low-retention missing-db-fields malformed-db; do
     export SCENARIO="$scenario"
     : > "$MOCK_LOG"
     rm -f "$PRODUCTION_ENV_FILE.firewall"
@@ -132,7 +133,7 @@ for scenario in success no-migrations unknown-revision diverged stale classic ta
     exit_status=0
     bash "$script_dir/deploy-production.sh" > "$workspace/output" 2>&1 || exit_status=$?
     case "$scenario" in
-        success|unknown-revision|diverged)
+        success|integer-port|unknown-revision|diverged)
             test "$exit_status" = 0
             test "$(cat "$MOCK_IMAGE")" = "lloydismael12/request-hub:$RELEASE_VERSION"
             grep -q 'manage.py migrate --noinput' "$MOCK_LOG"
@@ -171,14 +172,14 @@ for scenario in success no-migrations unknown-revision diverged stale classic ta
             fi ;;
     esac
     case "$scenario" in
-        success|unknown-revision|diverged|migration-failure|cleanup-failure|verification-failure|rollback-unhealthy)
+        success|integer-port|unknown-revision|diverged|migration-failure|cleanup-failure|verification-failure|rollback-unhealthy)
             grep -q 'firewall-rule create .*--name github-cd-123-1' "$MOCK_LOG"
             grep -q 'firewall-rule delete .*--name github-cd-123-1' "$MOCK_LOG"
             test "$(grep -c 'az postgres flexible-server show' "$MOCK_LOG")" = 1 ;;
         non-ready|low-retention|missing-backup|missing-db-fields|malformed-db)
             ! grep -q 'firewall-rule create' "$MOCK_LOG" ;;
     esac
-    if [[ "$scenario" == success || "$scenario" == no-migrations ]]; then
+    if [[ "$scenario" == success || "$scenario" == integer-port || "$scenario" == no-migrations ]]; then
         test "$(grep -Fc 'properties.{isMain:isMain,targetPort:targetPort,image:image}' "$MOCK_LOG")" = 1
     fi
     if [[ "$scenario" != cleanup-failure ]]; then

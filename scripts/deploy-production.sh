@@ -33,7 +33,7 @@ try:
     state = json.load(sys.stdin)
     if state["isMain"] is not True:
         raise ValueError("Configured sitecontainer is not the main container")
-    if type(state["targetPort"]) is not int or state["targetPort"] != 8000:
+    if str(state["targetPort"]) != "8000":
         raise ValueError("Main container targetPort must be 8000")
     image = state["image"]
     if not isinstance(image, str) or not image.strip():

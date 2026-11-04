@@ -255,7 +255,7 @@ Rollback means reverting the individual workflow/helper change through normal Gi
 
 ## Status
 
-Implementation is on the isolated `optimize-github-actions` branch, based on remote dev commit `409567a2`. Tasks 1–5 have local implementation and regression coverage; final branch review and validation are in progress. No push, production deployment, or repository/environment settings change has been performed.
+Implementation is on the isolated `optimize-github-actions` branch, based on remote dev commit `409567a2`. Tasks 1–5 have local implementation and regression coverage. A fresh branch review found three introduced defects (Azure string targetPort handling, no-op release latency mixing, and incomplete job coverage); all three were reproduced with failing tests and fixed. Final offline validation passes: 19 Python unit/gate tests, 5 Node toast tests, 22 mocked deployment scenarios, 17 routing cases, and 16 preflight cases; workflow actionlint and Bash syntax checks pass. The analyzer's 16 tests also pass on Python 3.11, and the four new Python files parse with Python 3.12 grammar. No push, production deployment, or repository/environment settings change has been performed.
 
 | Task | Implementation evidence | Still required after reviewed rollout |
 | --- | --- | --- |
