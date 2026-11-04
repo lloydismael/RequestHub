@@ -178,7 +178,7 @@
                                 </div>
                                 {% if is_pm_esg %}
                                 <div class="form-check">
-                                    <input class="form-check-input" type="checkbox" value="1" id="sqr-table-filter-my-assigned"{% if default_my_assigned_filter %} checked{% endif %}>
+                                    <input class="form-check-input" type="checkbox" value="1" id="sqr-table-filter-my-assigned"{% if sqr_my_assigned_active %} checked{% endif %}>
                                     <label class="form-check-label" for="sqr-table-filter-my-assigned">My Assigned SQR only</label>
                                 </div>
                                 {% endif %}
@@ -1064,6 +1064,7 @@
                     </tbody>
                 </table>
             </div>
+            {% include 'hub/partials/pagination.html' with pagination_id='sqr-pagination' %}
         </div>
         {% if is_pm %}
         {% include "hub/partials/sqr_performance.html" %}
@@ -3685,7 +3686,46 @@
         return records;
     }
 
+    var serverControls = [
+        ['q', searchInput], ['status', statusSelect], ['proposal_status', proposalStatusSelect],
+        ['overall_status', overallStatusSelect], ['delivery_health', healthSelect], ['revenue_source', revenueSourceSelect],
+        ['date_from', sqrDateFromInput], ['date_to', sqrDateToInput], ['group', groupInput],
+        ['amount_min', amountMinInput], ['amount_max', amountMaxInput], ['linked', linkedRequestCheckbox],
+        ['sse', assignedSseCheckbox], ['billed', billedOnlyCheckbox]
+    ];
+    var initialParams = new URLSearchParams(window.location.search);
+    serverControls.forEach(function (entry) {
+        if (!entry[1] || !initialParams.has(entry[0])) return;
+        if (entry[1].type === 'checkbox') entry[1].checked = initialParams.get(entry[0]) === '1';
+        else entry[1].value = initialParams.get(entry[0]);
+    });
+    if (toolbarSearchInput && searchInput) toolbarSearchInput.value = searchInput.value;
+    function serverValues() {
+        var values = serverControls.map(function (entry) {
+            return [entry[0], !entry[1] ? '' : entry[1].type === 'checkbox' ? (entry[1].checked ? '1' : '') : entry[1].value.trim()];
+        });
+        values.push(['assigned', isMyAssignedActive() ? 'mine' : 'all']);
+        return values;
+    }
+    var filterSignature = null;
     function applyFilter() {
+        var values = serverValues();
+        var signature = JSON.stringify(values);
+        if (document.getElementById('sqr-pagination') && !focusedProjectPk && filterSignature !== null && signature !== filterSignature) {
+            var params = new URLSearchParams(window.location.search);
+            params.delete('page');
+            params.delete('focus');
+            values.forEach(function (entry) { if (entry[1]) params.set(entry[0], entry[1]); else params.delete(entry[0]); });
+            var nextLocation = window.location.pathname + '?' + params.toString();
+            try { sessionStorage.setItem('sqr-filter-navigation', nextLocation); } catch (_) {}
+            var focused = document.activeElement;
+            if (focused && focused.id && (serverControls.some(function (entry) { return entry[1] === focused; }) || focused === toolbarSearchInput)) {
+                try { sessionStorage.setItem('sqr-filter-focus', JSON.stringify({id: focused.id, start: focused.selectionStart, end: focused.selectionEnd})); } catch (_) {}
+            }
+            window.location.assign(nextLocation);
+            return;
+        }
+        filterSignature = signature;
         if (filterFrame) cancelAnimationFrame(filterFrame);
         filterFrame = requestAnimationFrame(runFilter);
     }
@@ -3756,6 +3796,7 @@
                 && matchesBilled
                 && matchesQuery;
 
+            if (document.getElementById('sqr-pagination') && !focusedProjectPk) isVisible = true;
             // Temporary exact-PK override; all ordinary filter values stay intact.
             if (focusedProjectPk) isVisible = rowProjectPk(row) === focusedProjectPk;
 
@@ -3775,7 +3816,11 @@
             }
         }
         if (headerCountBadge) {
-            headerCountBadge.textContent = visibleCount + ' total';
+            var total = document.getElementById('sqr-pagination') && !focusedProjectPk ? {{ page_obj.paginator.count|default:0 }} : visibleCount;
+            headerCountBadge.textContent = total + ' total';
+        }
+        if (resultsMeta && document.getElementById('sqr-pagination') && !focusedProjectPk) {
+            resultsMeta.textContent = 'Showing ' + visibleCount + ' of {{ page_obj.paginator.count|default:0 }} matching rows';
         }
         if (typeof window.invalidateRequestHubScrollGeometry === 'function') {
             window.invalidateRequestHubScrollGeometry(activeRows.panel);
@@ -3794,7 +3839,14 @@
         var target = Array.from(tracker.querySelectorAll('tbody tr')).find(function (row) {
             return rowProjectPk(row) === exactPk;
         });
-        if (!target) return false;
+        if (!target) {
+            if (!document.getElementById('sqr-pagination')) return false;
+            var params = new URLSearchParams(window.location.search);
+            params.set('focus', exactPk);
+            params.delete('page');
+            window.location.assign(window.location.pathname + '?' + params.toString());
+            return true;
+        }
         clearFocusedRow();
         focusedProjectPk = exactPk;
         focusedRow = target;
@@ -3814,6 +3866,11 @@
     };
 
     if (focusDismiss) focusDismiss.addEventListener('click', function () {
+        if (initialParams.has('focus')) {
+            initialParams.delete('focus');
+            window.location.assign(window.location.pathname + '?' + initialParams.toString());
+            return;
+        }
         focusedProjectPk = '';
         clearFocusedRow();
         if (focusNotice) focusNotice.hidden = true;
@@ -3951,9 +4008,24 @@
         });
     }
 
-    setMyAssignedChecked(defaultMyAssigned);
+    setMyAssignedChecked(initialParams.has('assigned') ? initialParams.get('assigned') === 'mine' : defaultMyAssigned);
+    syncActiveBadgeFromControls();
     updateBadgeState();
     applyFilter();
+    try {
+        if (sessionStorage.getItem('sqr-filter-navigation') === window.location.pathname + window.location.search) document.body.dataset.sqrFilterNavigation = '1';
+        sessionStorage.removeItem('sqr-filter-navigation');
+        var savedFocus = JSON.parse(sessionStorage.getItem('sqr-filter-focus') || 'null');
+        sessionStorage.removeItem('sqr-filter-focus');
+        if (savedFocus) {
+            var focusInput = document.getElementById(savedFocus.id);
+            if (focusInput) {
+                focusInput.focus({preventScroll: true});
+                if (typeof savedFocus.start === 'number' && focusInput.setSelectionRange) focusInput.setSelectionRange(savedFocus.start, savedFocus.end);
+            }
+        }
+    } catch (_) {}
+    if (initialParams.has('focus')) window.focusSqrTrackerProject(initialParams.get('focus'));
 })();
 </script>
 
@@ -4051,7 +4123,7 @@
     }
 
     // Skip when opted out, or when the user already lands on the prototype tab.
-    if (readFlag(storageKey) === '1' || readFlag(viewStorageKey) === 'prototype') return;
+    if (document.body.dataset.sqrFilterNavigation === '1' || readFlag(storageKey) === '1' || readFlag(viewStorageKey) === 'prototype') return;
 
     var previousFocus = null;
 

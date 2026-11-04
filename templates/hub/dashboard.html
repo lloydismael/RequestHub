@@ -286,11 +286,8 @@
                 </form>
             {% endif %}
             {% if role != 'engineer' or active_tab != 'report' %}
-            {% if requests_list_limited %}
-            <div class="alert alert-info border-0 py-2 px-3 mb-3 d-flex align-items-center gap-2 small" role="status">
-                <i class="bi bi-info-circle-fill flex-shrink-0"></i>
-                <span>Showing {{ requests_displayed_count }} of {{ requests_total_count }} matching requests (limit {{ requests_list_limit }}). Narrow filters to find older rows.</span>
-            </div>
+            {% if requests_list_limited and not page_obj %}
+            <div class="alert alert-info border-0 py-2 px-3 mb-3 small" role="status">Showing {{ requests_displayed_count }} of {{ requests_total_count }} matching requests.</div>
             {% endif %}
                 <div class="table-responsive dashboard-table-wrapper{% if is_requestor_ui %} dashboard-table-wrapper--requestor{% endif %}" tabindex="0" role="region" aria-label="Requests table; scroll horizontally for more columns">
                 <table class="table align-middle table-nowrap{% if is_requestor_ui %} table-hover table-requestor{% endif %}">
@@ -464,6 +461,7 @@
                     </tbody>
                 </table>
             </div>
+            {% include 'hub/partials/pagination.html' with pagination_id='dashboard-live-pagination' %}
             {% endif %}
             {% if is_requestor_ui %}
                     </div>
@@ -617,15 +615,22 @@
             let version = root.dataset.liveVersion || "";
             let inFlight = false;
             const INTERVAL_MS = 15000;
+            let rowUpdateGeneration = 0;
 
-            function applyRowsWhenIdle(html, attempt = 0) {
+            function applyRowsWhenIdle(html, attempt = 0, generation) {
+                if (generation === undefined) generation = ++rowUpdateGeneration;
+                if (generation !== rowUpdateGeneration) return;
                 const wrapper = document.querySelector(".dashboard-table-wrapper");
                 if (wrapper && wrapper.classList.contains("is-scrolling-x") && attempt < 12) {
-                    window.setTimeout(() => applyRowsWhenIdle(html, attempt + 1), 100);
+                    window.setTimeout(() => applyRowsWhenIdle(html, attempt + 1, generation), 100);
                     return;
                 }
                 const tbody = document.getElementById("dashboard-live-tbody");
                 if (!tbody) return;
+                if (tbody.contains(document.activeElement)) {
+                    window.setTimeout(() => applyRowsWhenIdle(html, attempt + 1, generation), 100);
+                    return;
+                }
                 const scrollLeft = wrapper ? wrapper.scrollLeft : 0;
                 tbody.innerHTML = html;
                 if (wrapper) wrapper.scrollLeft = scrollLeft;
@@ -719,6 +724,9 @@
                         if (data.html_rows) {
                             applyRowsWhenIdle(data.html_rows);
                         }
+                        if (data.html_pagination) {
+                            swapHtml("dashboard-live-pagination", data.html_pagination);
+                        }
                     })
                     .catch(() => {})
                     .finally(() => {
@@ -755,6 +763,7 @@
                 const query = input.value.trim();
                 const params = new URLSearchParams(window.location.search || "");
                 if (query) params.set("q", query); else params.delete("q");
+                params.delete("page");
                 params.delete("version");
                 const qs = params.toString();
 
@@ -771,7 +780,16 @@
                         return response.json();
                     })
                     .then(function (data) {
-                        if (!data || !data.ok || typeof data.html_rows !== "string") return;
+                        if (!data || !data.ok || typeof data.html_rows !== "string" || current !== controller) return;
+                        const pagination = document.getElementById("dashboard-live-pagination");
+                        if (pagination && data.html_pagination) pagination.outerHTML = data.html_pagination;
+                        document.querySelectorAll(".dashboard-table-wrapper thead a[href]").forEach(function (link) {
+                            const url = new URL(link.href, window.location.href);
+                            if (!url.searchParams.has("sort")) return;
+                            if (query) url.searchParams.set("q", query); else url.searchParams.delete("q");
+                            url.searchParams.delete("page");
+                            link.href = url.toString();
+                        });
                         window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : "") + window.location.hash);
                         const metricsHost = document.getElementById("dashboard-live-metrics");
                         if (metricsHost && data.html_metrics) metricsHost.outerHTML = data.html_metrics;

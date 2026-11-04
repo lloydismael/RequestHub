@@ -1,0 +1,19 @@
+{% if page_size %}
+<div{% if pagination_id %} id="{{ pagination_id }}"{% endif %}>
+    <nav class="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3" aria-label="Record pagination">
+        <span class="small text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} · {{ page_obj.paginator.count }} records</span>
+        <div class="d-flex align-items-center gap-1">
+            {% if pagination_previous %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ pagination_previous }}" rel="prev" aria-label="Previous page">Previous</a>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" disabled aria-label="Previous page">Previous</button>
+            {% endif %}
+            {% if pagination_next %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ pagination_next }}" rel="next" aria-label="Next page">Next</a>
+            {% else %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" disabled aria-label="Next page">Next</button>
+            {% endif %}
+        </div>
+    </nav>
+</div>
+{% endif %}

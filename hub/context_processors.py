@@ -9,8 +9,27 @@ from accounts.models import User
 from hub.models import Notification
 
 
-def notification_badges(request: HttpRequest) -> Dict[str, int]:
-    """Provide global notification badge counts for the navigation bar."""
+def new_ticket_count(request: HttpRequest) -> int:
+    user = request.user
+    cached = getattr(request, "_new_ticket_count", None)
+    if cached is None or cached[0] != user.pk:
+        cached = (user.pk, user.notifications.filter(is_read=False, source__icontains="new request").count())
+        request._new_ticket_count = cached
+    return cached[1]
+
+
+def notification_badges(request: HttpRequest) -> Dict[str, int | str]:
+    """Reuse private badge data only within this HTTP request."""
+    user = getattr(request, "user", None)
+    user_id = getattr(user, "pk", None)
+    cached = getattr(request, "_notification_badges", None)
+    if cached is None or cached[0] != user_id:
+        cached = (user_id, _notification_badges(request))
+        request._notification_badges = cached
+    return cached[1]
+
+
+def _notification_badges(request: HttpRequest) -> Dict[str, int | str]:
     user = getattr(request, "user", None)
     if not user or not user.is_authenticated:
         return {
@@ -40,11 +59,8 @@ def notification_badges(request: HttpRequest) -> Dict[str, int]:
             "notification_toast_initial_cursor": notification_toast_initial_cursor,
         }
 
-    new_ticket_count = (
-        user.notifications.filter(is_read=False, source__icontains="new request").count()
-    )
     return {
-        "new_ticket_count": new_ticket_count,
+        "new_ticket_count": new_ticket_count(request),
         "app_version": settings.APP_VERSION,
         "notification_toast_initial_cursor": notification_toast_initial_cursor,
     }

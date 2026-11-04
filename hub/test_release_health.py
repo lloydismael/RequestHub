@@ -14,6 +14,12 @@ class ReleaseHealthTests(SimpleTestCase):
         self.assertEqual(response.json()["revision"], "a" * 40)
         self.assertIn("no-store", response.headers["Cache-Control"])
 
+    def test_healthz_does_not_access_database(self):
+        response = self.client.get("/healthz/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"ok")
+        self.assertIn("no-store", response.headers["Cache-Control"])
+
     def test_readiness_checks_database(self):
         with patch("request_hub.urls.connection") as database:
             response = self.client.get("/readyz/")
