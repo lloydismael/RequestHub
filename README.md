@@ -25,6 +25,14 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 Admin accounts can open **Management → Form Editor** to save and publish form presentation and custom fields, preview changes, and restore prior versions. Core validation and credential controls remain protected. See the [usage and coverage guide](docs/form-editor.md).
 
+## Changelogs
+
+Admins can open **Management → Changelogs** to create, edit, preview, publish, or return release entries to draft. Each entry has a title, previous/new version, release date, summary, and Before / After descriptions and screenshots. Publishing requires both descriptions and screenshots; screenshots accept PNG, JPEG, or WebP up to 5 MB each. Use screenshots without confidential customer information.
+
+Signed-in users can read published entries under **Notifications → Changelogs**, newest release first, with side-by-side comparisons on desktop and stacked panels on mobile. Future-dated entries appear on their release date (Asia/Manila). Drafts and their screenshots are admin-only; changelogs do not affect notification unread counts.
+
+Apply `python manage.py migrate` and `python manage.py collectstatic --noinput` before deployment. Screenshots use the existing database-backed file storage. Recovery snapshots include changelog records but exclude screenshot contents, like other media; preserve the application database to retain uploaded images. No historical entries or screenshots are generated automatically.
+
 ## Latest Release Snapshot
 
 - **Current image tag:** `lloydismael12/request-hub:v51.9`

@@ -1,7 +1,8 @@
 {% extends "base.html" %}
-{% load tz %}
+{% load tz static %}
 {% block title %}Notifications · Request Hub{% endblock %}
 {% block body_class %}notifications-page{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}">{% endblock %}
 {% block content %}
 <div class="nq-page">
 
@@ -17,7 +18,7 @@
                 </p>
             </div>
         </div>
-        {% if unread_count > 0 %}
+        {% if unread_count > 0 and active_tab != 'changelogs' %}
             <form method="post" action="{% url 'hub:notification-mark-all-read' %}" class="nq-head__action">
                 {% csrf_token %}
                 <button type="submit" class="nq-btn nq-btn--primary">
@@ -27,6 +28,45 @@
         {% endif %}
     </header>
 
+    <nav class="cl-tabs" aria-label="Notification sections">
+        <a href="{% url 'hub:notifications' %}" class="cl-tab{% if active_tab != 'changelogs' %} is-active{% endif %}"
+           {% if active_tab != 'changelogs' %}aria-current="page"{% endif %}>
+            <i class="bi bi-bell" aria-hidden="true"></i> Activity
+        </a>
+        <a href="?tab=changelogs" class="cl-tab{% if active_tab == 'changelogs' %} is-active{% endif %}"
+           {% if active_tab == 'changelogs' %}aria-current="page"{% endif %}>
+            <i class="bi bi-journal-richtext" aria-hidden="true"></i> Changelogs
+        </a>
+    </nav>
+
+    {% if active_tab == 'changelogs' %}
+        <section aria-labelledby="changelogs-heading">
+            <div class="cl-section-heading">
+                <div>
+                    <p class="cl-eyebrow">PRODUCT UPDATES</p>
+                    <h2 id="changelogs-heading">See what's changed</h2>
+                    <p class="text-muted mb-0">Explore new features with a clear look at before and after.</p>
+                </div>
+                <span class="cl-version">{{ page_obj.paginator.count }} update{{ page_obj.paginator.count|pluralize }}</span>
+            </div>
+            {% for entry in changelogs %}
+                {% include 'hub/partials/changelog_entry.html' %}
+            {% empty %}
+                <div class="glass-card cl-empty">
+                    <i class="bi bi-journal-richtext fs-1" aria-hidden="true"></i>
+                    <h3 class="h5 mt-3">No changelogs published yet</h3>
+                    <p class="text-muted mb-0">New features and before-and-after comparisons will appear here when released.</p>
+                </div>
+            {% endfor %}
+            {% if is_paginated %}
+                <nav class="cl-pagination" aria-label="Changelog pages">
+                    {% if page_obj.has_previous %}<a class="btn btn-outline-primary" href="?tab=changelogs&amp;page={{ page_obj.previous_page_number }}">Newer updates</a>{% endif %}
+                    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                    {% if page_obj.has_next %}<a class="btn btn-outline-primary" href="?tab=changelogs&amp;page={{ page_obj.next_page_number }}">Older updates</a>{% endif %}
+                </nav>
+            {% endif %}
+        </section>
+    {% else %}
     <section class="nq-toolbar" aria-label="Notification filters">
         <div class="nq-segment" role="group" aria-label="Read status">
             <a href="?filter=unread{% if current_category %}&category={{ current_category }}{% endif %}"
@@ -197,5 +237,6 @@
         </nav>
     {% endif %}
 
+    {% endif %}
 </div>
 {% endblock %}

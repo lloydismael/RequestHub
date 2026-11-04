@@ -62,6 +62,7 @@ from accounts.sign_in_log import (
     filter_sign_in_logs,
     summarize_sign_ins,
 )
+from .changelog_forms import ChangelogForm
 
 REQUESTOR_ROLES = set(User.REQUESTOR_ROLES)
 REQUEST_CREATOR_ROLES = set(getattr(User, "REQUEST_CREATOR_ROLES", User.REQUESTOR_ROLES))
@@ -92,6 +93,7 @@ from .forms import (
 )
 from .models import (
     Account,
+    Changelog,
     EngineerActivityLog,
     Notification,
     Request,
@@ -7610,13 +7612,32 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             user_search_query=user_search_query,
         )
         active_tab = request.GET.get("tab", "users")
-        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "activity", "forms"} else "users"
+        if self.kwargs.get("changelog_editor"):
+            active_tab = "changelogs"
+        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "activity", "forms", "changelogs"} else "users"
+        if active_tab == "changelogs":
+            entry = None
+            if self.kwargs.get("pk"):
+                entry = get_object_or_404(Changelog, pk=self.kwargs["pk"])
+            context["changelog_form"] = getattr(self, "changelog_form", None) or ChangelogForm(instance=entry)
+            context["changelog_entry"] = entry
+            context["changelog_page"] = Paginator(Changelog.objects.all(), 10).get_page(request.GET.get("changelog_page"))
         context["form_catalog"] = catalog()
         for user in context["users"]:
             user.editor_form = UserManagementForm(instance=user)
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
+        if self.kwargs.get("changelog_editor"):
+            entry = get_object_or_404(Changelog, pk=kwargs["pk"]) if kwargs.get("pk") else None
+            self.changelog_form = ChangelogForm(request.POST, request.FILES, instance=entry)
+            if self.changelog_form.is_valid():
+                with transaction.atomic():
+                    saved = self.changelog_form.save()
+                messages.success(request, "Changelog published." if saved.is_published else "Changelog saved as draft.")
+                return redirect(reverse("hub:management") + "?tab=changelogs")
+            messages.error(request, "Please correct the changelog errors below.")
+            return self.get(request, *args, **kwargs)
         active_tab = request.POST.get("active_tab", "users")
         self._sync_account_baseline()
         if active_tab != "accounts":
@@ -7976,6 +7997,21 @@ class NotificationListView(LoginRequiredMixin, ListView):
     template_name = "hub/notifications.html"
     context_object_name = "notifications"
     paginate_by = 50
+
+    def get(self, request, *args, **kwargs):
+        if request.GET.get("tab") != "changelogs":
+            return super().get(request, *args, **kwargs)
+        base_qs = request.user.notifications.all()
+        if getattr(request.user, "role", None) in ADMIN_PANEL_ROLES:
+            base_qs = base_qs.filter(source__icontains="new request")
+        page = Paginator(
+            Changelog.objects.filter(is_published=True, release_date__lte=timezone.localdate()), 10,
+        ).get_page(request.GET.get("page"))
+        return render(request, self.template_name, {
+            "active_tab": "changelogs", "changelogs": page, "page_obj": page,
+            "is_paginated": page.has_other_pages(),
+            "unread_count": base_qs.filter(is_read=False).count(), "total_count": base_qs.count(),
+        })
 
     def get_queryset(self):
         queryset = (

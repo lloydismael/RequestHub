@@ -5,6 +5,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView
 from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
+from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -235,7 +236,17 @@ class SignInHeartbeatView(LoginRequiredMixin, View):
 
 class StoredFileServeView(LoginRequiredMixin, View):
     def get(self, request, name):
-        if not name.startswith(_PROFILE_PHOTO_PREFIX):
+        is_changelog = name.startswith("changelogs/")
+        if is_changelog:
+            from django.db.models import Q
+            from hub.models import Changelog
+
+            entries = Changelog.objects.filter(Q(before_image=name) | Q(after_image=name))
+            if request.user.role != User.Roles.ADMIN:
+                entries = entries.filter(is_published=True, release_date__lte=timezone.localdate())
+            if not entries.exists():
+                raise Http404
+        elif not name.startswith(_PROFILE_PHOTO_PREFIX):
             raise Http404
         stored_file = get_object_or_404(StoredFile, name=name)
         if not stored_file.data:
@@ -243,5 +254,6 @@ class StoredFileServeView(LoginRequiredMixin, View):
         response = HttpResponse(stored_file.data, content_type=stored_file.content_type or "application/octet-stream")
         filename = _safe_download_filename(stored_file.original_name or name.split("/")[-1])
         response["Content-Disposition"] = f'inline; filename="{filename}"'
-        response["Cache-Control"] = "private, max-age=86400"
+        response["Cache-Control"] = "private, no-store" if is_changelog else "private, max-age=86400"
+        response["X-Content-Type-Options"] = "nosniff"
         return response
