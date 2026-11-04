@@ -87,6 +87,19 @@ git() {
     esac
 }
 
+# Git Bash cannot enforce Unix mode bits. This shim affects only the synthetic
+# migration env file; Linux CI still exercises the real permission check.
+case "$(uname -s)" in
+    MINGW*|MSYS*)
+        find() {
+            if [[ "$1" == "$PRODUCTION_ENV_FILE" && "$2" == -perm ]]; then
+                return 0
+            fi
+            command find "$@"
+        }
+        export -f find ;;
+esac
+
 export -f gh az docker python3 curl git
 script_dir=$(cd "$(dirname "$0")" && pwd)
 for scenario in success no-migrations unknown-revision diverged stale classic tag-mismatch missing-backup migration-failure cleanup-failure verification-failure rollback-unhealthy; do

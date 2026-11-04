@@ -10,6 +10,10 @@ The eligibility summary distinguishes **DISABLED** (switch unset/false) from **I
 
 The workflow serializes releases without cancelling an active one and rejects superseded commits before publishing/deploying. CI keeps its own cancellation policy. Use branch protection to restrict changes to `master` and require all three CI jobs plus review. Restrict the GitHub `production` environment to the default `master` branch. The environment ref is the downstream workflow's default-branch ref, not the upstream merge ref.
 
+## Offline regression checks
+
+CI runs `bash scripts/test-deploy-production.sh` before the full Django suite. It uses synthetic settings and mocks GitHub, Azure, Docker, and HTTP calls; it never deploys or connects to production. Run it in Linux or Git Bash. Git Bash uses a narrowly scoped test-only permission shim for its synthetic env file because Windows cannot enforce Unix mode 0600; production scripts and Linux CI retain the actual mode check. Node toast behavior tests also run in the existing Django CI job, without npm packages.
+
 ## Measuring release latency
 
 Use the offline analyzer and export commands in [the CI testing guide](ci-workflow-testing.md#measuring-latency-and-duplicate-work). Annotate individual release REST objects with `migration_window: "executed"` or `"skipped"` only when the controlled-deployment timing log proves it; otherwise the analyzer reports `unknown`. Never infer skipped migrations merely from a fast release.

@@ -83,6 +83,11 @@ jobs:
       - name: Collect static files
         run: python manage.py collectstatic --noinput
 
+      - name: Run fast regression checks
+        run: |
+          node --test scripts_check/test_notification_toasts.cjs
+          bash scripts/test-deploy-production.sh
+
       # Test-only settings use a fast password hasher; the checks above run against
       # the real settings. Tests run in parallel across the runner's CPUs.
       - name: Run application tests

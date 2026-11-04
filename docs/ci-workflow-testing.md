@@ -103,7 +103,7 @@ GitHub normally tests the PR merge ref, so its checkout SHA can differ from the 
 
 | Job | Expected checks |
 | --- | --- |
-| Django Validation | Dependency installation and `pip check`; Django configuration; production-security configuration; missing migrations; static collection; full tests with PostgreSQL 16 |
+| Django Validation | Dependency installation and `pip check`; Django configuration; production-security configuration; missing migrations; static collection; fast Node toast and mocked deployment regressions; full tests with PostgreSQL 16 |
 | Python dependency audit | `pip-audit` completes without reported blocking vulnerabilities |
 | Build, scan, and publish SBOM | Docker build succeeds; SPDX SBOM generated; Trivy finds no fixable HIGH/CRITICAL vulnerabilities; applicable uploads succeed |
 
