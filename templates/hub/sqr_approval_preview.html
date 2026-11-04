@@ -22,7 +22,7 @@
     {% endif %}
     <div class="d-flex flex-wrap gap-2 mb-3">
         <button type="button" class="btn btn-primary" id="sqr-email-copy">Copy formatted body</button>
-        <a class="btn btn-outline-primary" href="{{ compose_url }}" id="sqr-email-open">Open email draft</a>
+        <a class="btn btn-outline-primary" href="{{ compose_url }}" id="sqr-email-open"{% if compose_body_url %} data-body-href="{{ compose_body_url }}"{% endif %}>Open email draft</a>
         <a class="btn btn-outline-secondary" href="{% url 'hub:sqr-approval-email-eml' submission.pk %}">Download Outlook template (.eml)</a>
     </div>
     <p id="sqr-email-feedback" role="status" aria-live="polite">The draft opens with recipients and subject only. Copy and paste the body, or use the complete .eml template.</p>
