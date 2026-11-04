@@ -28,6 +28,8 @@ class ChangelogTests(TestCase):
         )
 
     def setUp(self):
+        # Release entries seeded by migrations are cleared so each test controls the feed.
+        self.model().objects.all().delete()
         self.client.force_login(self.admin)
         self.management = reverse("hub:management")
         self.notifications = reverse("hub:notifications")
@@ -184,3 +186,25 @@ class ChangelogTests(TestCase):
         self.assertNotContains(response, "Read activity")
         self.assertEqual(response.context["unread_count"], 1)
         self.assertEqual(response.context["total_count"], 2)
+
+
+class ReleaseChangelogTests(TestCase):
+    def test_v55_1_release_is_logged_with_descriptions_and_screenshots(self):
+        reader = User.objects.create_user(
+            username="release-viewer", role=User.Roles.ENGINEER, must_change_password=False,
+        )
+        self.client.force_login(reader)
+        entries = apps.get_model("hub", "Changelog").objects.filter(previous_version="v55.0", new_version="v55.1")
+        self.assertEqual(entries.count(), 2)
+        response = self.client.get(reverse("hub:notifications"), {"tab": "changelogs"})
+        self.assertNotContains(response, "No changelogs published yet")
+        for entry in entries:
+            self.assertTrue(entry.is_published)
+            self.assertTrue(entry.summary and entry.before_text and entry.after_text)
+            self.assertContains(response, entry.title)
+            for image in (entry.before_image, entry.after_image):
+                self.assertContains(response, image.url)
+                image_response = self.client.get(image.url)
+                self.assertEqual(image_response.status_code, 200)
+                self.assertEqual(image_response["Content-Type"], "image/jpeg")
+                Image.open(BytesIO(image_response.content)).verify()

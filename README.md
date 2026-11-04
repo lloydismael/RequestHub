@@ -31,7 +31,9 @@ Admins can open **Management → Changelogs** to create, edit, preview, publish,
 
 Signed-in users can read published entries under **Notifications → Changelogs**, newest release first, with side-by-side comparisons on desktop and stacked panels on mobile. Future-dated entries appear on their release date (Asia/Manila). Drafts and their screenshots are admin-only; changelogs do not affect notification unread counts.
 
-Apply `python manage.py migrate` and `python manage.py collectstatic --noinput` before deployment. Screenshots use the existing database-backed file storage. Recovery snapshots include changelog records but exclude screenshot contents, like other media; preserve the application database to retain uploaded images. No historical entries or screenshots are generated automatically.
+Apply `python manage.py migrate` and `python manage.py collectstatic --noinput` before deployment. Screenshots use the existing database-backed file storage. Recovery snapshots include changelog records but exclude screenshot contents, like other media; preserve the application database to retain uploaded images.
+
+Release entries can also ship with the code: migration `hub/migrations/0055_v55_1_release_changelogs.py` publishes the **v55.0 → v55.1** changes (SQR approval emails open with the body filled in; sign-in footer year) with Before / After screenshots stored in `hub/changelog_assets/v55.1/`. To log a later release the same way, add its screenshots under `hub/changelog_assets/<version>/` and a similar data migration, or create the entry in **Management → Changelogs**.
 
 ## Latest Release Snapshot
 
