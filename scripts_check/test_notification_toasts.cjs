@@ -22,13 +22,18 @@ function start({ initial = 10, stored = null, storageUnavailable = false } = {})
         querySelector(selector) { return selector.includes('config') ? config : region; },
         addEventListener(name, callback) { listeners[name] = callback; },
         createElement() {
-            return {
-                dataset: {}, children: [], listeners: {},
-                appendChild(child) { this.children.push(child); },
-                setAttribute() {},
-                addEventListener(name, callback) { this.listeners[name] = callback; },
-            };
-        },
+                    const classes = new Set();
+                    return {
+                        dataset: {}, children: [], listeners: {},
+                        classList: {
+                            add(name) { classes.add(name); },
+                            contains(name) { return classes.has(name); },
+                        },
+                        appendChild(child) { this.children.push(child); },
+                        setAttribute() {},
+                        addEventListener(name, callback) { this.listeners[name] = callback; },
+                    };
+                },
     };
     const window = {
         localStorage: {
@@ -36,8 +41,11 @@ function start({ initial = 10, stored = null, storageUnavailable = false } = {})
             setItem(key, next) { if (storageUnavailable) throw new Error('Storage unavailable'); value = next; },
         },
         location: { origin: 'http://localhost' },
-        setTimeout() {}, setInterval() {}, addEventListener() {},
-    };
+                setTimeout() { return 0; },
+                clearTimeout() {},
+                setInterval() {},
+                addEventListener() {},
+            };
     vm.runInNewContext(source, {
         document, window, URL, Set,
         fetch(url) {
@@ -79,9 +87,12 @@ test('only new events toast, with no replay after dismissal or repeat polling', 
     await app.poll({ ok: true, events: [{ id: 5 }, event, event], next_cursor: 11 });
     assert.equal(app.region.children.length, 1);
     assert.equal(app.region.children[0].dataset.notificationId, '11');
-    app.region.children[0].children[0].children[1].listeners.click();
-    assert.equal(app.region.children.length, 0);
-    await app.poll({ ok: true, events: [event], next_cursor: 11 });
+    const toast = app.region.children[0];
+        toast.children[0].children[1].listeners.click();
+        assert.equal(toast.classList.contains('notification-toast--leaving'), true);
+        app.region.removeChild(toast);
+        assert.equal(app.region.children.length, 0);
+        await app.poll({ ok: true, events: [event], next_cursor: 11 });
     assert.equal(app.region.children.length, 0);
     assert.equal(app.requests.at(-1).searchParams.get('cursor'), '11');
 });

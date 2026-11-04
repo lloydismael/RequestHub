@@ -11,11 +11,17 @@
             <span class="nq-head__icon" aria-hidden="true"><i class="bi bi-bell-fill"></i></span>
             <div>
                 <h1 id="notifications-heading" class="nq-head__h1">Notifications</h1>
-                <p class="nq-head__summary" aria-label="Notification summary">
-                    <span class="nq-summary-pill{% if unread_count %} nq-summary-pill--unread{% endif %}"><strong>{{ unread_count }}</strong> unread</span>
-                    <span class="nq-summary-sep" aria-hidden="true">·</span>
-                    <span><strong>{{ total_count }}</strong> total</span>
-                </p>
+                {% if active_tab == 'changelogs' %}
+                    <p class="nq-head__summary" aria-label="Changelog summary">
+                        <span><strong>{{ changelog_count }}</strong> published update{{ changelog_count|pluralize }}</span>
+                    </p>
+                {% else %}
+                    <p class="nq-head__summary" aria-label="Notification summary">
+                        <span class="nq-summary-pill{% if unread_count %} nq-summary-pill--unread{% endif %}"><strong>{{ unread_count }}</strong> unread</span>
+                        <span class="nq-summary-sep" aria-hidden="true">·</span>
+                        <span><strong>{{ total_count }}</strong> total</span>
+                    </p>
+                {% endif %}
             </div>
         </div>
         {% if unread_count > 0 and active_tab != 'changelogs' %}
@@ -32,10 +38,13 @@
         <a href="{% url 'hub:notifications' %}" class="cl-tab{% if active_tab != 'changelogs' %} is-active{% endif %}"
            {% if active_tab != 'changelogs' %}aria-current="page"{% endif %}>
             <i class="bi bi-bell" aria-hidden="true"></i> Activity
+            <span class="cl-tab__count{% if unread_count %} cl-tab__count--unread{% endif %}"
+                  aria-label="{{ unread_count }} unread">{{ unread_count }}</span>
         </a>
         <a href="?tab=changelogs" class="cl-tab{% if active_tab == 'changelogs' %} is-active{% endif %}"
            {% if active_tab == 'changelogs' %}aria-current="page"{% endif %}>
             <i class="bi bi-journal-richtext" aria-hidden="true"></i> Changelogs
+            <span class="cl-tab__count" aria-label="{{ changelog_count }} published updates">{{ changelog_count }}</span>
         </a>
     </nav>
 

@@ -21,6 +21,31 @@
     background: var(--rh-surface, rgba(128, 128, 128, .12));
 }
 .cl-tab.is-active { box-shadow: inset 0 -3px var(--brand-primary); }
+.cl-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    padding: 0 .4rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--rh-text-secondary);
+    background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.cl-tab__count--unread {
+    color: #fff;
+    background: #dc3545;
+}
+.cl-tab.is-active .cl-tab__count {
+    color: var(--rh-text-primary);
+    background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
+}
+.cl-tab.is-active .cl-tab__count--unread {
+    color: #fff;
+    background: #dc3545;
+}
 .cl-section-heading, .cl-entry__header, .cl-panel__heading {
     display: flex;
     justify-content: space-between;
