@@ -9,8 +9,11 @@ from pathlib import Path
 import statistics
 
 
+HEAVY_CHECKS = {'Django Validation', 'Python dependency audit', 'Build, scan, and publish SBOM'}
+
+
 def _timestamp(value):
-    if not value or value.startswith('0001-'):
+    if not isinstance(value, str) or not value or value.startswith('0001-'):
         return None
     try:
         timestamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
@@ -33,8 +36,19 @@ def summarize_runs(runs: list[dict], jobs_by_run: dict[str, list[dict]]) -> dict
         jobs = jobs_by_run.get(str(run_id), [])
         durations = [{
             'name': job['name'], 'conclusion': job.get('conclusion'),
-            'seconds': _seconds(job.get('started_at'), job.get('completed_at')),
+            'seconds': 0 if job.get('conclusion') == 'skipped' else _seconds(job.get('started_at'), job.get('completed_at')),
         } for job in jobs]
+        heavy = [job for job in jobs if job['name'] in HEAVY_CHECKS]
+        heavy_count = sum(job.get('conclusion') != 'skipped' and _timestamp(job.get('started_at')) is not None for job in heavy)
+        skipped_names = {job['name'] for job in heavy if job.get('conclusion') == 'skipped'}
+        if run.get('name') != 'Container Security':
+            validation = 'not-applicable'
+        elif skipped_names == HEAVY_CHECKS:
+            validation = 'routing-only'
+        elif heavy_count == 3:
+            validation = 'full'
+        else:
+            validation = 'partial' if heavy else 'unknown'
         starts = [_timestamp(job.get('started_at')) for job in jobs]
         starts = [start for start in starts if start is not None]
         elapsed = (_seconds(run.get('created_at'), run.get('updated_at'))
@@ -47,20 +61,22 @@ def summarize_runs(runs: list[dict], jobs_by_run: dict[str, list[dict]]) -> dict
             'sha': run.get('head_sha'), 'branch': run.get('head_branch'),
             'event': run.get('event'), 'conclusion': run.get('conclusion'),
             'migration_window': run.get('migration_window', 'unknown'),
+            'validation': validation, 'heavy_job_count': heavy_count,
             'elapsed_seconds': elapsed,
             'time_to_first_job_seconds': _seconds(run.get('created_at'), min(starts).isoformat()) if starts else None,
             'job_execution_seconds': total, 'jobs': durations, 'evidence': evidence,
         }
         records.append(record)
-        grouped[(record['workflow'], record['branch'], record['event'], record['migration_window'])].append(record)
+        grouped[(record['workflow'], record['branch'], record['event'], record['migration_window'], validation)].append(record)
         by_sha[(record['workflow'], record['sha'])].append(record)
     groups = []
-    for (workflow, branch, event, migration), members in grouped.items():
+    for (workflow, branch, event, migration, validation), members in grouped.items():
         samples = sorted(member['elapsed_seconds'] for member in members
                          if member['conclusion'] == 'success' and member['elapsed_seconds'] is not None
                          and member['evidence'] == 'complete')
         groups.append({
             'workflow': workflow, 'branch': branch, 'event': event, 'migration_window': migration,
+            'validation': validation,
             'count': len(members), 'conclusions': dict(Counter(member['conclusion'] for member in members)),
             'success_samples': len(samples),
             'median_seconds': statistics.median(samples) if samples else None,
