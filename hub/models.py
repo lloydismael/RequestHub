@@ -38,7 +38,7 @@ class Changelog(models.Model):
     )
     is_published = models.BooleanField(default=False)
     release_sha = models.CharField(max_length=40, unique=True, null=True, editable=False)
-    changes = models.JSONField(default=dict, editable=False)
+    changes = models.JSONField(default=dict, db_default={}, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -63,7 +63,7 @@ class Changelog(models.Model):
             return []
         titles = {key: [] for key, _ in GROUPS}
         for item in commits:
-            if not isinstance(item, dict) or item.get("type") not in titles:
+            if not isinstance(item, dict) or not isinstance(item.get("type"), str) or item.get("type") not in titles:
                 continue
             if isinstance(item.get("title"), str):
                 titles[item["type"]].append(item["title"])

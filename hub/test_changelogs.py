@@ -4,7 +4,7 @@ from io import BytesIO
 from PIL import Image
 from django.apps import apps
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -106,9 +106,20 @@ class ChangelogTests(TestCase):
         for changes in (
             {}, [], {"commits": "x"},
             {"commits": [1, {"type": "zzz", "title": "t"}, {"type": "new"}]},
+            {"commits": [{"type": ["new"], "title": "t"}, {"type": {"a": 1}, "title": "t"}]},
         ):
             with self.subTest(changes=changes):
                 self.assertEqual(self.automatic(changes=changes, release_sha=None).change_groups, [])
+
+    def test_changes_column_has_database_default(self):
+        with connection.cursor() as cursor:
+            columns = {
+                c.name: c
+                    for c in connection.introspection.get_table_description(cursor, self.model()._meta.db_table)
+            }
+        default = columns["changes"].default
+        self.assertIsNotNone(default)
+        self.assertIn("{}", default)
 
     def feed(self):
         return self.client.get(self.notifications, {"tab": "changelogs"})

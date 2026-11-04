@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='changelog',
             name='changes',
-            field=models.JSONField(default=dict, editable=False),
+            field=models.JSONField(db_default={}, default=dict, editable=False),
         ),
         migrations.AddField(
             model_name='changelog',
