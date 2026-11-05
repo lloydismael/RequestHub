@@ -7,7 +7,7 @@ done
 [[ "$PRODUCTION_URL" == https://* ]] || exit 1
 [[ "$RELEASE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
 [[ "$RELEASE_VERSION" =~ ^v[0-9]+\.[0-9]$ ]] || exit 1
-test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA" || { echo '::error::Release commit is no longer current master'; exit 1; }
+test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/master" --jq .object.sha)" = "$RELEASE_SHA" || { echo '::error::Release commit is no longer current master'; exit 1; }
 
 phase_start=$SECONDS
 timing() {
@@ -138,7 +138,7 @@ else
     echo "No database-affecting changes between $previous_revision and $RELEASE_SHA; skipping the migration window."
     timing 'Database migration window skipped'
 fi
-test "$(gh api "repos/$GITHUB_REPOSITORY/commits/master" --jq .sha)" = "$RELEASE_SHA"
+test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/master" --jq .object.sha)" = "$RELEASE_SHA"
 verify_release_tag
 
 restore_required=true
