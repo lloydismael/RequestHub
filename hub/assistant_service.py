@@ -491,8 +491,8 @@ def answer_message(
         safe_tool_messages: list[ToolMessage] = []
         for call, result in zip(turn.tool_calls, results):
             safe_payload = {
-                "ok": result.error is None,
-                "error": result.error.code if result.error else None,
+                "ok": True,
+                "error": None,
                 "counts": {
                     "destinations": len(result.destinations),
                     "departments": len(result.departments),

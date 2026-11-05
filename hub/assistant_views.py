@@ -162,7 +162,7 @@ def _handle_error(error: Exception, *, request_id: UUID | str | None = None) -> 
         return _error("conversation_conflict", 409, "The assistant conversation is no longer current.", request_id=request_id)
     if isinstance(error, AssistantApiValidationError):
         logger.warning("Assistant API validation error request_id=%s", request_id, exc_info=error)
-        return _error("invalid_input", 400, "Invalid input.", request_id=request_id)
+        return _error("invalid_input", 400, str(error), request_id=request_id)
     return _error("provider_failure", 502, "The assistant request failed.", request_id=request_id)
 
 
