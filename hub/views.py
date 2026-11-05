@@ -7590,6 +7590,25 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         return page_obj, query
 
     def get(self, request, *args, **kwargs):
+        active_tab = request.GET.get("tab", "users")
+        if self.kwargs.get("changelog_editor"):
+            active_tab = "changelogs"
+        if active_tab not in {"users", "accounts", "activity", "forms", "changelogs"}:
+            active_tab = "users"
+        if active_tab == "changelogs":
+            entry = None
+            if self.kwargs.get("pk"):
+                entry = get_object_or_404(Changelog, pk=self.kwargs["pk"])
+            context = {
+                "active_tab": active_tab,
+                "total_users": User.objects.count(),
+                "total_accounts": Account.objects.count(),
+                "changelog_form": getattr(self, "changelog_form", None) or ChangelogForm(instance=entry),
+                "changelog_entry": entry,
+                "changelog_page": Paginator(Changelog.objects.all(), 10).get_page(request.GET.get("changelog_page")),
+            }
+            return render(request, self.template_name, context)
+
         from .form_editor_views import catalog
 
         self._sync_account_baseline()
@@ -7604,17 +7623,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             users_page_obj=users_page_obj,
             user_search_query=user_search_query,
         )
-        active_tab = request.GET.get("tab", "users")
-        if self.kwargs.get("changelog_editor"):
-            active_tab = "changelogs"
-        context["active_tab"] = active_tab if active_tab in {"users", "accounts", "activity", "forms", "changelogs"} else "users"
-        if active_tab == "changelogs":
-            entry = None
-            if self.kwargs.get("pk"):
-                entry = get_object_or_404(Changelog, pk=self.kwargs["pk"])
-            context["changelog_form"] = getattr(self, "changelog_form", None) or ChangelogForm(instance=entry)
-            context["changelog_entry"] = entry
-            context["changelog_page"] = Paginator(Changelog.objects.all(), 10).get_page(request.GET.get("changelog_page"))
+        context["active_tab"] = active_tab
         context["form_catalog"] = catalog()
         for user in context["users"]:
             user.editor_form = UserManagementForm(instance=user)
