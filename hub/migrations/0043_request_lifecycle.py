@@ -196,7 +196,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddConstraint(
             model_name="requestlifecycleevent",
-            constraint=models.CheckConstraint(check=models.Q(("sequence__gte", 1)), name="req_lifecycle_sequence_gte_1"),
+            constraint=models.CheckConstraint(condition=models.Q(("sequence__gte", 1)), name="req_lifecycle_sequence_gte_1"),
         ),
         migrations.AddIndex(
             model_name="requestlifecycleevent",
