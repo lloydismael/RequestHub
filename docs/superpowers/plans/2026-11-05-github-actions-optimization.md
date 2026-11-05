@@ -255,4 +255,19 @@ Rollback means reverting the individual workflow/helper change through normal Gi
 
 ## Status
 
+<<<<<<< HEAD
 **Investigation complete to the extent supported by accessible evidence; implementation not started.** Balanced scope selected by the user. No workflows, application code, repository settings, or production resources were changed while creating this plan. The 14m45s no-job failure remains unresolved, and all performance targets are prospective rather than verified outcomes.
+=======
+Implementation is on the isolated `optimize-github-actions` branch, based on remote dev commit `409567a2`. Tasks 1–5 have local implementation and regression coverage. A fresh branch review found three introduced defects (Azure string targetPort handling, no-op release latency mixing, and incomplete job coverage); all three were reproduced with failing tests and fixed. Final offline validation passes: 19 Python unit/gate tests, 5 Node toast tests, 22 mocked deployment scenarios, 17 routing cases, and 16 preflight cases; workflow actionlint and Bash syntax checks pass. The analyzer's 16 tests also pass on Python 3.11, and the four new Python files parse with Python 3.12 grammar. No push, production deployment, or repository/environment settings change has been performed.
+
+| Task | Implementation evidence | Still required after reviewed rollout |
+| --- | --- | --- |
+| 1 | Offline analyzer, 40 exported run/job metadata captures, explicit missing-job evidence | Root cause of the 885-second no-job failure remains unresolved |
+| 2 | Fast analyzer/Node/mocked deployment checks wired before the complete Django suite; remote toast fix preserved | Python 3.12 + disposable PostgreSQL 16 integration on the Actions runner |
+| 3 | Fail-safe classifier and branch/PR/API-error fixtures; stable CI gate names | Actual standalone-dev, open-PR, merge-ref, and manual-run verification |
+| 4 | Combined eligibility/configuration job; invalid-config and secret-redaction fixtures | Trusted master release and environment-gate behavior verification |
+| 5 | One initial main-container snapshot and one backup-state snapshot; negative-case and rollback tests | Live Azure timing comparison during an approved release |
+| 6 | Full versus routing-only timing categories, started-heavy-job counts, baseline and rollout instructions | At least ten ordinary non-migration releases, startup correlation, and before/after acceptance measurements |
+
+Local Python is 3.14.6; CI remains pinned to 3.12. Git Bash tests use a test-only mode-bit shim for their synthetic env file; production/Linux permission checks are unchanged. A local Django integration attempt failed because disposable PostgreSQL was unavailable (`127.0.0.1:65534`, connection refused); no production database was contacted. Do not interpret offline passing checks as verified live deployment speed. The production startup and temporary firewall provisioning delays remain intentional investigation targets, not removed safeguards.
+>>>>>>> 0ea5b812f924912d9862d1a8f3140643464c4d19
