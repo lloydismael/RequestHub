@@ -366,7 +366,14 @@ def _tool_messages(
     results: tuple[ToolResult, ...],
 ) -> tuple[ToolMessage, ...]:
     return tuple(
-        ToolMessage(tool_call_id=call.id, content=result.text)
+        ToolMessage(
+            tool_call_id=call.id,
+            content=json.dumps(
+                {"type": "tool_result", "text": result.text},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+        )
         for call, result in zip(tool_calls, results, strict=True)
     )
 
