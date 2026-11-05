@@ -238,8 +238,9 @@ Browser Request
                              +- Engineer      ? assigned/backup tabs + graph
                              +- Requestor/PM  ? personal metrics + request list
      
-      +-? /requests/*   -- RequestDetailView, RequestAdminUpdateView
+      +-? /requests/*   -- RequestCollaborativeManageView, RequestAdminUpdateView
                             
+                             +- /requests/<id>/ permanently redirects to collaborative management
                              +- StatusLog writes on every save
                              +- SLA check on due_date
                              +- Notification signals (hub/signals.py)

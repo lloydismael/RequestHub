@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-import msal
 import requests
 
 from django.conf import settings
@@ -51,7 +50,7 @@ from django.utils.html import format_html, json_script
 from django.utils.safestring import mark_safe
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
-from django.views.generic import DetailView, DeleteView, ListView, TemplateView, UpdateView
+from django.views.generic import DeleteView, ListView, TemplateView, UpdateView
 from urllib.parse import quote, urlencode
 
 from accounts.forms import UserManagementForm
@@ -87,7 +86,6 @@ from .forms import (
     SqrImportForm,
     RequestForm,
     RequestStatusForm,
-    SqrReviewForm,
     SqrSubmissionForm,
     StatusLogForm,
 )
@@ -224,10 +222,6 @@ def _split_sqr_scope_items(scope_text: str) -> list[str]:
         if item:
             items.append(item)
     return items or list(SQR_APPROVAL_INCLUDED_SERVICES)
-
-
-def _get_sqr_scope_items(submission: "SqrSubmission") -> list[str]:
-    return _split_sqr_scope_items(submission.project_details or "")
 
 
 def _get_sqr_service_component(submission: "SqrSubmission") -> str:
@@ -1313,17 +1307,6 @@ def clear_engineer_outlook_lock_on_reassignment(
     (Disabled per requirement: the new engineer shouldn't need to acknowledge again if already done)"""
     return 0
 
-def _admin_sort_account_manager_key(request_obj):
-    manager_name = ""
-    manager_user = getattr(request_obj, "requestor", None)
-    if manager_user:
-        manager_name = (manager_user.get_full_name() or manager_user.username or "").strip()
-    elif request_obj.account_manager:
-        manager_name = request_obj.account_manager.strip()
-    normalized = manager_name.lower()
-    has_name = 0 if normalized else 1
-    return (has_name, normalized)
-
 
 def _send_sqr_new_submission_email(
     submission: SqrSubmission,
@@ -1667,118 +1650,6 @@ def _get_sqr_approval_email_context(submission: SqrSubmission) -> dict:
     }
 
 
-def _get_graph_access_token() -> tuple[str, str]:
-    if not (settings.PHILDATA_TENANT_ID and settings.PHILDATA_CLIENT_ID and settings.PHILDATA_CLIENT_SECRET):
-        return "", "Microsoft Graph draft creation is not configured. Set PHILDATA_TENANT_ID, PHILDATA_CLIENT_ID, and PHILDATA_CLIENT_SECRET."
-
-    app = msal.ConfidentialClientApplication(
-        client_id=settings.PHILDATA_CLIENT_ID,
-        client_credential=settings.PHILDATA_CLIENT_SECRET,
-        authority=f"https://login.microsoftonline.com/{settings.PHILDATA_TENANT_ID}",
-    )
-    token_result = app.acquire_token_for_client(scopes=settings.PHILDATA_GRAPH_SCOPE)
-    access_token = token_result.get("access_token")
-    if access_token:
-        return access_token, ""
-    error_description = token_result.get("error_description") or token_result.get("error") or "Unable to acquire Microsoft Graph access token."
-    return "", error_description
-
-
-def _extract_graph_error_message(response: requests.Response) -> str:
-    try:
-        error_payload = response.json()
-        return error_payload.get("error", {}).get("message") or response.text
-    except ValueError:
-        return response.text
-
-
-def _create_sqr_approval_graph_draft_json(context: dict, sender_email: str, access_token: str) -> tuple[str, str]:
-    graph_url = f"https://graph.microsoft.com/v1.0/users/{quote(sender_email, safe='')}/messages"
-    recipients = context.get("recipients") or []
-    payload = {
-        "subject": context["subject"],
-        "body": {
-            "contentType": "HTML",
-            "content": context.get("html_draft") or context["html_preview"],
-        },
-        "toRecipients": [
-            {"emailAddress": {"address": email}}
-            for email in recipients
-            if email
-        ],
-        "ccRecipients": [],
-    }
-    attachments = context.get("attachments") or []
-    if attachments:
-        payload["attachments"] = attachments
-
-    try:
-        response = requests.post(
-            graph_url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=30,
-        )
-    except requests.RequestException as exc:
-        return "", f"Unable to contact Microsoft Graph: {exc}"
-
-    if response.status_code not in (200, 201):
-        message = _extract_graph_error_message(response)
-        return "", f"Microsoft Graph JSON draft creation failed ({response.status_code}): {message}"
-
-    draft = response.json()
-    return draft.get("webLink") or "", ""
-
-
-def _create_sqr_approval_graph_draft_mime(context: dict, sender_email: str, access_token: str) -> tuple[str, str]:
-    graph_url = f"https://graph.microsoft.com/v1.0/users/{quote(sender_email, safe='')}/messages"
-    mime_payload = _build_sqr_approval_mime_message(context, sender_email)
-    try:
-        response = requests.post(
-            graph_url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "text/plain",
-            },
-            data=mime_payload,
-            timeout=30,
-        )
-    except requests.RequestException as exc:
-        return "", f"Unable to contact Microsoft Graph: {exc}"
-
-    if response.status_code not in (200, 201):
-        message = _extract_graph_error_message(response)
-        return "", f"Microsoft Graph MIME draft creation failed ({response.status_code}): {message}"
-
-    draft = response.json()
-    return draft.get("webLink") or "", ""
-
-
-def _create_sqr_approval_graph_draft(context: dict, sender_email: str) -> tuple[str, str]:
-    sender_email = (sender_email or "").strip()
-    if not sender_email:
-        return "", "The signed-in user does not have an email address configured for Outlook draft creation."
-
-    access_token, token_error = _get_graph_access_token()
-    if token_error:
-        return "", token_error
-
-    web_link, json_error = _create_sqr_approval_graph_draft_json(context, sender_email, access_token)
-    if web_link:
-        return web_link, ""
-
-    web_link, mime_error = _create_sqr_approval_graph_draft_mime(context, sender_email, access_token)
-    if web_link:
-        return web_link, ""
-
-    if json_error and mime_error:
-        return "", f"{json_error} Fallback attempt also failed: {mime_error}"
-    return "", json_error or mime_error or "Microsoft Graph draft creation failed."
-
-
 def _build_sqr_approval_mailto_url(context: dict) -> str:
     recipients = context.get("recipients") or []
     to_recipient = ";".join(recipients)
@@ -1791,28 +1662,6 @@ def _build_sqr_approval_mailto_url(context: dict) -> str:
     if cc_recipients:
         mailto_parts.insert(1, f"cc={quote(cc_recipients)}")
     return "?".join([mailto_parts[0], "&".join(mailto_parts[1:])])
-
-
-def _admin_sort_engineer_key(request_obj):
-    engineer = getattr(request_obj, "engineer", None)
-    if engineer:
-        engineer_name = (engineer.get_full_name() or engineer.username or "").strip().lower()
-        return (0, engineer_name)
-    return (1, "")
-
-
-def _admin_sort_backup_engineer_key(request_obj):
-    backup = getattr(request_obj, "backup_engineer", None)
-    if backup:
-        name = (backup.get_full_name() or backup.username or "").strip().lower()
-        return (0, name)
-    return (1, "")
-
-
-def _admin_sort_date_key(value):
-    if value is None:
-        return (1, date.max)
-    return (0, value)
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
@@ -2890,11 +2739,6 @@ def _get_sqr_esg_export_columns():
         ("Remarks", lambda s: s.revenue_remarks or s.remarks or ""),
         ("Action", lambda s: "History"),
     ]
-
-
-def _get_sqr_performance(prefetched=True):
-    """Return {submission_id: SqrProjectPerformance} for all rows (single query)."""
-    return {p.submission_id: p for p in SqrProjectPerformance.objects.select_related("project_manager")}
 
 
 def _get_sqr_performance_export_columns():
@@ -5082,67 +4926,6 @@ class SqrApprovalFormattedDraftView(LoginRequiredMixin, View):
         })
         patch_cache_control(response, private=True, no_store=True)
         return response
-
-
-class RequestDetailView(LoginRequiredMixin, DetailView):
-    model = Request
-    template_name = "hub/request_detail.html"
-    context_object_name = "request_obj"
-
-    def get_queryset(self):
-        user = self.request.user
-        qs = super().get_queryset()
-        if user.role == PM_ESS_ROLE:
-            return qs.filter(Q(requestor=user) | Q(requestor__role=User.Roles.REQUESTOR_ESS))
-        if user.role in REQUESTOR_ROLES:
-            return qs.filter(requestor=user)
-        if user.role in ENGINEER_ACCESS_ROLES:
-            return qs.filter(engineer=user)
-        return qs
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        request_obj = context["request_obj"]
-        context["status_logs"] = request_obj.status_logs.select_related("author")
-        context.update(get_request_activity_log_context(request_obj))
-        can_comment = self._user_can_comment(self.request.user, request_obj)
-        context["can_comment"] = can_comment
-        if can_comment:
-            context["log_form"] = kwargs.get("log_form") or StatusLogForm()
-        if (
-            self.request.user.role in ENGINEER_ACCESS_ROLES
-            and request_obj.engineer_id == self.request.user.id
-        ):
-            context["status_form"] = kwargs.get("status_form") or RequestStatusForm(instance=request_obj)
-        return context
-
-    def post(self, request, *args, **kwargs):
-        self.object = self.get_object()
-        if not self._user_can_comment(request.user, self.object):
-            return redirect("hub:request-manage-collab", pk=self.object.pk)
-        form = StatusLogForm(request.POST)
-        if form.is_valid():
-            log = form.save(commit=False)
-            log.request = self.object
-            log.author = request.user
-            save_configured_instance(form, log)
-            notify_status_update(log, "Request Detail · Status Update")
-            messages.success(request, "Status log saved.")
-            return redirect("hub:request-manage-collab", pk=self.object.pk)
-        context = self.get_context_data(log_form=form)
-        return self.render_to_response(context)
-
-    @staticmethod
-    def _user_can_comment(user, request_obj):
-        if not user.is_authenticated:
-            return False
-        if user.role in ADMIN_PANEL_ROLES:
-            return True
-        if user.role in ENGINEER_ACCESS_ROLES and request_obj.engineer_id == user.id:
-            return True
-        if user.role in REQUEST_CREATOR_ROLES and request_obj.requestor_id == user.id:
-            return True
-        return False
 
 
 class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, UpdateView):
