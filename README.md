@@ -12,7 +12,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 [![Docker](https://img.shields.io/badge/Docker-lloydismael12%2Frequest--hub-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/lloydismael12/request-hub)
 [![Latest Tag](https://img.shields.io/badge/Latest-v50.7-0ea5e9)](https://hub.docker.com/r/lloydismael12/request-hub/tags)
-[![Django](https://img.shields.io/badge/Django-5.2-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
+[![Django](https://img.shields.io/badge/Django-6.1-092E20?logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3-7952B3?logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Azure-336791?logo=postgresql)](https://azure.microsoft.com/en-us/products/postgresql/)
 
@@ -249,8 +249,9 @@ Browser Request
                              +- Engineer      ? assigned/backup tabs + graph
                              +- Requestor/PM  ? personal metrics + request list
      
-      +-? /requests/*   -- RequestDetailView, RequestAdminUpdateView
+      +-? /requests/*   -- RequestCollaborativeManageView, RequestAdminUpdateView
                             
+                             +- /requests/<id>/ permanently redirects to collaborative management
                              +- StatusLog writes on every save
                              +- SLA check on due_date
                              +- Notification signals (hub/signals.py)
@@ -277,7 +278,7 @@ Signals & Background Jobs
 
 | Layer | Technology |
 |---|---|
-| **Backend** | Python 3.12 Django 5.2 LTS |
+| **Backend** | Python 3.12 Django 6.1 |
 | **Database** | PostgreSQL (Azure Flexible Server in production) |
 | **Frontend** | Django Templates Bootstrap 5.3 Bootstrap Icons Chart.js 4.4 |
 | **Auth** | Django `AbstractUser` custom role system MSAL (Microsoft Graph) |

@@ -81,7 +81,7 @@ az webapp config appsettings set ^
 - `WEBSITES_PORT` tells App Service which port the container listens on (Gunicorn binds to 8000).
 - Leave `DJANGO_ALLOWED_HOSTS` empty to rely on the automatic `WEBSITE_HOSTNAME` detection added in `settings.py`. Provide extra hosts if needed (comma-separated).
 - When `DJANGO_DEBUG=False`, `DJANGO_SECRET_KEY`, `DB_HOST`, and `DB_PASSWORD` are required or the app fails closed at boot.
-- If you connect to PostgreSQL, provide `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT` values here as well. Django 5.2 requires PostgreSQL 14+.
+- If you connect to PostgreSQL, provide `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT` values here as well. Django 6.1 requires PostgreSQL 15+.
 - App Service already forwards `X-Forwarded-Proto`; production settings trust `HTTP_X_FORWARDED_PROTO=https`.
 - `ACS_EMAIL_CONNECTION_STRING` should point at the Request Hub Azure Communication Services endpoint `https://esgrequesthub.asiapacific.communication.azure.com`.
 - `ACS_EMAIL_SENDER` should be the verified sender address `DoNotReply@dreadops.site`.
@@ -132,7 +132,7 @@ az webapp restart --name $APP --resource-group $RESOURCE_GROUP
 
 ## Notes on Database Connectivity
 
-- Production uses Azure Database for PostgreSQL Flexible Server (PostgreSQL 14+ for Django 5.2).
+- Production uses Azure Database for PostgreSQL Flexible Server (PostgreSQL 15+ for Django 6.1).
 - Expose credentials through app settings (`DB_HOST` and `DB_PASSWORD` are required when `DJANGO_DEBUG=False`) and ensure outbound access via VNet integration or public firewall rules.
 - Run migrations manually if you disable automatic migrations in `entrypoint.sh`.
 

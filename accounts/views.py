@@ -13,19 +13,16 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.generic import TemplateView, UpdateView
-import json
+from django.views.generic import UpdateView
 
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
 from accounts.sign_in_log import client_ip as _client_ip, touch_sign_in_session
-from .recovery_views import BackupDataView, RestoreDataView, recovery_context
+from .recovery_views import recovery_context
 
 from .forms import (
     ProfileForm,
     ThemeForm,
-    ROLE_CHOICES,
-    ROLE_LABELS,
     RoleAuthenticationForm,
 )
 
@@ -136,38 +133,6 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         else:
             messages.success(self.request, "Profile updated successfully.")
         return response
-
-
-# ── Backup / Restore ─────────────────────────────────────────────────────
-
-# Models included in backup (order = save order on restore; delete reversed)
-class LandingView(TemplateView):
-
-    def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated:
-            return redirect("hub:dashboard")
-        return redirect("login")
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        descriptions = {
-            User.Roles.ADMIN: "Oversee requests, assign engineers, and close engagements.",
-            User.Roles.PM_ESG: "Manage requests like administrators, coordinate engineers, and create tickets without user-management access.",
-            User.Roles.ENGINEER: "Review assigned tickets, respond to updates, and act on SLAs.",
-            User.Roles.ON_HOLD: "Retain engineer access to previously assigned work while staying unavailable for new assignments.",
-            User.Roles.REQUESTOR: "Create new customer requests and monitor progress.",
-            User.Roles.REQUESTOR_ESS: "Submit customer requests without Support engagements and track progress.",
-            User.Roles.PM_ESS: "Oversee Requestor-ESS requests, create tickets, and track status across accounts.",
-        }
-        context["role_cards"] = [
-            {
-                "role": role,
-                "label": ROLE_LABELS[role],
-                "description": descriptions.get(role, ""),
-            }
-            for role, _ in ROLE_CHOICES
-        ]
-        return context
 
 
 @method_decorator(never_cache, name="dispatch")

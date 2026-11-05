@@ -201,6 +201,14 @@ class RedirectSecurityTests(SimpleTestCase):
         response = RequestCollaborativeManageView()._handle_status_update(request, obj)
         self.assertEqual(response["Location"], reverse("hub:request-manage-collab", args=[obj.pk]))
 
+    def test_legacy_request_detail_url_redirects_to_collaborative_management(self):
+        response = self.client.get("/requests/42/")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(
+            response["Location"],
+            reverse("hub:request-manage-collab", args=[42]),
+        )
+
     def test_csrf_rejects_external_origin_and_referer(self):
         for headers in (
             {"HTTP_ORIGIN": "https://outside.example", "HTTP_REFERER": "https://testserver/"},

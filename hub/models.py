@@ -504,7 +504,7 @@ class RequestLifecycleEvent(models.Model):
                 name="uniq_req_lifecycle_key",
             ),
             models.CheckConstraint(
-                check=Q(sequence__gte=1),
+                condition=Q(sequence__gte=1),
                 name="req_lifecycle_sequence_gte_1",
             ),
         ]
