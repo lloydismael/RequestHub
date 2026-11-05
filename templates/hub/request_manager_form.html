@@ -362,7 +362,7 @@
             {% if status_logs %}
                 <ul class="rmf-timeline">
                     {% for log in status_logs %}
-                        <li class="rmf-timeline__item">
+                        <li class="rmf-timeline__item" id="update-{{ log.pk }}">
                             <div class="rmf-timeline__avatar">
                                 {{ log.author.get_full_name|default:log.author.username|slice:':1'|upper }}
                             </div>
@@ -393,10 +393,7 @@
                 <input type="hidden" name="form_type" value="status_log">
                 <div class="rmf-log-form__field">
                     {% form_editor_extras log_form %}
-                    {{ log_form.message }}
-                    {% if log_form.message.errors %}
-                        <div class="invalid-feedback d-block">{{ log_form.message.errors|join:" " }}</div>
-                    {% endif %}
+                    {% include "hub/update_composer.html" with composer_form=log_form %}
                 </div>
                 <div class="rmf-form-actions rmf-form-actions--end">
                     <button class="btn btn-primary" type="submit">
@@ -438,11 +435,13 @@
                     </div>
                 </div>
 
+                {% if request.user.role == 'engineer' or request.user.role == 'admin' %}
                 <div class="d-flex justify-content-end mb-3">
                     <a href="{% url 'hub:activity-logs' %}?request={{ object.pk }}" class="btn btn-primary btn-sm request-activity-empty-state__action">
                         <i class="bi bi-plus-circle me-1"></i>Add Activity Logs
                     </a>
                 </div>
+                {% endif %}
 
                 {% if related_activity_logs %}
                     <div class="table-responsive request-activity-table-wrap">

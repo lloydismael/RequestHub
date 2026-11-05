@@ -28,6 +28,7 @@
 [data-account-theme="teal"]    { --account-c1: #134e4a; --account-c2: #0d9488; --account-c3: #3b82f6; --account-accent: #0f766e; --account-dark-accent: #5eead4; --account-rgb: 15, 118, 110; }
 [data-account-theme="amber"]   { --account-c1: #78350f; --account-c2: #f59e0b; --account-c3: #ef4444; --account-accent: #b45309; --account-dark-accent: #fcd34d; --account-rgb: 180, 83, 9; }
 [data-account-theme="ocean"]   { --account-c1: #0c4a6e; --account-c2: #0284c7; --account-c3: #2dd4bf; --account-accent: #0369a1; --account-dark-accent: #7dd3fc; --account-rgb: 3, 105, 161; }
+[data-account-theme="christmas"] { --account-c1: #146044; --account-c2: #a51d38; --account-c3: #d5aa53; --account-accent: #146044; --account-dark-accent: #9ce1be; --account-rgb: 20, 96, 68; }
 [data-account-theme]:not([data-account-theme="default"]) {
     --account-gradient: linear-gradient(120deg, var(--account-c1), var(--account-c2), var(--account-c3));
 }

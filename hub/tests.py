@@ -1620,6 +1620,89 @@ class RequestActivityLogEditModalTests(TestCase):
             status=EngineerActivityLog.Status.IN_PROGRESS,
         )
 
+    def test_add_activity_button_is_only_visible_to_engineer_and_admin(self):
+        url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
+        for role in User.Roles.values:
+            with self.subTest(role=role):
+                actor = self.engineer if role in {"engineer", "on_hold"} else self.requestor
+                actor.role = role
+                actor.save(update_fields=["role"])
+                self.client.force_login(actor)
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                if role in {"engineer", "admin"}:
+                    self.assertContains(response, "Add Activity Logs")
+                else:
+                    self.assertNotContains(response, "Add Activity Logs")
+
+    def test_activity_page_and_creation_only_allow_engineer_and_admin(self):
+        payload = {
+            "request_date": date.today().isoformat(),
+            "request": self.request_obj.pk,
+            "activity_type": EngineerActivityLog.ActivityType.DEPLOYMENT,
+            "actual_hours": "1.25",
+            "details": "Role-restricted activity creation.",
+            "location": EngineerActivityLog.Location.OFFICE,
+            "is_billable": "false",
+            "status": EngineerActivityLog.Status.COMPLETED,
+        }
+        url = reverse("hub:activity-logs")
+        for role in User.Roles.values:
+            with self.subTest(role=role):
+                self.engineer.role = role
+                self.engineer.save(update_fields=["role"])
+                self.client.force_login(self.engineer)
+                page = self.client.get(url, {"request": self.request_obj.pk})
+                before = EngineerActivityLog.objects.count()
+                response = self.client.post(url, payload)
+                if role in {"engineer", "admin"}:
+                    self.assertEqual(page.status_code, 200)
+                    self.assertEqual(response.status_code, 302)
+                    self.assertEqual(EngineerActivityLog.objects.count(), before + 1)
+                else:
+                    self.assertEqual(page.status_code, 403)
+                    self.assertEqual(response.status_code, 403)
+                    self.assertEqual(EngineerActivityLog.objects.count(), before)
+
+    def test_admin_activity_page_can_prefill_and_log_another_engineers_request(self):
+        self.requestor.role = User.Roles.ADMIN
+        self.requestor.save(update_fields=["role"])
+        self.client.force_login(self.requestor)
+        response = self.client.get(
+            reverse("hub:activity-logs"), {"request": self.request_obj.pk}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["form"].initial["request"], self.request_obj.pk)
+        self.assertIn(self.request_obj, response.context["form"].fields["request"].queryset)
+        response = self.client.post(reverse("hub:activity-logs"), {
+            "request_date": date.today().isoformat(),
+            "request": self.request_obj.pk,
+            "activity_type": EngineerActivityLog.ActivityType.DEPLOYMENT,
+            "actual_hours": "1.25",
+            "details": "Admin activity for an assigned request.",
+            "location": EngineerActivityLog.Location.OFFICE,
+            "is_billable": "false",
+            "status": EngineerActivityLog.Status.COMPLETED,
+        })
+        self.assertRedirects(response, reverse("hub:activity-logs"))
+        self.assertTrue(EngineerActivityLog.objects.filter(
+            request=self.request_obj, engineer=self.requestor,
+            details="Admin activity for an assigned request.",
+        ).exists())
+
+    def test_manage_request_rejects_activity_creation_for_other_roles(self):
+        url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
+        for role in {"requestor", "requestor_ess", "pm_ess", "pm_esg", "on_hold"}:
+            with self.subTest(role=role):
+                actor = self.engineer if role == "on_hold" else self.requestor
+                actor.role = role
+                actor.save(update_fields=["role"])
+                self.client.force_login(actor)
+                before = EngineerActivityLog.objects.count()
+                response = self.client.post(url, {"form_type": "activity_log"})
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(EngineerActivityLog.objects.count(), before)
+
     def test_manage_request_shows_edit_activity_modal_for_selected_log(self):
         self.client.force_login(self.engineer)
 

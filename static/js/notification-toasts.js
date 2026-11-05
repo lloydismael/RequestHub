@@ -13,6 +13,7 @@
     var channelName = 'reqHubToasts:v1:' + userId;
     var intervalMs = 10000;
     var inFlight = false;
+    var morePending = false;
     var queued = new Set();
     var channel = null;
 
@@ -96,7 +97,7 @@
         var title = createElement(
             'h2',
             'notification-toast__title',
-            event.type === 'assignment' ? 'New assignment' : 'New incoming request'
+            event.type === 'mention' ? 'You were mentioned' : (event.type === 'assignment' ? 'New assignment' : 'New incoming request')
         );
         var close = createElement('button', 'notification-toast__close', '×');
         close.type = 'button';
@@ -120,12 +121,64 @@
         scheduleDismiss(toast);
     }
 
+    var lastPageState = null;
+
+    function updateNotificationCount(count) {
+        if (!Number.isInteger(count) || count < 0) return;
+        var link = document.querySelector('[data-notification-link]');
+        if (!link) return;
+        var badge = link.querySelector('[data-notification-badge]');
+        if (count === 0) {
+            if (badge) link.removeChild(badge);
+            link.classList.remove('nav-link-with-dot');
+            return;
+        }
+        link.classList.add('nav-link-with-dot');
+        if (!badge) {
+            badge = createElement('span', 'notification-dot notification-dot--nav');
+            badge.setAttribute('data-notification-badge', '');
+            badge.setAttribute('role', 'status');
+            var value = createElement('span', 'notification-dot__count');
+            value.setAttribute('data-notification-count', '');
+            badge.appendChild(value);
+            link.appendChild(badge);
+        }
+        badge.setAttribute('title', 'Unread notifications');
+        badge.setAttribute('aria-label', count + ' new items');
+        badge.querySelector('[data-notification-count]').textContent = String(count);
+    }
+
+    function refreshNotificationPage(data) {
+        var page = document.querySelector('[data-notification-page]');
+        if (!page || !Number.isInteger(data.unread_count)) return;
+        var state = [data.latest_id, data.total_count, data.unread_count].join(':');
+        if (state === lastPageState) return;
+        // Do not replace a notification action while someone is using the keyboard.
+        if (document.activeElement && page.contains(document.activeElement)) return;
+        return fetch(window.location.href, {
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (response) {
+            if (!response.ok) throw new Error('notification page refresh failed');
+            return response.text();
+        }).then(function (html) {
+            var replacement = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-notification-page]');
+            if (replacement && document.querySelector('[data-notification-page]') === page) {
+                page.replaceWith(replacement);
+                lastPageState = state;
+            }
+        });
+    }
+
     function processPayload(data) {
         if (!data || !data.ok) return;
         var events = Array.isArray(data.events) ? data.events : [];
         events.forEach(showToast);
+        updateNotificationCount(data.unread_count);
         if (data.next_cursor !== undefined) writeCursor(data.next_cursor, true);
-        if (data.has_more) window.setTimeout(poll, 0);
+        morePending = Boolean(data.has_more);
+        return refreshNotificationPage(data);
     }
 
     function poll() {
@@ -136,6 +189,7 @@
         if (cursor !== null) requestUrl.searchParams.set('cursor', String(cursor));
         fetch(requestUrl.toString(), {
             credentials: 'same-origin',
+            cache: 'no-store',
             headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
         })
             .then(function (response) {
@@ -144,7 +198,13 @@
             })
             .then(processPayload)
             .catch(function () {})
-            .finally(function () { inFlight = false; });
+            .finally(function () {
+                inFlight = false;
+                if (morePending) {
+                    morePending = false;
+                    window.setTimeout(poll, 0);
+                }
+            });
     }
 
     if ('BroadcastChannel' in window) {

@@ -9,13 +9,15 @@ from django.urls import reverse
 from accounts.models import User
 from hub.assistant_knowledge import allowed_destinations
 from hub.models import Notification
+from hub.services.notifications import visible_notifications
 
 
 def new_ticket_count(request: HttpRequest) -> int:
     user = request.user
     cached = getattr(request, "_new_ticket_count", None)
     if cached is None or cached[0] != user.pk:
-        cached = (user.pk, user.notifications.filter(is_read=False, source__icontains="new request").count())
+        count = visible_notifications(user).filter(is_read=False).count()
+        cached = (user.pk, count)
         request._new_ticket_count = cached
     return cached[1]
 
@@ -82,6 +84,7 @@ def _notification_badges(request: HttpRequest) -> Dict[str, int | str]:
             event_type__in=[
                 Notification.EventType.NEW_REQUEST,
                 Notification.EventType.ASSIGNMENT,
+                Notification.EventType.MENTION,
             ],
         )
         .order_by("-id")
@@ -89,13 +92,6 @@ def _notification_badges(request: HttpRequest) -> Dict[str, int | str]:
         .first()
         or 0
     )
-
-    if getattr(user, "role", None) not in {User.Roles.ADMIN, User.Roles.PM_ESG}:
-        return {
-            "new_ticket_count": 0,
-            "app_version": settings.APP_VERSION,
-            "notification_toast_initial_cursor": notification_toast_initial_cursor,
-        }
 
     return {
         "new_ticket_count": new_ticket_count(request),

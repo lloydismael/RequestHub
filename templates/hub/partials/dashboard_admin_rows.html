@@ -49,7 +49,9 @@
                                         </div>
                                     </td>
                                 {% else %}
-                                    <td title="{{ item.description|default:'No description provided' }}">{{ item.reference_code }}</td>
+                                    <td title="{{ item.description|default:'No description provided' }}">
+                                        <a href="{% url 'hub:request-manage-collab' item.pk %}" class="text-reset" aria-label="Manage {{ item.reference_code }}">{{ item.reference_code }}</a>
+                                    </td>
                                 {% endif %}
                                 <td>{{ item.account.name }}</td>
                                 {% if role == 'admin' %}

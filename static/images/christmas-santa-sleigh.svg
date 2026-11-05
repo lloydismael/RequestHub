@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 210" role="img" aria-label="Santa in his sleigh pulled by reindeer">
+  <defs>
+    <linearGradient id="sleigh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8343f"/>
+      <stop offset="1" stop-color="#a30f22"/>
+    </linearGradient>
+    <linearGradient id="fur" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b4783f"/>
+      <stop offset="1" stop-color="#8a5428"/>
+    </linearGradient>
+    <g id="deer">
+      <ellipse cx="22" cy="58" rx="7" ry="5" fill="#f4e6cf"/>
+      <path d="M36 76 L20 88 L7 86 M40 78 L29 96 L16 99" fill="none" stroke="#744321" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M86 76 L104 88 L113 86 M82 78 L96 95 L106 96" fill="none" stroke="#744321" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+      <g fill="#3b2412"><circle cx="7" cy="86" r="3.5"/><circle cx="16" cy="99" r="3.5"/><circle cx="113" cy="86" r="3.5"/><circle cx="106" cy="96" r="3.5"/></g>
+      <ellipse cx="60" cy="67" rx="38" ry="18" fill="url(#fur)"/>
+      <ellipse cx="58" cy="75" rx="27" ry="8" fill="#ddb57f"/>
+      <path d="M82 56 Q94 42 102 32 L116 40 Q106 56 96 72 Z" fill="url(#fur)"/>
+      <path d="M106 26 Q101 13 94 6 M100 16 L90 14 M109 24 Q115 11 124 4 M117 13 L122 2" fill="none" stroke="#5f3a1c" stroke-width="3.2" stroke-linecap="round"/>
+      <ellipse cx="100" cy="29" rx="7" ry="3.2" fill="#9a6233" transform="rotate(-28 100 29)"/>
+      <ellipse cx="114" cy="35" rx="13" ry="9" fill="#a46a37" transform="rotate(-12 114 35)"/>
+      <ellipse cx="126" cy="39" rx="7" ry="5.5" fill="#c08850"/>
+      <circle cx="112" cy="31" r="2" fill="#1f1209"/>
+      <circle cx="133" cy="38.5" r="3.4" fill="#2a170b"/>
+      <circle cx="112.7" cy="30.3" r="0.6" fill="#fff"/>
+      <path d="M70 50 Q75 67 70 84" fill="none" stroke="#c8102e" stroke-width="6"/>
+      <path d="M90 58 Q98 66 104 64" fill="none" stroke="#c8102e" stroke-width="5"/>
+      <g fill="#f6c445" stroke="#b9851c" stroke-width="1"><circle cx="72" cy="58" r="3.4"/><circle cx="73" cy="68" r="3.4"/><circle cx="72" cy="78" r="3.4"/></g>
+    </g>
+  </defs>
+
+  <g opacity="0.85" fill="#ffe08a">
+    <path d="M6 112 l2 5 5 2 -5 2 -2 5 -2 -5 -5 -2 5 -2z"/>
+    <path d="M18 146 l1.5 4 4 1.5 -4 1.5 -1.5 4 -1.5 -4 -4 -1.5 4 -1.5z"/>
+    <circle cx="10" cy="134" r="2"/><circle cx="26" cy="122" r="1.5"/>
+  </g>
+
+  <path d="M43 98 Q30 52 64 44 Q94 50 86 98 Z" fill="#7a4a24"/>
+  <rect x="48" y="38" width="20" height="18" rx="2" fill="#1f8a4c"/>
+  <rect x="56" y="38" width="4" height="18" fill="#f6c445"/>
+  <rect x="64" y="30" width="18" height="22" rx="2" fill="#258aff"/>
+  <rect x="71" y="30" width="4" height="22" fill="#fff"/>
+  <path d="M58 38 q-6 -8 2 -8 q4 0 0 8 q4 -9 8 -6 q2 4 -10 6" fill="#f6c445"/>
+
+  <path d="M98 90 Q96 58 126 54 Q152 56 150 92 Z" fill="#d6202f"/>
+  <path d="M124 56 L124 92" stroke="#fff" stroke-width="6"/>
+  <path d="M146 66 Q162 70 172 80" fill="none" stroke="#d6202f" stroke-width="12" stroke-linecap="round"/>
+  <path d="M160 74 L166 78" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="175" cy="82" r="6.5" fill="#1f6f3a"/>
+  <circle cx="128" cy="36" r="15" fill="#f6c9a8"/>
+  <path d="M112 38 Q112 68 129 72 Q146 68 145 38 Q137 48 129 46 Q120 48 112 38 Z" fill="#fff" stroke="#d9dee3" stroke-width="1.2"/>
+  <path d="M119 44 Q125 40 129 44 Q133 40 139 44 Q133 48 129 46 Q124 48 119 44 Z" fill="#f2f2f2" stroke="#ddd" stroke-width="0.8"/>
+  <circle cx="129" cy="40" r="3" fill="#ea8c7c"/>
+  <circle cx="123" cy="34" r="1.6" fill="#2b1a10"/>
+  <circle cx="135" cy="34" r="1.6" fill="#2b1a10"/>
+  <circle cx="119" cy="39" r="3" fill="#f2a08c" opacity="0.6"/>
+  <path d="M113 26 Q118 5 140 8 Q120 6 106 16 Q98 22 96 30 Q104 22 113 26 Z" fill="#d6202f"/>
+  <path d="M112 27 Q114 8 136 9 Q150 14 146 27 Z" fill="#d6202f"/>
+  <circle cx="95" cy="31" r="6" fill="#fff" stroke="#d9dee3" stroke-width="1.2"/>
+  <rect x="109" y="22" width="40" height="9" rx="4.5" fill="#fff" stroke="#d9dee3" stroke-width="1.2"/>
+
+  <path d="M22 122 Q18 82 52 80 L172 88 Q204 90 200 120 Q194 154 152 156 L62 156 Q26 154 22 122 Z" fill="url(#sleigh)" stroke="#7d0a1a" stroke-width="2"/>
+  <path d="M52 84 L172 92" stroke="#f6c445" stroke-width="6" stroke-linecap="round"/>
+  <path d="M48 120 q14 -16 28 0 q14 16 28 0 q14 -16 28 0 q14 16 28 0" fill="none" stroke="#f6c445" stroke-width="3" stroke-linecap="round"/>
+  <path d="M36 140 Q100 150 186 136" fill="none" stroke="#ffd36b" stroke-width="2" opacity="0.6"/>
+  <path d="M66 156 L60 172 M156 156 L162 172" stroke="#c9961e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 172 L196 172 Q222 172 222 152 Q222 138 208 141" fill="none" stroke="#f6c445" stroke-width="5" stroke-linecap="round"/>
+
+  <path d="M176 80 Q232 92 282 120" fill="none" stroke="#5a2f12" stroke-width="2"/>
+  <path d="M282 120 Q346 108 406 100 Q470 90 532 80" fill="none" stroke="#c8102e" stroke-width="2.5"/>
+
+  <use href="#deer" x="210" y="58"/>
+  <use href="#deer" x="334" y="40"/>
+  <use href="#deer" x="460" y="22"/>
+  <circle cx="593" cy="60.5" r="10" fill="#ff3b4d" opacity="0.35"/>
+  <circle cx="593" cy="60.5" r="4.6" fill="#ff2a3c"/>
+  <circle cx="591.8" cy="59.2" r="1.3" fill="#ffd0d4"/>
+</svg>

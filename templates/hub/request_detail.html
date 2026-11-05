@@ -105,11 +105,7 @@
                     {% csrf_token %}
                     <div class="mb-3">
                         {% form_editor_extras log_form %}
-                        {{ log_form.message.label_tag }}
-                        {{ log_form.message }}
-                        {% if log_form.message.errors %}
-                            <div class="invalid-feedback d-block">{{ log_form.message.errors|join:" " }}</div>
-                        {% endif %}
+                        {% include "hub/update_composer.html" with composer_form=log_form %}
                     </div>
                     <button class="btn btn-primary" type="submit">Post Update</button>
                 </form>

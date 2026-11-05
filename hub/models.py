@@ -1181,6 +1181,7 @@ class Notification(models.Model):
         SYSTEM = "system", "System"
         NEW_REQUEST = "new_request", "New Request"
         ASSIGNMENT = "assignment", "Assignment"
+        MENTION = "mention", "Mention"
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
     message = models.CharField(max_length=255)
@@ -1240,6 +1241,7 @@ class Notification(models.Model):
             "update": "Status Update",
             "completion": "Completion",
             "reminder": "Reminder",
+            "mention": "Mention",
             "system": "System",
         }
         return labels.get(self.category_key, "System")
@@ -1248,7 +1250,7 @@ class Notification(models.Model):
     def action_label(self) -> str:
         if not self.related_request:
             return "View"
-        if self.category_key in {"update", "completion"}:
+        if self.category_key in {"update", "completion", "mention"}:
             return "Review Update"
         if self.category_key in {"new_request", "assignment", "reminder"}:
             return "Open Request"
@@ -1262,6 +1264,7 @@ class Notification(models.Model):
             "update": "bi-chat-left-text-fill",
             "completion": "bi-check2-circle",
             "reminder": "bi-alarm",
+            "mention": "bi-at",
             "system": "bi-bell",
         }
         return icons.get(self.category_key, "bi-bell")

@@ -73,12 +73,16 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 - Assign primary and backup engineers with capacity enforcement (max 5 ongoing; max 3 when a deployment is active)
 - SLA due-date auto-calculation (Medium = 5 days, High = 3 days)
 - Overdue detection and visual indicators on the dashboard
-- Status log history and admin-authored request updates
+- Collaborative update history for the requestor, primary engineer, backup engineer, and active administrators (including PM-ESG)
+- Type `@` or use **Mention** in Updates to select only these people; unrelated and inactive users cannot be mentioned. Arrow keys select a suggestion, Enter inserts it, and Escape dismisses the list.
+- Mentions send one in-app notification, a toast while the recipient is signed in, and an email linking to the update. Repeated mentions and unchanged mentions on edits do not send duplicate alerts. Your own account is excluded from suggestions; manually typed self-mentions are rejected on both new updates and edits.
+- The notification badge matches the notification page's unread count for every role. Toast polling synchronizes counts and refreshes the open notification page every 10 seconds when its notification state changes, preserving category, read-status, and pagination filters.
+- Mention email uses the existing ACS email configuration, or a configured Django delivery backend. Console/dummy/file backends do not deliver email; missing addresses or delivery failures show a warning without losing the update or in-app notification.
 
 ### ?? Dashboard & Reporting
 - **Admin/PM dashboard**: filterable, sortable request table with stat pills (All / Ongoing / Completed / Overdue)
 - **Engineer dashboard**: Assigned vs Backup tabs, personal activity report graph
-- **Requestor dashboard**: personal metrics, request creation, and progress tracking
+- **Requestor dashboard**: personal metrics, request creation, and progress tracking; click a request ID to open its Manage page
 - **Reports page (Operational)**: stacked bar charts requests by requestor, by engineer, by engagement type, by product category
 - **Reports page (Activity)**: billable vs non-billable hours, work location mix (donut), activity type breakdown, paginated engineer log
 - Chart **expand button** on every chart card for full-screen view
@@ -106,7 +110,13 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 ### ?? User & Profile Management
 - Profile photos stored in the database (no external media bucket required)
-- Configurable banner gradient (Blue, Sunset, Forest, Crimson, Slate, Aurora, Rose, Teal)
+- Account-wide themes with live preview, Apply Theme, and Cancel preview; light/dark mode stays unchanged
+- **Christmas**: evergreen, cranberry and gold surfaces, background snowfall, an icy blue/lavender pill navbar wrapped in twisted multicolour lights, a pine-and-berry corner border (`static/images/christmas-frame.webp`, drawn as a nine-slice `border-image`), a snowflake cursor, click snowbursts, and a quick 1.9-second Santa-and-reindeer sleigh flyover (`static/images/christmas-santa-sleigh.svg`) whenever the light/dark switch is toggled (right into dark, left into light). Open `/accounts/profile/#christmas` for an unsaved interactive preview; Apply Theme saves it across devices. The Christmas panel has separate switches for border decoration, snowfall, navbar lights, the snowflake cursor, click snowflakes, and the Santa flyover. The master Festive effects switch turns them all off without clearing individual selections. Changes preview immediately; Apply Theme saves the choices to your account across devices, and Cancel preview restores the saved theme and choices. Account settings take precedence over the old device-local switch. Reduced-motion/reduced-effects preferences still take priority, and animations pause when the tab is hidden.
+- Seasonal navbar overlay: [CSS](static/css/christmas-lights.css) and [JavaScript](static/js/christmas-lights.js), loaded in the base template without changing navbar styling or controls. JavaScript measures the rounded perimeter and maps the approved reference layout onto it: 36 bulbs with their measured positions, angles and colours (24 on tablets), plus the reference wire sags. It adds top clearance so outward bulbs are not cropped and removes the overlay below 480px. ResizeObserver and window resize keep it aligned, including expanded mobile menus.
+- Enable/disable navbar lights by adding/removing `seasonal-lights` on the navbar. The default `data-seasonal-lights-theme="christmas"` limits them to the Christmas account theme; remove that attribute to use the class flag with any theme. Twinkle respects reduced motion and the existing Festive effects toggle; dark mode has slightly stronger glow. No external libraries are needed.
+- Christmas login page: [CSS](static/css/login-christmas.css) and [JavaScript](static/js/login-christmas.js) give the sign-in page a snowy dusk scene, falling snow, and a frosted card with a snow cap and twinkling C7 lights. The form, CSRF, validation, and light/dark toggle are unchanged. After someone signs in with the Christmas theme and Festive effects on, that browser shows this design on the login page. It switches back after they sign in with another theme or turn Festive effects off. The page adds `login-christmas` to `<html>` when the browser's `reqHubLoginTheme` value is `christmas`.
+  - **Background image:** `static/img/login-christmas-bg.webp`, shown with `background-size: cover; background-position: center`. To use a different scene, replace the file with a background-only image (no card or toggle) at the same path, ideally 16:9 or 3:2 and at least 1920px wide, then run `collectstatic`. Keep the corner decorations away from the centre, where the card sits.
+  - **Turn it off after the holidays:** set `CHRISTMAS_LOGIN_THEME_ENABLED=false` and restart. The login page then renders without any Christmas markup or assets.
 - Forced password-change on first login or admin reset
 - Microsoft Graph user sync via `fetch_phildata_users` management command
 - The Management Changelogs tab loads only its editor and paginated history, avoiding unrelated user/account editors and sign-in-log queries. Links back to the other tabs load their normal Management views.
@@ -149,7 +159,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 | Assign engineers | ? | ? | ? | ? | ? | ? | ? |
 | Update request status | ? | ? | ? | ? | ? | ? | ? |
 | View assigned requests | ? | ? | ? | ? | ? | ? (read-only) | ? |
-| Log engineer activity | ? | ? | ? | ? | ? | ? | ? |
+| Add activity logs | No | No | No | No | Yes | No | Yes |
 | Submit SQR | ? | ? | ? | ? | ? | ? | ? |
 | Access reports | ? | ? | ? | ? | ? (own graph) | ? | ? |
 | Manage users | ? | ? | ? | ? | ? | ? | ? |
@@ -420,6 +430,7 @@ docker compose exec web python manage.py migrate
 | `PHILDATA_DOMAIN` | Default `phildata.com` |
 | `PHILDATA_GRAPH_SCOPE` | Default `https://graph.microsoft.com/.default` |
 | `AI_ASSISTANT_NATIVE_ENABLED` | Enables the native assistant and provider; defaults to `false`. |
+| `CHRISTMAS_LOGIN_THEME_ENABLED` | Site-wide switch for the Christmas login design; defaults to `true`. Set `false` after the holidays. |
 | `AZURE_AI_BASE_URL` | Full Azure OpenAI v1 endpoint URL, including `/openai/v1/`. |
 | `AZURE_AI_DEPLOYMENT` | Exact Foundry model deployment name. |
 | `AZURE_AI_AUTH_MODE` | `managed_identity` (default) or `api_key`. |
@@ -453,6 +464,12 @@ endpoint guidance](https://learn.microsoft.com/en-us/azure/foundry/foundry-model
 for current SDK and endpoint requirements.
 
 ### Assistant rollout and operator handoff
+
+Before enabling the native assistant, apply the [assistant usage migration](hub/migrations/0058_assistant_usage_limit.py)
+to the operator-approved database. Review its plan with
+`python manage.py migrate hub 0058_assistant_usage_limit --plan`, then apply it
+without `--plan` after approval. The state and reset APIs require this table even
+for a local preview with Foundry left unconfigured.
 
 The native assistant requires both `AI_ASSISTANT_NATIVE_ENABLED=true` and each
 user's existing chatbot preference. Roll out only after verifying the endpoint,

@@ -1,12 +1,30 @@
 from __future__ import annotations
 
 from django.db import transaction
+from django.db.models import Count, Max, Q
 
 from accounts.models import User
 from hub.models import Notification, Request
 
 
 ADMIN_NOTIFICATION_ROLES = {User.Roles.ADMIN, User.Roles.PM_ESG}
+
+
+def visible_notifications(user: User):
+    queryset = user.notifications.all()
+    if user.role in ADMIN_NOTIFICATION_ROLES:
+        queryset = queryset.filter(Q(source__icontains="new request") | Q(event_type=Notification.EventType.MENTION))
+    return queryset
+
+
+def notification_summary(user: User) -> dict:
+    summary = visible_notifications(user).aggregate(
+        unread_count=Count("pk", filter=Q(is_read=False)),
+        total_count=Count("pk"),
+        latest_id=Max("pk"),
+    )
+    summary["latest_id"] = summary["latest_id"] or 0
+    return summary
 
 
 def _user_label(user: User) -> str:
