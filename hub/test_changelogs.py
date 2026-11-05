@@ -185,8 +185,8 @@ class ChangelogTests(TestCase):
     def test_changelogs_omit_unrelated_panes_and_allow_server_return_navigation(self):
         apps.get_model("hub", "Account").objects.create(name="Management account")
         response = self.client.get(self.management, {"tab": "changelogs"})
-        self.assertEqual(response.context["total_users"], 2)
-        self.assertEqual(response.context["total_accounts"], 1)
+        self.assertEqual(response.context["total_users"], User.objects.count())
+        self.assertEqual(response.context["total_accounts"], apps.get_model("hub", "Account").objects.count())
         html = response.content.decode()
         self.assertIn('id="changelogs-pane"', html)
         for tab in ("users", "accounts", "activity", "forms"):
