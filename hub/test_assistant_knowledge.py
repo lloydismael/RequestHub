@@ -30,16 +30,16 @@ class AssistantKnowledgeTests(TestCase):
     def make_user(self, role):
         return User(role=role, is_active=True)
 
-    def test_destinations_match_existing_navigation_roles(self):
+    def test_destinations_match_existing_route_permissions(self):
         expected = {
             User.Roles.REQUESTOR: {"dashboard", "notifications", "profile"},
             User.Roles.REQUESTOR_ESS: {"dashboard", "notifications", "profile"},
             User.Roles.PM_ESS: {"dashboard", "notifications", "profile"},
             User.Roles.PM_ESG: {"dashboard", "sqr", "reports", "notifications", "profile"},
             User.Roles.ENGINEER: {"dashboard", "activity_logs", "sqr", "notifications", "profile"},
-            User.Roles.ON_HOLD: {"dashboard", "activity_logs", "sqr", "notifications", "profile"},
+            User.Roles.ON_HOLD: {"dashboard", "sqr", "notifications", "profile"},
             User.Roles.ADMIN: {
-                "dashboard", "sqr", "management", "reports",
+                "dashboard", "activity_logs", "sqr", "management", "reports",
                 "notifications", "profile",
             },
         }
@@ -63,9 +63,6 @@ class AssistantKnowledgeTests(TestCase):
         }
 
         for key, route_name in route_names.items():
-            if key == "activity_logs":
-                self.assertNotIn(key, cards)
-                continue
             self.assertEqual(cards[key].url, reverse(route_name))
         engineer_cards = {
             card.key: card
@@ -87,16 +84,17 @@ class AssistantKnowledgeTests(TestCase):
             },
         )
 
-    def test_guide_audiences_match_existing_navigation_permissions(self):
+    def test_guide_audiences_match_existing_route_permissions(self):
         destination_access = {
             User.Roles.REQUESTOR: {"dashboard", "notifications", "profile"},
             User.Roles.REQUESTOR_ESS: {"dashboard", "notifications", "profile"},
             User.Roles.PM_ESS: {"dashboard", "notifications", "profile"},
             User.Roles.PM_ESG: {"dashboard", "sqr", "reports", "notifications", "profile"},
             User.Roles.ENGINEER: {"dashboard", "activity_logs", "sqr", "notifications", "profile"},
-            User.Roles.ON_HOLD: {"dashboard", "activity_logs", "sqr", "notifications", "profile"},
+            User.Roles.ON_HOLD: {"dashboard", "sqr", "notifications", "profile"},
             User.Roles.ADMIN: {
-                "dashboard", "sqr", "management", "reports", "notifications", "profile",
+                "dashboard", "activity_logs", "sqr", "management", "reports",
+                "notifications", "profile",
             },
         }
 
