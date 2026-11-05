@@ -109,6 +109,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 - Configurable banner gradient (Blue, Sunset, Forest, Crimson, Slate, Aurora, Rose, Teal)
 - Forced password-change on first login or admin reset
 - Microsoft Graph user sync via `fetch_phildata_users` management command
+- The Management Changelogs tab loads only its editor and paginated history, avoiding unrelated user/account editors and sign-in-log queries. Links back to the other tabs load their normal Management views.
 
 ---
 

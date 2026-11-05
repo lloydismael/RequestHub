@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from io import BytesIO
 
@@ -5,7 +6,8 @@ from PIL import Image
 from django.apps import apps
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -168,6 +170,81 @@ class ChangelogTests(TestCase):
         response = self.client.get(self.management, {"tab": "changelogs"})
         self.assertContains(response, 'id="changelogs-tab"')
         self.assertEqual(response.context["active_tab"], "changelogs")
+
+    def test_changelogs_link_exposes_pane_target_without_intercepting_navigation(self):
+        for tab in ("changelogs", "activity"):
+            with self.subTest(tab=tab):
+                response = self.client.get(self.management, {"tab": tab})
+                match = re.search(r'<a\b[^>]*\bid="changelogs-tab"[^>]*>', response.content.decode())
+                self.assertIsNotNone(match)
+                link = match.group()
+                self.assertIn('data-bs-target="#changelogs-pane"', link)
+                self.assertIn(f'href="{self.management}?tab=changelogs"', link)
+                self.assertNotIn("data-bs-toggle", link)
+
+    def test_changelogs_omit_unrelated_panes_and_allow_server_return_navigation(self):
+        apps.get_model("hub", "Account").objects.create(name="Management account")
+        response = self.client.get(self.management, {"tab": "changelogs"})
+        self.assertEqual(response.context["total_users"], User.objects.count())
+        self.assertEqual(response.context["total_accounts"], apps.get_model("hub", "Account").objects.count())
+        html = response.content.decode()
+        self.assertIn('id="changelogs-pane"', html)
+        for tab in ("users", "accounts", "activity", "forms"):
+            with self.subTest(tab=tab):
+                self.assertFalse(f'id="{tab}-pane"' in html, f"Unrelated {tab} pane rendered")
+                match = re.search(rf'<a\b[^>]*\bid="{tab}-tab"[^>]*>', html)
+                self.assertIsNotNone(match)
+                self.assertIn(f'href="{self.management}?tab={tab}"', match.group())
+                self.assertNotIn("data-bs-toggle", match.group())
+                returned = self.client.get(self.management, {"tab": tab})
+                self.assertEqual(returned.context["active_tab"], tab)
+                self.assertContains(returned, f'id="{tab}-pane"')
+
+    def test_changelogs_do_not_query_unrelated_editors_or_sign_in_logs(self):
+        from .views import UserManagementView
+
+        request = RequestFactory().get(self.management, {"tab": "changelogs"})
+        request.user = self.admin
+        with CaptureQueriesContext(connection) as queries:
+            response = UserManagementView.as_view()(request)
+        self.assertEqual(response.status_code, 200)
+        sql = "\n".join(query["sql"].lower() for query in queries)
+        for app, model in (("hub", "FormDefinition"), ("hub", "FormAnswerSet"), ("accounts", "SignInLog")):
+            with self.subTest(model=model):
+                self.assertNotIn(apps.get_model(app, model)._meta.db_table.lower(), sql)
+
+    def test_invalid_changelog_create_and_edit_preserve_bound_values(self):
+        entry = self.entry(title="Saved draft")
+        urls = (reverse("hub:changelog-create"), reverse("hub:changelog-edit", args=[entry.pk]))
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.post(url, self.payload(title="Unsaved change", new_version="v1"))
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context["active_tab"], "changelogs")
+                form = response.context["changelog_form"]
+                self.assertTrue(form.is_bound)
+                self.assertEqual(form["title"].value(), "Unsaved change")
+                self.assertIn("new_version", form.errors)
+                self.assertContains(response, 'id="changelog-errors"')
+                self.assertFalse('id="users-pane"' in response.content.decode(), "Unrelated users pane rendered")
+                entry.refresh_from_db()
+                self.assertEqual(entry.title, "Saved draft")
+                self.assertEqual(self.model().objects.count(), 1)
+
+    def test_management_history_pagination_and_editor_routes(self):
+        entries = [self.entry(title=f"Draft {index}") for index in range(11)]
+        response = self.client.get(self.management, {"tab": "changelogs", "changelog_page": "2"})
+        page = response.context["changelog_page"]
+        self.assertEqual(page.number, 2)
+        self.assertEqual(page.paginator.count, 11)
+        self.assertEqual(len(page.object_list), 1)
+        for url in (reverse("hub:changelog-create"), reverse("hub:changelog-edit", args=[entries[0].pk])):
+            with self.subTest(url=url):
+                response = self.client.get(url, {"tab": "users"})
+                self.assertEqual(response.context["active_tab"], "changelogs")
+                self.assertFalse('id="users-pane"' in response.content.decode(), "Unrelated users pane rendered")
+        response = self.client.get(reverse("hub:changelog-edit", args=[entries[-1].pk + 1]))
+        self.assertEqual(response.status_code, 404)
 
     def test_admin_can_save_edit_publish_and_unpublish(self):
         url = reverse("hub:changelog-create")
