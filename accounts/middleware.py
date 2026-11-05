@@ -1,7 +1,10 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.contrib import messages
+from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.urls import resolve, Resolver404
+from django.urls import Resolver404, resolve, reverse
 
 FORCE_PASSWORD_CHANGE_SESSION_KEY = "_force_password_change_prompt"
 
@@ -35,6 +38,10 @@ def _is_password_change_exempt(view_name: str) -> bool:
     if view_name.startswith("admin:"):
         return True
     return False
+
+
+def _is_assistant_api(view_name: str | None) -> bool:
+    return bool(view_name and view_name.rsplit(":", 1)[-1].startswith("assistant-"))
 
 
 def _is_static_or_media_request(request) -> bool:
@@ -85,6 +92,17 @@ class PasswordChangeRequiredMiddleware:
         if user and user.is_authenticated and getattr(user, "must_change_password", False):
             view_name = _get_view_name(request)
             if not _is_password_change_exempt(view_name):
+                if _is_assistant_api(view_name):
+                    return JsonResponse(
+                        {
+                            "status": "error",
+                            "code": "password_change_required",
+                            "message": "Change your password before using the assistant.",
+                            "request_id": str(uuid4()),
+                            "profile_url": reverse("accounts:update"),
+                        },
+                        status=403,
+                    )
                 if not request.session.get(self.SESSION_KEY):
                     messages.warning(
                         request,

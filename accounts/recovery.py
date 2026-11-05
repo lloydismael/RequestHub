@@ -28,12 +28,14 @@ MODEL_LABELS = (
 )
 EXCLUDED_MODEL_LABELS = (
     "hub.outlookconnection", "hub.outlookoauthattempt", "hub.outlooksqrdraft",
+    "hub.assistantusagelimit",
 )
 EXCLUSIONS = [
     "Users, credentials, permissions and sessions",
     "Media and stored files",
     "Backup history and recovery audit events",
     "Microsoft 365 connections, authorization attempts and draft state",
+    "Transient assistant quotas, leases and session-generation state",
 ]
 CONFIRMATION_PHRASE = "RESTORE"
 

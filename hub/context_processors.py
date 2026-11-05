@@ -4,8 +4,10 @@ from typing import Dict
 
 from django.conf import settings
 from django.http import HttpRequest
+from django.urls import reverse
 
 from accounts.models import User
+from hub.assistant_knowledge import allowed_destinations
 from hub.models import Notification
 
 
@@ -27,6 +29,42 @@ def notification_badges(request: HttpRequest) -> Dict[str, int | str]:
         cached = (user_id, _notification_badges(request))
         request._notification_badges = cached
     return cached[1]
+
+
+def assistant_widget(request: HttpRequest) -> dict[str, object]:
+    user = getattr(request, "user", None)
+    native_enabled = bool(
+        getattr(user, "is_authenticated", False)
+        and getattr(user, "is_active", False)
+        and getattr(user, "show_chatbot", False)
+        and settings.AI_ASSISTANT_NATIVE_ENABLED
+    )
+    config: dict[str, object] = {}
+    if native_enabled:
+        destinations = allowed_destinations(user, "", None)
+        current_destination = next(
+            (card for card in destinations if card.url == request.path_info),
+            None,
+        )
+        config = {
+            "stateUrl": reverse("hub:assistant-state"),
+            "messagesUrl": reverse("hub:assistant-messages"),
+            "resetUrl": reverse("hub:assistant-reset"),
+            "guideUrlTemplate": reverse(
+                "hub:assistant-guide",
+                kwargs={"key": "__guide_key__"},
+            ),
+            "departmentsUrl": reverse("hub:assistant-departments"),
+            "membersUrl": reverse("hub:assistant-members"),
+            "pageKey": current_destination.key if current_destination else None,
+            "pageLabel": current_destination.title if current_destination else "Request Hub",
+        }
+    return {
+        "assistant_widget": {
+            "native_enabled": native_enabled,
+            "config": config,
+        }
+    }
 
 
 def _notification_badges(request: HttpRequest) -> Dict[str, int | str]:

@@ -1,0 +1,83 @@
+<section class="rh-assistant" id="rh-assistant" data-assistant-root aria-label="Hub Assistant">
+    <header class="rh-assistant__header">
+        <div class="rh-assistant__identity">
+            <span class="rh-assistant__eyebrow">REQUEST HUB</span>
+            <h2>Hub Assistant</h2>
+            <p>Find your way around, learn workflows, and explore teams.</p>
+        </div>
+        <div class="rh-assistant__header-actions">
+            <button type="button" class="rh-assistant__icon-button" data-assistant-new-chat aria-label="Start a new chat" title="New chat">
+                <i class="bi bi-plus-lg" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="rh-assistant__icon-button" data-assistant-expand aria-expanded="false" aria-label="Expand assistant" title="Expand assistant">
+                <i class="bi bi-arrows-angle-expand" aria-hidden="true"></i>
+            </button>
+            <button id="ai-chat-close-btn" type="button" class="ai-chat-close-btn rh-assistant__close" aria-label="Close Hub Assistant" title="Close assistant">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="rh-assistant__context" data-assistant-context>
+        <i class="bi bi-window" aria-hidden="true"></i>
+        <span>On this page: {{ assistant_widget.config.pageLabel }}. Only the page name is shared.</span>
+    </div>
+
+    <main class="rh-assistant__main">
+        <div class="rh-assistant__conversation" data-assistant-messages role="log" aria-live="off" aria-relevant="additions text"></div>
+        <section class="rh-assistant__starters" data-assistant-starters aria-label="Try asking">
+            <p>What would you like to do?</p>
+            <button type="button" data-assistant-starter="Find a page">
+                <i class="bi bi-compass" aria-hidden="true"></i><span>Find a page</span>
+            </button>
+            <button type="button" data-assistant-starter="How do I use Request Hub?">
+                <i class="bi bi-journal-text" aria-hidden="true"></i><span>Learn a workflow</span>
+            </button>
+            <button type="button" data-assistant-action="directory">
+                <i class="bi bi-people" aria-hidden="true"></i><span>Explore departments</span>
+            </button>
+        </section>
+
+        <section class="rh-assistant__directory" data-assistant-directory hidden aria-labelledby="assistant-directory-title">
+            <div class="rh-assistant__section-heading">
+                <div>
+                    <h3 id="assistant-directory-title">Departments &amp; people</h3>
+                    <p>Active Request Hub members, using their published name and application role.</p>
+                </div>
+                <button type="button" class="rh-assistant__text-button" data-assistant-action="directory-close">Close</button>
+            </div>
+            <form class="rh-assistant__search" data-assistant-directory-form role="search">
+                <label class="visually-hidden" for="assistant-directory-search">Search departments</label>
+                <input id="assistant-directory-search" type="search" data-assistant-directory-search maxlength="100" placeholder="Search departments">
+                <button type="submit" class="rh-assistant__button rh-assistant__button--secondary">Search</button>
+            </form>
+            <div class="rh-assistant__directory-results" data-assistant-directory-results aria-live="polite"></div>
+        </section>
+
+        <section class="rh-assistant__source-viewer" data-assistant-source-viewer hidden aria-labelledby="assistant-source-title">
+            <div class="rh-assistant__section-heading">
+                <h3 id="assistant-source-title">Source</h3>
+                <button type="button" class="rh-assistant__text-button" data-assistant-action="source-close">Back to conversation</button>
+            </div>
+            <div data-assistant-source-content></div>
+        </section>
+    </main>
+
+    <footer class="rh-assistant__footer">
+        <p class="rh-assistant__status" data-assistant-status role="status" aria-live="polite">Ready when you are.</p>
+        <div class="rh-assistant__error" data-assistant-error role="alert" hidden>
+            <span data-assistant-error-message></span>
+            <button type="button" class="rh-assistant__text-button" data-assistant-retry hidden>Retry</button>
+        </div>
+        <form class="rh-assistant__composer" data-assistant-form>
+            <label class="visually-hidden" for="assistant-message">Message Hub Assistant</label>
+            <textarea id="assistant-message" data-assistant-input rows="2" maxlength="4000" placeholder="Ask a question…" aria-describedby="assistant-message-hint"></textarea>
+            <div class="rh-assistant__composer-bottom">
+                <span id="assistant-message-hint">Enter to send · Shift+Enter for a new line</span>
+                <button type="submit" class="rh-assistant__button" data-assistant-send>
+                    <span>Send</span><i class="bi bi-arrow-up" aria-hidden="true"></i>
+                </button>
+            </div>
+        </form>
+    </footer>
+</section>

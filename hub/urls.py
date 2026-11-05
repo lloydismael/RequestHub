@@ -59,10 +59,24 @@ from .form_editor_views import (
     FormEditorHistoryView, FormEditorPreviewView, FormEditorPeopleView,
 )
 from .outlook_views import OutlookCallbackView, OutlookDraftView, RequestOutlookConnectView
+from .assistant_views import (
+    assistant_conversation_reset,
+    assistant_departments,
+    assistant_guide,
+    assistant_members,
+    assistant_messages,
+    assistant_state,
+)
 
 app_name = "hub"
 
 urlpatterns = [
+    path("assistant/state/", assistant_state, name="assistant-state"),
+    path("assistant/guides/<slug:key>/", assistant_guide, name="assistant-guide"),
+    path("assistant/departments/", assistant_departments, name="assistant-departments"),
+    path("assistant/members/", assistant_members, name="assistant-members"),
+    path("assistant/messages/", assistant_messages, name="assistant-messages"),
+    path("assistant/conversation/reset/", assistant_conversation_reset, name="assistant-reset"),
     path("management/changelogs/new/", UserManagementView.as_view(), {"changelog_editor": True}, name="changelog-create"),
     path("management/changelogs/<int:pk>/edit/", UserManagementView.as_view(), {"changelog_editor": True}, name="changelog-edit"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),

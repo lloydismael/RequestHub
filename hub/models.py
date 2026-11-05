@@ -1400,3 +1400,30 @@ class OutlookSqrDraft(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "tenant_id", "mailbox_oid", "submission"], name="outlook_user_mailbox_sqr_unique")]
+
+
+class AssistantUsageLimit(models.Model):
+    scope_key = models.CharField(max_length=96, unique=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    window_started_at = models.DateTimeField(null=True, blank=True)
+    request_count = models.PositiveSmallIntegerField(default=0)
+    lease_owner = models.UUIDField(null=True, blank=True)
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    session_generation = models.PositiveIntegerField(default=0)
+    session_expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["lease_expires_at"],
+                name="assistant_lease_expiry_idx",
+            ),
+        ]

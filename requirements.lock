@@ -2,7 +2,9 @@ Django==5.2.17
 psycopg2-binary==2.9.10
 Pillow==13.0.0
 azure-communication-email==1.0.0
+azure-identity==1.25.0
 msal==1.37.0
+openai==2.29.0
 cryptography==50.0.1
 msgpack==1.2.3
 requests==2.33.0
