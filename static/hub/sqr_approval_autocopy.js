@@ -58,7 +58,6 @@
                     var text = JSON.parse(preview.getElementById('sqr-email-text').textContent);
                     var openLink = preview.getElementById('sqr-email-open');
                     var composeUrl = openLink.getAttribute('href');
-                    var bodyUrl = openLink.getAttribute('data-body-href') || '';
                     if (!composeUrl || !composeUrl.startsWith('mailto:')) throw new Error('Invalid compose link.');
                     resolveBody({html: html, text: text});
                     var microsoftForm = preview.getElementById('sqr-email-microsoft');
@@ -69,11 +68,9 @@
                         submitMicrosoftDraft(microsoftUrl, csrfField.value);
                         return;
                     }
-                    // Without Microsoft 365 the compose window opens with the plain-text body already filled in.
-                    var bodyPrefilled = bodyUrl.indexOf('mailto:') === 0;
-                    var launchUrl = bodyPrefilled ? bodyUrl : composeUrl;
+                    // mailto cannot insert HTML, so keep the body blank for the formatted paste.
                     var clipboardCopied = await copied;
-                    if (!clipboardCopied && !bodyPrefilled) {
+                    if (!clipboardCopied) {
                         window.location.href = previewUrl;
                         return;
                     }
@@ -85,18 +82,12 @@
                         notice.setAttribute('role', 'status');
                         document.querySelector('main').prepend(notice);
                     }
-                    if (bodyPrefilled) {
-                        notice.textContent = 'Approval saved. The email opened with the text body filled in.' +
-                            (clipboardCopied ? ' For the full formatted layout and logo, select the message body (Ctrl+A) and paste (Ctrl+V).' : '') +
-                            ' If Outlook did not open, ';
-                    } else {
-                        notice.textContent = 'Approval saved. Formatted email copied. Paste into Outlook using Ctrl+V. If Outlook did not open, ';
-                    }
+                    notice.textContent = 'Approval saved. Formatted email copied. Click the blank message body in Outlook and paste with Ctrl+V. If Outlook did not open, ';
                     var link = document.createElement('a');
-                    link.href = launchUrl;
+                    link.href = composeUrl;
                     link.textContent = 'open the email draft';
                     notice.appendChild(link);
-                    window.location.href = launchUrl;
+                    window.location.href = composeUrl;
                 } catch (error) {
                     rejectBody(error);
                     window.location.href = previewUrl;
