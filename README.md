@@ -506,9 +506,11 @@ Full Azure App Service container deployment guide:
 
 The `Container Security` GitHub Actions workflow runs on every push to `dev` or `master`, pull requests targeting `master`, and manual dispatch. Application and template changes are included; there are no path filters. Superseded CI runs are cancelled.
 
-Three independent jobs validate each change:
+A read-only event classifier avoids duplicate full dev-push validation when an open same-repository master PR matches the exact pushed SHA. That update is validated by the separate PR merge-ref run; its lightweight branch result is not PR approval. Standalone dev pushes, master pushes, PR runs, and manual dispatch still run all three validation jobs. Lookup failures default to full validation. See [CI testing and timing](docs/ci-workflow-testing.md) for routing cases and offline latency analysis.
 
-- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements.lock` and `requirements-ci.txt` (the runtime dependencies and test-only `tblib`) with a pip cache, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, and runs the complete Django test suite in parallel with migrations enabled. Tests use `request_hub.settings_ci`, which only swaps the password hasher for a fast one; every other check uses the real settings.
+Three jobs run in parallel when full validation is required:
+
+- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements.lock` and `requirements-ci.txt` (the runtime dependencies and test-only `tblib`) with a pip cache, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, runs fast offline analyzer/toast/deployment/routing regressions, and runs the complete Django test suite in parallel with migrations enabled. Tests use `request_hub.settings_ci`, which only swaps the password hasher for a fast one; every other check uses the real settings.
 - **Python dependency audit** checks dependencies with `pip-audit`.
 - **Build, scan, and publish SBOM** builds the Docker image without pushing it, generates an SPDX SBOM, and fails on fixable HIGH/CRITICAL vulnerabilities found by Trivy. Dependency layers are restored from the GitHub Actions cache; OS packages are refreshed on every build, so security fixes are never served from cache. Generated scan reports and SBOM artifacts are retained for 14 days, including after scan failures. Fork PRs retain report artifacts without attempting a privileged code-scanning upload.
 

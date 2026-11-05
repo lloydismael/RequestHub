@@ -18,11 +18,12 @@ env:
 
 jobs:
   release-preflight:
-    name: Check release eligibility
+    name: Check release eligibility and configuration
     runs-on: ubuntu-24.04
+    environment: production
     timeout-minutes: 5
     outputs:
-      ready: ${{ steps.check.outputs.ready }}
+      ready: ${{ steps.configuration.outputs.ready || 'false' }}
     steps:
       - name: Explain release eligibility
         id: check
@@ -54,20 +55,14 @@ jobs:
           check_condition 'Upstream CI event' "$CI_EVENT" push
           check_condition 'Upstream CI branch' "$CI_BRANCH" master
           check_condition 'Upstream repository' "$CI_REPOSITORY" "$GITHUB_REPOSITORY"
-          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+          echo "eligible=$ready" >> "$GITHUB_OUTPUT"
           if [ "$ready" = false ]; then
             echo 'No image will be published or deployed. See docs/cd-workflow-testing.md for setup.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  production-configuration:
-    name: Check production configuration
-    needs: release-preflight
-    if: needs.release-preflight.outputs.ready == 'true'
-    runs-on: ubuntu-24.04
-    environment: production
-    timeout-minutes: 5
-    steps:
       - name: Validate required configuration without exposing values
+        id: configuration
+        if: steps.check.outputs.eligible == 'true'
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
@@ -122,10 +117,11 @@ jobs:
               raise SystemExit('Removed default-password setting is not permitted')
           PY
           echo 'Required settings are present. Azure permissions and backup restoration readiness still require independent verification.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
 
   release-image:
     name: Build and publish numbered release
-    needs: [release-preflight, production-configuration]
+    needs: release-preflight
     if: needs.release-preflight.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
