@@ -1,4 +1,5 @@
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -71,6 +72,8 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
                     for name in ThemeForm.CUSTOM_FIELDS:
                         setattr(self.object, name, cleaned[name])
                     update_fields.extend(ThemeForm.CUSTOM_FIELDS)
+                if request.POST.get(ThemeForm.CHRISTMAS_PREFERENCES_MARKER):
+                    update_fields.extend(ThemeForm.CHRISTMAS_FIELDS)
                 self.object.save(update_fields=update_fields)
                 messages.success(request, "Theme applied to your account.")
                 return redirect(reverse_lazy("accounts:update") + "#themes")
@@ -138,6 +141,11 @@ class RoleLoginView(LoginView):
     authentication_form = RoleAuthenticationForm
     template_name = "accounts/login.html"
     redirect_authenticated_user = True
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["christmas_login_enabled"] = getattr(settings, "CHRISTMAS_LOGIN_THEME_ENABLED", False)
+        return context
 
     def _throttle_key(self) -> str:
         username = (self.request.POST.get("username") or "").strip().lower()

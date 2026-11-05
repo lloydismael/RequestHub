@@ -119,6 +119,8 @@ from .services.outlook_drafts import (
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
+    notification_summary,
+    visible_notifications,
 )
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
@@ -623,6 +625,7 @@ def flash_assignment_email_feedback(request, result: AssignmentEmailResult, *, a
 
 
 class EngineerActivityLogView(EngineerRequiredMixin, LoginRequiredMixin, TemplateView):
+    required_roles = {User.Roles.ENGINEER, User.Roles.ADMIN}
     template_name = "hub/activity_logs.html"
     form_class = EngineerActivityLogForm
 
@@ -780,12 +783,12 @@ class EngineerActivityLogView(EngineerRequiredMixin, LoginRequiredMixin, Templat
             except (TypeError, ValueError):
                 selected_request_id = None
             if selected_request_id is not None:
-                allowed_request_ids = set(
-                    Request.objects.filter(
+                allowed_requests = Request.objects.all()
+                if request.user.role != User.Roles.ADMIN:
+                    allowed_requests = allowed_requests.filter(
                         Q(engineer=request.user) | Q(backup_engineer=request.user)
-                    ).values_list("id", flat=True)
-                )
-                if selected_request_id in allowed_request_ids:
+                    )
+                if allowed_requests.filter(pk=selected_request_id).exists():
                     initial["request"] = selected_request_id
 
         if edit_id:
@@ -1069,31 +1072,22 @@ def summarize_request_changes(original, updated, changed_fields):
     return "; ".join(change_summaries)
 
 
-def notify_status_update(log, source_label):
-    """Notify relevant stakeholders that a new status update was posted."""
-    request_obj = log.request
-    author = log.author
-    author_name = author.get_full_name() or author.username
+def notify_status_update(log, source_label, *, previous_message=None, http_request=None):
+    from .services.update_mentions import notify_update
 
-    recipients: dict[int, User] = {}
-    if request_obj.engineer:
-        recipients[request_obj.engineer.pk] = request_obj.engineer
-    if request_obj.requestor:
-        recipients[request_obj.requestor.pk] = request_obj.requestor
-
-    for admin in User.objects.filter(role__in=ADMIN_PANEL_ROLES):
-        recipients[admin.pk] = admin
-
-    recipients.pop(author.pk, None)
-
-    for user in recipients.values():
-        Notification.objects.create(
-            recipient=user,
-            message=f"{author_name} posted an update on {request_obj.reference_code or 'a request'}.",
-            related_request=request_obj,
-            actor=author_name,
-            source=source_label,
+    def email_feedback(result):
+        messages.warning(
+            http_request,
+            "The update and mention notification were saved, but a mention email could not be sent. "
+            "Check the recipient's email address and email delivery configuration.",
         )
+
+    notify_update(
+        log,
+        source_label,
+        previous_message=previous_message,
+        email_feedback=email_feedback if http_request else None,
+    )
 
 
 def get_request_activity_log_context(request_obj: Request) -> dict:
@@ -3528,6 +3522,7 @@ class NotificationToastDataView(LoginRequiredMixin, View):
                 event_type__in=[
                     Notification.EventType.NEW_REQUEST,
                     Notification.EventType.ASSIGNMENT,
+                    Notification.EventType.MENTION,
                 ],
                 related_request__isnull=False,
             )
@@ -3535,9 +3530,10 @@ class NotificationToastDataView(LoginRequiredMixin, View):
             .order_by("id")
         )
         raw_cursor = request.GET.get("cursor")
+        summary = notification_summary(request.user)
         if raw_cursor in (None, ""):
             baseline = queryset.aggregate(value=Max("id"))["value"] or 0
-            return JsonResponse({"ok": True, "events": [], "next_cursor": baseline, "has_more": False})
+            return JsonResponse({"ok": True, "events": [], "next_cursor": baseline, "has_more": False, **summary})
         try:
             cursor = max(int(raw_cursor), 0)
         except (TypeError, ValueError):
@@ -3564,6 +3560,7 @@ class NotificationToastDataView(LoginRequiredMixin, View):
                 "events": events,
                 "next_cursor": rows[-1].pk if rows else cursor,
                 "has_more": has_more,
+                **summary,
             }
         )
 
@@ -5019,7 +5016,8 @@ class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, Upda
             .select_related("author")
             .order_by("-created_at")
         )
-        context.setdefault("log_form", StatusLogForm())
+        context.setdefault("log_form", StatusLogForm(request_obj=self.object, actor_user=self.request.user))
+        context["mention_people"] = context["log_form"].mention_people
         context["engineer_capacity_map"] = self._build_engineer_capacity_map()
         context["status_form"] = None
         context["status_allowed"] = False
@@ -5030,14 +5028,15 @@ class RequestAdminUpdateView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, Upda
         context.update(get_request_activity_log_context(self.object))
         return context
 
+    @transaction.atomic
     def _handle_status_log_post(self, request):
-        form = StatusLogForm(request.POST)
+        form = StatusLogForm(request.POST, request_obj=self.object, actor_user=request.user)
         if form.is_valid():
             log = form.save(commit=False)
             log.request = self.object
             log.author = request.user
             save_configured_instance(form, log)
-            notify_status_update(log, "Admin · Manage Request · Status Update")
+            notify_status_update(log, "Admin · Manage Request · Status Update", http_request=request)
             messages.success(request, "Status update posted.")
             return redirect("hub:request-manage", pk=self.object.pk)
         if form.errors:
@@ -5272,7 +5271,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         elif not status_allowed:
             status_form = None
         if log_form is None:
-            log_form = StatusLogForm()
+            log_form = StatusLogForm(request_obj=request_obj, actor_user=self.request.user)
         if editing_activity_log is not None and activity_form is None:
             activity_form = EngineerActivityLogForm(
                 engineer=editing_activity_log.engineer,
@@ -5295,6 +5294,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             "form": form,
             "status_form": status_form,
             "log_form": log_form,
+            "mention_people": log_form.mention_people,
             "activity_form": activity_form,
             "editing_activity_log": editing_activity_log,
             "status_logs": request_obj.status_logs.select_related("author").order_by("-created_at"),
@@ -5309,6 +5309,8 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
 
     def _handle_activity_log_post(self, request, request_obj):
         log_id = (request.POST.get("log_id") or "").strip()
+        if not log_id and request.user.role not in {User.Roles.ENGINEER, User.Roles.ADMIN}:
+            raise PermissionDenied("Only engineers and admins can add activity logs.")
         instance = None
         if log_id:
             queryset = EngineerActivityLog.objects.select_related("engineer", "account", "request").filter(
@@ -5447,15 +5449,16 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         context = self.get_context_data(request_obj, status_form=status_form)
         return render(request, self.template_name, context)
 
+    @transaction.atomic
     def _handle_status_log_post(self, request, request_obj):
-        log_form = StatusLogForm(request.POST)
+        log_form = StatusLogForm(request.POST, request_obj=request_obj, actor_user=request.user)
         if log_form.is_valid():
             log = log_form.save(commit=False)
             log.request = request_obj
             log.author = request.user
             save_configured_instance(log_form, log)
             source_label = self._source_label("Manage Request · Status Update")
-            notify_status_update(log, source_label)
+            notify_status_update(log, source_label, http_request=request)
             messages.success(request, "Status update posted.")
             return redirect("hub:request-manage-collab", pk=request_obj.pk)
         if log_form.errors:
@@ -5474,8 +5477,32 @@ class StatusLogUpdateView(LoginRequiredMixin, UpdateView):
     template_name = "hub/status_log_form.html"
 
     def get_queryset(self):
-        # Only allow the author to edit their own logs
-        return super().get_queryset().filter(author=self.request.user)
+        user = self.request.user
+        queryset = super().get_queryset().filter(author=user, request__is_deleted=False).select_related("request", "author")
+        if user.role in ADMIN_PANEL_ROLES:
+            return queryset
+        if user.role == PM_ESS_ROLE:
+            return queryset.filter(Q(request__requestor=user) | Q(request__requestor__role=User.Roles.REQUESTOR_ESS))
+        if user.role in REQUEST_CREATOR_ROLES:
+            return queryset.filter(request__requestor=user)
+        if user.role in ENGINEER_ACCESS_ROLES:
+            return queryset.filter(
+                Q(request__engineer=user) | Q(request__backup_engineer=user) | Q(request__sqr_links__engineer=user)
+            ).distinct()
+        return queryset.none()
+
+    @transaction.atomic
+    def form_valid(self, form):
+        previous_message = StatusLog.objects.values_list("message", flat=True).get(pk=self.object.pk)
+        response = super().form_valid(form)
+        notify_status_update(
+            self.object,
+            "Manage Request · Status Update",
+            previous_message=previous_message,
+            http_request=self.request,
+        )
+        messages.success(self.request, "Update saved.")
+        return response
 
     def get_success_url(self):
         request_obj = self.object.request
@@ -7786,9 +7813,7 @@ class NotificationListView(LoginRequiredMixin, ListView):
     def get(self, request, *args, **kwargs):
         if request.GET.get("tab") != "changelogs":
             return super().get(request, *args, **kwargs)
-        base_qs = request.user.notifications.all()
-        if getattr(request.user, "role", None) in ADMIN_PANEL_ROLES:
-            base_qs = base_qs.filter(source__icontains="new request")
+        base_qs = visible_notifications(request.user)
         changelog_qs = Changelog.objects.filter(
             is_published=True, release_date__lte=timezone.localdate(),
         )
@@ -7801,13 +7826,9 @@ class NotificationListView(LoginRequiredMixin, ListView):
         })
 
     def get_queryset(self):
-        queryset = (
-            self.request.user.notifications.select_related("related_request", "related_request__account")
-            .order_by("-created_at")
-        )
-        user = self.request.user
-        if getattr(user, "role", None) in ADMIN_PANEL_ROLES:
-            queryset = queryset.filter(source__icontains="new request")
+        queryset = visible_notifications(self.request.user).select_related(
+            "related_request", "related_request__account"
+        ).order_by("-created_at")
 
         # ── Filter: read/unread (default to unread for the notification dashboard) ──
         self._filter_read = self.request.GET.get("filter", "unread")
@@ -7821,7 +7842,9 @@ class NotificationListView(LoginRequiredMixin, ListView):
         if self._filter_category:
             # We can't directly filter on computed properties, so filter on message/source patterns
             cat = self._filter_category
-            if cat == "new_request":
+            if cat == "mention":
+                queryset = queryset.filter(event_type=Notification.EventType.MENTION)
+            elif cat == "new_request":
                 queryset = queryset.filter(source__icontains="new request")
             elif cat == "assignment":
                 queryset = queryset.filter(message__icontains="assigned to request")
@@ -7848,9 +7871,7 @@ class NotificationListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
-        base_qs = user.notifications.all()
-        if getattr(user, "role", None) in ADMIN_PANEL_ROLES:
-            base_qs = base_qs.filter(source__icontains="new request")
+        base_qs = visible_notifications(user)
         context["unread_count"] = base_qs.filter(is_read=False).count()
         context["total_count"] = base_qs.count()
         context["changelog_count"] = Changelog.objects.filter(
@@ -7923,9 +7944,13 @@ class NotificationFollowRedirectView(LoginRequiredMixin, View):
         if notification.related_request:
             req = notification.related_request
             # Route to manage views instead of read-only detail.
-            if request.user.role in ADMIN_PANEL_ROLES:
-                return redirect("hub:request-manage", pk=req.pk)
-            return redirect("hub:request-manage-collab", pk=req.pk)
+            route = "hub:request-manage" if request.user.role in ADMIN_PANEL_ROLES else "hub:request-manage-collab"
+            destination = reverse(route, args=[req.pk])
+            if notification.event_type == Notification.EventType.MENTION:
+                match = re.fullmatch(r"update:(\d+):mention:\d+", notification.event_key)
+                if match:
+                    destination += f"#update-{match.group(1)}"
+            return HttpResponseRedirect(destination)
         return redirect("hub:notifications")
 
 

@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 
 from django.utils import timezone
+from django.utils.functional import cached_property
 
 from typing import Iterable, List
 
@@ -1448,6 +1449,17 @@ class RequestStatusForm(forms.ModelForm):
 
 
 class StatusLogForm(forms.ModelForm):
+    def __init__(self, *args, request_obj=None, actor_user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.request_obj = request_obj or (self.instance.request if self.instance.pk else None)
+        self.actor_user = actor_user or (self.instance.author if self.instance.pk else None)
+
+    @cached_property
+    def mention_people(self):
+        from .services.update_mentions import mention_people_data
+
+        return mention_people_data(self.request_obj, exclude_user=self.actor_user)
+
     class Meta:
         model = StatusLog
         fields = ["message"]
@@ -1460,6 +1472,15 @@ class StatusLogForm(forms.ModelForm):
         message = self.cleaned_data.get("message", "").strip()
         if not message:
             raise forms.ValidationError("Message cannot be empty.")
+        from .services.update_mentions import mention_handles, request_people
+
+        handles = mention_handles(message)
+        if handles:
+            if self.actor_user and self.actor_user.username.casefold() in handles:
+                raise forms.ValidationError("You cannot mention yourself. Choose another related person.")
+            allowed = {user.username.casefold() for user in request_people(self.request_obj)}
+            if not handles.issubset(allowed):
+                raise forms.ValidationError("Mention only active people listed for this request. Remove or replace unavailable @mentions.")
         return message
 
 
@@ -1537,6 +1558,8 @@ class EngineerActivityLogForm(forms.ModelForm):
         elif self.engineer.pk is None:
             # Form-editor baselines use an unsaved engineer, with no related requests.
             related_requests = Request.objects.none()
+        elif self.engineer.role == User.Roles.ADMIN:
+            related_requests = Request.objects.all()
         else:
             related_requests = Request.objects.filter(
                 Q(engineer=self.engineer) | Q(backup_engineer=self.engineer)

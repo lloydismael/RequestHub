@@ -212,6 +212,28 @@ class ProfileSmokeTests(TestCase):
         other.refresh_from_db()
         self.assertEqual(other.banner_gradient, "blue")
 
+    def test_christmas_theme_can_be_previewed_and_saved(self):
+        page = self.client.get(reverse("accounts:update"))
+        self.assertContains(page, 'value="christmas"')
+        self.assertContains(page, 'id="christmas-effects-toggle"')
+        from django.templatetags.static import static
+        self.assertContains(page, static('css/christmas-theme.css'))
+        self.assertContains(page, static('js/christmas-theme.js'))
+        self.assertContains(page, static('css/christmas-lights.css'))
+        self.assertContains(page, static('js/christmas-lights.js'))
+        self.assertContains(page, 'data-seasonal-lights-theme="christmas"')
+        self.assertContains(page, 'shadow-sm seasonal-lights')
+        response = self.client.post(reverse("accounts:update"), {
+            "save_theme": "1", "banner_gradient": "christmas",
+        })
+        self.assertRedirects(response, reverse("accounts:update") + "#themes")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.account_theme, "christmas")
+        self.assertFalse(self.user.profile_completed)
+        reopened = self.client.get(reverse("accounts:update"))
+        self.assertContains(reopened, 'data-account-theme="christmas"')
+        self.assertContains(reopened, "Cancel preview")
+
     def test_new_accounts_start_on_default_theme(self):
         self.assertEqual(self.user.banner_gradient, "default")
         response = self.client.get(reverse("accounts:update"))

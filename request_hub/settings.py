@@ -111,6 +111,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "hub.context_processors.notification_badges",
+                "hub.context_processors.assistant_widget",
             ],
         },
     },
@@ -267,3 +268,17 @@ SQR_OUTLOOK_TOKEN_KEY = os.getenv("SQR_OUTLOOK_TOKEN_KEY", "").strip()
 # PFX certificate takes precedence over SQR_OUTLOOK_CLIENT_SECRET when the file exists.
 SQR_OUTLOOK_CERT_PATH = os.getenv("SQR_OUTLOOK_CERT_PATH", "").strip()
 SQR_OUTLOOK_CERT_PASSWORD = os.getenv("SQR_OUTLOOK_CERT_PASSWORD", "")
+
+AI_ASSISTANT_NATIVE_ENABLED = (
+    os.getenv("AI_ASSISTANT_NATIVE_ENABLED", "false").strip().lower() == "true"
+)
+# Site-wide switch for the Christmas login design (shown only after a Christmas-theme user signed in on that browser).
+CHRISTMAS_LOGIN_THEME_ENABLED = (
+    os.getenv("CHRISTMAS_LOGIN_THEME_ENABLED", "true").strip().lower() == "true"
+)
+AZURE_AI_BASE_URL = os.getenv("AZURE_AI_BASE_URL", "")
+AZURE_AI_DEPLOYMENT = os.getenv("AZURE_AI_DEPLOYMENT", "").strip()
+AZURE_AI_AUTH_MODE = os.getenv("AZURE_AI_AUTH_MODE", "managed_identity").strip()
+AZURE_AI_TOKEN_SCOPE = os.getenv("AZURE_AI_TOKEN_SCOPE", "").strip()
+AZURE_AI_API_KEY = os.getenv("AZURE_AI_API_KEY", "")
+CSRF_FAILURE_VIEW = "hub.assistant_views.assistant_csrf_failure"

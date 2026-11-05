@@ -1,0 +1,53 @@
+/* Decoration only: controls stay in their original positions. */
+.navbar.seasonal-lights--active {
+    margin-top: 1rem !important;
+    top: max(1.75rem, env(safe-area-inset-top, 0px)) !important;
+}
+.seasonal-lights-overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    z-index: 2;
+    pointer-events: none;
+    user-select: none;
+}
+.seasonal-lights-overlay * { pointer-events: none; }
+.navbar:not(.seasonal-lights) > .seasonal-lights-overlay { display: none; }
+.seasonal-light-wire {
+    fill: none;
+    stroke: #183f31;
+    stroke-width: 1.35px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 1px 0.6px rgba(8, 31, 23, 0.25));
+}
+.seasonal-light-wire--twist { stroke: #0d2a22; stroke-width: 1.1px; }
+.seasonal-light-bulb { color: var(--bulb-color); }
+.seasonal-light-glass { fill: currentColor; stroke: color-mix(in srgb, currentColor 70%, white); stroke-width: 0.5px; }
+.seasonal-light-core { fill: #fff8df; opacity: 0.56; }
+.seasonal-light-highlight { fill: #ffffff; opacity: 0.88; }
+.seasonal-light-socket { fill: #173c2e; stroke: #0d241c; stroke-width: 0.4px; }
+.seasonal-light-emitter {
+    --light-glow: 3.5px;
+    --light-halo: 11px;
+    filter: drop-shadow(0 0 var(--light-glow) currentColor) drop-shadow(0 0 var(--light-halo) currentColor);
+    animation: seasonal-light-twinkle var(--twinkle-duration, 3s) ease-in-out var(--twinkle-delay, 0s) infinite;
+}
+body.dark-mode .seasonal-light-emitter { --light-glow: 4.5px; --light-halo: 14px; }
+@keyframes seasonal-light-twinkle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+.seasonal-lights-overlay--paused .seasonal-light-emitter { animation: none; }
+body.pref-reduce-effects .seasonal-light-emitter { animation: none; filter: none; }
+@media (prefers-reduced-motion: reduce) {
+    .seasonal-light-emitter { animation: none; }
+}
+@media (max-width: 479px) {
+    .seasonal-lights-overlay { display: none; }
+}
+@media print {
+    .seasonal-lights-overlay { display: none !important; }
+}

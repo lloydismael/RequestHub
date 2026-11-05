@@ -27,6 +27,14 @@
             } catch (_) {}
         }());
     </script>
+    {% if request.user.is_authenticated %}
+    <script>
+        // Remembers the saved Christmas theme so the signed-out login page can match it on this browser.
+        try {
+            {% if request.user.account_theme == 'christmas' and request.user.pref_christmas_enabled %}localStorage.setItem('reqHubLoginTheme', 'christmas');{% else %}localStorage.removeItem('reqHubLoginTheme');{% endif %}
+        } catch (_) {}
+    </script>
+    {% endif %}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/app.css' %}?v=25">
@@ -36,12 +44,22 @@
     <!-- Ambient background layer renders below content; defer so it doesn't block first paint -->
     <link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3"></noscript>
-    <link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">
+    {% if request.user.is_authenticated %}
+    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=8">
+    <link rel="stylesheet" href="{% static 'css/christmas-lights.css' %}?v=2">
+    {% endif %}
+    {% if assistant_widget.native_enabled %}
+    <link rel="stylesheet" href="{% static 'css/assistant.css' %}?v=3">
+    {% endif %}
     {% block extra_head %}{% endblock %}
     {{ sqr_json_scripts }}
     <link rel="icon" type="image/png" href="{% static 'images/PD favicon.png' %}">
 </head>
 <body {% if request.user.is_authenticated %}data-account-theme="{{ request.user.account_theme }}"{% if request.user.account_theme_style %} style="{{ request.user.account_theme_style }}"{% endif %}{% endif %} class="bg-light {% block body_class %}{% endblock %}{% if request.user.is_authenticated %} authenticated{% if request.user.account_theme != 'default' %} account-themed{% endif %}{% if request.user.pref_compact_tables %} pref-compact-tables{% endif %}{% if request.user.pref_large_text %} pref-large-text{% endif %}{% if request.user.pref_reduce_effects %} pref-reduce-effects{% endif %}{% if request.user.pref_reduce_motion %} pref-reduce-motion{% endif %}{% endif %}">
+    {% if request.user.is_authenticated %}
+    {{ request.user.christmas_effects_preferences|json_script:"christmas-effects-settings" }}
+    {% endif %}
     <script>
         if (document.documentElement.classList.contains('theme-dark-pending')) {
             document.body.classList.add('dark-mode');
@@ -60,7 +78,7 @@
         <span class="ambient-mesh__orb ambient-mesh__orb--7"></span>
         <span class="ambient-mesh__grain"></span>
     </div>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-gradient-primary shadow-sm" data-nav-surface="light" data-nav-default-surface="light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-gradient-primary shadow-sm{% if request.user.is_authenticated %} seasonal-lights{% endif %}" data-nav-surface="light" data-nav-default-surface="light" data-seasonal-lights-theme="christmas">
         <div class="container-fluid">
             <a class="navbar-brand fw-semibold" href="{% if request.user.is_authenticated %}{% url 'hub:dashboard' %}{% else %}{% url 'landing' %}{% endif %}">
                 <i class="bi bi-hexagon-half me-1"></i>Request Hub
@@ -128,11 +146,11 @@
                             <li class="nav-item"><a class="nav-link" href="{% url 'hub:report' %}"><i class="bi bi-bar-chart-fill nav-icon"></i>Reports</a></li>
                         {% endif %}
                         <li class="nav-item position-relative">
-                            <a class="nav-link {% if new_ticket_count %}nav-link-with-dot{% endif %}" href="{% url 'hub:notifications' %}">
+                            <a class="nav-link {% if new_ticket_count %}nav-link-with-dot{% endif %}" href="{% url 'hub:notifications' %}" data-notification-link>
                                 <i class="bi bi-bell-fill nav-icon"></i>Notifications
                                 {% if new_ticket_count %}
-                                    <span class="notification-dot notification-dot--nav" title="New assignments or tickets" aria-label="{{ new_ticket_count }} new items">
-                                        <span class="notification-dot__count">{{ new_ticket_count }}</span>
+                                    <span class="notification-dot notification-dot--nav" title="Unread notifications" aria-label="{{ new_ticket_count }} new items" data-notification-badge role="status">
+                                        <span class="notification-dot__count" data-notification-count>{{ new_ticket_count }}</span>
                                     </span>
                                 {% endif %}
                             </a>
@@ -413,9 +431,13 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
         <script src="{% static 'js/page-transitions.js' %}?v=1" defer></script>
     <script src="{% static 'js/navbar-contrast.js' %}?v=1" defer></script>
+    {% if request.user.is_authenticated %}
+    <script src="{% static 'js/christmas-theme.js' %}?v=7" defer></script>
+    <script src="{% static 'js/christmas-lights.js' %}?v=4" defer></script>
+    {% endif %}
     <script src="{% static 'js/liquid-glass.js' %}?v=4" defer></script>
     <script src="{% static 'js/smooth-scroll.js' %}?v=11" defer></script>
-    <script src="{% static 'js/notification-toasts.js' %}?v=4" defer></script>
+    <script src="{% static 'js/notification-toasts.js' %}?v=6" defer></script>
     <script src="{% static 'js/login-success.js' %}" defer></script>
     <script src="{% static 'hub/form_runtime.js' %}" defer></script>
     <script>
@@ -552,7 +574,7 @@
             });
 
             {% if request.user.is_authenticated %}
-            // AI Chat Bot Logic (Iframe Implementation)
+            const nativeAssistantEnabled = {{ assistant_widget.native_enabled|yesno:"true,false" }};
             const initChat = () => {
                 const chatWidget = document.getElementById('ai-chat-widget-container');
                 if (!chatWidget) return;
@@ -561,12 +583,32 @@
                 const chatWindow = document.getElementById('ai-chat-window');
                 const closeBtn = document.getElementById('ai-chat-close-btn');
                 const chatIframe = document.getElementById('ai-chat-iframe');
+                const assistantRoot = document.getElementById('rh-assistant');
                 const chatBody = chatWidget.querySelector('.ai-chat-body');
                 const chatStateKey = 'reqHubChatOpen';
                 let chatObserver = null;
                 let iframeLoaded = false;
 
                 if (!toggleBtn || !chatWindow) return;
+
+                const dispatchAssistantEvent = (name) => {
+                    if (!nativeAssistantEnabled || !assistantRoot) return;
+                    assistantRoot.dispatchEvent(new CustomEvent(name));
+                };
+                const getSavedChatState = () => {
+                    try {
+                        return localStorage.getItem(chatStateKey);
+                    } catch (_) {
+                        return null;
+                    }
+                };
+                const saveChatState = (open) => {
+                    try {
+                        localStorage.setItem(chatStateKey, open ? '1' : '0');
+                    } catch (_) {
+                        // The widget remains usable when browser storage is disabled.
+                    }
+                };
 
                 const removeInjectedAgentLabel = () => {
                     if (!chatBody) return;
@@ -607,20 +649,32 @@
                     const shouldFocus = Boolean(options.focus);
 
                     if (open) {
-                        ensureIframeLoaded();
-                        startChatObserver();
+                        if (nativeAssistantEnabled) {
+                            dispatchAssistantEvent('assistant:open');
+                        } else {
+                            ensureIframeLoaded();
+                            startChatObserver();
+                        }
                     } else {
-                        stopChatObserver();
+                        if (nativeAssistantEnabled) {
+                            dispatchAssistantEvent('assistant:close');
+                        } else {
+                            stopChatObserver();
+                        }
                     }
 
                     chatWindow.classList.toggle('open', open);
                     toggleBtn.classList.toggle('active', open);
                     toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
                     toggleBtn.setAttribute('aria-label', open ? 'Close AI Assistant' : 'Open AI Assistant');
-                    localStorage.setItem(chatStateKey, open ? '1' : '0');
+                    saveChatState(open);
 
                     if (shouldFocus) {
-                        (open ? chatWindow : toggleBtn).focus();
+                        if (open) {
+                            chatWindow.focus();
+                        } else if (chatWidget.contains(document.activeElement)) {
+                            toggleBtn.focus();
+                        }
                     }
                 };
 
@@ -634,7 +688,7 @@
                     closeBtn.addEventListener('click', () => applyChatState(false, { focus: true }));
                 }
 
-                if (localStorage.getItem(chatStateKey) === '1') {
+                if (getSavedChatState() === '1') {
                     applyChatState(true);
                 }
 
@@ -644,7 +698,11 @@
                         return;
                     }
 
-                    if (e.key !== 'Tab' || !chatWindow.classList.contains('open')) {
+                    if (
+                        e.key !== 'Tab'
+                        || !chatWindow.classList.contains('open')
+                        || (nativeAssistantEnabled && !chatWindow.classList.contains('ai-chat-window--expanded'))
+                    ) {
                         return;
                     }
 
@@ -665,6 +723,20 @@
                         e.preventDefault();
                     }
                 });
+
+                if (nativeAssistantEnabled) {
+                    chatWindow.addEventListener('focusout', () => {
+                        window.setTimeout(() => {
+                            if (
+                                chatWindow.classList.contains('open')
+                                && !chatWindow.classList.contains('ai-chat-window--expanded')
+                                && !chatWidget.contains(document.activeElement)
+                            ) {
+                                applyChatState(false);
+                            }
+                        }, 0);
+                    });
+                }
             };
 
             // Ensure DOM is ready before init
@@ -681,11 +753,17 @@
     <!-- AI Chat Bot Widget -->
     <div id="ai-chat-widget-container" class="ai-chat-widget">
         <!-- Chat Window -->
-        <div id="ai-chat-window" class="ai-chat-window" role="dialog" aria-label="ESG AI Assistant" tabindex="-1">
+        <div id="ai-chat-window" class="ai-chat-window" role="dialog" aria-label="{% if assistant_widget.native_enabled %}Hub Assistant{% else %}ESG AI Assistant{% endif %}" tabindex="-1">
+            {% if not assistant_widget.native_enabled %}
             <button id="ai-chat-close-btn" class="ai-chat-close-btn" type="button" aria-label="Close AI Assistant">
                 <i class="bi bi-x-lg" aria-hidden="true"></i>
             </button>
+            {% endif %}
             <div class="ai-chat-body">
+                {% if assistant_widget.native_enabled %}
+                {% include "includes/assistant_widget.html" %}
+                {{ assistant_widget.config|json_script:"assistant-config" }}
+                {% else %}
                 {# Lazy-load iframe on first open — avoids Copilot Studio boot cost on every navigation #}
                 <iframe
                     id="ai-chat-iframe"
@@ -697,6 +775,7 @@
                     title="Chat with ESG AI Assistant"
                     loading="lazy">
                 </iframe>
+                {% endif %}
             </div>
         </div>
 
@@ -705,6 +784,9 @@
              <i class="bi bi-robot" aria-hidden="true"></i>
         </button>
     </div>
+    {% if assistant_widget.native_enabled %}
+    <script src="{% static 'js/assistant.js' %}?v=3" defer></script>
+    {% endif %}
     {% endif %}
 
     {% if request.user.is_authenticated %}

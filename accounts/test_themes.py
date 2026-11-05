@@ -1,6 +1,33 @@
+from django.contrib.staticfiles import finders
 from django.test import SimpleTestCase
+from PIL import Image
 
 from accounts.themes import contrast_ratio, custom_theme_style, custom_theme_vars, normalize_hex
+
+
+class ChristmasFrameAssetTests(SimpleTestCase):
+    def test_border_artwork_is_transparent_nine_slice_image(self):
+        path = finders.find("images/christmas-frame.webp")
+        self.assertIsNotNone(path)
+        with Image.open(path) as image:
+            self.assertEqual(image.size, (1152, 768))
+            alpha = image.convert("RGBA").getchannel("A")
+        self.assertEqual(alpha.getpixel((576, 384)), 0)
+        self.assertGreater(alpha.getpixel((5, 5)), 200)
+        self.assertIsNone(alpha.crop((300, 0, 842, 215)).point(lambda value: 255 if value > 8 else 0).getbbox())
+        with open(finders.find("css/christmas-theme.css"), encoding="utf-8") as stylesheet:
+            self.assertIn("christmas-frame.webp') 215 310 180 300", stylesheet.read())
+
+    def test_santa_flyover_artwork_is_valid_svg_used_by_stylesheet(self):
+        from xml.etree import ElementTree
+
+        path = finders.find("images/christmas-santa-sleigh.svg")
+        self.assertIsNotNone(path)
+        root = ElementTree.parse(path).getroot()
+        self.assertEqual(root.get("viewBox"), "0 0 640 210")
+        self.assertEqual(len(root.findall(".//{http://www.w3.org/2000/svg}use")), 3)
+        with open(finders.find("css/christmas-theme.css"), encoding="utf-8") as stylesheet:
+            self.assertIn("url('../images/christmas-santa-sleigh.svg')", stylesheet.read())
 
 
 class CustomThemeTests(SimpleTestCase):

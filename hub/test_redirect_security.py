@@ -185,10 +185,12 @@ class RedirectSecurityTests(SimpleTestCase):
                     "hub.views.save_configured_instance"
                 ), patch("hub.views.notify_status_update"):
                     form.return_value.is_valid.return_value = True
+                    # This routing-only test bypasses the database transaction wrapper.
+                    handler = view._handle_status_log_post.__wrapped__
                     if view_class is RequestAdminUpdateView:
-                        response = view._handle_status_log_post(request)
+                        response = handler(view, request)
                     else:
-                        response = view._handle_status_log_post(request, obj)
+                        response = handler(view, request, obj)
                 self.assertEqual(response["Location"], reverse(route, args=[obj.pk]))
 
     def test_unauthorized_status_update_redirect_uses_named_route(self):

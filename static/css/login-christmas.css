@@ -1,0 +1,526 @@
+/* ==========================================================================
+   Christmas login theme
+   Active only when <html> has `login-christmas` (set in accounts/login.html
+   from the browser's last signed-in Christmas theme) and the site-wide
+   CHRISTMAS_LOGIN_THEME_ENABLED setting renders this file.
+   Purely visual: form fields, CSRF, validation and the theme toggle are untouched.
+   ========================================================================== */
+
+html:not(.login-christmas) .xmas-only {
+    display: none !important;
+}
+
+html.login-christmas body.page-login {
+    --xc-ink: #0b1d3a;
+    --xc-muted: #44516a;
+    --xc-faint: #556277;
+    --xc-icon: #6b778c;
+    --xc-glass: rgba(255, 255, 255, 0.55);
+    --xc-glass-border: rgba(255, 255, 255, 0.78);
+    --xc-input-bg: rgba(255, 255, 255, 0.74);
+    --xc-input-border: rgba(255, 255, 255, 0.92);
+    --xc-focus: #1e7bff;
+    --xc-divider: rgba(68, 81, 106, 0.32);
+    --xc-snowflake: #4f7fd9;
+    background: #b8c4de !important;
+    color: var(--xc-ink);
+}
+
+html.login-christmas body.page-login.dark-mode {
+    --xc-ink: #f2f6ff;
+    --xc-muted: #c7d1e6;
+    --xc-faint: #b3bfd7;
+    --xc-icon: #a3b2cf;
+    --xc-glass: rgba(20, 28, 55, 0.6);
+    --xc-glass-border: rgba(196, 214, 255, 0.24);
+    --xc-input-bg: rgba(12, 20, 44, 0.58);
+    --xc-input-border: rgba(196, 214, 255, 0.22);
+    --xc-focus: #5ea2ff;
+    --xc-divider: rgba(199, 209, 230, 0.3);
+    --xc-snowflake: #9cc2ff;
+    background: #0b1430 !important;
+}
+
+/* The shared animated orbs and liquid-glass wash would tint the snow scene. */
+html.login-christmas body.page-login .ambient-mesh,
+html.login-christmas body.page-login .login-hero::before,
+html.login-christmas body.page-login .login-hero::after {
+    display: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Background scene + falling snow (behind the card)
+   -------------------------------------------------------------------------- */
+
+.xmas-scene {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.xmas-scene::before,
+.xmas-scene::after,
+.xmas-scene__glow,
+.xmas-scene .xmas-snow {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.xmas-scene::before {
+    content: "";
+    z-index: 0;
+    /* Soft haze pools behind the card so the busy corners never compete with the form. */
+    background:
+        radial-gradient(ellipse 36% 50% at 50% 46%, rgba(228, 234, 247, 0.4) 0%, rgba(228, 234, 247, 0.16) 62%, rgba(228, 234, 247, 0) 100%),
+        #b8c4de url("../img/login-christmas-bg.webp") center / cover no-repeat;
+    transition: filter 0.4s ease;
+}
+
+/* Night tint (dark mode only) */
+.xmas-scene::after {
+    content: "";
+    z-index: 1;
+    opacity: 0;
+    background:
+        radial-gradient(120% 70% at 50% 0%, rgba(6, 12, 40, 0.5), transparent 70%),
+        linear-gradient(180deg, rgba(8, 16, 52, 0.55) 0%, rgba(10, 22, 62, 0.42) 55%, rgba(8, 16, 48, 0.5) 100%);
+    transition: opacity 0.4s ease;
+}
+
+/* Warm light bloom isolated from the same photo, screened back over the darker scene. */
+.xmas-scene__glow {
+    z-index: 2;
+    display: none;
+    background: url("../img/login-christmas-bg.webp") center / cover no-repeat;
+    filter: url("#xmas-warm-glow");
+    mix-blend-mode: screen;
+    opacity: 0.85;
+}
+
+.xmas-scene .xmas-snow {
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+}
+
+.xmas-filter-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+body.dark-mode .xmas-scene::before {
+    filter: brightness(0.62) saturate(1.12);
+}
+
+body.dark-mode .xmas-scene::after {
+    opacity: 1;
+}
+
+body.dark-mode .xmas-scene__glow {
+    display: block;
+}
+
+/* --------------------------------------------------------------------------
+   Frosted glass card
+   -------------------------------------------------------------------------- */
+
+html.login-christmas body.page-login .login-card {
+    overflow: visible;
+    contain: none;
+    border-radius: 24px;
+    color: var(--xc-ink);
+    background: var(--xc-glass) !important;
+    border: 1px solid var(--xc-glass-border) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.55),
+        0 28px 64px -22px rgba(14, 30, 70, 0.5),
+        0 10px 24px -14px rgba(14, 30, 70, 0.35) !important;
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    backdrop-filter: blur(14px) saturate(135%);
+}
+
+html.login-christmas body.page-login.dark-mode .login-card {
+    box-shadow:
+        inset 0 1px 0 rgba(196, 214, 255, 0.16),
+        0 28px 70px -20px rgba(0, 0, 0, 0.7) !important;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    html.login-christmas body.page-login .login-card {
+        background: rgba(255, 255, 255, 0.88) !important;
+    }
+
+    html.login-christmas body.page-login.dark-mode .login-card {
+        background: rgba(20, 28, 55, 0.92) !important;
+    }
+}
+
+/* The refraction lens bleeds outside the card once overflow is visible. */
+html.login-christmas body.page-login .login-card__lens {
+    display: none;
+}
+
+html.login-christmas body.page-login .login-card > .xmas-card-frost.xmas-only {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' seed='8'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 10 0 0 0 -6.1'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23f)'/%3E%3C/svg%3E");
+    box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.55), inset 0 0 3px rgba(255, 255, 255, 0.7);
+    -webkit-mask-image: radial-gradient(120% 95% at 50% 50%, transparent 58%, #000 100%);
+    mask-image: radial-gradient(120% 95% at 50% 50%, transparent 58%, #000 100%);
+    opacity: 0.75;
+}
+
+html.login-christmas body.page-login.dark-mode .login-card > .xmas-card-frost.xmas-only {
+    box-shadow: inset 0 0 18px rgba(196, 214, 255, 0.16);
+    opacity: 0.32;
+}
+
+/* SVG overlay (snow, wire, bulbs) built by login-christmas.js */
+html.login-christmas body.page-login .login-card > .xmas-card-deco.xmas-only {
+    position: absolute;
+    inset: calc(var(--xmas-deco-pad, 36px) * -1);
+    z-index: 4;
+    pointer-events: none;
+}
+
+.xmas-card-deco svg {
+    position: absolute;
+    inset: 0;
+    display: block;
+    overflow: visible;
+}
+
+/* Static snow/wire layer is filtered once and cached; only the bulb layer animates. */
+.xmas-deco-static {
+    will-change: transform;
+}
+
+.xmas-frost-specks,
+.xmas-crystals {
+    fill: #ffffff;
+}
+
+.xmas-snow {
+    fill: url(#xmas-puff);
+}
+
+.xmas-frost {
+    opacity: 0.6;
+}
+
+body.dark-mode .xmas-frost {
+    opacity: 0.22;
+}
+
+.xmas-cap-shadow {
+    fill: rgba(46, 72, 128, 0.34);
+}
+
+.xmas-wire {
+    fill: none;
+    stroke: #0c2414;
+    stroke-width: 2.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.xmas-wire--back {
+    stroke: #050f08;
+}
+
+.xmas-wire-highlight {
+    fill: none;
+    stroke: #4c7f58;
+    stroke-width: 0.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.6;
+}
+
+.xmas-wire-shadow {
+    fill: none;
+    stroke: rgba(18, 36, 70, 0.32);
+    stroke-width: 3.2;
+}
+
+.xmas-socket-ribs {
+    fill: none;
+    stroke: rgba(0, 0, 0, 0.4);
+    stroke-width: 0.55;
+}
+
+.xmas-bulb__facets {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.26);
+    stroke-width: 0.5;
+}
+
+.xmas-bulb__shine {
+    fill: rgba(255, 255, 255, 0.8);
+}
+
+.xmas-halos {
+    opacity: 1;
+}
+
+.xmas-bulb__halo,
+.xmas-bulb__core {
+    animation: xmas-twinkle var(--twinkle-duration, 3s) ease-in-out var(--twinkle-delay, 0s) infinite;
+}
+
+body.dark-mode .xmas-halos {
+    opacity: 1;
+}
+
+body.dark-mode .xmas-frost-specks {
+    opacity: 0.45;
+}
+
+body.dark-mode .xmas-cap-shadow {
+    fill: rgba(0, 6, 24, 0.5);
+}
+
+body.dark-mode .xmas-wire-shadow {
+    stroke: rgba(0, 0, 0, 0.45);
+}
+
+@keyframes xmas-twinkle {
+    0%, 100% { opacity: 1; }
+    42% { opacity: 0.95; }
+    52% { opacity: 0.5; }
+    66% { opacity: 0.92; }
+}
+
+/* --------------------------------------------------------------------------
+   Card content
+   -------------------------------------------------------------------------- */
+
+html.login-christmas body.page-login .login-card .login-card__brand {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+html.login-christmas body.page-login .login-card .login-card__logo {
+    width: 100% !important;
+    border-radius: 16px;
+    background: #fff;
+    filter: drop-shadow(0 10px 22px rgba(14, 30, 70, 0.22));
+}
+
+html.login-christmas body.page-login .login-card .login-card__title {
+    margin-bottom: 0.3rem;
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: var(--xc-ink) !important;
+}
+
+html.login-christmas body.page-login .login-card .login-card__subtitle {
+    margin-bottom: 1.5rem;
+    color: var(--xc-muted) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Inputs (icon + placeholder-style label; label stays the accessible name)
+   -------------------------------------------------------------------------- */
+
+html.login-christmas body.page-login .login-card .login-form__fields {
+    gap: 0.9rem;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+html.login-christmas body.page-login .login-card .login-form__group + .login-form__group {
+    border-top: 0;
+}
+
+html.login-christmas body.page-login .login-card .login-form .form-control {
+    min-height: 3.25rem;
+    padding: 0 1rem 0 2.9rem !important;
+    border: 1px solid var(--xc-input-border) !important;
+    border-radius: 12px !important;
+    background: var(--xc-input-bg) !important;
+    color: var(--xc-ink) !important;
+    caret-color: var(--xc-focus);
+    box-shadow: inset 0 1px 2px rgba(14, 30, 70, 0.06) !important;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+html.login-christmas body.page-login .login-card .login-form .form-control:focus,
+html.login-christmas body.page-login .login-card .login-form .form-control:focus-visible {
+    outline: none;
+    border-color: var(--xc-focus) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--xc-focus) 38%, transparent) !important;
+}
+
+html.login-christmas body.page-login .login-card .login-form input:-webkit-autofill {
+    -webkit-text-fill-color: var(--xc-ink);
+    caret-color: var(--xc-focus);
+}
+
+html.login-christmas body.page-login .login-card .login-form__group > label,
+html.login-christmas body.page-login .login-card .login-form__group:focus-within > label,
+html.login-christmas body.page-login .login-card .login-form__group > input:focus ~ label {
+    top: 1rem !important;
+    left: 2.9rem;
+    right: 1rem;
+    font-size: 1rem !important;
+    line-height: 1.25rem;
+    color: var(--xc-faint) !important;
+    opacity: 1;
+    transition: opacity 0.12s ease;
+}
+
+/* Hide the placeholder-style label once a value exists, exactly like a native placeholder. */
+html.login-christmas body.page-login .login-card .login-form__group > input:not(:placeholder-shown) ~ label {
+    opacity: 0;
+}
+
+html.login-christmas body.page-login .login-card .login-form__icon {
+    position: absolute;
+    top: 0;
+    left: 1rem;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    height: 3.25rem;
+    font-size: 1.05rem;
+    color: var(--xc-icon);
+    pointer-events: none;
+}
+
+html.login-christmas body.page-login .login-card .invalid-feedback {
+    padding: 0.4rem 0.25rem 0;
+}
+
+html.login-christmas body.page-login .login-card .alert {
+    position: relative;
+    z-index: 3;
+}
+
+/* --------------------------------------------------------------------------
+   Sign in button
+   -------------------------------------------------------------------------- */
+
+/* 19px bold counts as large text, keeping white text >= 3:1 across the whole gradient. */
+html.login-christmas body.page-login .login-card .login-card__submit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    overflow: visible;
+    margin-top: 0.15rem;
+    padding: 0.85rem 1.25rem;
+    border-radius: 12px;
+    font-size: 1.1875rem;
+    font-weight: 700;
+    color: #fff;
+    background: linear-gradient(90deg, #1e7bff 0%, #0a5ce0 100%) !important;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        0 10px 22px -10px rgba(10, 92, 224, 0.7);
+}
+
+/* Keep liquid-glass.js's submit spinner readable: hide label + arrow while loading. */
+html.login-christmas body.page-login .login-card .login-card__submit[data-loading="true"] {
+    color: transparent;
+}
+
+html.login-christmas body.page-login .login-card .login-card__submit:hover {
+    filter: brightness(1.05);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.36),
+        0 12px 28px -8px rgba(30, 123, 255, 0.75),
+        0 0 26px rgba(30, 123, 255, 0.45);
+}
+
+html.login-christmas body.page-login .login-card .login-card__submit:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px var(--xc-focus);
+}
+
+html.login-christmas body.page-login .login-card .login-card__submit-arrow {
+    font-size: 1.05em;
+    line-height: 1;
+    transition: transform 0.18s ease;
+}
+
+html.login-christmas body.page-login .login-card .login-card__submit:hover .login-card__submit-arrow {
+    transform: translateX(3px);
+}
+
+/* --------------------------------------------------------------------------
+   Footer
+   -------------------------------------------------------------------------- */
+
+html.login-christmas body.page-login .login-card .login-card__footer {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin: 1.5rem 0 0;
+    color: var(--xc-muted) !important;
+    white-space: nowrap;
+}
+
+html.login-christmas body.page-login .login-card .login-card__footer::before,
+html.login-christmas body.page-login .login-card .login-card__footer::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--xc-divider);
+}
+
+html.login-christmas body.page-login .login-card .login-card__snowflake {
+    display: block;
+    margin-top: 0.5rem;
+    text-align: center;
+    font-size: 0.95rem;
+    line-height: 1;
+    color: var(--xc-snowflake);
+}
+
+/* --------------------------------------------------------------------------
+   Responsive + motion
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 520px) {
+    html.login-christmas body.page-login .login-hero {
+        padding-left: max(1.75rem, env(safe-area-inset-left, 0px));
+        padding-right: max(1.75rem, env(safe-area-inset-right, 0px));
+    }
+
+    /* Keep the snowy middle of the scene; the corner props crop away. */
+    .xmas-scene::before {
+        background-position: center, 50% 62%;
+    }
+
+    .xmas-scene__glow {
+        background-position: 50% 62%;
+    }
+
+    html.login-christmas body.page-login .login-card {
+        padding: 1.75rem 1.35rem 1.5rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .xmas-bulb__halo,
+    .xmas-bulb__core {
+        animation: none;
+    }
+
+    html.login-christmas body.page-login .login-card .login-card__submit-arrow {
+        transition: none;
+    }
+}

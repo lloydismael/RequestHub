@@ -1,0 +1,17 @@
+{% load static %}
+<link rel="stylesheet" href="{% static 'hub/update_mentions.css' %}">
+<div class="update-composer" data-mention-composer>
+    {{ composer_form.mention_people|json_script:"request-mention-people" }}
+    <label class="form-label" for="{{ composer_form.message.id_for_label }}">{{ composer_form.message.label }}</label>
+    {{ composer_form.message }}
+    <div id="request-mention-suggestions" class="update-mention-list" role="listbox" aria-label="Related people" hidden></div>
+    <div class="update-composer__tools">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-insert-mention aria-label="Mention a related person" aria-controls="request-mention-suggestions" aria-expanded="false"><i class="bi bi-at" aria-hidden="true"></i> Mention</button>
+        <span id="request-mention-help" class="update-composer__help">Type @ to mention a related person. They receive a notification and email.</span>
+    </div>
+    <span class="visually-hidden" data-mention-status role="status" aria-live="polite"></span>
+    {% if composer_form.message.errors %}
+        <div class="invalid-feedback d-block" role="alert">{{ composer_form.message.errors|join:" " }}</div>
+    {% endif %}
+</div>
+<script src="{% static 'js/update-mentions.js' %}" defer></script>

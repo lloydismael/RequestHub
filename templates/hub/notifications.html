@@ -4,7 +4,7 @@
 {% block body_class %}notifications-page{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}">{% endblock %}
 {% block content %}
-<div class="nq-page">
+<div class="nq-page" data-notification-page>
 
     <header class="nq-head" aria-labelledby="notifications-heading" data-navbar-surface="theme">
         <div class="nq-head__title">
@@ -111,6 +111,10 @@
             <a href="?category=update{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
                class="nq-chip nq-chip--update{% if current_category == 'update' %} is-active{% endif %}">
                 <i class="bi bi-chat-left-text-fill"></i> Updated
+            </a>
+            <a href="?category=mention{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
+               class="nq-chip nq-chip--update{% if current_category == 'mention' %} is-active{% endif %}">
+                <i class="bi bi-at" aria-hidden="true"></i> Mentions
             </a>
             <a href="?category=completion{% if current_filter and current_filter != 'all' %}&filter={{ current_filter }}{% endif %}"
                class="nq-chip nq-chip--completion{% if current_category == 'completion' %} is-active{% endif %}">

@@ -31,6 +31,51 @@ class RecoveryCenterTests(TransactionTestCase):
             set(recovery.MODEL_LABELS),
         )
 
+    def test_assistant_runtime_data_is_excluded_and_existing_snapshot_restores(self):
+        from django.apps import apps
+        from accounts import recovery
+        from hub.models import AssistantUsageLimit
+
+        actual = {model._meta.label_lower for model in apps.get_app_config("hub").get_models()}
+        self.assertEqual(
+            actual,
+            set(recovery.MODEL_LABELS) | set(recovery.EXCLUDED_MODEL_LABELS),
+        )
+        self.assertIn("hub.assistantusagelimit", recovery.EXCLUDED_MODEL_LABELS)
+
+        account = Account.objects.create(name="Assistant recovery customer")
+        _, payload = self.create_backup()
+        self.assertNotIn(
+            "hub.assistantusagelimit",
+            {row["model"] for row in payload["data"]},
+        )
+        AssistantUsageLimit.objects.create(
+            scope_key=f"user:{self.user.pk}",
+            owner=self.user,
+        )
+        Account.objects.filter(pk=account.pk).update(name="Changed customer")
+
+        preview = self.client.post(
+            reverse("accounts:backup-validate"),
+            {"backup_file": self.upload(payload)},
+        )
+        self.assertEqual(preview.status_code, 200)
+        response = self.client.post(
+            reverse("accounts:restore"),
+            {
+                "preview_token": preview.context["preview_token"],
+                "confirm_restore": "1",
+                "confirmation_phrase": "RESTORE",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        account.refresh_from_db()
+        self.assertEqual(account.name, "Assistant recovery customer")
+        self.assertTrue(
+            AssistantUsageLimit.objects.filter(scope_key=f"user:{self.user.pk}").exists()
+        )
+
     def create_backup(self):
         response = self.client.post(reverse("accounts:backup-create"), {"reason": "Test snapshot"})
         self.assertEqual(response.status_code, 302)

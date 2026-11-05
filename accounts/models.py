@@ -129,6 +129,7 @@ class User(AbstractUser):
         ("teal", "Teal"),
         ("amber", "Amber"),
         ("ocean", "Ocean"),
+        ("christmas", "Christmas"),
         (CUSTOM_THEME, "Custom"),
     ]
     HEX_COLOR_VALIDATOR = RegexValidator(r"^#[0-9a-fA-F]{6}$", "Enter a colour as #RRGGBB.")
@@ -178,6 +179,44 @@ class User(AbstractUser):
         default=False, verbose_name="Reduce Motion",
         help_text="Disable entrance animations and smooth scrolling.",
     )
+
+    CHRISTMAS_EFFECT_FIELDS = (
+        "pref_christmas_enabled", "pref_christmas_border", "pref_christmas_snow",
+        "pref_christmas_lights", "pref_christmas_cursor", "pref_christmas_clicks",
+        "pref_christmas_santa",
+    )
+    pref_christmas_enabled = models.BooleanField(
+        default=True, verbose_name="Festive effects",
+        help_text="Turn all effects off without changing your individual selections.",
+    )
+    pref_christmas_border = models.BooleanField(
+        default=True, verbose_name="Border decoration",
+        help_text="Frame your workspace with festive pine and berries.",
+    )
+    pref_christmas_snow = models.BooleanField(
+        default=True, verbose_name="Falling snow",
+        help_text="Soft snowfall behind your workspace.",
+    )
+    pref_christmas_lights = models.BooleanField(
+        default=True, verbose_name="Navbar lights",
+        help_text="Multicolour lights around the navigation bar.",
+    )
+    pref_christmas_cursor = models.BooleanField(
+        default=True, verbose_name="Snowflake cursor",
+        help_text="Use a snowflake pointer on clickable controls.",
+    )
+    pref_christmas_clicks = models.BooleanField(
+        default=True, verbose_name="Click snowflakes",
+        help_text="Scatter snowflakes with each mouse click.",
+    )
+    pref_christmas_santa = models.BooleanField(
+        default=True, verbose_name="Santa flyover",
+        help_text="Santa flies past when you switch light/dark mode.",
+    )
+
+    @property
+    def christmas_effects_preferences(self) -> dict[str, bool]:
+        return {name[len("pref_christmas_"):]: getattr(self, name) for name in self.CHRISTMAS_EFFECT_FIELDS}
 
     @property
     def custom_theme_colors(self):

@@ -240,6 +240,37 @@
                 </div>
             </div>
             {% endwith %}
+            <div class="christmas-controls" id="christmas-controls" hidden>
+                <input type="hidden" name="christmas_preferences_present" value="1">
+                <div class="christmas-controls__header">
+                    <div>
+                        <h3 class="h6 mb-1"><i class="bi bi-snow me-2" aria-hidden="true"></i>Christmas, your way</h3>
+                        <p class="small mb-0">Choose the decorations and little moments of magic you want in your workspace.</p>
+                    </div>
+                    <span class="christmas-controls__ornament" aria-hidden="true"><i class="bi bi-tree-fill"></i></span>
+                </div>
+                <label class="christmas-controls__master" for="{{ theme_form.pref_christmas_enabled.id_for_label }}">
+                    {{ theme_form.pref_christmas_enabled }}
+                    <span>
+                        <span class="fw-semibold">{{ theme_form.pref_christmas_enabled.label }}</span>
+                        <span class="small text-muted d-block" id="christmas-master-help">{{ theme_form.pref_christmas_enabled.help_text }}</span>
+                    </span>
+                </label>
+                <fieldset class="christmas-controls__options">
+                    <legend class="visually-hidden">Choose your Christmas effects</legend>
+                    {% for option in theme_form.christmas_options %}
+                    <label class="christmas-option" for="{{ option.id_for_label }}">
+                        {{ option }}
+                        <span class="christmas-option__content">
+                            <span class="fw-semibold">{{ option.label }}</span>
+                            <span class="small text-muted" id="christmas-{{ option.name|cut:'pref_christmas_' }}-help">{{ option.help_text }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </fieldset>
+                <p class="small text-muted mb-0" id="christmas-effects-status" role="status">Reduced-motion and reduced-effects preferences take priority.</p>
+                <p class="small mb-0">Changes preview immediately. Select <strong>Apply Theme</strong> to save your choices to your account on every device.</p>
+            </div>
             <div class="d-flex align-items-center gap-3 flex-wrap mt-4">
                 <button class="btn btn-primary" type="submit" name="save_theme" value="1"><i class="bi bi-check2 me-1" aria-hidden="true"></i>Apply Theme</button>
                 <button class="btn btn-outline-secondary" type="button" id="theme-cancel-btn" hidden>Cancel preview</button>
@@ -336,7 +367,7 @@
 
     // Hash-based tab activation
     if (window.location.hash === '#avatar') activate('avatar');
-    if (['#banner', '#themes'].includes(window.location.hash)) activate('themes');
+    if (['#banner', '#themes', '#christmas'].includes(window.location.hash)) activate('themes');
     if (document.getElementById('theme-errors')) activate('themes');
     if (window.location.hash === '#settings') activate('settings');
     if (window.location.hash === '#backup') {
@@ -374,6 +405,8 @@
     const savedTheme = body.dataset.accountTheme;
     const cancelTheme = document.getElementById('theme-cancel-btn');
     const themeStatus = document.getElementById('theme-status');
+    const effectInputs = Array.from(themeForm.querySelectorAll('[data-christmas-effect]'));
+    const savedEffects = JSON.parse(document.getElementById('christmas-effects-settings').textContent);
     const customPanel = document.getElementById('theme-custom-panel');
     const customCard = document.getElementById('theme-card-custom');
     const hexInputs = Array.from(customPanel.querySelectorAll('input[type="text"][data-color-slot]'));
@@ -419,6 +452,7 @@
     const setVars = (el, vars) => Object.entries(vars).forEach(([name, value]) => el.style.setProperty(name, value));
     const selectedTheme = () => themeForm.querySelector('input[name="banner_gradient"]:checked').value;
     const currentColors = () => hexInputs.map((input) => normalizeHex(input.value));
+    const currentEffects = () => Object.fromEntries(effectInputs.map(input => [input.dataset.christmasEffect, input.checked]));
     const setColors = (colors) => {
         colors.forEach((color, index) => { hexInputs[index].value = color; pickers[index].value = color; });
     };
@@ -435,18 +469,21 @@
         body.classList.toggle('account-themed', value !== 'default');
         if (!isCustom) THEME_VARS.forEach((name) => body.style.removeProperty(name));
         else if (validCustom) setVars(body, customVars(colors));
-        const dirty = value !== savedTheme || (isCustom && colors.join() !== savedColors.join());
+        document.dispatchEvent(new CustomEvent('requesthub:christmas-effects-preview', { detail: currentEffects() }));
+        const effectsDirty = effectInputs.some(input => input.checked !== savedEffects[input.dataset.christmasEffect]);
+        const dirty = value !== savedTheme || (isCustom && colors.join() !== savedColors.join()) || effectsDirty;
         cancelTheme.hidden = !dirty;
         themeStatus.textContent = dirty ? 'Preview only — select Apply Theme to save.' : 'Saved to your account. Available on every device.';
     };
     const restoreSaved = () => {
         themeForm.querySelector(`input[name="banner_gradient"][value="${savedTheme}"]`).checked = true;
         setColors(savedColors);
+        effectInputs.forEach(input => { input.checked = savedEffects[input.dataset.christmasEffect]; });
         render();
     };
 
     themeForm.addEventListener('change', (event) => {
-        if (event.target.name === 'banner_gradient') render();
+        if (event.target.name === 'banner_gradient' || event.target.dataset.christmasEffect) render();
     });
     customPanel.addEventListener('input', (event) => {
         const field = event.target;
@@ -479,6 +516,9 @@
     window.addEventListener('pageshow', (event) => {
         if (event.persisted) restoreSaved();
     });
+    if (window.location.hash === '#christmas') {
+        themeForm.querySelector('input[name="banner_gradient"][value="christmas"]').checked = true;
+    }
     render();
 
     // Live avatar preview

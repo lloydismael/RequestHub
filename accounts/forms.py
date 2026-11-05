@@ -43,16 +43,31 @@ class ThemeForm(forms.ModelForm):
     custom_theme_tertiary = forms.CharField(required=False, max_length=7)
 
     CUSTOM_FIELDS = ("custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary")
+    CHRISTMAS_FIELDS = User.CHRISTMAS_EFFECT_FIELDS
+    CHRISTMAS_PREFERENCES_MARKER = "christmas_preferences_present"
 
     class Meta:
         model = User
-        fields = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary"]
+        fields = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary", *User.CHRISTMAS_EFFECT_FIELDS]
         widgets = {"banner_gradient": forms.RadioSelect()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk:
             self.initial["banner_gradient"] = self.instance.account_theme
+        # Seed legacy bound forms so validation retries retain saved checkbox choices.
+        if self.is_bound and not self.data.get(self.CHRISTMAS_PREFERENCES_MARKER):
+            self.data = self.data.copy()
+            for name in self.CHRISTMAS_FIELDS:
+                self.data[name] = getattr(self.instance, name)
+        for name in self.CHRISTMAS_FIELDS:
+            key = name[len("pref_christmas_"):]
+            self.fields[name].widget.attrs.update({
+                "id": "christmas-effects-toggle" if key == "enabled" else f"christmas-{key}-toggle",
+                "class": "form-check-input m-0",
+                "data-christmas-effect": key,
+                "aria-describedby": "christmas-master-help christmas-effects-status" if key == "enabled" else f"christmas-{key}-help",
+            })
 
     def clean(self):
         cleaned = super().clean()
@@ -68,6 +83,10 @@ class ThemeForm(forms.ModelForm):
             for name in self.CUSTOM_FIELDS:
                 cleaned[name] = getattr(self.instance, name)
         return cleaned
+
+    @property
+    def christmas_options(self):
+        return [self[name] for name in self.CHRISTMAS_FIELDS if name != "pref_christmas_enabled"]
 
     @property
     def custom_colors(self):
