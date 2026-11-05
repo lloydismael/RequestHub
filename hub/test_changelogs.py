@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from io import BytesIO
 
@@ -168,6 +169,17 @@ class ChangelogTests(TestCase):
         response = self.client.get(self.management, {"tab": "changelogs"})
         self.assertContains(response, 'id="changelogs-tab"')
         self.assertEqual(response.context["active_tab"], "changelogs")
+
+    def test_changelogs_link_exposes_pane_target_without_intercepting_navigation(self):
+        for tab in ("changelogs", "activity"):
+            with self.subTest(tab=tab):
+                response = self.client.get(self.management, {"tab": tab})
+                match = re.search(r'<a\b[^>]*\bid="changelogs-tab"[^>]*>', response.content.decode())
+                self.assertIsNotNone(match)
+                link = match.group()
+                self.assertIn('data-bs-target="#changelogs-pane"', link)
+                self.assertIn(f'href="{self.management}?tab=changelogs"', link)
+                self.assertNotIn("data-bs-toggle", link)
 
     def test_admin_can_save_edit_publish_and_unpublish(self):
         url = reverse("hub:changelog-create")

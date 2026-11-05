@@ -51,7 +51,7 @@
             </li>
             <li class="nav-item" role="presentation">
                 <a class="nav-link {% if active_tab == 'changelogs' %}active{% endif %}"
-                   id="changelogs-tab" href="{% url 'hub:management' %}?tab=changelogs"
+                   id="changelogs-tab" href="{% url 'hub:management' %}?tab=changelogs" data-bs-target="#changelogs-pane"
                    {% if active_tab == 'changelogs' %}aria-current="page"{% endif %}>
                     <i class="bi bi-journal-richtext me-1" aria-hidden="true"></i>Changelogs
                 </a>
