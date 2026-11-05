@@ -96,7 +96,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
       - `for_revision` ? **For Revision**
       - `reviewed` ? **Approved**
 - Approved flow supports two user options:
-      - open a ready-to-edit email draft through the local mail app
+      - automatically copy the formatted email (tables and logo) and open a local Outlook draft with recipients and subject only; click the blank message body and press Ctrl+V to paste
       - download a formatted `.eml` file with the branded quotation layout
 - Managed support date behavior:
       - `AI` = Post-service warranty end date

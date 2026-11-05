@@ -118,7 +118,7 @@ assert.ok(chats[0][0].startsWith('https://teams.microsoft.com/'));
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 (async () => {
-    for (const withBody of [false, true]) for (const mode of ['success', 'denied', 'unsupported', 'fetch-failed', 'cancel']) {
+    for (const withBody of [true, false]) for (const mode of ['success', 'denied', 'unsupported', 'fetch-failed', 'parse-failed', 'cancel']) {
         const events = [];
         const window = {location: {href: ''}};
         let notice = null;
@@ -127,7 +127,9 @@ const vm = require('node:vm');
             if (mode === 'denied') throw new Error('Denied');
             const html = await items[0].data['text/html'];
             const text = await items[0].data['text/plain'];
-            assert.equal(await html.text(), '<table>Approved</table>');
+            assert.equal(html.type, 'text/html');
+            assert.equal(text.type, 'text/plain');
+            assert.equal(await html.text(), '<img src="https://example.com/logo.png" alt="Phil-Data"><table><tbody><tr><td>Approved</td></tr></tbody></table>');
             assert.equal(await text.text(), 'Approved');
             events.push('copied');
         }};
@@ -137,16 +139,17 @@ const vm = require('node:vm');
             ClipboardItem: class {constructor(data) {this.data = data;}},
             Blob,
             document: {getElementById: () => null, createElement: () => {
-                const created = {setAttribute() {}, appendChild() {}};
+                const created = {children: [], setAttribute() {}, appendChild(child) {this.children.push(child);}};
                 notice = notice || created;
                 return created;
             }, querySelector: () => ({prepend() {}})},
             DOMParser: class {parseFromString() {return {getElementById(id) {
-                if (id === 'sqr-email-html') return {textContent: JSON.stringify('<table>Approved</table>')};
+                if (id === 'sqr-email-html') return {textContent: mode === 'parse-failed' ? '{' : JSON.stringify('<img src="https://example.com/logo.png" alt="Phil-Data"><table><tbody><tr><td>Approved</td></tr></tbody></table>')};
                 if (id === 'sqr-email-text') return {textContent: JSON.stringify('Approved')};
-                return {getAttribute: name => name === 'href'
+                if (id === 'sqr-email-open') return {getAttribute: name => name === 'href'
                     ? 'mailto:reviewer@example.com?subject=Approved&body='
                     : (withBody ? 'mailto:reviewer@example.com?subject=Approved&body=Approved' : null)};
+                return null;
             }}}},
             fetch: async () => {events.push('fetch'); return {ok: mode !== 'fetch-failed', text: async () => 'preview'};}
         });
@@ -161,17 +164,18 @@ const vm = require('node:vm');
         } else {
             await transfer.complete('/preview/');
             const copied = mode === 'success';
-            const launch = withBody
-                ? 'mailto:reviewer@example.com?subject=Approved&body=Approved'
-                : 'mailto:reviewer@example.com?subject=Approved&body=';
-            // The compose window opens with the body whenever it is available; otherwise copying is required.
-            const expected = mode === 'fetch-failed' || (!withBody && !copied) ? '/preview/' : launch;
-            assert.equal(window.location.href, expected);
-            if (expected === launch) {
-                assert.match(notice.textContent, withBody ? /text body filled in/ : /Paste into Outlook/);
-                assert.equal(/formatted layout/.test(notice.textContent), withBody && copied);
+            const launch = 'mailto:reviewer@example.com?subject=Approved&body=';
+            assert.equal(window.location.href, copied ? launch : '/preview/', `${mode}, withBody=${withBody}`);
+            if (copied) {
+                assert.match(notice.textContent, /formatted.*copied/i);
+                assert.match(notice.textContent, /blank.*body/);
+                assert.match(notice.textContent, /Ctrl[+]V/);
+                assert.doesNotMatch(notice.textContent, /Ctrl[+]A|text body filled in/);
+                assert.equal(notice.children[0].href, launch);
+                assert.deepEqual(events, ['write-start', 'fetch', 'copied']);
+            } else {
+                assert.equal(notice, null);
             }
-            if (mode === 'success') assert.deepEqual(events, ['write-start', 'fetch', 'copied']);
         }
     }
 })().catch(error => {console.error(error); process.exitCode = 1;});
