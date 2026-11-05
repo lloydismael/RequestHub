@@ -149,13 +149,20 @@ def _handle_error(error: Exception, *, request_id: UUID | str | None = None) -> 
             "invalid_response": 502,
             "invalid_request": 502,
         }.get(error.code, 502)
-        return _error(error.code, status, str(error), request_id=request_id)
+        logger.warning("Assistant provider error code=%s request_id=%s", error.code, request_id, exc_info=error)
+        return _error(
+            error.code,
+            status,
+            "The assistant service is temporarily unavailable.",
+            request_id=request_id,
+        )
     if isinstance(error, AssistantToolError):
         return _error("provider_response_invalid", 502, "The assistant returned an invalid response.", request_id=request_id)
     if isinstance(error, AssistantRuntimeError):
         return _error("conversation_conflict", 409, "The assistant conversation is no longer current.", request_id=request_id)
     if isinstance(error, AssistantApiValidationError):
-        return _error("invalid_input", 400, str(error), request_id=request_id)
+        logger.warning("Assistant API validation error request_id=%s", request_id, exc_info=error)
+        return _error("invalid_input", 400, "Invalid input.", request_id=request_id)
     return _error("provider_failure", 502, "The assistant request failed.", request_id=request_id)
 
 
