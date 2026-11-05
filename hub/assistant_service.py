@@ -482,6 +482,22 @@ def answer_message(
             for source in result.sources:
                 sources[source.key] = source
             results.append(result)
-        messages.extend(_tool_messages(turn.tool_calls, tuple(results)))
+        safe_tool_messages: list[ToolMessage] = []
+        for call, result in zip(turn.tool_calls, results):
+            safe_payload = {
+                "ok": result.error is None,
+                "error": result.error.code if result.error else None,
+                "counts": {
+                    "destinations": len(result.destinations),
+                    "departments": len(result.departments),
+                    "members": len(result.members.items) if result.members else 0,
+                    "sources": len(result.sources),
+                },
+                "page": result.members.page if result.members else None,
+            }
+            safe_tool_messages.append(
+                ToolMessage(call.id, json.dumps(safe_payload, separators=(",", ":"), sort_keys=True))
+            )
+        messages.extend(safe_tool_messages)
 
     raise AssistantToolError("tool_round_limit", "The assistant exceeded its tool-round limit.")
