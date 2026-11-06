@@ -309,7 +309,6 @@ html.login-christmas body.page-login .login-card .login-card__brand {
 }
 
 html.login-christmas body.page-login .login-card .login-card__logo {
-    width: 100% !important;
     border-radius: 16px;
     background: #fff;
     filter: drop-shadow(0 10px 22px rgba(14, 30, 70, 0.22));
@@ -470,7 +469,7 @@ html.login-christmas body.page-login .login-card .login-card__footer {
     gap: 0.85rem;
     margin: 1.5rem 0 0;
     color: var(--xc-muted) !important;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 html.login-christmas body.page-login .login-card .login-card__footer::before,
@@ -494,12 +493,21 @@ html.login-christmas body.page-login .login-card .login-card__snowflake {
    Responsive + motion
    -------------------------------------------------------------------------- */
 
-@media (max-width: 520px) {
-    html.login-christmas body.page-login .login-hero {
-        padding-left: max(1.75rem, env(safe-area-inset-left, 0px));
-        padding-right: max(1.75rem, env(safe-area-inset-right, 0px));
+@media (max-width: 640px), (max-height: 700px) {
+    html.login-christmas body.page-login .login-card .login-card__brand {
+        margin-bottom: 1rem;
     }
 
+    html.login-christmas body.page-login .login-card .login-card__subtitle {
+        margin-bottom: 1rem;
+    }
+
+    html.login-christmas body.page-login .login-card .login-card__footer {
+        margin-top: 1rem;
+    }
+}
+
+@media (max-width: 520px) {
     /* Keep the snowy middle of the scene; the corner props crop away. */
     .xmas-scene::before {
         background-position: center, 50% 62%;
@@ -507,10 +515,6 @@ html.login-christmas body.page-login .login-card .login-card__snowflake {
 
     .xmas-scene__glow {
         background-position: 50% 62%;
-    }
-
-    html.login-christmas body.page-login .login-card {
-        padding: 1.75rem 1.35rem 1.5rem;
     }
 }
 
