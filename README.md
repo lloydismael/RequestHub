@@ -634,8 +634,11 @@ Full Azure App Service container deployment guide:
 - `.env` is gitignored and dockerignored; only `.env.example` (empty placeholders) is committed
 - Rotate any exposed credentials immediately
 - Production boot is fail-closed: missing `DJANGO_SECRET_KEY`, `DB_HOST`, `DB_USER`, or `DB_PASSWORD` refuses to start when `DJANGO_DEBUG` is false
-- Login failures are throttled at 5 attempts / 15 minutes per IP+username
-- Database media files are served only under the `profile_photos/` prefix; other prefixes 404
+- Login failures are throttled at 5 attempts / 15 minutes per IP+username. `X-Forwarded-For` is ignored unless the direct peer is in `TRUSTED_PROXY_CIDRS` (comma-separated proxy IPs/CIDRs, empty by default). Only configure controlled proxies that append the actual client address; the first untrusted hop is resolved from the right, and malformed headers/configuration fall back to the peer IP. Never trust arbitrary client address ranges.
+- Avatar input is limited to 16,000,000 pixels before decoding/conversion; valid uploads are center-cropped and saved as square JPEGs with a maximum edge of 512 pixels. Oversized/decompression-bomb inputs return form validation errors.
+- CSV exports neutralize formula-like user text, including leading whitespace/control and full-width operator prefixes, while preserving numeric cells. All SQR workbook report formats write text as literal strings rather than formulas or error cells.
+- Inline SQR updates validate edited and derived saved fields against their model constraints before persistence, including numeric limits, precision, finite decimals, and choices. Integer/foreign-key fields reject boolean, fractional, and non-finite decoded numeric values before coercion; invalid updates do not create history or undo records.
+- Database media is limited to profile photos and referenced changelog screenshots, with changelog publication/access checks. Screenshot uploads verify actual image bytes, accept only PNG/JPEG/WebP, and store the detected image MIME rather than the client-supplied MIME; serving responses include `X-Content-Type-Options: nosniff`.
 - Admin password reset issues a one-time temporary password and sets `must_change_password`
 - `MustChangePasswordMiddleware` enforces password rotation on flagged accounts
 - `ProfileCompleteMiddleware` blocks access until profile fields are filled

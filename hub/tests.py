@@ -1,3 +1,4 @@
+import csv
 import io
 import json
 from datetime import date, datetime, timedelta, timezone as dt_timezone
@@ -273,6 +274,65 @@ class RequestReportViewTests(TestCase):
         }
         values.update(overrides)
         return EngineerActivityLog.objects.create(**values)
+
+    def _csv_rows(self, url_name, **query):
+        response = self.client.get(reverse(url_name), query)
+        self.assertEqual(response.status_code, 200)
+        return list(csv.DictReader(io.StringIO(response.content.decode("utf-8"))))
+
+    def test_activity_csv_neutralizes_formula_and_control_prefixes(self):
+        log = self._create_activity_log(request_date=timezone.localdate())
+        self.client.force_login(self.admin)
+        for payload in (
+            "=1+1", "+SUM(1,1)", "-1+1", "@SUM(1,1)",
+            " \t=1+1", "\r=1+1", "\v=1+1", "\ufeff=1+1", "\uff1d1+1",
+        ):
+            with self.subTest(payload=payload):
+                EngineerActivityLog.objects.filter(pk=log.pk).update(details=payload)
+                rows = self._csv_rows("hub:report-export", report_view="activity")
+                self.assertEqual(rows[0]["Details"], "'" + payload)
+
+    def test_activity_csv_preserves_plain_text_and_numeric_hours(self):
+        self._create_activity_log(
+            request_date=timezone.localdate(), details="Ordinary activity",
+            actual_hours=Decimal("-2.50"),
+        )
+        self.client.force_login(self.admin)
+
+        rows = self._csv_rows("hub:report-export", report_view="activity")
+
+        self.assertEqual(rows[0]["Details"], "Ordinary activity")
+        self.assertEqual(rows[0]["Hours"], "-2.50")
+
+    def test_operational_csv_neutralizes_user_controlled_names(self):
+        self.requestor.first_name = "=1+1"
+        self.requestor.last_name = ""
+        self.requestor.save(update_fields=["first_name", "last_name"])
+        self.engineer.first_name = "@SUM(1,1)"
+        self.engineer.last_name = ""
+        self.engineer.save(update_fields=["first_name", "last_name"])
+        self.account.name = "-1+1"
+        self.account.save(update_fields=["name"])
+        self._create_request()
+        self.client.force_login(self.admin)
+
+        row = self._csv_rows("hub:report-export", report_view="operational")[0]
+
+        self.assertEqual(row["Requestor"], "'=1+1")
+        self.assertEqual(row["Engineer"], "'@SUM(1,1)")
+        self.assertEqual(row["Account"], "'-1+1")
+        self.assertEqual(row["Product Category"], "Azure")
+
+    def test_request_csv_neutralizes_description_and_account(self):
+        self.account.name = "+SUM(1,1)"
+        self.account.save(update_fields=["name"])
+        self._create_request(description="=1+1")
+        self.client.force_login(self.admin)
+
+        row = self._csv_rows("hub:request-export")[0]
+
+        self.assertEqual(row["Description"], "'=1+1")
+        self.assertEqual(row["Account"], "'+SUM(1,1)")
 
     def test_report_requires_admin_or_pm_esg_role(self):
         self.client.force_login(self.requestor)
@@ -2149,6 +2209,74 @@ class SqrInlineUndoTests(TestCase):
         self.assertEqual(send_email.call_args.args[1], "SQR PM")
         self.assertTrue(SqrSubmissionChange.objects.filter(submission=self.submission, field="status").exists())
 
+    def test_invalid_inline_values_are_rejected_without_writes(self):
+        self.client.raise_request_exception = False
+        cases = (
+            ("sse_manhrs", "-1"), ("pm_manhrs", "-1"),
+            ("managed_support_amount", "-1"),
+            ("discount_rate", "7"), ("discount_rate", "100"),
+            ("pm_manhrs", "1.234"), ("pm_manhrs", "1000000.00"),
+            ("sse_manhrs", "NaN"), ("pm_manhrs", "Infinity"),
+            ("managed_support_amount", "NaN"), ("pm_manhrs", "not-a-number"),
+            ("proposal_status", "unexpected"),
+            ("discount_rate", 5.9), ("discount_rate", False),
+            ("delivery_progress", 5.9), ("delivery_progress", True),
+            ("assigned_pm", float(self.pm.pk) + 0.5),
+        )
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                SqrSubmission.objects.filter(pk=self.submission.pk).update(
+                    sse_manhrs=Decimal("20"), pm_manhrs=Decimal("8"),
+                    sse_amount=Decimal("40000"), pm_amount=Decimal("24000"),
+                    managed_support_amount=None, discount_rate=0,
+                )
+                original = SqrSubmission.objects.filter(pk=self.submission.pk).values().get()
+                change_count = SqrSubmissionChange.objects.count()
+                history_count = SqrSubmissionHistory.objects.count()
+
+                response = self._inline_update(field, value)
+
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+                self.assertEqual(
+                    SqrSubmission.objects.filter(pk=self.submission.pk).values().get(),
+                    original,
+                )
+                self.assertEqual(SqrSubmissionChange.objects.count(), change_count)
+                self.assertEqual(SqrSubmissionHistory.objects.count(), history_count)
+
+    def test_non_finite_json_integer_inputs_are_rejected_without_writes(self):
+        self.client.raise_request_exception = False
+        original = SqrSubmission.objects.filter(pk=self.submission.pk).values().get()
+        change_count = SqrSubmissionChange.objects.count()
+        history_count = SqrSubmissionHistory.objects.count()
+        for number in ("1e400", "-1e400", "NaN", "Infinity", "-Infinity"):
+            with self.subTest(number=number):
+                response = self.client.post(
+                    reverse("hub:sqr-inline-update", args=[self.submission.pk]),
+                    data=f'{{"field":"discount_rate","value":{number}}}',
+                    content_type="application/json",
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+                self.assertEqual(
+                    SqrSubmission.objects.filter(pk=self.submission.pk).values().get(),
+                    original,
+                )
+                self.assertEqual(SqrSubmissionChange.objects.count(), change_count)
+                self.assertEqual(SqrSubmissionHistory.objects.count(), history_count)
+
+    def test_integral_json_numbers_preserve_valid_inline_updates(self):
+        for field, value, expected in (
+            ("discount_rate", 5.0, 5), ("delivery_progress", 50.0, 50),
+            ("assigned_pm", float(self.pm.pk), self.pm.pk),
+        ):
+            with self.subTest(field=field):
+                response = self._inline_update(field, value)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.json()["ok"])
+                self.assertEqual(response.json()["field_value"], expected)
+
     def test_inline_update_creates_undo_change(self):
         response = self._inline_update("pm_manhrs", "16")
 
@@ -2493,6 +2621,30 @@ class SqrExportTests(TestCase):
             last_name="PM",
         )
         self.client.force_login(self.pm)
+
+    def test_all_workbook_reports_store_untrusted_text_as_literal_cells(self):
+        submission = self._create_submission()
+        SqrProjectPerformance.objects.create(submission=submission, percent_complete=25)
+        for report in ("sqr", "esg", "performance"):
+            for payload in ("=1+1", "#DIV/0!", "\t=1+1"):
+                with self.subTest(report=report, payload=payload):
+                    SqrSubmission.objects.filter(pk=submission.pk).update(
+                        customer_name=payload, project_title=payload,
+                    )
+                    response = self.client.get(reverse("hub:sqr-export"), {"report": report})
+                    self.assertEqual(response.status_code, 200)
+                    workbook = load_workbook(io.BytesIO(response.content), data_only=False)
+                    sheet = workbook.active
+                    assert sheet is not None
+                    cells = list(sheet[2])
+                    text_cells = [cell for cell in cells if cell.value == payload]
+                    self.assertTrue(text_cells)
+                    for cell in text_cells:
+                        self.assertEqual(cell.data_type, "s")
+                    self.assertTrue(any(
+                        isinstance(cell.value, (int, float)) and cell.data_type == "n"
+                        for cell in cells
+                    ))
 
     def test_esg_export_headers_and_row_match_esg_tracker_table(self):
         older = self._create_submission(customer_name="Older Account", project_title="Older Service")

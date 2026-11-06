@@ -203,6 +203,11 @@ AUTH_USER_MODEL = "accounts.User"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "hub:dashboard"
 LOGOUT_REDIRECT_URL = "login"
+TRUSTED_PROXY_CIDRS = [
+    value.strip()
+    for value in os.getenv("TRUSTED_PROXY_CIDRS", "").split(",")
+    if value.strip()
+]
 
 # Session security: expire the session cookie when the browser is closed so
 # users must log in again after closing the tab/window. SERVER-SIDE age is

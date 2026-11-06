@@ -11,6 +11,7 @@ from .themes import DEFAULT_CUSTOM_COLORS, custom_theme_style, normalize_hex
 
 # Longest edge, in pixels, that a stored profile photo may have.
 AVATAR_MAX_EDGE = 512
+AVATAR_MAX_PIXELS = 16_000_000
 
 ROLE_LABELS = {
     User.Roles.ADMIN: "Admin",
@@ -172,8 +173,8 @@ class ProfileForm(forms.ModelForm):
         """Normalize uploads to a square JPEG.
 
         The browser crop step is a convenience, not a guarantee, so enforce the
-        same result server-side: any upload is center-cropped to a square and
-        bounded in size before it reaches storage.
+        same result server-side: input pixels are limited before decoding, then
+        the upload is center-cropped to a square and bounded before storage.
         """
         photo = self.cleaned_data.get("profile_photo")
         if not photo or not hasattr(photo, "read"):
@@ -185,8 +186,13 @@ class ProfileForm(forms.ModelForm):
         try:
             photo.seek(0)
             with Image.open(photo) as source:
+                width, height = source.size
+                if width * height > AVATAR_MAX_PIXELS:
+                    raise ValidationError(
+                        f"Please upload an image with no more than {AVATAR_MAX_PIXELS:,} pixels.",
+                        code="image_too_large",
+                    )
                 image = source.convert("RGB")
-                width, height = image.size
                 edge = min(width, height)
                 if edge < 1:
                     raise ValidationError("That image file appears to be empty.")
@@ -201,6 +207,11 @@ class ProfileForm(forms.ModelForm):
                 square.save(buffer, format="JPEG", quality=90, optimize=True)
         except ValidationError:
             raise
+        except Image.DecompressionBombError:
+            raise ValidationError(
+                "That image is too large. Please choose a smaller image.",
+                code="image_too_large",
+            )
         except (UnidentifiedImageError, OSError, ValueError):
             raise ValidationError("Please upload a valid image file (JPG, PNG or GIF).")
         buffer.seek(0)

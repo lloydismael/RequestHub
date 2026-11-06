@@ -2,7 +2,9 @@
 
 import json
 import shutil
+import struct
 import subprocess
+import zlib
 from io import BytesIO
 from pathlib import Path
 from unittest import skipUnless
@@ -286,6 +288,30 @@ class ProfilePhotoNormalizationTests(SimpleTestCase):
         buffer = BytesIO()
         image.save(buffer, format=image.format or "PNG")
         return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+    def upload_with_dimensions(self, width, height):
+        # Rewrite valid PNG metadata without allocating a large decoded image.
+        data = bytearray(self.upload_for(Image.new("RGB", (1, 1))).read())
+        data[16:24] = struct.pack(">II", width, height)
+        data[29:33] = struct.pack(">I", zlib.crc32(data[12:29]))
+        return SimpleUploadedFile("large.png", bytes(data), content_type="image/png")
+
+    def test_input_pixel_limit_is_checked_before_decoding(self):
+        for width, height in ((4001, 4000), (16_000_001, 1)):
+            with self.subTest(width=width, height=height):
+                photo, error = self.clean(self.upload_with_dimensions(width, height))
+                self.assertIsNone(photo)
+                self.assertIsInstance(error, ValidationError)
+                self.assertEqual(error.code, "image_too_large")
+
+    def test_decompression_bomb_becomes_a_validation_error(self):
+        try:
+            photo, error = self.clean(self.upload_with_dimensions(20_000, 20_000))
+        except Image.DecompressionBombError:
+            self.fail("Oversized uploads must produce a form validation error.")
+        self.assertIsNone(photo)
+        self.assertIsInstance(error, ValidationError)
+        self.assertEqual(error.code, "image_too_large")
 
     def test_wide_image_is_center_cropped_to_a_square(self):
         source = Image.new("RGB", (1000, 500))
