@@ -3581,7 +3581,6 @@ body.dark-mode .avatar-select__image {
     background-repeat: no-repeat, no-repeat;
     color: #f4f9ff;
     min-height: 100vh;
-    height: 100vh;
     overflow: hidden;
 }
 
@@ -3594,7 +3593,8 @@ body.dark-mode .avatar-select__image {
     width: 100%;
     padding: 0 !important;   /* override Bootstrap .py-4's !important */
     min-height: 100vh;
-    overflow: hidden;
+    min-height: 100dvh;
+    overflow: visible;
 }
 
 .login-hero {
@@ -6872,7 +6872,7 @@ body.view-mobile:not(.view-mobile-preview) {
     max-width: 100%;
 }
 
-body.view-mobile:not(.view-mobile-preview) > main.container {
+body.view-mobile:not(.view-mobile-preview, .page-login) > main.container {
     max-width: 100% !important;
     width: 100% !important;
     margin-left: 0 !important;
