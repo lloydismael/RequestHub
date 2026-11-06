@@ -1,13 +1,16 @@
 (() => {
     'use strict';
     const body = document.body;
-    if (!body.classList.contains('authenticated')) return;
+    const root = document.documentElement;
+    const login = body.classList.contains('page-login') && !body.classList.contains('authenticated');
+    if (!body.classList.contains('authenticated') && !(login && root.classList.contains('login-christmas'))) return;
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const panel = document.getElementById('christmas-controls');
     const toggle = document.getElementById('christmas-effects-toggle');
     const status = document.getElementById('christmas-effects-status');
     const storageKey = 'reqHubChristmasEffects';
     const effectKeys = ['border', 'snow', 'lights', 'cursor', 'clicks', 'santa'];
+    const loginEffects = ['cursor', 'clicks', 'santa'];
     const preferences = Object.fromEntries(['enabled', ...effectKeys].map(key => [key, true]));
     const settings = document.getElementById('christmas-effects-settings');
     const controls = Array.from(document.querySelectorAll('[data-christmas-effect]'));
@@ -21,7 +24,7 @@
         try { applyPreferences(JSON.parse(settings.textContent)); } catch (_) {}
         // Bound form values can contain an unsaved preview after validation errors.
         controls.forEach(control => applyPreferences({ [control.dataset.christmasEffect]: control.checked }));
-    } else {
+    } else if (!login) {
         try { preferences.enabled = window.localStorage.getItem(storageKey) !== 'off'; } catch (_) {}
     }
     let border = null;
@@ -36,13 +39,15 @@
     let santa = null;
     let santaTimer = null;
 
-    const isChristmas = () => body.dataset.accountTheme === 'christmas';
+    const isChristmas = () => login ? root.classList.contains('login-christmas') : body.dataset.accountTheme === 'christmas';
     const reduced = () => media.matches || body.classList.contains('pref-reduce-motion') || body.classList.contains('pref-reduce-effects');
     // The snow loop repaints a full-viewport canvas and the bulbs re-evaluate a
     // non-compositable drop-shadow; both are wasted while the theme is snapshotting.
     const switching = () => body.classList.contains('theme-switching');
-    const effectEnabled = effect => isChristmas() && preferences.enabled && preferences[effect];
+    const effectEnabled = effect => isChristmas() && preferences.enabled && preferences[effect] && (!login || loginEffects.includes(effect));
     const canAnimate = effect => effectEnabled(effect) && !reduced() && !switching() && !document.hidden;
+    // Santa has its own transition layer, unlike the paused background effects.
+    const canFlySanta = () => effectEnabled('santa') && !reduced() && !document.hidden;
     function decorative(className, parent, tag = 'div') {
         const element = document.createElement(tag);
         element.className = className;
@@ -174,7 +179,7 @@
         if (!canAnimate('snow')) pauseSnow();
         else if (context && frameId === null) frameId = window.requestAnimationFrame(draw);
         if (!canAnimate('clicks')) for (const burst of bursts.keys()) removeBurst(burst);
-        if (!canAnimate('santa')) removeSanta();
+        if (!canFlySanta()) removeSanta();
     }
     document.addEventListener('click', event => {
         if (!canAnimate('clicks') || !event.detail || event.button !== 0) return;
@@ -200,7 +205,7 @@
         if (key === 'enabled' || effectKeys.includes(key)) {
             applyPreferences({ [key]: target.checked });
             reconcile();
-        } else if (target.id === 'theme-checkbox' && canAnimate('santa')) {
+        } else if (target.id === 'theme-checkbox' && canFlySanta()) {
             flySanta(target.checked);
         }
     });
@@ -222,7 +227,7 @@
     window.addEventListener('pagehide', pause);
     window.addEventListener('pageshow', reconcile);
     window.addEventListener('storage', event => {
-        if (!settings && event.key === storageKey) { preferences.enabled = event.newValue !== 'off'; reconcile(); }
+        if (!settings && !login && event.key === storageKey) { preferences.enabled = event.newValue !== 'off'; reconcile(); }
     });
     reconcile();
 })();

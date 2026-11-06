@@ -6,7 +6,10 @@ const vm = require('node:vm');
 
 const scriptPath = path.join(__dirname, '..', 'static', 'js', 'christmas-theme.js');
 
-function start({ theme = 'christmas', reduced = false, effects = false, stored = null, storageBlocked = false, account = null, controlsPresent = true } = {}) {
+function start({
+    theme = 'christmas', reduced = false, effects = false, stored = null, storageBlocked = false,
+    account = null, controlsPresent = true, authenticated = true, login = false, loginChristmas = false,
+} = {}) {
     const keys = ['enabled', 'border', 'snow', 'lights', 'cursor', 'clicks', 'santa'];
     const preferences = account === null ? null : { ...Object.fromEntries(keys.map(key => [key, true])), ...account };
     const callbacks = {};
@@ -33,8 +36,9 @@ function start({ theme = 'christmas', reduced = false, effects = false, stored =
         };
     }
     const body = element();
-    body.dataset.accountTheme = theme;
-    body.classList.toggle('authenticated', true);
+    if (authenticated) body.dataset.accountTheme = theme;
+    body.classList.toggle('authenticated', authenticated);
+    body.classList.toggle('page-login', login);
     body.classList.toggle('pref-reduce-motion', reduced);
     body.classList.toggle('pref-reduce-effects', effects);
     const nav = element();
@@ -50,8 +54,10 @@ function start({ theme = 'christmas', reduced = false, effects = false, stored =
     }
     const settings = preferences ? { textContent: JSON.stringify(preferences) } : null;
     const media = { matches: false, addEventListener(name, callback) { this.change = callback; } };
+    const documentElement = element();
+    documentElement.classList.toggle('login-christmas', loginChristmas);
     const document = {
-        body, hidden: false,
+        body, documentElement, hidden: false,
         createElement: element,
         querySelector: selector => selector === '.navbar' ? nav : null,
         querySelectorAll: selector => selector === '[data-christmas-effect]' && preferences && controlsPresent ? Object.values(controls) : [],
@@ -82,9 +88,9 @@ function start({ theme = 'christmas', reduced = false, effects = false, stored =
         storageEvent(value) { callbacks.storage({ key: 'reqHubChristmasEffects', newValue: value }); },
         changeTheme(value) { body.dataset.accountTheme = value; observer(); },
         preference(name, value) { body.classList.toggle(name, value); observer(); },
-        switchMode(dark, id = 'theme-checkbox') { callbacks.change({ target: { id, checked: dark } }); },
+        switchMode(dark, id = 'theme-checkbox') { if (callbacks.change) callbacks.change({ target: { id, checked: dark } }); },
         santas() { return body.children.filter(child => String(child.className).startsWith('christmas-santa')); },
-        click(x = 100, y = 100, detail = 1) { callbacks.click({ clientX: x, clientY: y, detail, button: 0 }); },
+        click(x = 100, y = 100, detail = 1) { if (callbacks.click) callbacks.click({ clientX: x, clientY: y, detail, button: 0 }); },
         visibility(hidden) { document.hidden = hidden; callbacks.visibilitychange(); },
         frame() { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(16)); },
         expire(delay = Infinity) {
@@ -343,6 +349,109 @@ test('account effect changes still respect accessibility and hidden-page prefere
     app.switchMode(false);
     assert.equal(app.frames.size, 0);
     assert.equal(app.timers.size, 0);
+});
+
+const christmasLogin = { authenticated: false, login: true, loginChristmas: true, controlsPresent: false };
+
+test('Christmas login enables pointer and Santa effects without a second snow loop or border', () => {
+    const app = start({ ...christmasLogin, stored: 'off' });
+    assert.equal(app.body.classList.contains('christmas-effects-on'), true, 'the active login theme is the gate, not a stale legacy switch');
+    assert.equal(app.body.classList.contains('christmas-cursor-off'), false);
+    app.storageEvent('off');
+    assert.equal(app.body.classList.contains('christmas-effects-on'), true, 'legacy storage events must not override the remembered login theme');
+    for (const effect of ['border', 'snow', 'lights']) {
+        assert.equal(app.body.classList.contains(`christmas-${effect}-off`), true);
+    }
+    assert.equal(app.body.children.length, 0);
+    assert.equal(app.frames.size, 0);
+    app.preview({ border: true, snow: true, lights: true });
+    app.click();
+    const burst = app.body.children.find(child => child.className === 'christmas-burst');
+    assert.ok(burst);
+    assert.equal(burst.attributes['aria-hidden'], 'true');
+    assert.equal(burst.children.length, 12);
+    app.switchMode(true);
+    assert.equal(app.santas().length, 1);
+    assert.equal(app.frames.size, 0, 'login owns the existing snowfall renderer');
+    assert.ok(app.body.children.every(child => child.className !== 'christmas-snow' && child.className !== 'christmas-frame'));
+});
+
+test('authenticated login-success pages retain their account Christmas effects', () => {
+    const app = start({ login: true, controlsPresent: false, account: {} });
+    assert.equal(app.body.classList.contains('christmas-effects-on'), true);
+    assert.ok(app.body.children.some(child => child.className === 'christmas-frame'));
+    assert.ok(app.body.children.some(child => child.className === 'christmas-snow'));
+    assert.equal(app.frames.size, 1);
+});
+
+test('standard login and other anonymous pages create no festive interactions', () => {
+    for (const options of [{ authenticated: false }, { ...christmasLogin, loginChristmas: false }]) {
+        const app = start(options);
+        app.click();
+        app.switchMode(true);
+        assert.equal(app.body.children.length, 0);
+        assert.equal(app.frames.size, 0);
+        assert.equal(app.timers.size, 0);
+        assert.equal(app.body.classList.contains('christmas-effects-on'), false);
+    }
+});
+
+test('Christmas login interactions respect reduced motion and reduced effects', () => {
+    for (const preferences of [{ reduced: true }, { effects: true }]) {
+        const app = start({ ...christmasLogin, ...preferences });
+        app.click();
+        app.switchMode(true);
+        assert.equal(app.body.classList.contains('christmas-effects-on'), false);
+        assert.equal(app.body.children.length, 0);
+        assert.equal(app.frames.size, 0);
+        assert.equal(app.timers.size, 0);
+    }
+});
+
+test('login click bursts stay bounded, ignore keyboard clicks, and clean up', () => {
+    const app = start(christmasLogin);
+    app.click(100, 100, 0);
+    assert.equal(app.timers.size, 0);
+    for (let index = 0; index < 50; index++) app.click();
+    assert.equal(app.body.children.filter(child => child.className === 'christmas-burst').length, 6);
+    assert.equal(app.timers.size, 6);
+    assert.equal(app.frames.size, 0);
+    app.expire();
+    assert.equal(app.body.children.length, 0);
+    assert.equal(app.timers.size, 0);
+});
+
+test('Santa survives the theme reveal while background snowfall stays paused', () => {
+    for (const options of [{}, christmasLogin]) {
+        const app = start(options);
+        app.preference('theme-switching', true);
+        app.switchMode(true);
+        assert.equal(app.santas().length, 1, 'a toggle must start Santa even when the theme reveal has begun');
+        const santa = app.santas()[0];
+        app.preference('dark-mode', true);
+        assert.equal(app.santas()[0], santa, 'theme reconciliation must not cancel the flight');
+        assert.equal(app.frames.size, 0);
+        app.preference('theme-switching', false);
+        assert.equal(app.santas()[0], santa);
+        app.switchMode(false);
+        assert.equal(app.santas().length, 1);
+        assert.equal(app.santas()[0].className, 'christmas-santa christmas-santa--to-light');
+        app.expire();
+        assert.equal(app.santas().length, 0);
+    }
+});
+
+test('hiding Christmas login removes running flakes and Santa without restarting extra snow', () => {
+    const app = start(christmasLogin);
+    app.click();
+    app.switchMode(true);
+    assert.equal(app.santas().length, 1);
+    assert.equal(app.timers.size, 2);
+    app.visibility(true);
+    assert.equal(app.body.children.length, 0);
+    assert.equal(app.timers.size, 0);
+    app.visibility(false);
+    assert.equal(app.frames.size, 0);
 });
 
 test('blocked local storage does not prevent preview or effects toggling', () => {

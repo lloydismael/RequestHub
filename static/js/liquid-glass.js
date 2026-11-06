@@ -44,6 +44,8 @@
         }
 
         var frame = null;
+        var pendingPointer = null;
+        var lightLayers = card.querySelectorAll('.login-card__lens, .login-card__sheen');
         var currentX = 0.5;
         var currentY = 0.18;
         var targetX = currentX;
@@ -51,10 +53,19 @@
         var lastOrientationSample = 0;
 
         function render() {
+            if (pendingPointer) {
+                var rect = card.getBoundingClientRect();
+                targetX = Math.min(1, Math.max(0, (pendingPointer.x - rect.left) / rect.width));
+                targetY = Math.min(1, Math.max(0, (pendingPointer.y - rect.top) / rect.height));
+                pendingPointer = null;
+            }
             currentX += (targetX - currentX) * 0.16;
             currentY += (targetY - currentY) * 0.16;
-            card.style.setProperty('--login-light-x', (currentX * 100).toFixed(1) + '%');
-            card.style.setProperty('--login-light-y', (currentY * 100).toFixed(1) + '%');
+            // Inherited properties on the card invalidate thousands of festive SVG nodes.
+            for (var i = 0; i < lightLayers.length; i += 1) {
+                lightLayers[i].style.setProperty('--login-light-x', (currentX * 100).toFixed(1) + '%');
+                lightLayers[i].style.setProperty('--login-light-y', (currentY * 100).toFixed(1) + '%');
+            }
 
             if (Math.abs(targetX - currentX) > 0.002 || Math.abs(targetY - currentY) > 0.002) {
                 frame = requestAnimationFrame(render);
@@ -70,9 +81,7 @@
         }
 
         function setPointerTarget(event) {
-            var rect = card.getBoundingClientRect();
-            targetX = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
-            targetY = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+            pendingPointer = { x: event.clientX, y: event.clientY };
             requestRender();
         }
 
@@ -80,6 +89,7 @@
             card.addEventListener('pointermove', setPointerTarget, { passive: true });
 
             card.addEventListener('pointerleave', function () {
+                pendingPointer = null;
                 targetX = 0.5;
                 targetY = 0.18;
                 requestRender();

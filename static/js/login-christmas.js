@@ -22,6 +22,14 @@
         else if (query.addListener) query.addListener(handler);
     };
 
+    function effectsPaused() {
+        return motionQuery.matches || document.hidden || document.body.classList.contains('theme-switching');
+    }
+
+    function syncEffectState() {
+        root.classList.toggle('xmas-effects-paused', effectsPaused());
+    }
+
     function seeded(seed) {
         let state = seed >>> 0;
         return () => {
@@ -130,7 +138,7 @@
         // The theme swap snapshots the page; a full-viewport repaint per frame is
         // wasted work while that snapshot is being taken.
         function shouldRun() {
-            return !motionQuery.matches && !document.hidden && !document.body.classList.contains('theme-switching');
+            return !effectsPaused();
         }
 
         function play() {
@@ -489,22 +497,16 @@
         return outward + toDown * 0.2 + (random() - 0.5) * 1.1;
     }
 
-    function addBulb(layers, color, x, y, angle, scale, random) {
+    function addBulb(layers, color, x, y, angle, scale) {
         const transform = `translate(${round(x)} ${round(y)}) rotate(${round(angle * 180 / Math.PI)}) scale(${scale})`;
-        const duration = `${(2 + random() * 2).toFixed(2)}s`;
-        const delay = `${(-random() * 4).toFixed(2)}s`;
-        const halo = svg('circle', { class: 'xmas-bulb__halo', cx: '11.5', cy: '0', r: '20', fill: `url(#xmas-halo-${color})`, transform }, layers.halos);
+        svg('circle', { class: 'xmas-bulb__halo', cx: '11.5', cy: '0', r: '20', fill: `url(#xmas-halo-${color})`, transform }, layers.halos[color]);
         const bulb = svg('g', { class: `xmas-bulb xmas-bulb--${color}`, transform }, layers.bulbs);
         svg('path', { d: 'M-0.3 -2.4Q-0.3 -2.8 0.3 -2.8H4.8Q5.4 -2.8 5.4 -2.3V2.3Q5.4 2.8 4.8 2.8H0.3Q-0.3 2.8 -0.3 2.4Z', fill: 'url(#xmas-socket-fill)' }, bulb);
         svg('path', { class: 'xmas-socket-ribs', d: 'M1.8 -2.7V2.7M3.6 -2.7V2.7' }, bulb);
         svg('path', { d: 'M5 -3.1C6.8 -4.6 10 -4.8 12.6 -3.5C15 -2.3 17.3 -0.9 18.5 0C17.3 0.9 15 2.3 12.6 3.5C10 4.8 6.8 4.6 5 3.1Z', fill: `url(#xmas-glass-${color})` }, bulb);
         svg('path', { class: 'xmas-bulb__facets', d: 'M6.6 -2.6Q11.4 -3.1 16.8 -0.6M6.6 2.6Q11.4 3.1 16.8 0.6' }, bulb);
-        const core = svg('ellipse', { class: 'xmas-bulb__core', cx: '10', cy: '0', rx: '3.4', ry: '1.8', fill: 'url(#xmas-core)' }, bulb);
+        svg('ellipse', { class: 'xmas-bulb__core', cx: '10', cy: '0', rx: '3.4', ry: '1.8', fill: 'url(#xmas-core)' }, bulb);
         svg('ellipse', { class: 'xmas-bulb__shine', cx: '10', cy: '-2.4', rx: '2.6', ry: '0.6', transform: 'rotate(-7 10 -2.4)' }, bulb);
-        [halo, core].forEach(element => {
-            element.style.setProperty('--twinkle-duration', duration);
-            element.style.setProperty('--twinkle-delay', delay);
-        });
     }
 
     /* ---------- Card decoration ---------- */
@@ -548,9 +550,15 @@
             const radius = parseFloat(getComputedStyle(card).borderTopLeftRadius) || 24;
             const shape = outline(width, height, radius);
             const scene = canvas(width, height, 'xmas-deco-static');
+            const glows = COLORS.map((name, index) => {
+                const layer = canvas(width, height, 'xmas-deco-glows');
+                layer.style.setProperty('--twinkle-duration', `${2.8 + index * 0.7}s`);
+                layer.style.setProperty('--twinkle-delay', `${-index * 0.9}s`);
+                return layer;
+            });
             const lights = canvas(width, height, 'xmas-deco-lights');
             buildDefs(scene, dark, width, height, shape.r);
-            deco.replaceChildren(scene, lights);
+            deco.replaceChildren(scene, ...glows, lights);
 
             // Frost haze and crystals creeping in from the glass edges.
             const frostBand = svg('g', { class: 'xmas-frost', 'clip-path': 'url(#xmas-card-clip)' }, scene);
@@ -620,8 +628,11 @@
             [bottomLeft, bottomRight].forEach(s => clusterAlong(tufts, shape, s, 22 + random() * 10, 5 + random() * 2, random));
             drawPuffs(svg('g', { class: 'xmas-snow', filter: 'url(#xmas-snow-tex)' }, scene), tufts);
 
-            // C7 bulbs: halos behind, glass in front so neighbouring glows never cover a socket.
-            const layers = { halos: svg('g', { class: 'xmas-halos' }, lights), bulbs: svg('g', {}, lights) };
+            // Animate cached halo layers; the filtered snow and glass bulbs stay static.
+            const layers = {
+                halos: Object.fromEntries(COLORS.map((name, index) => [name, svg('g', { class: 'xmas-halos' }, glows[index])])),
+                bulbs: svg('g', {}, lights),
+            };
             const count = mobile ? 22 : 40;
             const spacing = total / count;
             const offset = random() * spacing;
@@ -638,7 +649,7 @@
                 const choices = COLORS.filter(color => color !== previous);
                 const color = choices[Math.floor(random() * choices.length)];
                 previous = color;
-                addBulb(layers, color, point.x, point.y, angle, scale, random);
+                addBulb(layers, color, point.x, point.y, angle, scale);
                 placed++;
             }
         }
@@ -657,6 +668,10 @@
     }
 
     function init() {
+        syncEffectState();
+        document.addEventListener('visibilitychange', syncEffectState);
+        new MutationObserver(syncEffectState).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        onChange(motionQuery, syncEffectState);
         const scene = document.querySelector('.xmas-scene');
         if (scene) startSnow(scene);
         const card = document.querySelector('.page-login .login-card');
