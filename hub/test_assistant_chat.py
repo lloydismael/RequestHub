@@ -24,6 +24,7 @@ from hub.assistant_types import (
     ToolMessage,
     UserMessage,
 )
+from hub.assistant_views import AssistantApiValidationError, _handle_error
 from hub.assistant_service import (
     AssistantToolError,
     answer_message,
@@ -713,10 +714,16 @@ class AssistantApiTests(AssistantApiTestMixin, TestCase):
             {
                 "status": "error",
                 "code": "invalid_input",
-                "message": "The request must contain only the supported fields.",
+                "message": "The assistant request is invalid.",
                 "request_id": response.json()["request_id"],
             },
         )
+
+    def test_validation_error_details_are_not_returned_to_clients(self):
+        response = _handle_error(AssistantApiValidationError("internal implementation detail"))
+
+        self.assertEqual(response.json()["message"], "The assistant request is invalid.")
+        self.assertNotIn("internal implementation detail", response.content.decode())
 
     def test_forged_conversation_and_invalid_pagination_are_rejected(self):
         forged = self.post_message(conversation_id="other-conversation")
