@@ -48,9 +48,6 @@
         <button class="profile-tab profile-tab--active" data-profile-tab="info">
             <i class="bi bi-person-fill me-1"></i>Personal Info
         </button>
-        <button class="profile-tab" data-profile-tab="avatar">
-            <i class="bi bi-camera-fill me-1"></i>Update Avatar
-        </button>
         <button class="profile-tab" data-profile-tab="password">
             <i class="bi bi-lock-fill me-1"></i>Change Password
         </button>
@@ -89,70 +86,68 @@
                     {% endfor %}
                 </div>
                 {% include "hub/form_custom_fields.html" with editor_custom_fields=form.editor_custom_fields %}
-                <div class="d-flex gap-2 mt-4">
-                    <button class="btn btn-primary" type="submit" name="save_info" value="1">
-                        <i class="bi bi-check2 me-1"></i>Save Changes
-                    </button>
-                </div>
-            </div>
-        </div>
 
-        {# Avatar tab #}
-        <div class="profile-panel" id="profile-panel-avatar">
-            <div class="glass-card profile-card">
-                <h2 class="profile-card__title"><i class="bi bi-image-fill me-2"></i>Profile Avatar</h2>
-                <div class="profile-avatar-section">
-                    <div class="profile-avatar-preview-wrap">
-                        {% if form.instance.profile_photo %}
-                            <img src="{{ form.instance.profile_photo.url }}" alt="Current photo" class="profile-avatar-preview" id="profile-avatar-preview">
-                        {% else %}
-                            <span class="profile-avatar-preview profile-avatar-preview--placeholder" id="profile-avatar-preview">
-                                {{ form.instance.get_full_name|default:form.instance.username|slice:":1"|upper }}
-                            </span>
-                        {% endif %}
-                    </div>
-                    <div class="profile-avatar-controls">
-                        <p class="text-muted small mb-3">Upload a clear photo of yourself. JPG, PNG or GIF, max 5 MB. You can crop and zoom the photo before saving it.</p>
-                        {% for field in form.visible_fields %}
-                            {% if field.name == "profile_photo" %}
-                                <div class="mb-3">
-                                    <label class="form-label profile-label" for="id_profile_photo">Choose new photo</label>
-                                    {{ field }}
-                                    {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
-                                </div>
-                            {% endif %}
-                        {% endfor %}
-                                                <div class="avatar-crop" id="avatar-crop" hidden>
-                                                    <div class="avatar-crop__stage" id="avatar-crop-stage">
-                                                        <img class="avatar-crop__image" id="avatar-crop-image" alt="" draggable="false">
-                                                        <canvas class="avatar-crop__overlay" id="avatar-crop-overlay" aria-hidden="true"></canvas>
-                                                    </div>
-                                                    <div class="avatar-crop__controls">
-                                                        <label class="avatar-crop__zoom-label" for="avatar-crop-zoom">Zoom</label>
-                                                        <input class="avatar-crop__zoom" id="avatar-crop-zoom" type="range" min="1" max="4" step="0.01" value="1">
-                                                    </div>
-                                                    <div class="d-flex gap-2 flex-wrap">
-                                                        <button class="btn btn-primary btn-sm" type="button" id="avatar-crop-apply">
-                                                            <i class="bi bi-check2 me-1"></i>Apply Crop
-                                                        </button>
-                                                        <button class="btn btn-outline-secondary btn-sm" type="button" id="avatar-crop-cancel">Cancel</button>
-                                                        <button class="btn btn-link btn-sm ms-auto p-0" type="button" id="avatar-crop-reset">Reset</button>
+                                <div class="profile-avatar-block">
+                                                    <h3 class="profile-card__subtitle"><i class="bi bi-image-fill me-2"></i>Profile Avatar</h3>
+                                                    <div class="profile-avatar-section">
+                                                        <div class="profile-avatar-preview-wrap">
+                                                            {% if form.instance.profile_photo %}
+                                                                <img src="{{ form.instance.profile_photo.url }}" alt="Current photo" class="profile-avatar-preview" id="profile-avatar-preview">
+                                                            {% else %}
+                                                                <span class="profile-avatar-preview profile-avatar-preview--placeholder" id="profile-avatar-preview">
+                                                                    {{ form.instance.get_full_name|default:form.instance.username|slice:":1"|upper }}
+                                                                </span>
+                                                            {% endif %}
+                                                        </div>
+                                                        <div class="profile-avatar-controls">
+                                                            <p class="text-muted small mb-3">Upload a clear photo of yourself. JPG, PNG or GIF, max 5 MB. You can crop and zoom the photo before saving it.</p>
+                                                            {% for field in form.visible_fields %}
+                                                                {% if field.name == "profile_photo" %}
+                                                                    <div class="mb-3">
+                                                                        <label class="form-label profile-label" for="id_profile_photo">Choose new photo</label>
+                                                                        {{ field }}
+                                                                        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
+                                                                    </div>
+                                                                {% endif %}
+                                                            {% endfor %}
+                                                            <div class="avatar-crop" id="avatar-crop" hidden>
+                                                                <div class="avatar-crop__stage" id="avatar-crop-stage">
+                                                                    <img class="avatar-crop__image" id="avatar-crop-image" alt="" draggable="false">
+                                                                    <canvas class="avatar-crop__overlay" id="avatar-crop-overlay" aria-hidden="true"></canvas>
+                                                                </div>
+                                                                <div class="avatar-crop__controls">
+                                                                    <label class="avatar-crop__zoom-label" for="avatar-crop-zoom">Zoom</label>
+                                                                    <input class="avatar-crop__zoom" id="avatar-crop-zoom" type="range" min="1" max="4" step="0.01" value="1">
+                                                                </div>
+                                                                <div class="d-flex gap-2 flex-wrap">
+                                                                    <button class="btn btn-primary btn-sm" type="button" id="avatar-crop-apply">
+                                                                        <i class="bi bi-check2 me-1"></i>Apply Crop
+                                                                    </button>
+                                                                    <button class="btn btn-outline-secondary btn-sm" type="button" id="avatar-crop-cancel">Cancel</button>
+                                                                    <button class="btn btn-link btn-sm ms-auto p-0" type="button" id="avatar-crop-reset">Reset</button>
+                                                                </div>
+                                                            </div>
+                                                            <div class="d-flex gap-2 flex-wrap">
+                                                                <button class="btn btn-primary" type="submit" name="save_avatar" value="1">
+                                                                    <i class="bi bi-upload me-1"></i>Upload Photo
+                                                                </button>
+                                                                {% if form.instance.profile_photo %}
+                                                                    <button class="btn btn-outline-danger" type="submit" name="delete_photo" value="1" formnovalidate>
+                                                                        <i class="bi bi-trash-fill me-1"></i>Remove Photo
+                                                                    </button>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div class="d-flex gap-2 flex-wrap">
-                            <button class="btn btn-primary" type="submit" name="save_avatar" value="1">
-                                <i class="bi bi-upload me-1"></i>Upload Photo
-                            </button>
-                            {% if form.instance.profile_photo %}
-                                <button class="btn btn-outline-danger" type="submit" name="delete_photo" value="1" formnovalidate>
-                                    <i class="bi bi-trash-fill me-1"></i>Remove Photo
-                                </button>
-                            {% endif %}
+
+                                                <div class="d-flex gap-2 mt-4">
+                                                    <button class="btn btn-primary" type="submit" name="save_info" value="1">
+                                                        <i class="bi bi-check2 me-1"></i>Save Changes
+                                                    </button>
+                                                </div>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         {# Password tab #}
         <div class="profile-panel" id="profile-panel-password">
@@ -389,7 +384,7 @@
     });
 
     // Hash-based tab activation
-    if (window.location.hash === '#avatar') activate('avatar');
+        if (window.location.hash === '#avatar') activate('info');
     if (['#banner', '#themes', '#christmas'].includes(window.location.hash)) activate('themes');
     if (document.getElementById('theme-errors')) activate('themes');
     if (window.location.hash === '#settings') activate('settings');
