@@ -186,7 +186,7 @@ html.login-christmas body.page-login.dark-mode .login-card > .xmas-card-frost.xm
 /* SVG overlay (snow, wire, bulbs) built by login-christmas.js */
 html.login-christmas body.page-login .login-card > .xmas-card-deco.xmas-only {
     position: absolute;
-    inset: calc(var(--xmas-deco-pad, 36px) * -1);
+    inset: calc(var(--xmas-deco-pad, 60px) * -1);
     z-index: 4;
     pointer-events: none;
 }
@@ -227,45 +227,72 @@ body.dark-mode .xmas-frost {
 
 .xmas-wire {
     fill: none;
-    stroke: #0c2414;
-    stroke-width: 2.3;
+    stroke: #0e2a17;
+    stroke-width: 2.6;
     stroke-linecap: round;
     stroke-linejoin: round;
 }
 
 .xmas-wire--back {
-    stroke: #050f08;
+    stroke: #04100a;
 }
 
 .xmas-wire-highlight {
     fill: none;
-    stroke: #4c7f58;
-    stroke-width: 0.6;
+    stroke: #6fa47a;
+    stroke-width: 0.7;
     stroke-linecap: round;
     stroke-linejoin: round;
-    opacity: 0.6;
+    opacity: 0.55;
 }
 
 .xmas-wire-shadow {
     fill: none;
     stroke: rgba(18, 36, 70, 0.32);
-    stroke-width: 3.2;
+    stroke-width: 3.4;
 }
 
 .xmas-socket-ribs {
     fill: none;
-    stroke: rgba(0, 0, 0, 0.4);
-    stroke-width: 0.55;
+    stroke: rgba(0, 0, 0, 0.45);
+    stroke-width: 0.45;
 }
 
 .xmas-bulb__facets {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.26);
+    stroke: rgba(255, 255, 255, 0.22);
+    stroke-width: 0.45;
+}
+
+.xmas-bulb__rim {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.55);
+    stroke-width: 0.7;
+    stroke-linecap: round;
+}
+
+.xmas-bulb__filament {
+    fill: none;
+    stroke: #ffffff;
     stroke-width: 0.5;
+    stroke-linejoin: round;
+    opacity: 0.95;
 }
 
 .xmas-bulb__shine {
-    fill: rgba(255, 255, 255, 0.8);
+    fill: rgba(255, 255, 255, 0.85);
+}
+
+.xmas-bulb__glint {
+    fill: #ffffff;
+}
+
+.xmas-bulb__bloom {
+    opacity: 0.3;
+}
+
+body.dark-mode .xmas-bulb__bloom {
+    opacity: 0.5;
 }
 
 .xmas-halos {
@@ -275,6 +302,11 @@ body.dark-mode .xmas-frost {
 .xmas-deco-glows {
     will-change: opacity;
     animation: xmas-twinkle var(--twinkle-duration, 3s) ease-in-out var(--twinkle-delay, 0s) infinite;
+}
+
+/* At night the light adds onto the scene instead of painting over it. */
+body.dark-mode .xmas-deco-glows {
+    mix-blend-mode: screen;
 }
 
 html.xmas-effects-paused .xmas-deco-glows {

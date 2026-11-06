@@ -12,3 +12,5 @@ python-dotenv==1.2.4
 gunicorn==23.0.0
 whitenoise==6.9.0
 openpyxl==3.1.5
+azure-monitor-opentelemetry-exporter==1.0.0b59
+opentelemetry-sdk==1.45.2

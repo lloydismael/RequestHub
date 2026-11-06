@@ -7,11 +7,11 @@
     if (!root.classList.contains('login-christmas')) return;
 
     const NS = 'http://www.w3.org/2000/svg';
-    const PAD = 36;
+    const PAD = 60;
     const BULBS = {
-        red: { core: '#fff7ea', tint: '#ffb3a1', main: '#ff2d20', deep: '#8f0410', glow: '255, 58, 40' },
-        green: { core: '#f2fff2', tint: '#a4f7c0', main: '#13c95a', deep: '#03602a', glow: '40, 222, 112' },
-        amber: { core: '#fffbea', tint: '#ffe5a6', main: '#ffab1a', deep: '#a85300', glow: '255, 178, 52' },
+        red: { core: '#fff4e6', tint: '#ff9d86', main: '#f2251b', deep: '#6e020b', glow: '255, 62, 42' },
+        green: { core: '#f0fff2', tint: '#8ef2b0', main: '#0fbf52', deep: '#024f22', glow: '52, 230, 120' },
+        amber: { core: '#fffbe8', tint: '#ffe09a', main: '#ffa514', deep: '#8f4400', glow: '255, 184, 60' },
     };
     const COLORS = Object.keys(BULBS);
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -62,6 +62,41 @@
         return sprite;
     }
 
+    // Six-armed dendrite drawn once and stamped for the mid-depth crystal flakes.
+    function crystalSprite(size) {
+        const sprite = document.createElement('canvas');
+        sprite.width = sprite.height = size;
+        const context = sprite.getContext('2d');
+        const r = size / 2;
+        context.translate(r, r);
+        context.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        context.lineCap = 'round';
+        context.shadowColor = 'rgba(255, 255, 255, 0.9)';
+        context.shadowBlur = size * 0.06;
+        context.lineWidth = size * 0.045;
+        for (let arm = 0; arm < 6; arm++) {
+            context.save();
+            context.rotate(arm * Math.PI / 3);
+            context.beginPath();
+            context.moveTo(0, 0);
+            context.lineTo(0, -r * 0.82);
+            [0.36, 0.58].forEach((at, index) => {
+                const branch = r * (index ? 0.17 : 0.24);
+                context.moveTo(0, -r * at);
+                context.lineTo(-branch, -r * at - branch);
+                context.moveTo(0, -r * at);
+                context.lineTo(branch, -r * at - branch);
+            });
+            context.stroke();
+            context.restore();
+        }
+        context.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        context.beginPath();
+        context.arc(0, 0, size * 0.06, 0, Math.PI * 2);
+        context.fill();
+        return sprite;
+    }
+
     function startSnow(scene) {
         const canvas = document.createElement('canvas');
         canvas.className = 'xmas-snow';
@@ -72,6 +107,7 @@
         // Soft-edged sprites: crisp distant flakes and out-of-focus bokeh flakes up front.
         const crisp = flakeSprite(32, [[0, 1], [0.35, 0.9], [0.62, 0.35], [1, 0]]);
         const bokeh = flakeSprite(64, [[0, 0.5], [0.55, 0.38], [0.8, 0.14], [1, 0]]);
+        const crystal = crystalSprite(64);
 
         let width = 0;
         let height = 0;
@@ -79,20 +115,29 @@
         let frame = 0;
         let last = 0;
         let queued = 0;
+        let gust = 0;
 
-        function makeFlake(front, anywhere) {
-            const radius = front ? 6 + Math.random() * 7 : 1 + Math.pow(Math.random(), 1.6) * 3;
+        // kind: 'dust' (distant, crisp), 'crystal' (mid-depth dendrite), 'front' (out-of-focus bokeh).
+        function makeFlake(kind, anywhere) {
+            const front = kind === 'front';
+            const isCrystal = kind === 'crystal';
+            const radius = front ? 6 + Math.random() * 7
+                : isCrystal ? 3.5 + Math.random() * 3.5
+                    : 0.8 + Math.pow(Math.random(), 1.8) * 3;
             return {
-                front,
+                kind,
                 radius,
+                depth: front ? 1.6 : isCrystal ? 1 : 0.35 + radius / 6,
                 x: Math.random() * width,
                 y: anywhere ? Math.random() * height : -radius * 3 - Math.random() * 40,
-                speed: front ? 55 + Math.random() * 35 : 16 + radius * 12 + Math.random() * 16,
+                speed: front ? 55 + Math.random() * 35 : isCrystal ? 28 + Math.random() * 18 : 14 + radius * 12 + Math.random() * 14,
                 drift: front ? 18 + Math.random() * 22 : 5 + Math.random() * 16,
                 sway: 0.35 + Math.random() * 0.8,
                 phase: Math.random() * Math.PI * 2,
                 wind: 3 + Math.random() * 9,
-                alpha: front ? 0.35 + Math.random() * 0.3 : 0.45 + Math.random() * 0.55,
+                angle: Math.random() * Math.PI * 2,
+                spin: (Math.random() - 0.5) * 1.6,
+                alpha: front ? 0.3 + Math.random() * 0.3 : isCrystal ? 0.55 + Math.random() * 0.35 : 0.4 + Math.random() * 0.55,
             };
         }
 
@@ -105,17 +150,32 @@
             context.setTransform(ratio, 0, 0, ratio, 0, 0);
             const count = mobileQuery.matches ? 55 : (width < 1100 ? 85 : 110);
             const frontCount = mobileQuery.matches ? 3 : 7;
-            flakes = Array.from({ length: count }, () => makeFlake(false, true))
-                .concat(Array.from({ length: frontCount }, () => makeFlake(true, true)));
+            const crystalCount = mobileQuery.matches ? 5 : 12;
+            const make = (length, kind) => Array.from({ length }, () => makeFlake(kind, true));
+            // Far to near, so nearer flakes paint over distant ones.
+            flakes = make(count, 'dust').sort((a, b) => a.radius - b.radius)
+                .concat(make(crystalCount, 'crystal'), make(frontCount, 'front'));
         }
 
         function draw(time) {
             context.clearRect(0, 0, width, height);
             for (const flake of flakes) {
                 const x = flake.x + Math.sin(flake.phase + time * 0.001 * flake.sway) * flake.drift;
-                const size = flake.radius * (flake.front ? 2.2 : 3);
                 context.globalAlpha = flake.alpha;
-                context.drawImage(flake.front ? bokeh : crisp, x - size / 2, flake.y - size / 2, size, size);
+                if (flake.kind === 'crystal') {
+                    const size = flake.radius * 2.6;
+                    // Tumbling: the flake foreshortens as it turns edge-on.
+                    const tilt = 0.55 + 0.45 * Math.abs(Math.cos(flake.angle * 0.7));
+                    context.save();
+                    context.translate(x, flake.y);
+                    context.rotate(flake.angle);
+                    context.scale(1, tilt);
+                    context.drawImage(crystal, -size / 2, -size / 2, size, size);
+                    context.restore();
+                    continue;
+                }
+                const size = flake.radius * (flake.kind === 'front' ? 2.2 : 3);
+                context.drawImage(flake.kind === 'front' ? bokeh : crisp, x - size / 2, flake.y - size / 2, size, size);
             }
             context.globalAlpha = 1;
         }
@@ -123,10 +183,13 @@
         function step(now) {
             const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
             last = now;
+            // Slow, layered gusts push every flake sideways; nearer flakes move more.
+            gust = Math.max(0, Math.sin(now * 0.00021) * 0.7 + Math.sin(now * 0.00067 + 1.3) * 0.3) * 34;
             for (const flake of flakes) {
                 flake.y += flake.speed * dt;
-                flake.x += flake.wind * dt;
-                if (flake.y - flake.radius * 2 > height) Object.assign(flake, makeFlake(flake.front, false));
+                flake.x += (flake.wind + gust * flake.depth) * dt;
+                flake.angle += flake.spin * dt;
+                if (flake.y - flake.radius * 2 > height) Object.assign(flake, makeFlake(flake.kind, false));
                 if (flake.x > width + 40) flake.x -= width + 80;
             }
             draw(now);
@@ -260,8 +323,8 @@
             const end = index + 1 < hooks.length ? hooks[index + 1] : hooks[0] + shape.length;
             const middle = shape.at((start + end) / 2);
             const side = Math.abs(middle.nx) > 0.7;
-            const sag = 2 + random() * 6;
-            const bulge = side ? (random() - 0.45) * 13 : (random() - 0.4) * 5;
+            const sag = 1.5 + random() * 3.5;
+            const bulge = side ? (random() - 0.4) * 5 : (random() - 0.4) * 2.5;
             for (let k = 0; k < 4; k++) {
                 const u = k / 4;
                 const point = shape.at(start + (end - start) * u);
@@ -306,8 +369,16 @@
         : [['0', '#ffffff'], ['0.55', '#f7faff'], ['0.8', '#dce6f5'], ['1', '#b9c8e2']]);
     const HALO_STOPS = (glow, dark) => [
         ['0', `rgb(${glow})`, dark ? 0.95 : 0.85],
-        ['0.18', `rgb(${glow})`, dark ? 0.7 : 0.55],
-        ['0.42', `rgb(${glow})`, dark ? 0.26 : 0.18],
+        ['0.12', `rgb(${glow})`, dark ? 0.75 : 0.62],
+        ['0.32', `rgb(${glow})`, dark ? 0.32 : 0.24],
+        ['0.6', `rgb(${glow})`, dark ? 0.1 : 0.06],
+        ['1', `rgb(${glow})`, 0],
+    ];
+    // Light bounced onto the frosted glass (and whatever sits under it) around each bulb.
+    const SPILL_STOPS = (glow, dark) => [
+        ['0', `rgb(${glow})`, dark ? 0.46 : 0.3],
+        ['0.35', `rgb(${glow})`, dark ? 0.2 : 0.12],
+        ['0.7', `rgb(${glow})`, dark ? 0.05 : 0.03],
         ['1', `rgb(${glow})`, 0],
     ];
 
@@ -321,7 +392,10 @@
     function retint(root, dark) {
         if (!root) return;
         setStops(root.querySelector('#xmas-puff'), PUFF_STOPS(dark));
-        COLORS.forEach(name => setStops(root.querySelector(`#xmas-halo-${name}`), HALO_STOPS(BULBS[name].glow, dark)));
+        COLORS.forEach(name => {
+            setStops(root.querySelector(`#xmas-halo-${name}`), HALO_STOPS(BULBS[name].glow, dark));
+            setStops(root.querySelector(`#xmas-spill-${name}`), SPILL_STOPS(BULBS[name].glow, dark));
+        });
     }
 
     function blurFilter(defs, id, deviation) {
@@ -360,15 +434,17 @@
 
         blurFilter(defs, 'xmas-soft', 2.6);
         blurFilter(defs, 'xmas-wire-blur', 1.3);
+        // Moulded dark-green plastic socket, lit from above.
         const socket = svg('linearGradient', { id: 'xmas-socket-fill', x1: '0', y1: '0', x2: '0', y2: '1' }, defs);
-        [['0', '#151817'], ['0.28', '#6f7471'], ['0.45', '#363b38'], ['0.8', '#141716'], ['1', '#050606']].forEach(([offset, color]) => svg('stop', { offset, 'stop-color': color }, socket));
+        [['0', '#0d2a16'], ['0.25', '#3f7a4c'], ['0.42', '#1a4426'], ['0.8', '#08200f'], ['1', '#020a05']].forEach(([offset, color]) => svg('stop', { offset, 'stop-color': color }, socket));
         COLORS.forEach(name => {
             const c = BULBS[name];
             // Lit glass: almost white where the filament sits, colour concentrating towards the rim.
-            radial(defs, `xmas-glass-${name}`, [['0', '#ffffff'], ['0.16', c.core], ['0.36', c.tint], ['0.62', c.main], ['1', c.deep]], { cx: '0.42', cy: '0.5', r: '0.72', fx: '0.4', fy: '0.5' });
+            radial(defs, `xmas-glass-${name}`, [['0', '#ffffff'], ['0.14', c.core], ['0.34', c.tint], ['0.62', c.main], ['0.9', c.deep], ['1', c.deep]], { cx: '0.4', cy: '0.5', r: '0.7', fx: '0.36', fy: '0.5' });
             radial(defs, `xmas-halo-${name}`, HALO_STOPS(c.glow, dark));
+            radial(defs, `xmas-spill-${name}`, SPILL_STOPS(c.glow, dark));
         });
-        radial(defs, 'xmas-core', [['0', '#ffffff', 1], ['0.55', '#fffbe9', 0.9], ['1', '#fff8dc', 0]]);
+        radial(defs, 'xmas-core', [['0', '#ffffff', 1], ['0.5', '#fffbe9', 0.95], ['1', '#fff8dc', 0]]);
     }
 
     /* ---------- Snow ---------- */
@@ -406,17 +482,18 @@
 
     function snowCap(puffs, shape, width, random) {
         const topRun = width - 2 * shape.r;
-        const start = -shape.arc - 18;
-        const end = topRun + shape.arc + 18;
+        const start = -shape.arc * 0.85;
+        const end = topRun + shape.arc * 0.85;
+        // Heavy clumps with shallow saddles between them, like snow settled on a ledge.
         const mounds = [];
-        for (let s = start + 18 + random() * 14; s < end - 14; s += 40 + random() * 30) {
-            mounds.push({ center: s, spread: 15 + random() * 12, height: 12 + random() * 9 });
+        for (let s = start + 10 + random() * 16; s < end - 10; s += 26 + random() * 34) {
+            mounds.push({ center: s, spread: 10 + random() * 12, height: 8 + random() * 10 });
         }
         heap(puffs, s => shape.at(s), start, end, s => {
-            const fade = Math.max(0, Math.min(1, (s - start) / 26, (end - s) / 26));
+            const fade = Math.max(0, Math.min(1, (s - start) / 20, (end - s) / 20));
             const mound = mounds.reduce((sum, m) => sum + m.height * bump(s, m.center, m.spread), 0);
-            return (4.5 + mound) * Math.pow(fade, 0.6);
-        }, random, { min: 2.4, max: 8.5 });
+            return (4.5 + mound) * Math.pow(fade, 0.7);
+        }, random, { min: 2.2, max: 7.2 });
     }
 
     function clusterAlong(puffs, shape, s, length, size, random) {
@@ -494,19 +571,33 @@
         }
         let toDown = Math.PI / 2 - outward;
         toDown = Math.atan2(Math.sin(toDown), Math.cos(toDown));
-        return outward + toDown * 0.2 + (random() - 0.5) * 1.1;
+        return outward + toDown * 0.42 + (random() - 0.5) * 0.9;
     }
 
     function addBulb(layers, color, x, y, angle, scale) {
         const transform = `translate(${round(x)} ${round(y)}) rotate(${round(angle * 180 / Math.PI)}) scale(${scale})`;
-        svg('circle', { class: 'xmas-bulb__halo', cx: '11.5', cy: '0', r: '20', fill: `url(#xmas-halo-${color})`, transform }, layers.halos[color]);
+        // Light leaves from the glass centre, not the socket.
+        const gx = x + Math.cos(angle) * 11 * scale;
+        const gy = y + Math.sin(angle) * 11 * scale;
+        // Wide, faint bloom washing the snow scene behind the card.
+        svg('circle', { class: 'xmas-bulb__bloom', cx: round(gx), cy: round(gy), r: round(30 * scale), fill: `url(#xmas-halo-${color})` }, layers.halos[color]);
+        // Bounce light pooling on the frosted glass, fields and logo near the bulb.
+        svg('circle', { cx: round(gx), cy: round(gy), r: round(54 * scale), fill: `url(#xmas-spill-${color})` }, layers.spills[color]);
+        // Tight bloom that also colours the snow and wire right around the bulb.
+        svg('circle', { class: 'xmas-bulb__halo', cx: '11', cy: '0', r: '17', fill: `url(#xmas-halo-${color})`, transform }, layers.halos[color]);
+
         const bulb = svg('g', { class: `xmas-bulb xmas-bulb--${color}`, transform }, layers.bulbs);
-        svg('path', { d: 'M-0.3 -2.4Q-0.3 -2.8 0.3 -2.8H4.8Q5.4 -2.8 5.4 -2.3V2.3Q5.4 2.8 4.8 2.8H0.3Q-0.3 2.8 -0.3 2.4Z', fill: 'url(#xmas-socket-fill)' }, bulb);
-        svg('path', { class: 'xmas-socket-ribs', d: 'M1.8 -2.7V2.7M3.6 -2.7V2.7' }, bulb);
-        svg('path', { d: 'M5 -3.1C6.8 -4.6 10 -4.8 12.6 -3.5C15 -2.3 17.3 -0.9 18.5 0C17.3 0.9 15 2.3 12.6 3.5C10 4.8 6.8 4.6 5 3.1Z', fill: `url(#xmas-glass-${color})` }, bulb);
-        svg('path', { class: 'xmas-bulb__facets', d: 'M6.6 -2.6Q11.4 -3.1 16.8 -0.6M6.6 2.6Q11.4 3.1 16.8 0.6' }, bulb);
-        svg('ellipse', { class: 'xmas-bulb__core', cx: '10', cy: '0', rx: '3.4', ry: '1.8', fill: 'url(#xmas-core)' }, bulb);
-        svg('ellipse', { class: 'xmas-bulb__shine', cx: '10', cy: '-2.4', rx: '2.6', ry: '0.6', transform: 'rotate(-7 10 -2.4)' }, bulb);
+        svg('path', { d: 'M-0.4 -2.5Q-0.4 -3 0.2 -3H5Q5.7 -3 5.7 -2.4V2.4Q5.7 3 5 3H0.2Q-0.4 3 -0.4 2.5Z', fill: 'url(#xmas-socket-fill)' }, bulb);
+        svg('path', { class: 'xmas-socket-ribs', d: 'M1.5 -2.9V2.9M3 -2.9V2.9M4.5 -2.9V2.9' }, bulb);
+        // C9 "strawberry" glass: full shoulders tapering to a rounded tip.
+        svg('path', { d: 'M5.2 -3.3C7.4 -5.6 11.6 -5.9 14.4 -4C16.6 -2.5 18.1 -1 18.3 0C18.1 1 16.6 2.5 14.4 4C11.6 5.9 7.4 5.6 5.2 3.3Z', fill: `url(#xmas-glass-${color})` }, bulb);
+        svg('path', { class: 'xmas-bulb__facets', d: 'M6.8 -2.9Q11.6 -3.6 17 -0.7M6.8 2.9Q11.6 3.6 17 0.7M7 0H16.6' }, bulb);
+        // Refracted light gathering on the far rim of the glass.
+        svg('path', { class: 'xmas-bulb__rim', d: 'M8.5 4.5Q13.5 4.4 17.3 1' }, bulb);
+        svg('ellipse', { class: 'xmas-bulb__core', cx: '9.6', cy: '0', rx: '3.8', ry: '2.1', fill: 'url(#xmas-core)' }, bulb);
+        svg('path', { class: 'xmas-bulb__filament', d: 'M7.6 0.6L8.4 -0.6L9.2 0.6L10 -0.6L10.8 0.6L11.6 -0.6' }, bulb);
+        svg('ellipse', { class: 'xmas-bulb__shine', cx: '10.2', cy: '-3', rx: '3', ry: '0.65', transform: 'rotate(-8 10.2 -3)' }, bulb);
+        svg('circle', { class: 'xmas-bulb__glint', cx: '7.4', cy: '-2.6', r: '0.55' }, bulb);
     }
 
     /* ---------- Card decoration ---------- */
@@ -630,13 +721,14 @@
 
             // Animate cached halo layers; the filtered snow and glass bulbs stay static.
             const layers = {
+                spills: Object.fromEntries(COLORS.map((name, index) => [name, svg('g', { class: 'xmas-spills', 'clip-path': 'url(#xmas-card-clip)' }, glows[index])])),
                 halos: Object.fromEntries(COLORS.map((name, index) => [name, svg('g', { class: 'xmas-halos' }, glows[index])])),
                 bulbs: svg('g', {}, lights),
             };
             const count = mobile ? 22 : 40;
             const spacing = total / count;
             const offset = random() * spacing;
-            const scale = mobile ? 1.2 : 1.38;
+            const scale = mobile ? 1.25 : 1.5;
             let previous = '';
             let placed = 0;
             const limit = mobile ? 18 : 34;

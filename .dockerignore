@@ -43,6 +43,7 @@ README.md
 Plan/
 scripts_check/
 .copilot-azure/
+.azure/deployment-plan.md
 .github/
 apply_pm_ess.py
 requirements-ci.txt
