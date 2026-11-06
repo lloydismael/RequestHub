@@ -72,6 +72,11 @@ INSTALLED_APPS = [
     "hub.apps.HubConfig",
 ]
 
+telemetry_enabled = os.getenv("AZURE_TELEMETRY_ENABLED", "false").lower()
+if telemetry_enabled not in ("true", "false"):
+    raise ImproperlyConfigured("AZURE_TELEMETRY_ENABLED must be true or false.")
+AZURE_TELEMETRY_ENABLED = telemetry_enabled == "true"
+
 PAGE_PERFORMANCE_ENABLED = (
     os.getenv("DJANGO_PAGE_PERFORMANCE_ENABLED", "false").lower() == "true"
     and (DEBUG or os.getenv("DJANGO_ENVIRONMENT", "").lower() == "staging")
@@ -96,6 +101,8 @@ MIDDLEWARE = [
     "accounts.middleware.PasswordChangeRequiredMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+if AZURE_TELEMETRY_ENABLED:
+    MIDDLEWARE.insert(1, "request_hub.telemetry.TelemetryMiddleware")
 
 ROOT_URLCONF = "request_hub.urls"
 

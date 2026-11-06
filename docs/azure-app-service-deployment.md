@@ -99,6 +99,33 @@ The image collects and compresses static files during the Docker build, using a 
 - Enabled diagnostics emit a `Server-Timing` header and sanitized `hub.performance` log records containing route name, response status, elapsed time, SQL execution time and query count. They do not log SQL, parameters, identities, or cookies. Database duration is included in request duration; do not add them together. Timings cover the synchronous response, not subsequent streaming iteration.
 - Runtime changelog synchronization is still bounded by its existing timeout. Moving it to a release step requires a separately verified database-access and failure-recovery path; do not simply disable it.
 
+### Optional Application Insights tracing
+
+The application includes opt-in request and database timing using the Azure
+Monitor OpenTelemetry exporter. It is disabled by default. Before enabling it,
+configure a system-assigned managed identity for the app and grant it the
+**Monitoring Metrics Publisher** role scoped to the Application Insights
+resource; the existing App Service does not currently have an identity. Set
+`APPLICATIONINSIGHTS_CONNECTION_STRING` to the full existing component
+connection string, including the ingestion endpoint, and set
+`AZURE_TELEMETRY_ENABLED=true`. Missing or invalid configuration is an error.
+Keep Gunicorn's default non-preloaded configuration so each worker initializes
+its own exporter after forking.
+
+Request spans contain a resolved view name, an allowlisted HTTP method, status,
+and timing. Database spans contain the database type and execution duration;
+they do not include SQL or parameters. Health and readiness probes are excluded.
+The pipeline does not instrument outbound HTTP, email, AI calls, or application
+logs, and does not include raw paths, query strings, headers, request bodies, or
+exception messages. Offline exporter storage is disabled. Sampling currently
+records every trace, so measure ingestion volume, cost and request overhead in
+staging before enabling production. Streaming response iteration is not timed.
+The Azure Monitor exporter dependency is currently a beta release.
+
+To disable tracing, set `AZURE_TELEMETRY_ENABLED=false` and restart the app.
+Verify requests and database dependencies arrive in the intended workspace after
+the approved deployment; workspace relinking alone does not instrument Django.
+
 ## 5. Restart and Verify
 
 ```powershell

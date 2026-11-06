@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Login · Request Hub{% endblock %}
+{% block title %}Login Â· Request Hub{% endblock %}
 {% block body_class %}page-login{% endblock %}
 {% block extra_head %}
 {% if christmas_login_enabled %}
 {% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=10">{% endif %}
-<link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=6">
 <script>
     (function () {
         try {
@@ -93,7 +93,7 @@
 </section>
 {% if christmas_login_enabled %}
 {% if not request.user.is_authenticated %}<script src="{% static 'js/christmas-theme.js' %}?v=9" defer></script>{% endif %}
-<script src="{% static 'js/login-christmas.js' %}?v=6" defer></script>
+<script src="{% static 'js/login-christmas.js' %}?v=7" defer></script>
 {% endif %}
 <script>
     window.addEventListener('pageshow', function (event) {
