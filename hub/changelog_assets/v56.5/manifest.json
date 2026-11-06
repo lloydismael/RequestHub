@@ -1,0 +1,61 @@
+{
+  "version": "v56.5",
+  "revision": "09771520305297d6ef05533d25795f6dbe5c15e7",
+  "generated_at": "2026-11-06T08:40:29+08:00",
+  "commits": [
+    {
+      "sha": "4065e1370b494e98ab0718a4e8010dceb9195baa",
+      "type": "fixed",
+      "title": "Complete partially prepared changelog comparisons",
+      "before_text": "Packaged screenshot evidence could be skipped when an admin had already started a comparison. A seasonal-theme regression fixture did not distinguish an explicit Christmas choice from the temporary default.",
+      "after_text": "Screenshot sync fills missing fields in existing comparisons and adds missing pairs without replacing prepared content. The regression fixture explicitly marks a saved Christmas choice so it can verify behavior after the temporary-default deadline."
+    },
+    {
+      "sha": "78f0544039d269191e3a90abe201dd4b0c601d2f",
+      "type": "improved",
+      "title": "Make seasonal-login regression checks case-insensitive",
+      "before_text": "The seasonal-login regression check extracted script tags using a case-sensitive match.",
+      "after_text": "The check recognizes script tags case-insensitively. This is a test-only improvement; application login behavior is unchanged."
+    },
+    {
+      "sha": "7f1ba896bcb4634c77fa80a456e54cd0001fcb7e",
+      "type": "improved",
+      "title": "Richer changelog comparisons and seasonal theme defaults",
+      "requires_comparison": true,
+      "before_text": "Changelogs listed commit titles and supported a single release-wide comparison, without per-change screenshot editing or a visual-evidence draft gate. Saved account themes were not temporarily replaced by a seasonal default.",
+      "after_text": "Changelogs include per-change descriptions, multiple labeled before/after pairs, capture revisions, full-size image links, and mobile stacking. Admins can complete and add comparison pairs; incomplete UI releases stay in draft. Accounts also receive an opt-out Christmas default through December 31, 2026, with their previous theme restored afterward unless a new choice is applied.",
+      "comparisons": [
+        {
+          "title": "Release comparison cards — desktop",
+          "before_text": "The same synthetic release displays change titles without per-change narratives or screenshot groups.",
+          "after_text": "Changes include Before/After narratives. Visual changes groups labeled screenshot pairs with capture provenance and full-size image links.",
+          "before_image": "v56.5/01-changelog-desktop-before.webp",
+          "after_image": "v56.5/01-changelog-desktop-after.webp",
+          "before_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "after_revision": "09771520305297d6ef05533d25795f6dbe5c15e7",
+          "capture_note": "Historical changelog component capture from the exact release templates and CSS, at a 1440 × 1000 viewport with motion disabled. Both revisions use the same unsaved synthetic release fixture; preview images come from the synthetic v56.4 evidence set. No live database queries or external messages."
+        },
+        {
+          "title": "Release comparison cards — mobile",
+          "before_text": "The mobile changelog shows the same title-only change list.",
+          "after_text": "Per-change descriptions remain visible on a small screen, and before/after screenshot panels stack vertically.",
+          "before_image": "v56.5/02-changelog-mobile-before.webp",
+          "after_image": "v56.5/02-changelog-mobile-after.webp",
+          "before_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "after_revision": "09771520305297d6ef05533d25795f6dbe5c15e7",
+          "capture_note": "Historical changelog component capture from the exact release templates and CSS, at a 375 × 844 viewport with motion disabled. The fixture and synthetic preview images are identical to the desktop comparison; images retain each component's full height. No live database queries or external messages."
+        },
+        {
+          "title": "Per-change changelog editor",
+          "before_text": "The editor contains release-wide before/after fields only.",
+          "after_text": "The editor adds per-change descriptions and screenshots, an optional additional-pair control, and a publishing requirement for complete UI/UX comparisons.",
+          "before_image": "v56.5/03-changelog-editor-before.webp",
+          "after_image": "v56.5/03-changelog-editor-after.webp",
+          "before_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "after_revision": "09771520305297d6ef05533d25795f6dbe5c15e7",
+          "capture_note": "Historical editor component capture from the exact release form code, templates, and CSS, at a 1440 × 1000 viewport with motion disabled. Both revisions receive the same unsaved synthetic release and comparisons; no form was submitted, no live database was queried, and no files were uploaded."
+        }
+      ]
+    }
+  ]
+}

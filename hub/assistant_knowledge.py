@@ -154,7 +154,7 @@ def _build_guides() -> dict[str, Guide]:
             "Profile & Preferences",
             "Update your profile and personal appearance and accessibility preferences.",
             (
-                "Open your account menu and choose My Profile.",
+                "Open your account menu and choose Settings.",
                 "Save changes using the controls provided on your profile page.",
             ),
         ),

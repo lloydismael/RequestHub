@@ -120,11 +120,8 @@
                                 <span class="nav-avatar-menu__role text-muted small">{{ request.user.get_role_display|default:request.user.role }}</span>
                             </div>
                             <div class="nav-avatar-menu__divider"></div>
-                            <a class="nav-avatar-menu__item" href="{% url 'accounts:update' %}#avatar" role="menuitem">
-                                <i class="bi bi-camera-fill nav-avatar-menu__icon"></i>Update Avatar
-                            </a>
                             <a class="nav-avatar-menu__item" href="{% url 'accounts:update' %}" role="menuitem">
-                                <i class="bi bi-person-fill nav-avatar-menu__icon"></i>My Profile
+                                <i class="bi bi-person-fill nav-avatar-menu__icon"></i>Settings
                             </a>
                             <div class="nav-avatar-menu__divider"></div>
                             <form action="{% url 'logout' %}" method="post" class="nav-avatar-menu__logout-form">

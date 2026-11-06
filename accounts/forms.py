@@ -2,9 +2,15 @@ from django import forms
 from django.contrib.auth import password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+
+from io import BytesIO
 
 from .models import User
 from .themes import DEFAULT_CUSTOM_COLORS, custom_theme_style, normalize_hex
+
+# Longest edge, in pixels, that a stored profile photo may have.
+AVATAR_MAX_EDGE = 512
 
 ROLE_LABELS = {
     User.Roles.ADMIN: "Admin",
@@ -161,6 +167,46 @@ class ProfileForm(forms.ModelForm):
         if submitted is None and self.instance and self.instance.pk:
             return self.instance.department
         return self.cleaned_data.get("department", "")
+
+    def clean_profile_photo(self):
+        """Normalize uploads to a square JPEG.
+
+        The browser crop step is a convenience, not a guarantee, so enforce the
+        same result server-side: any upload is center-cropped to a square and
+        bounded in size before it reaches storage.
+        """
+        photo = self.cleaned_data.get("profile_photo")
+        if not photo or not hasattr(photo, "read"):
+            return photo
+        try:
+            from PIL import Image, UnidentifiedImageError
+        except ImportError:  # pragma: no cover - Pillow is a pinned dependency
+            return photo
+        try:
+            photo.seek(0)
+            with Image.open(photo) as source:
+                image = source.convert("RGB")
+                width, height = image.size
+                edge = min(width, height)
+                if edge < 1:
+                    raise ValidationError("That image file appears to be empty.")
+                left = (width - edge) // 2
+                top = (height - edge) // 2
+                square = image.crop((left, top, left + edge, top + edge))
+                if square.width > AVATAR_MAX_EDGE:
+                    square = square.resize(
+                        (AVATAR_MAX_EDGE, AVATAR_MAX_EDGE), Image.LANCZOS
+                    )
+                buffer = BytesIO()
+                square.save(buffer, format="JPEG", quality=90, optimize=True)
+        except ValidationError:
+            raise
+        except (UnidentifiedImageError, OSError, ValueError):
+            raise ValidationError("Please upload a valid image file (JPG, PNG or GIF).")
+        buffer.seek(0)
+        name = photo.name or "profile.jpg"
+        stem = name.rsplit("/", 1)[-1].rsplit(".", 1)[0] or "profile"
+        return ContentFile(buffer.read(), name=f"{stem}.jpg")
 
     field_order = [
         "first_name",

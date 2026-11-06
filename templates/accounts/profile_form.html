@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load form_customization static %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=1"><link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=1">{% endblock %}
-{% block title %}My Profile · Request Hub{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=2"><link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=1">{% endblock %}
+{% block title %}Settings · Request Hub{% endblock %}
 {% block body_class %}profile-page-shell{% endblock %}
 {% block content %}
 <div class="profile-page">
@@ -58,7 +58,7 @@
             <i class="bi bi-palette-fill me-1" aria-hidden="true"></i>Themes
         </button>
         <button class="profile-tab" data-profile-tab="settings">
-            <i class="bi bi-sliders me-1"></i>Settings
+            <i class="bi bi-sliders me-1"></i>Personalization
         </button>
     </div>
 
@@ -112,7 +112,7 @@
                         {% endif %}
                     </div>
                     <div class="profile-avatar-controls">
-                        <p class="text-muted small mb-3">Upload a clear photo of yourself. JPG, PNG or GIF, max 5 MB.</p>
+                        <p class="text-muted small mb-3">Upload a clear photo of yourself. JPG, PNG or GIF, max 5 MB. You can crop and zoom the photo before saving it.</p>
                         {% for field in form.visible_fields %}
                             {% if field.name == "profile_photo" %}
                                 <div class="mb-3">
@@ -122,7 +122,24 @@
                                 </div>
                             {% endif %}
                         {% endfor %}
-                        <div class="d-flex gap-2 flex-wrap">
+                                                <div class="avatar-crop" id="avatar-crop" hidden>
+                                                    <div class="avatar-crop__stage" id="avatar-crop-stage">
+                                                        <img class="avatar-crop__image" id="avatar-crop-image" alt="" draggable="false">
+                                                        <canvas class="avatar-crop__overlay" id="avatar-crop-overlay" aria-hidden="true"></canvas>
+                                                    </div>
+                                                    <div class="avatar-crop__controls">
+                                                        <label class="avatar-crop__zoom-label" for="avatar-crop-zoom">Zoom</label>
+                                                        <input class="avatar-crop__zoom" id="avatar-crop-zoom" type="range" min="1" max="4" step="0.01" value="1">
+                                                    </div>
+                                                    <div class="d-flex gap-2 flex-wrap">
+                                                        <button class="btn btn-primary btn-sm" type="button" id="avatar-crop-apply">
+                                                            <i class="bi bi-check2 me-1"></i>Apply Crop
+                                                        </button>
+                                                        <button class="btn btn-outline-secondary btn-sm" type="button" id="avatar-crop-cancel">Cancel</button>
+                                                        <button class="btn btn-link btn-sm ms-auto p-0" type="button" id="avatar-crop-reset">Reset</button>
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex gap-2 flex-wrap">
                             <button class="btn btn-primary" type="submit" name="save_avatar" value="1">
                                 <i class="bi bi-upload me-1"></i>Upload Photo
                             </button>
@@ -285,7 +302,7 @@
     {# ── Settings tab (outside main form — its own POST) ─── #}
     <div class="profile-panel" id="profile-panel-settings">
         <div class="settings-header">
-            <div><h2 class="profile-card__title"><i class="bi bi-sliders" aria-hidden="true"></i>Settings</h2><p class="settings-subtitle">Personalize your workspace, comfort, and everyday experience.</p></div>
+            <div><h2 class="profile-card__title"><i class="bi bi-sliders" aria-hidden="true"></i>Personalization</h2><p class="settings-subtitle">Personalize your workspace, comfort, and everyday experience.</p></div>
             <span class="settings-scope"><i class="bi bi-person-check" aria-hidden="true"></i>Your account</span>
         </div>
         <form method="post" id="profile-settings-form">
@@ -362,7 +379,10 @@
     const activate = (tabName) => {
         tabs.forEach((t) => t.classList.toggle('profile-tab--active', t.dataset.profileTab === tabName));
         panels.forEach((p) => p.classList.toggle('profile-panel--active', p.id === `profile-panel-${tabName}`));
-    };
+            // Panels are display:none while inactive, so anything measuring layout
+            // (such as the avatar crop stage) needs to know a panel just became visible.
+            document.dispatchEvent(new CustomEvent('requesthub:profile-tab-changed', { detail: { tab: tabName } }));
+        };
 
     tabs.forEach((tab) => {
         tab.addEventListener('click', () => activate(tab.dataset.profileTab));
@@ -524,29 +544,374 @@
     }
     render();
 
-    // Live avatar preview
+    // Live avatar preview with an optional crop step before upload.
     const photoInput = document.getElementById('id_profile_photo');
     const preview = document.getElementById('profile-avatar-preview');
     if (photoInput && preview) {
-        photoInput.addEventListener('change', () => {
-            const file = photoInput.files && photoInput.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
+            const AVATAR_OUTPUT_SIZE = 512;
+            const MAX_CROP_DIMENSION = 2400;
+
+            const crop = {
+                root: document.getElementById('avatar-crop'),
+                stage: document.getElementById('avatar-crop-stage'),
+                image: document.getElementById('avatar-crop-image'),
+                overlay: document.getElementById('avatar-crop-overlay'),
+                zoom: document.getElementById('avatar-crop-zoom'),
+                apply: document.getElementById('avatar-crop-apply'),
+                cancel: document.getElementById('avatar-crop-cancel'),
+                reset: document.getElementById('avatar-crop-reset'),
+            };
+
+            if (!crop.root || !crop.stage || !crop.image) return;
+
+            const state = { scale: 1, offsetX: 0, offsetY: 0, base: 1, ready: false };
+            let originalFile = null;
+            let croppedFile = null;
+            let lastPreviewUrl = null;
+            let activePointer = null;
+            let pendingRepaint = false;
+            let resizeObserver = null;
+
+            const stageSize = () => crop.stage.clientWidth || crop.stage.offsetWidth || 0;
+
+            const replaceInputFile = (file) => {
+                try {
+                    const transfer = new DataTransfer();
+                    transfer.items.add(file);
+                    photoInput.files = transfer.files;
+                } catch (err) {
+                    photoInput.files = null;
+                }
+            };
+
+            const revokePreviewUrl = () => {
+                if (lastPreviewUrl) {
+                    URL.revokeObjectURL(lastPreviewUrl);
+                    lastPreviewUrl = null;
+                }
+            };
+
+            const setPreview = (src) => {
                 if (preview.tagName === 'IMG') {
-                    preview.src = e.target.result;
+                    preview.src = src;
                 } else {
                     const img = document.createElement('img');
-                    img.src = e.target.result;
+                    img.src = src;
                     img.className = 'profile-avatar-preview';
+                    img.id = 'profile-avatar-preview';
                     img.alt = 'Preview';
                     preview.replaceWith(img);
                 }
             };
-            reader.readAsDataURL(file);
-        });
-    }
-}());
+
+            const computeBase = () => {
+                const size = stageSize();
+                const naturalWidth = crop.image.naturalWidth;
+                const naturalHeight = crop.image.naturalHeight;
+                if (!size || !naturalWidth || !naturalHeight) return 0;
+                // "Cover" fit: the smaller axis must exactly fill the square stage,
+                // so the image never leaves empty space inside the crop circle.
+                return Math.max(size / naturalWidth, size / naturalHeight);
+            };
+
+            const clampOffsets = () => {
+                const size = stageSize();
+                if (!size) return;
+                const width = crop.image.naturalWidth * state.scale;
+                const height = crop.image.naturalHeight * state.scale;
+                if (width <= size) {
+                    state.offsetX = (size - width) / 2;
+                } else {
+                    state.offsetX = Math.min(0, Math.max(size - width, state.offsetX));
+                }
+                if (height <= size) {
+                    state.offsetY = (size - height) / 2;
+                } else {
+                    state.offsetY = Math.min(0, Math.max(size - height, state.offsetY));
+                }
+            };
+
+            const paint = () => {
+                const size = stageSize();
+                if (!size) return;
+                const width = crop.image.naturalWidth * state.scale;
+                const height = crop.image.naturalHeight * state.scale;
+                crop.image.style.width = width + 'px';
+                crop.image.style.height = height + 'px';
+                crop.image.style.left = state.offsetX + 'px';
+                crop.image.style.top = state.offsetY + 'px';
+                paintOverlay(size);
+            };
+
+            const paintOverlay = (size) => {
+                const canvas = crop.overlay;
+                if (!canvas) return;
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = Math.round(size * dpr);
+                canvas.height = Math.round(size * dpr);
+                canvas.style.width = size + 'px';
+                canvas.style.height = size + 'px';
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                ctx.clearRect(0, 0, size, size);
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                ctx.beginPath();
+                ctx.rect(0, 0, size, size);
+                ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2, true);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
+                ctx.stroke();
+            };
+
+            const repaintWhenReady = (attempt) => {
+                const tries = attempt || 0;
+                if (stageSize()) {
+                    pendingRepaint = false;
+                    syncResetState();
+                    return;
+                }
+                if (tries > 40) return;
+                pendingRepaint = true;
+                window.requestAnimationFrame(() => repaintWhenReady(tries + 1));
+            };
+
+            const syncResetState = () => {
+                            const base = computeBase();
+                            if (!base) return;
+                            const previousBase = state.base;
+                            state.base = base;
+
+                            // Re-seed the framing only when the base fit changes (first layout or
+                            // a genuine resize). Otherwise keep the user's zoom and pan intact so
+                            // a repaint never discards an in-progress crop.
+                            if (!previousBase || Math.abs(state.scale - previousBase) < 1e-6 || !state.ready) {
+                                state.scale = base;
+                                const size = stageSize();
+                                state.offsetX = (size - crop.image.naturalWidth * state.scale) / 2;
+                                state.offsetY = (size - crop.image.naturalHeight * state.scale) / 2;
+                            } else {
+                                state.scale = state.scale * (base / previousBase);
+                            }
+
+                            crop.zoom.min = String(base);
+                            crop.zoom.max = String(base * 4);
+                            crop.zoom.value = String(state.scale);
+
+                            state.ready = true;
+                            clampOffsets();
+                            paint();
+                        };
+
+            const onVisibility = () => {
+                if (!crop.root.hidden) repaintWhenReady();
+            };
+
+            const startRepaintWatch = () => {
+                if (resizeObserver || typeof ResizeObserver !== 'function') return;
+                resizeObserver = new ResizeObserver(() => {
+                    if (!crop.root.hidden && stageSize()) {
+                        pendingRepaint = false;
+                        syncResetState();
+                    }
+                });
+                resizeObserver.observe(crop.stage);
+                document.addEventListener('requesthub:profile-tab-changed', onVisibility);
+            };
+
+            const stopRepaintWatch = () => {
+                if (resizeObserver) {
+                    resizeObserver.disconnect();
+                    resizeObserver = null;
+                }
+                document.removeEventListener('requesthub:profile-tab-changed', onVisibility);
+            };
+
+            const dataUrlToFile = (dataUrl, fileName) => {
+                const parts = dataUrl.split(',');
+                const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/jpeg';
+                const binary = atob(parts[1]);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                return new File([bytes], fileName, { type: mime });
+            };
+
+            const renderCrop = () => {
+                const size = stageSize();
+                if (!size) return null;
+                const canvas = document.createElement('canvas');
+                canvas.width = AVATAR_OUTPUT_SIZE;
+                canvas.height = AVATAR_OUTPUT_SIZE;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return null;
+                const ratio = AVATAR_OUTPUT_SIZE / size;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+                ctx.drawImage(
+                    crop.image,
+                    state.offsetX * ratio,
+                    state.offsetY * ratio,
+                    crop.image.naturalWidth * state.scale * ratio,
+                    crop.image.naturalHeight * state.scale * ratio
+                );
+                return canvas.toDataURL('image/jpeg', 0.9);
+            };
+
+            const openCrop = () => {
+                crop.root.hidden = false;
+                if (!stageSize()) {
+                    pendingRepaint = true;
+                    startRepaintWatch();
+                    repaintWhenReady();
+                } else {
+                    syncResetState();
+                }
+            };
+
+            const closeCrop = () => {
+                crop.root.hidden = true;
+                stopRepaintWatch();
+            };
+
+            const loadIntoStage = (file) => {
+                const objectUrl = URL.createObjectURL(file);
+                revokePreviewUrl();
+                lastPreviewUrl = objectUrl;
+                            // A new image must re-seed its framing rather than inherit the
+                            // previous photo's zoom and pan.
+                            state.ready = false;
+                            state.base = 0;
+                            crop.image.onload = () => {
+                                openCrop();
+                            };
+                            crop.image.src = objectUrl;
+                        };
+
+            const enqueueImage = (file) => {
+                originalFile = file;
+                croppedFile = null;
+                const image = new Image();
+                const objectUrl = URL.createObjectURL(file);
+                image.onload = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    const longest = Math.max(image.naturalWidth, image.naturalHeight);
+                    if (longest <= MAX_CROP_DIMENSION) {
+                        loadIntoStage(file);
+                        return;
+                    }
+                    const ratio = MAX_CROP_DIMENSION / longest;
+                    const scaled = document.createElement('canvas');
+                    scaled.width = Math.round(image.naturalWidth * ratio);
+                    scaled.height = Math.round(image.naturalHeight * ratio);
+                    const ctx = scaled.getContext('2d');
+                    if (!ctx) {
+                        loadIntoStage(file);
+                        return;
+                    }
+                    ctx.drawImage(image, 0, 0, scaled.width, scaled.height);
+                    scaled.toBlob((blob) => {
+                        loadIntoStage(blob ? new File([blob], file.name, { type: 'image/jpeg' }) : file);
+                    }, 'image/jpeg', 0.92);
+                };
+                image.onerror = () => {
+                    URL.revokeObjectURL(objectUrl);
+                    loadIntoStage(file);
+                };
+                image.src = objectUrl;
+            };
+
+            photoInput.addEventListener('change', () => {
+                const file = photoInput.files && photoInput.files[0];
+                if (!file) return;
+                enqueueImage(file);
+            });
+
+            crop.zoom.addEventListener('input', () => {
+                const next = parseFloat(crop.zoom.value);
+                if (!isFinite(next) || !state.base) return;
+                const size = stageSize();
+                const centerX = (size / 2 - state.offsetX) / state.scale;
+                const centerY = (size / 2 - state.offsetY) / state.scale;
+                state.scale = next;
+                state.offsetX = size / 2 - centerX * state.scale;
+                state.offsetY = size / 2 - centerY * state.scale;
+                clampOffsets();
+                paint();
+            });
+
+            crop.stage.addEventListener('pointerdown', (event) => {
+                if (crop.root.hidden) return;
+                activePointer = event.pointerId;
+                crop.stage.dataset.dragX = String(event.clientX);
+                crop.stage.dataset.dragY = String(event.clientY);
+                try {
+                    crop.stage.setPointerCapture(event.pointerId);
+                } catch (err) {
+                    // pointer capture is best-effort
+                }
+                crop.stage.classList.add('avatar-crop__stage--dragging');
+                event.preventDefault();
+            });
+
+            crop.stage.addEventListener('pointermove', (event) => {
+                if (activePointer !== event.pointerId) return;
+                const lastX = parseFloat(crop.stage.dataset.dragX || '0');
+                const lastY = parseFloat(crop.stage.dataset.dragY || '0');
+                state.offsetX += event.clientX - lastX;
+                state.offsetY += event.clientY - lastY;
+                crop.stage.dataset.dragX = String(event.clientX);
+                crop.stage.dataset.dragY = String(event.clientY);
+                clampOffsets();
+                paint();
+            });
+
+            const endDrag = (event) => {
+                if (activePointer !== event.pointerId) return;
+                activePointer = null;
+                crop.stage.classList.remove('avatar-crop__stage--dragging');
+                try {
+                    crop.stage.releasePointerCapture(event.pointerId);
+                } catch (err) {
+                    // ignore
+                }
+            };
+
+            crop.stage.addEventListener('pointerup', endDrag);
+            crop.stage.addEventListener('pointercancel', endDrag);
+
+            crop.apply.addEventListener('click', () => {
+                const dataUrl = renderCrop();
+                if (!dataUrl) return;
+                const stem = (originalFile && originalFile.name ? originalFile.name : 'avatar').replace(/\.[^.]+$/, '');
+                croppedFile = dataUrlToFile(dataUrl, stem + '.jpg');
+                replaceInputFile(croppedFile);
+                setPreview(dataUrl);
+                closeCrop();
+            });
+
+            crop.cancel.addEventListener('click', () => {
+                // Cancelling discards the crop, not the chosen photo: restore the last
+                // applied crop if there is one, otherwise the original upload.
+                const restore = croppedFile || originalFile;
+                if (restore) {
+                    replaceInputFile(restore);
+                }
+                closeCrop();
+            });
+
+            crop.reset.addEventListener('click', () => {
+                if (!originalFile) return;
+                croppedFile = null;
+                replaceInputFile(originalFile);
+                loadIntoStage(originalFile);
+            });
+        }
+    }());
 
 // Settings changes are staged until explicitly saved.
 (function () {

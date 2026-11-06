@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 
 from .changelog_forms import ScreenshotField
 from .models import MANILA_TZ, Changelog
-from .release_changelog import ASSET_DIR, GROUPS, MANIFEST_PATH, ManifestError, missing_comparisons, validate_manifest
+from .release_changelog import ASSET_DIR, COMPARISON_FIELDS, GROUPS, MANIFEST_PATH, MAX_COMPARISONS, ManifestError, missing_comparisons, validate_manifest
 
 
 def load_manifest(path: Path = MANIFEST_PATH) -> dict | None:
@@ -80,6 +80,38 @@ def _store_comparisons(item: dict) -> dict:
     return item
 
 
+def _merge_comparisons(current: list, supplied: list) -> list:
+    pairs = deepcopy([pair for pair in current if isinstance(pair, dict)]) if isinstance(current, list) else []
+    matched = set()
+    for index, source in enumerate(supplied):
+        target = next((i for i, pair in enumerate(pairs) if i not in matched and pair.get("title") == source["title"]), None)
+        # Titles are editable; position preserves an admin's renamed comparison.
+        if target is None and index < len(pairs) and index not in matched:
+            target = index
+        if target is None:
+            if len(pairs) >= MAX_COMPARISONS:
+                continue
+            pairs.append(_store_comparisons({"comparisons": [source]})["comparisons"][0])
+            matched.add(len(pairs) - 1)
+            continue
+        matched.add(target)
+        pair = pairs[target]
+        missing = [field for field in COMPARISON_FIELDS if not isinstance(pair.get(field), str) or not pair[field].strip()]
+        incoming = source
+        if "before_image" in missing or "after_image" in missing:
+            incoming = _store_comparisons({"comparisons": [source]})["comparisons"][0]
+        for field in missing:
+            pair[field] = incoming[field]
+        for image_field, revision_field in (("before_image", "before_revision"), ("after_image", "after_revision")):
+            if image_field in missing and incoming.get(revision_field) and not pair.get(revision_field):
+                pair[revision_field] = incoming[revision_field]
+        if not pair.get("capture_note") and incoming.get("capture_note") and all(
+            pair.get(field) == incoming[field] for field in ("before_image", "after_image")
+        ):
+            pair["capture_note"] = incoming["capture_note"]
+    return pairs
+
+
 def _enrich_release(manifest: dict) -> Changelog | None:
     with transaction.atomic():
         entry = Changelog.objects.select_for_update().get(release_sha=manifest["revision"])
@@ -101,8 +133,8 @@ def _enrich_release(manifest: dict) -> Changelog | None:
             for field in ("before_text", "after_text", "requires_comparison"):
                 if note.get(field) and not item.get(field):
                     item[field] = note[field]
-            if note.get("comparisons") and not item.get("comparisons"):
-                item["comparisons"] = _store_comparisons(note)["comparisons"]
+            if note.get("comparisons"):
+                item["comparisons"] = _merge_comparisons(item.get("comparisons", []), note["comparisons"])
         if changes == entry.changes:
             return None
         entry.changes = changes
