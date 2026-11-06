@@ -187,7 +187,7 @@ class ChristmasDefaultAccountTests(TestCase):
         scripts = []
         for response in (account_page, login_page):
             scripts.append(next(
-                script for script in re.findall(r"<script[^>]*>(.*?)</script>", response.content.decode(), re.S)
+                script for script in re.findall(r"<script[^>]*>(.*?)</script>", response.content.decode(), re.S | re.IGNORECASE)
                 if "reqHubLoginTheme" in script
             ))
         program = """
