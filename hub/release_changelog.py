@@ -14,7 +14,7 @@ from pathlib import Path
 
 GROUPS = (("new", "New"), ("improved", "Improved"), ("fixed", "Fixed"), ("maintenance", "Maintenance"))
 BASELINE = "a0f37126304c245797c346abf2df664e25fa5310"
-MAX_COMMITS = 500
+EVIDENCE_POLICY = "all_changes"
 MANIFEST_PATH = Path(__file__).with_name("release_changelog_manifest.json")
 ASSET_DIR = Path(__file__).with_name("changelog_assets")
 COMPARISON_FIELDS = ("title", "before_text", "after_text", "before_image", "after_image")
@@ -79,14 +79,24 @@ def complete_comparison(comparison):
     )
 
 
-def missing_comparisons(commits):
+def missing_comparisons(commits, *, require_all=False):
     return [
         item.get("title") if isinstance(item.get("title"), str) and item["title"].strip() else "Untitled UI/UX change"
         for item in commits
-        if isinstance(item, dict) and item.get("requires_comparison") and not (
-            isinstance(item.get("comparisons"), list)
+        if isinstance(item, dict) and (require_all or item.get("requires_comparison")) and not (
+            not item.get("capture_error")
+            and isinstance(item.get("comparisons"), list)
             and item["comparisons"]
-            and all(complete_comparison(pair) for pair in item["comparisons"])
+            and all(
+                complete_comparison(pair) and (
+                    not require_all or (
+                        item.get("parent_sha")
+                        and pair.get("before_revision") == item["parent_sha"]
+                        and pair.get("after_revision") == item.get("sha")
+                    )
+                )
+                for pair in item["comparisons"]
+            )
         )
     ]
 
@@ -116,6 +126,9 @@ def _validate_comparison(comparison):
 def validate_manifest(data):
     if not isinstance(data, dict):
         raise ManifestError("manifest must be an object")
+    policy = data.get("evidence_policy")
+    if policy is not None and policy != EVIDENCE_POLICY:
+        raise ManifestError("invalid evidence policy")
     version = data.get("version")
     if not isinstance(version, str) or not VERSION_RE.fullmatch(version):
         raise ManifestError("invalid version")
@@ -132,8 +145,6 @@ def validate_manifest(data):
     commits = data.get("commits")
     if not isinstance(commits, list):
         raise ManifestError("commits must be a list")
-    if len(commits) > MAX_COMMITS:
-        raise ManifestError(f"too many commits (max {MAX_COMMITS})")
     clean = []
     for item in commits:
         if not isinstance(item, dict):
@@ -146,10 +157,22 @@ def validate_manifest(data):
         if not isinstance(title, str) or not 1 <= len(title) <= TITLE_MAX:
             raise ManifestError("invalid commit title")
         commit = {"sha": sha, "type": kind, "title": title}
+        if "parent_sha" in item:
+            parent = item["parent_sha"]
+            if not isinstance(parent, str) or not SHA_RE.fullmatch(parent) or parent == sha:
+                raise ManifestError("invalid parent sha")
+            commit["parent_sha"] = parent
+        if "capture_error" in item:
+            error = item["capture_error"]
+            if not isinstance(error, str) or not error.strip() or len(error) > TEXT_MAX:
+                raise ManifestError("invalid capture error")
+            commit["capture_error"] = error
         if "requires_comparison" in item:
             if not isinstance(item["requires_comparison"], bool):
                 raise ManifestError("requires_comparison must be a boolean")
             commit["requires_comparison"] = item["requires_comparison"]
+        if policy == EVIDENCE_POLICY:
+            commit["requires_comparison"] = True
         for field in ("before_text", "after_text"):
             if field in item:
                 if not isinstance(item[field], str) or not item[field].strip() or len(item[field]) > TEXT_MAX:
@@ -160,8 +183,17 @@ def validate_manifest(data):
             if not isinstance(comparisons, list) or len(comparisons) > MAX_COMPARISONS:
                 raise ManifestError(f"comparisons must be a list of at most {MAX_COMPARISONS} pairs")
             commit["comparisons"] = [_validate_comparison(pair) for pair in comparisons]
+            if policy == EVIDENCE_POLICY and any(
+                pair.get("before_revision") != commit.get("parent_sha")
+                or pair.get("after_revision") != sha
+                for pair in commit["comparisons"]
+            ):
+                raise ManifestError("comparison revisions must match the change and its parent")
         clean.append(commit)
-    return {"version": version, "revision": revision, "generated_at": generated_at, "commits": clean}
+    result = {"version": version, "revision": revision, "generated_at": generated_at, "commits": clean}
+    if policy is not None:
+        result["evidence_policy"] = policy
+    return result
 
 
 def curated_manifests(asset_dir=ASSET_DIR):
@@ -202,9 +234,8 @@ def build_manifest(version, revision, repo=".", baseline=BASELINE, now=None):
         repo,
         "log",
         "--no-merges",
-        f"--max-count={MAX_COMMITS}",
         "--name-only",
-        "--format=%x1e%H%x1f%s%x1f%b%x1f",
+        "--format=%x1e%H%x1f%P%x1f%s%x1f%b%x1f",
         f"{baseline}..{sha}",
     ).stdout
     notes = {
@@ -217,17 +248,28 @@ def build_manifest(version, revision, repo=".", baseline=BASELINE, now=None):
         record = record.strip("\n")
         if not record:
             continue
-        commit_sha, subject, body, files = record.split("\x1f", 3)
+        commit_sha, parents, subject, body, files = record.split("\x1f", 4)
         if is_excluded(subject, body):
             continue
         kind, title = classify(subject)
         item = dict(notes.get(commit_sha, {"sha": commit_sha, "type": kind, "title": title}))
-        if any(path.startswith(("templates/", "static/")) for path in files.splitlines()):
-            item["requires_comparison"] = True
+        item["requires_comparison"] = True
+        if parents.split():
+            item["parent_sha"] = parents.split()[0]
+        if any(
+            pair.get("before_revision") != item.get("parent_sha")
+            or pair.get("after_revision") != commit_sha
+            for pair in item.get("comparisons", [])
+        ):
+            item["comparisons"] = []
+            item["capture_error"] = "Packaged screenshots need recapture from this change and its parent."
         commits.append(item)
     now = now or datetime.now(timezone.utc)
     return validate_manifest(
-        {"version": version, "revision": sha, "generated_at": now.isoformat(), "commits": commits}
+        {
+            "version": version, "revision": sha, "generated_at": now.isoformat(),
+            "evidence_policy": EVIDENCE_POLICY, "commits": commits,
+        }
     )
 
 

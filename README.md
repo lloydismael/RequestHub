@@ -125,11 +125,15 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 ### Release changelogs and visual evidence
 
+- Notifications and Management sort releases newest first by release date, then numeric version (major/minor/patch), before pagination. Backfilled notes cannot jump ahead of newer same-day versions; custom version labels retain release-date ordering with record IDs as the final tie-breaker.
 - **Notifications → Changelogs** shows before/after descriptions and multiple labeled screenshot pairs per UI/UX change. Comparisons include historical revision/capture notes, open full-size images, and stack on mobile. Existing release-wide comparisons remain supported.
-- Changes to `templates/` or `static/` require visual evidence. Automatic releases with incomplete screenshot pairs stay in draft until an admin completes and publishes them in **Management → Changelogs**. Non-visual releases still publish automatically.
+- New automatic releases require before/after screenshot evidence for **every logged change**, including backend, documentation, tests and maintenance. Production Release captures declared historical scenes before building the image. Missing evidence keeps the release in draft, never blocks deployment, and displays an actionable reason in **Management → Changelogs**.
+- Automatic system drafts publish when their evidence becomes complete. Admins can disable **Automatically publish when every change has screenshot evidence** to hold a draft; unpublishing also disables automatic republication. Existing policy-less releases retain their historical publication rules.
+- Capture recipes in `hub/changelog_capture_recipes.json` explicitly select synthetic UI components, documentation sections or deterministic behavior reports. Unsupported, ambiguous or visibly unchanged scenes remain drafts rather than receiving fabricated screenshots. Collection retains the entire eligible commit history, with the existing explicit skip rules.
 - Package evidence in `hub/changelog_assets/<capture-set>/manifest.json`, with paths relative to `hub/changelog_assets/`. Sync stores the PNG/JPEG/WebP images (up to 5 MB each) in database-backed media, preserving them across deployments. Use genuine historical before/after captures with synthetic data, never after-only images relabeled as before.
 - Packaged evidence fills missing fields in existing and partially prepared comparisons without replacing admin text, images, or publication choices. Replays do not duplicate releases or files. Draft/future screenshots remain admin-only, and screenshot responses disable caching.
 - See [Release changelog workflow](docs/cd-workflow-testing.md#release-changelog) for the metadata format and publishing steps.
+- [v56.6–v56.8 release notes](docs/2026-11-06-v56.6-v56.8-changelog.md) document the CI-only update, empty maintenance checkpoint, and historical avatar/settings screenshots.
 
 ---
 

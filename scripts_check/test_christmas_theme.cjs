@@ -176,6 +176,17 @@ test('hidden pages pause and resume a single animation loop', () => {
     assert.equal(app.frames.size, 0);
 });
 
+test('the snow loop suspends while the theme is switching and resumes after', () => {
+    const app = start();
+    app.frame();
+    assert.equal(app.frames.size, 1);
+    app.preference('theme-switching', true);
+    assert.equal(app.frames.size, 0);
+    app.frame();
+    assert.equal(app.frames.size, 0);
+    app.preference('theme-switching', false);
+    assert.equal(app.frames.size, 1);
+});
 test('click bursts are bounded, expire, and ignore keyboard clicks', () => {
     const app = start();
     app.click(0, 0, 0);

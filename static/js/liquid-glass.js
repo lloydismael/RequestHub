@@ -48,6 +48,7 @@
         var currentY = 0.18;
         var targetX = currentX;
         var targetY = currentY;
+        var lastOrientationSample = 0;
 
         function render() {
             currentX += (targetX - currentX) * 0.16;
@@ -99,6 +100,13 @@
             if (!coarsePointer || event.gamma === null || event.beta === null) {
                 return;
             }
+            // Tilt is a slow input; sampling it every frame keeps the filtered
+            // glass layers repainting continuously. Coalesce to ~4 Hz instead.
+            var now = Date.now();
+            if (now - lastOrientationSample < 250) {
+                return;
+            }
+            lastOrientationSample = now;
             targetX = Math.min(0.82, Math.max(0.18, 0.5 + event.gamma / 90));
             targetY = Math.min(0.72, Math.max(0.12, 0.35 + event.beta / 180));
             requestRender();

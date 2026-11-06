@@ -101,6 +101,30 @@ class ClassifyTests(SimpleTestCase):
 
 
 class ValidateManifestTests(SimpleTestCase):
+    def test_new_policy_cannot_disable_required_screenshots(self):
+        data = valid_manifest(evidence_policy="all_changes")
+        data["commits"][0].update(parent_sha="c" * 40, requires_comparison=False)
+        result = validate_manifest(data)
+        self.assertEqual(result.get("evidence_policy"), "all_changes")
+        self.assertTrue(result["commits"][0].get("requires_comparison"))
+        self.assertEqual(result["commits"][0].get("parent_sha"), "c" * 40)
+
+    def test_capture_failure_is_preserved_for_a_recorded_draft(self):
+        data = valid_manifest(evidence_policy="all_changes")
+        data["commits"][0].update(parent_sha="c" * 40, capture_error="No capture recipe configured.")
+        result = validate_manifest(data)
+        self.assertEqual(result["commits"][0].get("capture_error"), "No capture recipe configured.")
+
+    def test_new_policy_rejects_screenshots_from_unrelated_revisions(self):
+        data = valid_manifest(evidence_policy="all_changes")
+        data["commits"][0].update(parent_sha="c" * 40, comparisons=[{
+            "title": "Change", "before_text": "Before", "after_text": "After",
+            "before_image": "v1/before.png", "after_image": "v1/after.png",
+            "before_revision": "d" * 40, "after_revision": SHA_B,
+        }])
+        with self.assertRaises(ManifestError):
+            validate_manifest(data)
+
     def test_validate_manifest(self):
         data = valid_manifest(extra="x")
         data["commits"][0]["author"] = "someone"
@@ -129,13 +153,43 @@ class ValidateManifestTests(SimpleTestCase):
                     validate_manifest(item)
 
         commit_item = {"sha": SHA_B, "type": "new", "title": "T"}
-        with mock.patch.object(release_changelog, "MAX_COMMITS", 2):
-            validate_manifest(valid_manifest(commits=[commit_item] * 2))
-            with self.assertRaises(ManifestError):
-                validate_manifest(valid_manifest(commits=[commit_item] * 3))
+        validate_manifest(valid_manifest(commits=[commit_item] * 2))
+        self.assertEqual(len(validate_manifest(valid_manifest(commits=[commit_item] * 3))["commits"]), 3)
 
 
 class BuildManifestTests(RepoMixin, SimpleTestCase):
+    def test_every_change_requires_evidence_from_its_actual_parent(self):
+        repo = self.make_repo()
+        base = commit(repo, "Baseline")
+        sha = commit(repo, "docs: update guide")
+        result = build_manifest("v1", "HEAD", repo, baseline=base)
+        self.assertEqual(result.get("evidence_policy"), "all_changes")
+        self.assertEqual(result["commits"], [{
+            "sha": sha, "parent_sha": base, "type": "maintenance",
+            "title": "Update guide", "requires_comparison": True,
+        }])
+
+    def test_history_beyond_500_commits_is_not_silently_lost(self):
+        repo = self.make_repo()
+        base = commit(repo, "Baseline")
+        records = []
+        for index in range(501):
+            subject = f"fix: change {index}"
+            parent = base if index == 0 else f":{index}"
+            records.append(
+                f"commit refs/heads/main\nmark :{index + 1}\n"
+                f"committer t <t@t.test> {1700000000 + index} +0000\n"
+                f"data {len(subject)}\n{subject}\nfrom {parent}\n\n"
+            )
+        result = subprocess.run(
+            ["git", "-C", str(repo), "fast-import", "--quiet"],
+            input="".join(records).encode("utf-8"), capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = build_manifest("v1", "HEAD", repo, baseline=base)
+        self.assertEqual(len(data["commits"]), 501)
+        self.assertEqual(data["commits"][-1]["title"], "Change 0")
+
     def test_commits_since_baseline_newest_first(self):
         repo = self.make_repo()
         base = commit(repo, "Baseline")
@@ -153,8 +207,8 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         self.assertEqual(
             manifest["commits"],
             [
-                {"sha": sha_c, "type": "fixed", "title": "C"},
-                {"sha": sha_a, "type": "new", "title": "A"},
+                {"sha": sha_c, "parent_sha": git(repo, "rev-parse", "HEAD^"), "type": "fixed", "title": "C", "requires_comparison": True},
+                {"sha": sha_a, "parent_sha": base, "type": "new", "title": "A", "requires_comparison": True},
             ],
         )
         self.assertEqual(manifest["revision"], sha_c)
@@ -180,20 +234,20 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         self.assertEqual(
             manifest["commits"],
             [
-                {"sha": sha_b, "type": "fixed", "title": "B"},
-                {"sha": sha_a, "type": "new", "title": "A"},
+                {"sha": sha_b, "parent_sha": git(repo, "rev-parse", "HEAD^"), "type": "fixed", "title": "B", "requires_comparison": True},
+                {"sha": sha_a, "parent_sha": base, "type": "new", "title": "A", "requires_comparison": True},
             ],
         )
 
-    def test_cap_keeps_newest(self):
+    def test_small_release_keeps_every_commit_newest_first(self):
         repo = self.make_repo()
         base = commit(repo, "Baseline")
         commit(repo, "Fix - one")
         two = commit(repo, "Fix - two")
         three = commit(repo, "Fix - three")
-        with mock.patch.object(release_changelog, "MAX_COMMITS", 2):
-            manifest = build_manifest("v1", "HEAD", repo, baseline=base)
-        self.assertEqual([c["sha"] for c in manifest["commits"]], [three, two])
+        manifest = build_manifest("v1", "HEAD", repo, baseline=base)
+        self.assertEqual(len(manifest["commits"]), 3)
+        self.assertEqual([c["sha"] for c in manifest["commits"][:2]], [three, two])
 
     def test_baseline_not_ancestor_or_missing_fails(self):
         repo = self.make_repo()
@@ -218,7 +272,7 @@ class MainTests(RepoMixin, SimpleTestCase):
             code = main(["--version", "v1", "--revision", "HEAD", "--repo", str(repo), "--baseline", base, "--output", str(out)])
             self.assertEqual(code, 0)
             data = json.loads(out.read_text(encoding="utf-8"))
-            self.assertEqual(list(data), ["version", "revision", "generated_at", "commits"])
+            self.assertEqual(list(data), ["version", "revision", "generated_at", "commits", "evidence_policy"])
             self.assertIn("Café", out.read_text(encoding="utf-8"))
 
             missing = Path(out_dir) / "missing.json"

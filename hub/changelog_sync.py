@@ -10,7 +10,7 @@ from django.db import IntegrityError, transaction
 
 from .changelog_forms import ScreenshotField
 from .models import MANILA_TZ, Changelog
-from .release_changelog import ASSET_DIR, COMPARISON_FIELDS, GROUPS, MANIFEST_PATH, MAX_COMPARISONS, ManifestError, missing_comparisons, validate_manifest
+from .release_changelog import ASSET_DIR, COMPARISON_FIELDS, EVIDENCE_POLICY, GROUPS, MANIFEST_PATH, MAX_COMPARISONS, ManifestError, missing_comparisons, validate_manifest
 
 
 def load_manifest(path: Path = MANIFEST_PATH) -> dict | None:
@@ -130,22 +130,35 @@ def _enrich_release(manifest: dict) -> Changelog | None:
                 continue
             if note.get("before_text") or note.get("after_text") or note.get("comparisons"):
                 item["title"] = note["title"]
-            for field in ("before_text", "after_text", "requires_comparison"):
+            fields = ["before_text", "after_text", "parent_sha"]
+            if entry.requires_all_evidence or manifest.get("evidence_policy") != EVIDENCE_POLICY:
+                fields.append("requires_comparison")
+            for field in fields:
                 if note.get(field) and not item.get(field):
                     item[field] = note[field]
+            if note.get("capture_error") and missing_comparisons([item], require_all=entry.requires_all_evidence):
+                item["capture_error"] = note["capture_error"]
             if note.get("comparisons"):
                 item["comparisons"] = _merge_comparisons(item.get("comparisons", []), note["comparisons"])
-        if changes == entry.changes:
+                candidate = {key: value for key, value in item.items() if key != "capture_error"}
+                if not missing_comparisons([candidate], require_all=entry.requires_all_evidence):
+                    item.pop("capture_error", None)
+        published = entry.is_published
+        if entry.publish_when_ready:
+            published = not missing_comparisons(commits, require_all=entry.requires_all_evidence)
+        if changes == entry.changes and published == entry.is_published:
             return None
         entry.changes = changes
-        entry.save(update_fields=["changes", "updated_at"])
+        entry.is_published = published
+        entry.clean()
+        entry.save(update_fields=["changes", "is_published", "updated_at"])
         return entry
 
 
 def _enrich_previous_releases(manifest: dict):
     notes = {
         item["sha"]: item for item in manifest["commits"]
-        if item.get("before_text") or item.get("after_text") or item.get("comparisons")
+        if item.get("before_text") or item.get("after_text") or item.get("comparisons") or item.get("capture_error")
     }
     if not notes:
         return
@@ -165,6 +178,7 @@ def _enrich_previous_releases(manifest: dict):
 def sync_release(manifest: dict) -> Changelog | None:
     manifest = validate_manifest(manifest)
     revision = manifest["revision"]
+    inserting = False
     try:
         with transaction.atomic():
             _enrich_previous_releases(manifest)
@@ -186,15 +200,22 @@ def sync_release(manifest: dict) -> Changelog | None:
                 .values_list("new_version", flat=True)
                 .first()
             )
+            require_all = manifest.get("evidence_policy") == EVIDENCE_POLICY
+            changes = {"commits": [_store_comparisons(item) for item in fresh]}
+            if require_all:
+                changes.update(evidence_policy=EVIDENCE_POLICY, publish_when_ready=True)
+            inserting = True
             return Changelog.objects.create(
                 title=f"What's new in {version}",
                 previous_version=previous or "",
                 new_version=version,
                 release_date=release_date,
                 summary=summarize(fresh),
-                is_published=not missing_comparisons(fresh),
+                is_published=not missing_comparisons(fresh, require_all=require_all),
                 release_sha=revision,
-                changes={"commits": [_store_comparisons(item) for item in fresh]},
+                changes=changes,
             )
     except IntegrityError:
-        return None
+        if inserting and Changelog.objects.filter(release_sha=revision).exists():
+            return None
+        raise

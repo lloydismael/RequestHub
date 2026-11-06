@@ -126,6 +126,42 @@ class ChangelogTests(TestCase):
     def feed(self):
         return self.client.get(self.notifications, {"tab": "changelogs"})
 
+    def test_backfilled_versions_are_ordered_before_pagination(self):
+        for version in (
+            "v56.9", "v57.0", "v56.11", "v56.8", "v56.10", "v56.12", "v56.6",
+            "v56.5", "v56.4", "v56.3", "v56.2", "v56.1", "v56.7",
+        ):
+            self.entry(title=version, new_version=version, is_published=True)
+        expected_pages = (
+            ["v57.0", "v56.12", "v56.11", "v56.10", "v56.9", "v56.8", "v56.7", "v56.6", "v56.5", "v56.4"],
+            ["v56.3", "v56.2", "v56.1"],
+        )
+        for url, parameter, key in (
+            (self.notifications, "page", "changelogs"),
+            (self.management, "changelog_page", "changelog_page"),
+        ):
+            for number, expected in enumerate(expected_pages, start=1):
+                with self.subTest(url=url, page=number):
+                    response = self.client.get(url, {"tab": "changelogs", parameter: number})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual([entry.new_version for entry in response.context[key]], expected)
+
+    def test_numeric_versions_handle_prefixes_patch_numbers_and_equal_versions(self):
+        large = "v" + "9" * 45 + ".0"
+        for version in ("v2.0", "v2.0.2", "V2.0.10", "2.0.1", "v1.99", "v02.0.3", "v2", large):
+            self.entry(new_version=version)
+        self.assertEqual(
+            list(self.model().objects.values_list("new_version", flat=True)),
+            [large, "V2.0.10", "v02.0.3", "v2.0.2", "2.0.1", "v2", "v2.0", "v1.99"],
+        )
+
+    def test_release_dates_and_custom_version_ties_keep_stable_order(self):
+        older = self.entry(new_version="v999.9", release_date=timezone.localdate() - timedelta(days=1))
+        custom = self.entry(new_version="maintenance")
+        numbered = self.entry(new_version="v2.0")
+        latest_custom = self.entry(new_version="custom-note")
+        self.assertEqual(list(self.model().objects.all()), [numbered, latest_custom, custom, older])
+
     def test_automatic_entry_lists_changes_by_group(self):
         self.automatic()
         response = self.feed()
@@ -391,12 +427,12 @@ class ChangelogTests(TestCase):
         self.assertContains(response, "v1 &rarr; v2")
         self.assertNotContains(response, "&rarr; v56.0")
         response = self.client.get(reverse("hub:changelog-edit", args=[automatic.pk]))
-        self.assertContains(response, "Automatic entries can be published as they are.")
+        self.assertContains(response, "This historical entry keeps its original publication rules.")
         self.assertNotContains(response, "Publishing requires both descriptions and screenshots.")
         self.assertNotContains(response, "Required for publishing.")
         response = self.client.get(reverse("hub:changelog-edit", args=[manual.pk]))
         self.assertContains(response, "Publishing requires both descriptions and screenshots.")
-        self.assertNotContains(response, "Automatic entries can be published as they are.")
+        self.assertNotContains(response, "This historical entry keeps its original publication rules.")
         self.assertContains(response, "Required for publishing.")
 
     def test_feed_pagination_preserves_tab_and_empty_state(self):

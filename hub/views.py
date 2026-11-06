@@ -2,7 +2,7 @@ import csv
 import base64
 import html
 from django.db import IntegrityError
-from .form_editor_runtime import save_configured_instance
+from .form_editor_runtime import configure_form, save_configured_instance
 import json
 import logging
 import mimetypes
@@ -29,6 +29,7 @@ import requests
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.sessions.models import Session
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -93,6 +94,7 @@ from .models import (
     Account,
     Changelog,
     EngineerActivityLog,
+    FormAnswerSet,
     Notification,
     Request,
     RequestCommunication,
@@ -7413,12 +7415,15 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                 "active_tab": active_tab,
                 "total_users": User.objects.count(),
                 "total_accounts": Account.objects.count(),
-                "changelog_form": getattr(self, "changelog_form", None) or ChangelogForm(instance=entry),
+                "changelog_form": getattr(self, "changelog_form", None) or ChangelogForm(
+                    instance=entry, comparison_page=request.GET.get("comparison_page"),
+                ),
                 "changelog_entry": entry,
                 "changelog_page": Paginator(Changelog.objects.all(), 10).get_page(request.GET.get("changelog_page")),
             }
             return render(request, self.template_name, context)
 
+        from .form_editor import get_definition
         from .form_editor_views import catalog
 
         self._sync_account_baseline()
@@ -7435,19 +7440,38 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         )
         context["active_tab"] = active_tab
         context["form_catalog"] = catalog()
-        for user in context["users"]:
-            user.editor_form = UserManagementForm(instance=user)
+        users = list(context["users"])
+        editor_definition = get_definition("user_management")
+        editor_answers = {}
+        if editor_definition.pk:
+            editor_answers = dict(FormAnswerSet.objects.filter(
+                definition=editor_definition,
+                content_type=ContentType.objects.get_for_model(User),
+                object_id__in=[user.pk for user in users],
+            ).values_list("object_id", "answers"))
+        for user in users:
+            form = UserManagementForm(instance=user, _form_editor_skip=True)
+            user.editor_form = configure_form(
+                form, definition=editor_definition, answers=editor_answers.get(user.pk, {}),
+            )
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
         if self.kwargs.get("changelog_editor"):
             entry = get_object_or_404(Changelog, pk=kwargs["pk"]) if kwargs.get("pk") else None
-            self.changelog_form = ChangelogForm(request.POST, request.FILES, instance=entry)
+            self.changelog_form = ChangelogForm(
+                request.POST, request.FILES, instance=entry, comparison_page=request.GET.get("comparison_page"),
+            )
             if self.changelog_form.is_valid():
                 with transaction.atomic():
                     saved = self.changelog_form.save()
                     self.changelog_form.save_comparisons()
                 messages.success(request, "Changelog published." if saved.is_published else "Changelog saved as draft.")
+                if not saved.is_published and self.changelog_form.comparison_page.has_other_pages():
+                    return redirect(
+                        reverse("hub:changelog-edit", args=[saved.pk])
+                        + f"?comparison_page={self.changelog_form.comparison_page.number}"
+                    )
                 return redirect(reverse("hub:management") + "?tab=changelogs")
             messages.error(request, "Please correct the changelog errors below.")
             return self.get(request, *args, **kwargs)

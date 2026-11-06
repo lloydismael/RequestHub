@@ -92,7 +92,7 @@ class EvidenceManifestTests(RepoMixin, SimpleTestCase):
         result = build_manifest("v56.5", "HEAD", repo, baseline=base)
         items = {item["sha"]: item for item in result["commits"]}
         self.assertTrue(items[ui_sha].get("requires_comparison"))
-        self.assertFalse(items[docs_sha].get("requires_comparison", False))
+        self.assertTrue(items[docs_sha].get("requires_comparison"))
 
     def test_generator_includes_curated_commit_evidence(self):
         from hub.test_release_changelog import commit as repo_commit
@@ -102,7 +102,10 @@ class EvidenceManifestTests(RepoMixin, SimpleTestCase):
         sha = repo_commit(repo, "Improve request composer")
         notes_dir = repo / "hub" / "changelog_assets" / "v56.4"
         notes_dir.mkdir(parents=True)
-        item = visual_commit(sha=sha)
+        item = visual_commit(
+            sha=sha, parent_sha=base,
+            comparisons=[comparison(before_revision=base, after_revision=sha)],
+        )
         notes_dir.joinpath("manifest.json").write_text(
             json.dumps(manifest(version="v56.4", revision=sha, commits=[item])), encoding="utf-8",
         )
@@ -263,6 +266,92 @@ class PackagedV564EvidenceTests(SimpleTestCase):
                         with Image.open(path) as image:
                             self.assertIn(image.format, {"PNG", "JPEG", "WEBP"})
                             image.verify()
+
+
+class PackagedV566ToV568EvidenceTests(TestCase):
+    def setUp(self):
+        Changelog.objects.all().delete()
+
+    def releases(self):
+        from hub.release_changelog import curated_manifests
+
+        versions = {"v56.6", "v56.7", "v56.8"}
+        releases = {data["version"]: data for data in curated_manifests() if data["version"] in versions}
+        self.assertEqual(set(releases), versions)
+        return releases
+
+    def test_all_three_releases_sync_in_order_without_duplicate_commits(self):
+        releases = self.releases()
+        expected = (
+            ("v56.6", "ec2c0c7772d994c5a62f99a5b8cf27db377ce4d0", "c51ad3eb950907805607487464dc53702d048578"),
+            ("v56.7", "49675f15a4d4b1d0848e18404287ffa4f8ed84f0", "3bc1f5b7f91229e93b6ded45436932a6455faf50"),
+            ("v56.8", "ee2e03ae5bf7b00507b8cfcc1fa256cc7807ae06", "ecc284e1dd19e208e4e843c0ba4a6fc009dd5204"),
+        )
+        previous = ""
+        for version, revision, sha in expected:
+            with self.subTest(version=version):
+                data = releases[version]
+                self.assertEqual(data["revision"], revision)
+                self.assertEqual([item["sha"] for item in data["commits"]], [sha])
+                entry = sync_release(data)
+                self.assertIsNotNone(entry)
+                self.assertTrue(entry.is_published)
+                self.assertEqual(entry.previous_version, previous)
+                for item in entry.changes["commits"]:
+                    self.assertTrue(item.get("before_text"))
+                    self.assertTrue(item.get("after_text"))
+                previous = version
+        media_count = StoredFile.objects.count()
+        for version, _revision, _sha in expected:
+            self.assertIsNone(sync_release(releases[version]))
+        self.assertEqual(Changelog.objects.count(), 3)
+        self.assertEqual(StoredFile.objects.count(), media_count)
+
+    def test_only_visual_release_has_complete_historical_screenshots(self):
+        from hub.release_changelog import ASSET_DIR, missing_comparisons
+
+        releases = self.releases()
+        for version in ("v56.6", "v56.7"):
+            for item in releases[version]["commits"]:
+                self.assertFalse(item.get("requires_comparison", False))
+                self.assertFalse(item.get("comparisons"))
+        checkpoint = releases["v56.7"]["commits"][0]
+        self.assertEqual(checkpoint["type"], "maintenance")
+        self.assertIn("no application changes", checkpoint["title"].lower())
+        data = releases["v56.8"]
+        self.assertEqual(missing_comparisons(data["commits"]), [])
+        visual = data["commits"][0]
+        self.assertTrue(visual.get("requires_comparison"))
+        self.assertGreaterEqual(len(visual.get("comparisons", [])), 3)
+        for pair in visual["comparisons"]:
+            self.assertEqual(pair.get("before_revision"), releases["v56.7"]["revision"])
+            self.assertEqual(pair.get("after_revision"), data["revision"])
+            self.assertTrue(pair.get("capture_note"))
+            paths = [ASSET_DIR.joinpath(*pair[field].split("/")) for field in ("before_image", "after_image")]
+            self.assertNotEqual(paths[0].read_bytes(), paths[1].read_bytes())
+            for path in paths:
+                with self.subTest(image=path.name):
+                    self.assertLessEqual(path.stat().st_size, 5 * 1024 * 1024)
+                    with Image.open(path) as image:
+                        self.assertIn(image.format, {"PNG", "JPEG", "WEBP"})
+                        image.verify()
+
+    def test_packaged_evidence_completes_existing_draft_without_publishing(self):
+        data = self.releases()["v56.8"]
+        entry = sync_release({**data, "commits": [{
+            "sha": data["commits"][0]["sha"], "type": "improved", "title": "Original subject",
+            "requires_comparison": True,
+        }]})
+        entry.title = "Admin release title"
+        entry.summary = "Admin summary"
+        entry.save()
+        self.assertIsNotNone(sync_release(data))
+        entry.refresh_from_db()
+        self.assertEqual(entry.title, "Admin release title")
+        self.assertEqual(entry.summary, "Admin summary")
+        self.assertFalse(entry.is_published)
+        self.assertEqual(entry.missing_comparisons, [])
+        self.assertGreaterEqual(len(entry.change_comparisons), 3)
 
 
 class PackagedV565EvidenceTests(SimpleTestCase):

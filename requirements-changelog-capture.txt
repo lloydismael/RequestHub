@@ -1,0 +1,2 @@
+# CI/development only; install alongside requirements.lock.
+playwright==1.64.1

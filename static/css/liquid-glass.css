@@ -1473,6 +1473,28 @@ body.dark-mode.page-login img.login-card__logo {
     .login-card__sheen { opacity: 0.48; }
 }
 
+/* Phones: the SVG displacement filter and the soft-light blend cannot be
+   composited, so every repaint of the card re-rasterizes them on the CPU.
+   Drop them and lean on the static gradient/rim for the same look. */
+@media (max-width: 640px), (pointer: coarse) {
+    .login-card__lens {
+        filter: none;
+        -webkit-backdrop-filter: blur(4px) saturate(150%);
+        backdrop-filter: blur(4px) saturate(150%);
+        opacity: 0.5;
+    }
+
+    .login-card__sheen {
+        mix-blend-mode: normal;
+        opacity: 0.34;
+    }
+
+    .page-login .login-card:hover .login-card__sheen,
+    .page-login .login-card:focus-within .login-card__sheen {
+        opacity: 0.48;
+    }
+}
+
 @supports not (filter: url("#lg-edge-refraction")) {
     .login-card__lens { filter: none; }
 }

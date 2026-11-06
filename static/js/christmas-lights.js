@@ -175,12 +175,20 @@
                 .forEach(bulb => overlay.appendChild(bulbElement(bulb, edge, offsetAt, scale)));
             nav.appendChild(overlay);
         }
+        // The decoration class changes the navbar's sticky offset and margin, so its
+        // border box (getBoundingClientRect) is not a stable cache key: every class
+        // write looked like a resize and rebuilt the whole overlay in a loop.
+        // offsetWidth/offsetHeight are the untransformed layout box and ignore both,
+        // so the key stays stable unless the navbar genuinely changes size.
+        function measure() {
+            return { width: nav.offsetWidth, height: nav.offsetHeight };
+        }
         function update() {
             frame = null;
             const theme = nav.dataset.seasonalLightsTheme;
             const allowed = nav.classList.contains('seasonal-lights') && (!theme || document.body.dataset.accountTheme === theme)
                 && (theme !== 'christmas' || !document.body.classList.contains('christmas-lights-off'));
-            const { width, height } = nav.getBoundingClientRect();
+            const { width, height } = measure();
             if (!allowed || window.innerWidth < 480 || width < 80 || height < 20) {
                 remove();
                 return;
