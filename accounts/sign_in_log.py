@@ -6,7 +6,9 @@ import logging
 import re
 from datetime import timedelta
 from functools import wraps
+from ipaddress import ip_address, ip_network
 
+from django.conf import settings
 from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
 from django.core.cache import cache
 from django.db import DatabaseError, transaction
@@ -60,10 +62,33 @@ _OS_RULES = (
 
 
 def client_ip(request) -> str:
+    try:
+        peer = ip_address((request.META.get("REMOTE_ADDR") or "").strip())
+    except ValueError:
+        return "unknown"
+    try:
+        trusted_proxies = tuple(
+            ip_network(cidr, strict=False)
+            for cidr in getattr(settings, "TRUSTED_PROXY_CIDRS", ())
+        )
+    except (ValueError, TypeError):
+        return str(peer)
+    if not any(peer in network for network in trusted_proxies):
+        return str(peer)
+
     forwarded = (request.META.get("HTTP_X_FORWARDED_FOR") or "").strip()
-    if forwarded:
-        return forwarded.split(",")[0].strip() or request.META.get("REMOTE_ADDR") or "unknown"
-    return request.META.get("REMOTE_ADDR") or "unknown"
+    if not forwarded:
+        return str(peer)
+    address = peer
+    # Walk trusted hops from the right; a client can forge the leftmost values.
+    for hop in reversed(forwarded.split(",")):
+        if not any(address in network for network in trusted_proxies):
+            break
+        try:
+            address = ip_address(hop.strip())
+        except ValueError:
+            return str(peer)
+    return str(address)
 
 
 def parse_user_agent(user_agent: str) -> tuple[str, str, str]:

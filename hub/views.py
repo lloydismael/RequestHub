@@ -11,7 +11,7 @@ import threading
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from datetime import date, datetime, timedelta
 from functools import partial
 from email.charset import Charset, QP
@@ -843,6 +843,21 @@ class EngineerActivityLogDeleteView(EngineerRequiredMixin, LoginRequiredMixin, V
         return redirect("hub:activity-logs")
 
 
+def _csv_safe_cell(value):
+    """Keep CSV text literal while preserving genuine numeric values."""
+    if not isinstance(value, str):
+        return value
+    first = next(
+        (char for char in value if not (char.isspace() or ord(char) < 32 or char == "\ufeff")),
+        "",
+    )
+    if value.startswith(("\t", "\r", "\n")) or first in (
+        "=", "+", "-", "@", "\uff1d", "\uff0b", "\uff0d", "\uff20",
+    ):
+        return "'" + value
+    return value
+
+
 class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
     """Export operational or activity report data as CSV."""
 
@@ -916,7 +931,7 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
         engagement_labels = dict(Request.Engagement.choices)
         for request_obj in queryset:
             writer.writerow(
-                [
+                map(_csv_safe_cell, [
                     request_obj.reference_code,
                     self._format_user(getattr(request_obj, "requestor", None)),
                     request_obj.account.name if request_obj.account else "",
@@ -930,7 +945,7 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
                     self._format_date(request_obj.due_date),
                     self._format_date(request_obj.end_date),
                     self._format_datetime(request_obj.created_at),
-                ]
+                ])
             )
 
         return response
@@ -978,18 +993,18 @@ class ReportExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
         location_labels = dict(EngineerActivityLog.Location.choices)
         for log in logs:
             writer.writerow(
-                [
+                map(_csv_safe_cell, [
                     self._format_date(log.request_date),
                     self._format_user(log.engineer),
                     log.account.name if log.account else "",
                     log.request.reference_code if log.request else "",
                     activity_labels.get(log.activity_type, log.activity_type or ""),
                     log.details or "",
-                    f"{log.actual_hours}",
+                    log.actual_hours,
                     location_labels.get(log.location, log.location or ""),
                     "Yes" if log.is_billable else "No",
                     self._format_datetime(log.created_at),
-                ]
+                ])
             )
 
         return response
@@ -4176,6 +4191,9 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             )
 
         try:
+            if field in self._INT_FIELDS or field in self._FK_FIELDS:
+                if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+                    raise ValueError
             if field in self._DATE_FIELDS:
                 coerced = date.fromisoformat(value) if value else None
             elif field in self._INT_FIELDS:
@@ -4189,8 +4207,9 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             elif field in self._FK_FIELDS:
                 coerced = int(value) if value not in ("", None) else None
             else:
-                coerced = value  # str fields — allow empty string
-        except (ValueError, TypeError):
+                coerced = value
+            coerced = submission._meta.get_field(field).clean(coerced, submission)
+        except (ValueError, TypeError, OverflowError, InvalidOperation, ValidationError):
             return JsonResponse({"ok": False, "error": f"Invalid value for {field}"}, status=400)
 
         # For FK fields, set the _id attribute directly
@@ -4261,6 +4280,14 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
                     save_fields.append("review_notes")
                 if "reviewed_by" not in save_fields:
                     save_fields.append("reviewed_by")
+
+        try:
+            for saved_field in save_fields[1:]:
+                model_field = submission._meta.get_field(saved_field)
+                cleaned = model_field.clean(getattr(submission, model_field.attname), submission)
+                setattr(submission, model_field.attname, cleaned)
+        except ValidationError:
+            return JsonResponse({"ok": False, "error": f"Invalid value for {field}"}, status=400)
 
         tracked_fields = self._tracked_fields_for_change(field, save_fields)
         old_values = self._snapshot_values(original_submission, tracked_fields)
@@ -5966,7 +5993,7 @@ class RequestExportCSVView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
             requestor = req.requestor
             engineer = req.engineer
             writer.writerow(
-                [
+                map(_csv_safe_cell, [
                     req.reference_code,
                     req.account.name if req.account else "",
                     requestor.get_full_name() or requestor.username if requestor else "",
@@ -5983,7 +6010,7 @@ class RequestExportCSVView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
                     (req.description or "").replace("\r\n", " ").replace("\n", " "),
                     req.created_at.strftime("%Y-%m-%d %H:%M:%S"),
                     req.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
-                ]
+                ])
             )
 
         return response
@@ -6057,6 +6084,8 @@ class SqrExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
                 except Exception:
                     val = ""
                 cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                if isinstance(val, str):
+                    cell.data_type = "s"
                 cell.alignment = cell_align
                 cell.border = border
 

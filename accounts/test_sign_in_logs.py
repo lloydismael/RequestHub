@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 from django.core.cache import cache
 from django.db import DatabaseError, connection
-from django.test import SimpleTestCase, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -13,10 +13,12 @@ from accounts.sign_in_log import (
     ACTIVE_WINDOW,
     INVALID_CREDENTIALS_REASON,
     annotate_sign_in_logs,
+    client_ip,
     format_elapsed,
     parse_user_agent,
     sign_in_status,
 )
+from accounts.views import LOGIN_THROTTLE_LIMIT, LOGIN_THROTTLE_MESSAGE
 
 CHROME_WINDOWS = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -32,6 +34,55 @@ ANDROID_TABLET = (
     "Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/125.0.0.0 Safari/537.36"
 )
+
+
+@override_settings(TRUSTED_PROXY_CIDRS=[])
+class ClientIpTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _ip(self, peer, forwarded=""):
+        request = self.factory.get(
+            "/", REMOTE_ADDR=peer, HTTP_X_FORWARDED_FOR=forwarded,
+        )
+        return client_ip(request)
+
+    def test_untrusted_forwarding_header_is_ignored(self):
+        self.assertEqual(self._ip("203.0.113.9", "198.51.100.15"), "203.0.113.9")
+
+    def test_missing_peer_does_not_trust_forwarding_header(self):
+        self.assertEqual(self._ip("", "198.51.100.15"), "unknown")
+
+    @override_settings(TRUSTED_PROXY_CIDRS=["10.0.0.0/8"])
+    def test_trusted_proxy_uses_last_untrusted_address(self):
+        for prefix in ("198.51.100.99", "not-an-ip"):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(
+                    self._ip("10.0.0.5", f"{prefix}, 203.0.113.8, 10.0.0.2"),
+                    "203.0.113.8",
+                )
+
+    @override_settings(TRUSTED_PROXY_CIDRS=["2001:db8:ffff::/48"])
+    def test_trusted_ipv6_proxy_resolves_ipv6_client(self):
+        self.assertEqual(
+            self._ip(
+                "2001:db8:ffff::1",
+                "2001:db8::99, 2001:db8:1234::5, 2001:db8:ffff::2",
+            ),
+            "2001:db8:1234::5",
+        )
+
+    @override_settings(TRUSTED_PROXY_CIDRS=["10.0.0.5"])
+    def test_invalid_forwarding_header_falls_back_to_peer(self):
+        self.assertEqual(self._ip("10.0.0.5", "not-an-ip"), "10.0.0.5")
+
+    @override_settings(TRUSTED_PROXY_CIDRS=["not-a-network"])
+    def test_invalid_proxy_configuration_fails_closed(self):
+        self.assertEqual(self._ip("10.0.0.5", "198.51.100.15"), "10.0.0.5")
+
+    @override_settings(TRUSTED_PROXY_CIDRS=["10.0.0.5"])
+    def test_missing_forwarding_header_preserves_peer(self):
+        self.assertEqual(self._ip("10.0.0.5"), "10.0.0.5")
 
 
 class UserAgentAndElapsedTests(SimpleTestCase):
@@ -69,6 +120,22 @@ class SignInRecordingTests(TestCase):
             HTTP_USER_AGENT=CHROME_WINDOWS,
             REMOTE_ADDR="10.0.0.5",
         )
+
+    @override_settings(TRUSTED_PROXY_CIDRS=[])
+    def test_rotating_forwarding_headers_does_not_bypass_login_throttle(self):
+        for attempt in range(LOGIN_THROTTLE_LIMIT):
+            self.client.post(
+                reverse("login"),
+                {"username": self.user.username, "password": "incorrect-password"},
+                REMOTE_ADDR="10.0.0.5",
+                HTTP_X_FORWARDED_FOR=f"198.51.100.{attempt + 1}",
+            )
+
+        response = self._login()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, LOGIN_THROTTLE_MESSAGE)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_successful_sign_in_records_session_details(self):
         response = self._login()
