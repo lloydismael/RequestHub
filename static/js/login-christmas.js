@@ -122,11 +122,19 @@
                 if (flake.x > width + 40) flake.x -= width + 80;
             }
             draw(now);
-            frame = requestAnimationFrame(step);
+            // Parking here (rather than only in play) lets an in-flight loop stop
+            // immediately instead of re-scheduling itself through the whole swap.
+            frame = shouldRun() ? requestAnimationFrame(step) : 0;
+        }
+
+        // The theme swap snapshots the page; a full-viewport repaint per frame is
+        // wasted work while that snapshot is being taken.
+        function shouldRun() {
+            return !motionQuery.matches && !document.hidden && !document.body.classList.contains('theme-switching');
         }
 
         function play() {
-            if (frame || motionQuery.matches || document.hidden) return;
+            if (frame || !shouldRun()) return;
             last = 0;
             frame = requestAnimationFrame(step);
         }
@@ -149,6 +157,8 @@
             if (!queued) queued = requestAnimationFrame(refresh);
         });
         document.addEventListener('visibilitychange', () => (document.hidden ? pause() : play()));
+        // Nothing else restarts the loop after the swap, so watch for the flag clearing.
+        new MutationObserver(play).observe(document.body, { attributes: true, attributeFilter: ['class'] });
         onChange(motionQuery, refresh);
         onChange(mobileQuery, refresh);
     }
@@ -281,6 +291,31 @@
         stops.forEach(([offset, color, opacity]) => svg('stop', { offset, 'stop-color': color, 'stop-opacity': opacity === undefined ? 1 : opacity }, gradient));
     }
 
+    // The only two defs that depend on the light/dark palette; kept separate so a
+    // theme change can retint them in place instead of rebuilding the whole scene.
+    const PUFF_STOPS = dark => (dark
+        ? [['0', '#f4f7ff'], ['0.5', '#dde6f7'], ['0.8', '#aebdd9'], ['1', '#8494b8']]
+        : [['0', '#ffffff'], ['0.55', '#f7faff'], ['0.8', '#dce6f5'], ['1', '#b9c8e2']]);
+    const HALO_STOPS = (glow, dark) => [
+        ['0', `rgb(${glow})`, dark ? 0.95 : 0.85],
+        ['0.18', `rgb(${glow})`, dark ? 0.7 : 0.55],
+        ['0.42', `rgb(${glow})`, dark ? 0.26 : 0.18],
+        ['1', `rgb(${glow})`, 0],
+    ];
+
+    function setStops(gradient, stops) {
+        if (!gradient) return;
+        gradient.replaceChildren(...stops.map(([offset, color, opacity]) =>
+            svg('stop', { offset, 'stop-color': color, 'stop-opacity': opacity === undefined ? 1 : opacity })));
+    }
+
+    // Recolours just the palette-sensitive gradients; geometry and filters are untouched.
+    function retint(root, dark) {
+        if (!root) return;
+        setStops(root.querySelector('#xmas-puff'), PUFF_STOPS(dark));
+        COLORS.forEach(name => setStops(root.querySelector(`#xmas-halo-${name}`), HALO_STOPS(BULBS[name].glow, dark)));
+    }
+
     function blurFilter(defs, id, deviation) {
         const filter = svg('filter', { id, x: '-20%', y: '-40%', width: '140%', height: '180%' }, defs);
         svg('feGaussianBlur', { stdDeviation: String(deviation) }, filter);
@@ -289,9 +324,7 @@
     function buildDefs(parent, dark, width, height, radius) {
         const defs = svg('defs', {}, parent);
         // Each snow puff is lit from above: bright crown, cool blue-grey underside.
-        radial(defs, 'xmas-puff', dark
-            ? [['0', '#f4f7ff'], ['0.5', '#dde6f7'], ['0.8', '#aebdd9'], ['1', '#8494b8']]
-            : [['0', '#ffffff'], ['0.55', '#f7faff'], ['0.8', '#dce6f5'], ['1', '#b9c8e2']],
+        radial(defs, 'xmas-puff', PUFF_STOPS(dark),
         { cx: '0.42', cy: '0.3', r: '0.78', fx: '0.4', fy: '0.24' });
 
         // Crisp, crystalline edges, fine grain and a few glints over the puffs.
@@ -325,12 +358,7 @@
             const c = BULBS[name];
             // Lit glass: almost white where the filament sits, colour concentrating towards the rim.
             radial(defs, `xmas-glass-${name}`, [['0', '#ffffff'], ['0.16', c.core], ['0.36', c.tint], ['0.62', c.main], ['1', c.deep]], { cx: '0.42', cy: '0.5', r: '0.72', fx: '0.4', fy: '0.5' });
-            radial(defs, `xmas-halo-${name}`, [
-                ['0', `rgb(${c.glow})`, dark ? 0.95 : 0.85],
-                ['0.18', `rgb(${c.glow})`, dark ? 0.7 : 0.55],
-                ['0.42', `rgb(${c.glow})`, dark ? 0.26 : 0.18],
-                ['1', `rgb(${c.glow})`, 0],
-            ]);
+            radial(defs, `xmas-halo-${name}`, HALO_STOPS(c.glow, dark));
         });
         radial(defs, 'xmas-core', [['0', '#ffffff', 1], ['0.55', '#fffbe9', 0.9], ['1', '#fff8dc', 0]]);
     }
@@ -483,6 +511,7 @@
 
     function startCardDeco(card, deco) {
         let lastKey = '';
+        let lastDark = null;
         deco.style.setProperty('--xmas-deco-pad', `${PAD}px`);
 
         function canvas(width, height, className) {
@@ -502,9 +531,18 @@
             const mobile = mobileQuery.matches;
             const dark = document.body.classList.contains('dark-mode');
             const targets = dustTargets(card);
-            const key = JSON.stringify([width, height, mobile, dark, targets]);
-            if (key === lastKey) return;
+            // Only the palette follows the theme, so a theme flip retints the two
+            // gradients that use it rather than rebuilding every canvas and filter.
+            const key = JSON.stringify([width, height, mobile, targets]);
+            if (key === lastKey) {
+                if (dark !== lastDark) {
+                    lastDark = dark;
+                    retint(deco, dark);
+                }
+                return;
+            }
             lastKey = key;
+            lastDark = dark;
 
             const random = seeded(20261225);
             const radius = parseFloat(getComputedStyle(card).borderTopLeftRadius) || 24;

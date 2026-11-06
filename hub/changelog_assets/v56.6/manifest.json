@@ -1,0 +1,14 @@
+{
+  "version": "v56.6",
+  "revision": "ec2c0c7772d994c5a62f99a5b8cf27db377ce4d0",
+  "generated_at": "2026-11-06T08:56:19+08:00",
+  "commits": [
+    {
+      "sha": "c51ad3eb950907805607487464dc53702d048578",
+      "type": "improved",
+      "title": "Run Django CI tests serially",
+      "before_text": "Container Security ran Django validation with --parallel auto, allowing multiple test worker processes.",
+      "after_text": "Django CI validation now runs serially while retaining duration reporting, non-interactive execution, and verbose results. This changes the CI test runner only; application behavior and the interface are unchanged."
+    }
+  ]
+}

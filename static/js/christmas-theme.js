@@ -38,8 +38,11 @@
 
     const isChristmas = () => body.dataset.accountTheme === 'christmas';
     const reduced = () => media.matches || body.classList.contains('pref-reduce-motion') || body.classList.contains('pref-reduce-effects');
+    // The snow loop repaints a full-viewport canvas and the bulbs re-evaluate a
+    // non-compositable drop-shadow; both are wasted while the theme is snapshotting.
+    const switching = () => body.classList.contains('theme-switching');
     const effectEnabled = effect => isChristmas() && preferences.enabled && preferences[effect];
-    const canAnimate = effect => effectEnabled(effect) && !reduced() && !document.hidden;
+    const canAnimate = effect => effectEnabled(effect) && !reduced() && !switching() && !document.hidden;
     function decorative(className, parent, tag = 'div') {
         const element = document.createElement(tag);
         element.className = className;

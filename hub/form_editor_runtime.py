@@ -1,5 +1,6 @@
 """Apply published presentation schemas without replacing domain validation."""
 from collections import OrderedDict
+from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
 from functools import wraps
@@ -103,13 +104,14 @@ def _configure_allowed_values(form, key, field, spec, form_key):
             })
 
 
-def configure_form(form, schema=None):
+def configure_form(form, schema=None, *, definition=None, answers=None):
     from . import form_editor
     key = form_editor.get_form_key(form)
     if not key:
         return form
     explicit = schema is not None
-    definition = form_editor.get_definition(key)
+    if definition is None:
+        definition = form_editor.get_definition(key)
     version = definition.published_version if definition else None
     pin_error = None
     posted = form.data.get(form.add_prefix(TOKEN_FIELD)) if form.is_bound else None
@@ -129,7 +131,7 @@ def configure_form(form, schema=None):
         except (signing.BadSignature, ValueError, TypeError, KeyError, ObjectDoesNotExist):
             pin_error = "This form has expired or changed. Reload the page and submit again."
     if schema is None:
-        schema = form_editor.get_schema(key)
+        schema = deepcopy(version.schema) if version else form_editor.baseline_schema(key)
     form.editor_enabled = True
     form.editor_key = key
     form.editor_version = version
@@ -142,7 +144,7 @@ def configure_form(form, schema=None):
     instance = getattr(form, "instance", None)
     existing = {}
     if instance is not None and instance.pk:
-        existing = form_editor.get_custom_answers(key, instance)
+        existing = deepcopy(answers) if answers is not None else form_editor.get_custom_answers(key, instance)
     core = OrderedDict((name, field) for name, field in form.fields.items() if name != TOKEN_FIELD and not name.startswith("custom_"))
     ordered = OrderedDict()
     for spec in schema.get("fields", []):

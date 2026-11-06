@@ -14,3 +14,6 @@ media/
 *.pfx
 *.p12
 hub/release_changelog_manifest.json
+hub/release_changelog_manifest.json.tmp
+hub/changelog_assets/automatic/
+.changelog-capture-vendor/

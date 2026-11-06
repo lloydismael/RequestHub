@@ -41,6 +41,8 @@ Published presentation applies when a registered Django form is used. Legacy inl
 
 Custom answers are stored with the corresponding business record and published version, independently of typed model columns. Create/edit flows that use registered forms preserve answers when revisiting records; shared SQR edit modals load each record's custom inputs before opening.
 
+Management user editors share a request-local published definition and bulk-load custom answers only for the current user page. Each form copies its schema and answers, avoiding per-row database round trips without sharing mutable form state or caching across requests. New publications appear on the next visit; user search, pagination, signed versions, and account bulk editing are unchanged.
+
 ## Deployment
 
 Run the normal Django migration and static build before starting updated workers:
@@ -57,7 +59,7 @@ Migration `0048_form_editor` adds editor definitions, immutable published versio
 Run the focused editor tests with the project's Python interpreter:
 
 ```powershell
-py manage.py test hub.test_form_editor_schema hub.test_form_editor_runtime hub.test_form_editor_views hub.test_form_people
+py manage.py test hub.test_form_editor_schema hub.test_form_editor_runtime hub.test_form_editor_views hub.test_form_people hub.test_management_performance
 ```
 
 The implementation also has regression coverage for Request, SQR performance, and Management. A local run found unrelated pending model/migration drift for SQR performance health choices; no unrelated migration was generated.

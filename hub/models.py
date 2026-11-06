@@ -10,9 +10,10 @@ from django.core.validators import MinValueValidator
 from django.db import connections, models, router, transaction
 from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
+from django.db.models.functions import Cast, Concat, StrIndex, Substr
 from django.utils import timezone
 from accounts.storage import DatabaseMediaStorage
-from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, GROUPS, missing_comparisons
+from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, GROUPS, missing_comparisons
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -20,6 +21,31 @@ MANILA_TZ = ZoneInfo("Asia/Manila")
 def changelog_image_upload_to(instance, filename):
     extension = filename.rsplit(".", 1)[-1].lower()
     return f"changelogs/{uuid4().hex}.{extension}"
+
+
+class ChangelogManager(models.Manager):
+    def get_queryset(self):
+        version = models.Case(
+            models.When(
+                new_version__regex=r"^[vV][0-9]+(?:\.[0-9]+){0,2}$",
+                then=Substr("new_version", 2),
+            ),
+            models.When(
+                new_version__regex=r"^[0-9]+(?:\.[0-9]+){0,2}$",
+                then=models.F("new_version"),
+            ),
+            default=models.Value("0"),
+            output_field=models.CharField(),
+        )
+        # Pad omitted components and the final separator before extracting numbers.
+        remaining = Concat(version, models.Value(".0.0.0"))
+        number = models.DecimalField(max_digits=50, decimal_places=0)
+        components = []
+        for _ in range(3):
+            separator = StrIndex(remaining, models.Value("."))
+            components.append(Cast(Substr(remaining, 1, separator - 1), number).desc())
+            remaining = Substr(remaining, separator + 1)
+        return super().get_queryset().order_by("-release_date", *components, "-pk")
 
 
 class Changelog(models.Model):
@@ -42,6 +68,8 @@ class Changelog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ChangelogManager()
+
     class Meta:
         ordering = ["-release_date", "-pk"]
 
@@ -51,6 +79,31 @@ class Changelog(models.Model):
     @property
     def is_automatic(self):
         return bool(self.release_sha)
+
+    @property
+    def requires_all_evidence(self):
+        return self.is_automatic and isinstance(self.changes, dict) and self.changes.get("evidence_policy") == EVIDENCE_POLICY
+
+    @property
+    def publish_when_ready(self):
+        return self.is_automatic and isinstance(self.changes, dict) and self.changes.get("publish_when_ready") is True
+
+    @publish_when_ready.setter
+    def publish_when_ready(self, value):
+        if not isinstance(value, bool):
+            raise ValidationError("Automatic publication must be true or false.")
+        if not isinstance(self.changes, dict):
+            raise ValidationError("Changelog changes must be an object.")
+        self.changes = {**self.changes, "publish_when_ready": value}
+
+    def clean(self):
+        super().clean()
+        commits = self.changes.get("commits") if isinstance(self.changes, dict) else None
+        valid_changes = isinstance(commits, list) and bool(commits) and all(isinstance(item, dict) for item in commits)
+        if self.is_published and self.requires_all_evidence and (not valid_changes or self.missing_comparisons):
+            raise ValidationError({
+                "is_published": "Every change requires before and after screenshots with matching revisions and descriptions.",
+            })
 
     @property
     def has_comparison(self):
@@ -98,7 +151,7 @@ class Changelog(models.Model):
     @property
     def missing_comparisons(self):
         commits = self.changes.get("commits", []) if isinstance(self.changes, dict) else []
-        return missing_comparisons(commits) if isinstance(commits, list) else []
+        return missing_comparisons(commits, require_all=self.requires_all_evidence) if isinstance(commits, list) else []
 
 
 class Account(models.Model):

@@ -8,6 +8,8 @@ function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas'
     const listeners = {};
     const observers = [];
     const frames = new Map();
+    let builds = 0;
+    let removals = 0;
     let resize;
     let nextId = 1;
     function element(tag) {
@@ -20,9 +22,13 @@ function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas'
                 toggle(name, on) { if (on) classes.add(name); else classes.delete(name); },
             },
             setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'class') value.split(' ').forEach(x => classes.add(x)); },
-            appendChild(child) { this.children.push(child); child.parentNode = this; },
-            remove() { this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); },
-            getBoundingClientRect() { return { width, height }; },
+            appendChild(child) { if (classes.has('seasonal-lights-overlay')) builds++; this.children.push(child); child.parentNode = this; },
+            remove() { if (classes.has('seasonal-lights-overlay')) removals++; this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); },
+            // Mirrors the real navbar:offsetWidth/Height are the untransformed layout
+            // box, while the decoration class shifts the border box via top/margin.
+            get offsetWidth() { return width; },
+            get offsetHeight() { return height; },
+            getBoundingClientRect() { return { width, height: height - (classes.has('seasonal-lights--active') ? 16 : 0) }; },
         };
         node.style.setProperty = (name, value) => { node.style[name] = value; };
         return node;
@@ -55,6 +61,8 @@ function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas'
     return {
         body, nav, document, window,
         update() { observers.forEach(callback => callback()); flush(); },
+        stats() { return { builds, removals }; },
+        reset() { builds = 0; removals = 0; },
         resize(w, h, vw) { width = w; height = h; window.innerWidth = vw; resize(); flush(); },
         windowResize() { listeners.resize(); flush(); },
         visibility(hidden) { document.hidden = hidden; listeners.visibilitychange(); flush(); },
@@ -89,6 +97,27 @@ test('Christmas light selection removes the overlay and restores the original ge
     assert.equal(app.bulbs.length, 36);
 });
 
+test('theme and preference class changes never rebuild the overlay', () => {
+    const app = start();
+    const wires = app.overlay.children.filter(child => child.tag === 'path').map(child => child.attributes.d);
+    app.reset();
+    // A light/dark toggle rewrites body classes; the navbar offset shifts with it.
+    app.body.classList.toggle('dark-mode');
+    app.update();
+    app.body.classList.toggle('dark-mode');
+    app.update();
+    app.body.classList.toggle('pref-reduce-effects');
+    app.update();
+    assert.deepEqual(app.stats(), { builds: 0, removals: 0 });
+    assert.deepEqual(
+        app.overlay.children.filter(child => child.tag === 'path').map(child => child.attributes.d),
+        wires,
+    );
+    assert.equal(app.bulbs.length, 36);
+    // A real size change must still rebuild.
+    app.resize(1280, 120, 1440);
+    assert.ok(app.stats().builds > 0);
+});
 test('desktop overlay reproduces the 36-bulb reference sequence with two closed twisted wires', () => {
     const app = start();
     assert.equal(app.bulbs.length, 36);

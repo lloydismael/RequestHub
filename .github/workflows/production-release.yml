@@ -175,11 +175,82 @@ jobs:
           PY
 
       - name: Generate release changelog manifest
+        id: changelog_manifest
         continue-on-error: true
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_REVISION: ${{ github.event.workflow_run.head_sha }}
         run: python -m hub.release_changelog --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION"
+
+      - name: Set up changelog capture Python
+        id: capture_python
+        if: steps.changelog_manifest.outcome == 'success'
+        continue-on-error: true
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install isolated changelog capture tools
+        id: capture_tools
+        if: steps.capture_python.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          python -m venv "$RUNNER_TEMP/changelog-capture"
+          "$RUNNER_TEMP/changelog-capture/bin/python" -m pip install -r requirements.lock -r requirements-changelog-capture.txt
+          "$RUNNER_TEMP/changelog-capture/bin/python" -m playwright install --with-deps chromium
+          echo "$RUNNER_TEMP/changelog-capture/bin" >> "$GITHUB_PATH"
+
+      - name: Capture release changelog screenshots
+        if: steps.changelog_manifest.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          CAPTURE_SETUP_OUTCOME: ${{ steps.capture_tools.outcome }}
+        run: |
+          export CAPTURE_FAILURE_REASON="Capture did not complete; retry automatic capture or add evidence in Management."
+          if [ "$CAPTURE_SETUP_OUTCOME" = "success" ]; then
+            if python scripts/capture_release_changelog.py --prepare-assets; then
+              if ! timeout 8m python scripts/capture_release_changelog.py; then
+                echo "::warning::Some changelog screenshots could not be captured; deployment continues."
+              fi
+            else
+              export CAPTURE_FAILURE_REASON="Offline screenshot assets could not be prepared; retry capture."
+            fi
+          else
+            export CAPTURE_FAILURE_REASON="Screenshot capture tools could not be installed; retry capture."
+          fi
+          python - <<'PY'
+          import json
+          import os
+          from hub.release_changelog import MANIFEST_PATH, missing_comparisons, validate_manifest
+
+          manifest = validate_manifest(json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
+          missing = [item for item in manifest["commits"] if missing_comparisons([item], require_all=True)]
+          for item in missing:
+              if not item.get("capture_error"):
+                  item["capture_error"] = os.environ["CAPTURE_FAILURE_REASON"]
+          temporary = MANIFEST_PATH.with_suffix(".json.tmp")
+          temporary.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          temporary.replace(MANIFEST_PATH)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"## Changelog screenshots\n{len(manifest['commits']) - len(missing)} complete; {len(missing)} need evidence.\n")
+              summary.write("Missing evidence holds publication only; deployment continues.\n")
+              for item in missing:
+                  summary.write(f"- `{item['sha'][:12]}`: {item['capture_error']}\n")
+          raise SystemExit(1 if missing else 0)
+          PY
+
+      - name: Retain changelog capture evidence
+        if: ${{ !cancelled() && steps.changelog_manifest.outcome == 'success' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog-evidence-${{ github.event.workflow_run.head_sha }}
+          path: |
+            hub/release_changelog_manifest.json
+            hub/changelog_assets/automatic/
+          retention-days: 30
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

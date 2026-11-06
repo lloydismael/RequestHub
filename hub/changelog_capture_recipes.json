@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "recipes": [
+    {
+      "id": "login-layout",
+      "paths": ["templates/accounts/login.html", "static/css/login-christmas.css"],
+      "scenes": [
+        {
+          "kind": "ui",
+          "fixture": "login",
+          "title": "Login layout - mobile",
+          "before_text": "The login layout at this change's first-parent revision.",
+          "after_text": "The updated login layout at this exact change revision.",
+          "viewport": {"width": 375, "height": 900}
+        }
+      ]
+    },
+    {
+      "id": "changelog-display",
+      "paths": ["templates/hub/partials/changelog_entry.html", "templates/hub/partials/changelog_change_list.html", "static/hub/changelogs.css"],
+      "scenes": [
+        {
+          "kind": "ui",
+          "fixture": "changelog",
+          "title": "Release changelog display",
+          "before_text": "The changelog component using the same synthetic release before this change.",
+          "after_text": "The updated changelog component using the same synthetic release after this change."
+        }
+      ]
+    },
+    {
+      "id": "changelog-guide",
+      "paths": ["README.md"],
+      "scenes": [
+        {
+          "kind": "document",
+          "path": "README.md",
+          "heading": "Release changelogs and visual evidence",
+          "title": "Release changelog guide",
+          "before_text": "The documented changelog behavior at the first-parent revision.",
+          "after_text": "The updated changelog guidance at this exact revision."
+        }
+      ]
+    },
+    {
+      "id": "release-contract",
+      "paths": ["hub/release_changelog.py"],
+      "scenes": [
+        {
+          "kind": "report",
+          "fixture": "changelog_contract",
+          "title": "Release evidence behavior",
+          "before_text": "Observed release-manifest behavior at the parent revision.",
+          "after_text": "Observed release-manifest behavior at this change revision."
+        }
+      ]
+    }
+  ]
+}

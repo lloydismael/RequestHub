@@ -8270,6 +8270,32 @@ body.theme-switching .login-card__sheen {
     animation-play-state: paused !important;
 }
 
+/* While the theme swaps, the ambient orbs are the only thing repainting behind
+   the glass card. Freeze them so the card's backdrop-filter is not re-evaluated
+   against a moving background on every frame. */
+body.theme-switching .ambient-mesh__orb {
+    animation: none !important;
+}
+
+/* The Christmas twinkle swaps --light-glow/--light-halo on body.dark-mode, which
+   invalidates a non-compositable double drop-shadow on every bulb at once, and the
+   snow canvas repaints a full-viewport layer. Suspend both for the swap. */
+body.theme-switching .seasonal-light-emitter {
+    animation: none !important;
+    filter: none !important;
+}
+
+body.theme-switching .christmas-snow {
+    visibility: hidden !important;
+}
+
+@media (max-width: 640px), (pointer: coarse) {
+    body.theme-switching .ambient-mesh,
+    body.theme-switching .login-card__lens {
+        visibility: hidden !important;
+    }
+}
+
 ::view-transition-group(request-hub-page) {
     animation-duration: 180ms;
     animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);

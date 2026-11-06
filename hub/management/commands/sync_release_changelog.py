@@ -28,6 +28,7 @@ class Command(BaseCommand):
             self.stdout.write(f"No release manifest at {path}; nothing to sync.")
             return
         try:
+            existed = Changelog.objects.filter(release_sha=manifest["revision"]).exists()
             entry = sync_release(manifest)
         except ManifestError as exc:
             raise CommandError(f"Invalid release manifest: {exc}") from None
@@ -35,6 +36,11 @@ class Command(BaseCommand):
             self.stdout.write(f"Nothing new to log for {manifest['version']}.")
         else:
             count = len(entry.changes["commits"])
-            self.stdout.write(f"Logged {count} change(s) for {manifest['version']}.")
+            action = "Updated" if existed else "Logged"
+            self.stdout.write(f"{action} {count} change(s) for {manifest['version']}.")
             if entry.missing_comparisons:
-                self.stdout.write("Saved as draft: add before and after screenshots in Management > Changelogs.")
+                intent = "will publish automatically when complete" if entry.publish_when_ready else "automatic publication is held"
+                self.stdout.write(
+                    f"Saved as draft: {len(entry.missing_comparisons)} change(s) need before/after screenshots; {intent}. "
+                    "Review capture errors or add evidence in Management > Changelogs."
+                )

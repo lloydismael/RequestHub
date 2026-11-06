@@ -46,6 +46,12 @@ scripts_check/
 .github/
 apply_pm_ess.py
 requirements-ci.txt
+requirements-changelog-capture.txt
+scripts/capture_release_changelog.py
+scripts/changelog_capture_scenes.py
+scripts/test_capture_release_changelog.py
+scripts/test_changelog_capture_workflow.py
+.changelog-capture-vendor/
 request_hub/settings_ci.py
 
 # OS noise

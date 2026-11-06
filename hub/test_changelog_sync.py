@@ -109,6 +109,12 @@ class SyncReleaseTests(TestCase):
         entry = sync_release(manifest(commits=[commit(1, "new")]))
         self.assertEqual(entry.previous_version, "v55.1")
 
+    def test_previous_version_ignores_later_inserted_older_release(self):
+        self.manual("v56.8", date(2026, 11, 4))
+        self.manual("v56.7", date(2026, 11, 4))
+        entry = sync_release(manifest(version="v56.9", commits=[commit(1, "new")]))
+        self.assertEqual(entry.previous_version, "v56.8")
+
     def test_release_date_uses_manila_day(self):
         late = sync_release(manifest(generated_at="2026-11-04T17:30:00+00:00", commits=[commit(1, "new")]))
         self.assertEqual(late.release_date, date(2026, 11, 5))

@@ -11,7 +11,7 @@
         <h3 class="h5 mb-3" id="changelog-editor-heading">{% if changelog_entry %}Edit changelog{% else %}New changelog{% endif %}</h3>
         <p class="text-muted small">Fields marked * are required. Drafts are visible only to admins.</p>
         <form method="post" enctype="multipart/form-data"
-              action="{% if changelog_entry %}{% url 'hub:changelog-edit' changelog_entry.pk %}{% else %}{% url 'hub:changelog-create' %}{% endif %}">
+              action="{% if changelog_entry %}{% url 'hub:changelog-edit' changelog_entry.pk %}?comparison_page={{ changelog_form.comparison_page.number }}{% else %}{% url 'hub:changelog-create' %}{% endif %}">
             {% csrf_token %}
             {% if changelog_form.errors %}
                 <div class="alert alert-danger" role="alert" tabindex="-1" id="changelog-errors">
@@ -32,10 +32,19 @@
             </div>
             {% include 'hub/partials/changelog_field.html' with field=changelog_form.release_date %}
             {% include 'hub/partials/changelog_field.html' with field=changelog_form.summary %}
+            {% if changelog_form.comparison_page.has_other_pages %}
+            <nav class="cl-pagination mb-3" aria-label="Screenshot comparison pages">
+                {% if changelog_form.comparison_page.has_previous %}<a href="{% url 'hub:changelog-edit' changelog_entry.pk %}?comparison_page={{ changelog_form.comparison_page.previous_page_number }}">Previous changes</a>{% endif %}
+                <span>Changes {{ changelog_form.comparison_page.start_index }}-{{ changelog_form.comparison_page.end_index }} of {{ changelog_form.comparison_page.paginator.count }}</span>
+                {% if changelog_form.comparison_page.has_next %}<a href="{% url 'hub:changelog-edit' changelog_entry.pk %}?comparison_page={{ changelog_form.comparison_page.next_page_number }}">Next changes</a>{% endif %}
+            </nav>
+            <p class="form-text">Save this page before changing pages. Publishing still requires complete evidence for every required change, including other pages.</p>
+            {% endif %}
             {% for group in changelog_form.comparison_groups %}
             <fieldset class="cl-editor-group">
                 <legend class="h6">{{ group.title }}</legend>
-                {% if group.required %}<p class="form-text">This UI/UX change needs before and after screenshots with descriptions before publishing.</p>{% endif %}
+                {% if group.required %}<p class="form-text">This change needs before and after screenshots with descriptions before publishing.</p>{% endif %}
+                {% if group.capture_error %}<div class="alert alert-warning" role="status"><strong>Automatic capture needs attention:</strong> {{ group.capture_error }} Add a capture recipe and rerun the capture command, or supply this change's actual evidence below.</div>{% endif %}
                 {% for pair in group.pairs %}
                 {% if pair.additional %}<details class="cl-add-comparison"><summary>Add another screenshot pair (optional)</summary>{% endif %}
                     {% for field in pair.fields %}{% include 'hub/partials/changelog_field.html' %}{% endfor %}
@@ -57,7 +66,14 @@
                 {{ changelog_form.is_published }}
                 <label class="form-check-label fw-semibold" for="{{ changelog_form.is_published.id_for_label }}">{{ changelog_form.is_published.label }}</label>
             </div>
-            <p class="form-text mb-3">{% if changelog_form.comparison_groups %}Publishing requires complete before and after screenshots and descriptions for each UI/UX change. The release-wide comparison below is optional.{% elif changelog_entry.is_automatic %}Automatic entries can be published as they are. No UI/UX evidence is required for these changes. Add all four Before / After fields to show a release-wide comparison.{% else %}Publishing requires both descriptions and screenshots.{% endif %} Future-dated releases stay hidden until their release date. Uncheck to return to draft.</p>
+            {% if changelog_form.publish_when_ready %}
+            <div class="form-check mb-2">
+                {{ changelog_form.publish_when_ready }}
+                <label class="form-check-label fw-semibold" for="{{ changelog_form.publish_when_ready.id_for_label }}">{{ changelog_form.publish_when_ready.label }}</label>
+                <p class="form-text">{{ changelog_form.publish_when_ready.help_text }}</p>
+            </div>
+            {% endif %}
+            <p class="form-text mb-3">{% if changelog_form.comparison_groups %}Publishing requires complete before and after screenshots and descriptions for every required change. The release-wide comparison below is optional.{% elif changelog_entry.is_automatic %}This historical entry keeps its original publication rules. Enable automatic publication to require evidence for every change.{% else %}Publishing requires both descriptions and screenshots.{% endif %} Future-dated releases stay hidden until their release date. Unchecking Publish on a published entry also disables automatic republication.</p>
             <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-primary" type="submit">Save changelog</button>
                 {% if changelog_entry %}<a class="btn btn-outline-secondary" href="{% url 'hub:management' %}?tab=changelogs">Cancel / New entry</a>{% endif %}

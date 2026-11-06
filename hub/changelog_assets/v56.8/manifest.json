@@ -1,0 +1,47 @@
+{
+  "version": "v56.8",
+  "revision": "ee2e03ae5bf7b00507b8cfcc1fa256cc7807ae06",
+  "generated_at": "2026-11-06T13:35:11+08:00",
+  "commits": [
+    {
+      "sha": "ecc284e1dd19e208e4e843c0ba4a6fc009dd5204",
+      "type": "improved",
+      "title": "Avatar cropping, clearer Settings navigation, and restored changelog evidence",
+      "requires_comparison": true,
+      "before_text": "Selecting a profile photo immediately previewed the original image, without crop positioning or zoom controls. The account menu offered separate Update Avatar and My Profile links, and the profile preferences tab was named Settings. Packaged release evidence could leave partially prepared screenshot comparisons incomplete.",
+      "after_text": "Avatar uploads add an inline crop stage with drag positioning, zoom, Apply Crop, Cancel, and Reset controls. The server applies EXIF orientation, center-crops to a square, caps the image at 1024 pixels per edge, and stores an optimized JPEG; the existing 5 MB upload limit remains. The account menu now links to Settings, the preferences tab is labeled Personalization, and assistant navigation guidance uses the same Settings label. Packaged v56.5 screenshots are restored into database-backed media, and evidence sync fills missing comparison fields without replacing prepared admin content or automatically publishing drafts. The SQR review template changes are comments-only, with no functional or visual SQR change.",
+      "comparisons": [
+        {
+          "title": "Avatar cropping — desktop",
+          "before_text": "After choosing the synthetic landscape image, the uploader shows only a circular preview and the Upload Photo action.",
+          "after_text": "The same uploader exposes an inline crop stage, a Zoom slider, and Apply Crop, Cancel, and Reset controls before saving the photo.",
+          "before_image": "v56.8/01-avatar-desktop-before.webp",
+          "after_image": "v56.8/01-avatar-desktop-after.webp",
+          "before_revision": "49675f15a4d4b1d0848e18404287ffa4f8ed84f0",
+          "after_revision": "ee2e03ae5bf7b00507b8cfcc1fa256cc7807ae06",
+          "capture_note": "Historical profile-component capture from the exact release templates, styles, and inline script, at a 1440 × 1000 viewport with reduced motion. Both revisions use the same unsaved synthetic profile and original 1200 × 800 geometric image in a neutral application-style wrapper; each image retains the component's full height. No database queries, form submissions, or external messages."
+        },
+        {
+          "title": "Avatar cropping — mobile",
+          "before_text": "The small-screen uploader provides the original direct-preview flow, without crop controls.",
+          "after_text": "The crop stage and its controls remain available in the small-screen profile layout, using the same synthetic image.",
+          "before_image": "v56.8/02-avatar-mobile-before.webp",
+          "after_image": "v56.8/02-avatar-mobile-after.webp",
+          "before_revision": "49675f15a4d4b1d0848e18404287ffa4f8ed84f0",
+          "after_revision": "ee2e03ae5bf7b00507b8cfcc1fa256cc7807ae06",
+          "capture_note": "Historical profile-component capture from the exact release templates, styles, and inline script, at a 375 × 844 viewport with reduced motion. The unsaved synthetic profile, geometric image, and neutral wrapper match the desktop comparison; images retain the component's full height. No database queries, form submissions, or external messages."
+        },
+        {
+          "title": "Settings account menu",
+          "before_text": "The account menu contains separate Update Avatar and My Profile entries.",
+          "after_text": "A single Settings entry opens the account settings page; the redundant avatar shortcut is removed.",
+          "before_image": "v56.8/03-settings-menu-before.webp",
+          "after_image": "v56.8/03-settings-menu-after.webp",
+          "before_revision": "49675f15a4d4b1d0848e18404287ffa4f8ed84f0",
+          "after_revision": "ee2e03ae5bf7b00507b8cfcc1fa256cc7807ae06",
+          "capture_note": "Historical account-menu component from the exact release navbar templates and styles, at a 1440 × 1000 viewport with reduced motion. Both captures use the same synthetic name and role, with the existing menu-open class applied for inspection. No live account data, database queries, navigation, logout, or other form submissions."
+        }
+      ]
+    }
+  ]
+}

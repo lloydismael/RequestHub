@@ -151,6 +151,7 @@ jobs:
       - name: Run fast regression checks
         run: |
           python -m unittest discover -s scripts -p test_analyze_actions_runs.py
+          python -m unittest discover -s scripts -p test_changelog_capture_workflow.py
           node --test scripts_check/test_notification_toasts.cjs
           bash scripts/test-deploy-production.sh
           bash scripts/test-ci-routing.sh
