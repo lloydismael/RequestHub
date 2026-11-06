@@ -227,7 +227,8 @@ class ChristmasDefaultAccountTests(TestCase):
 
     def test_previous_christmas_choice_keeps_its_login_theme_after_the_deadline(self):
         self.user.banner_gradient = "christmas"
-        self.user.save(update_fields=["banner_gradient"])
+        self.user.christmas_default_overridden = True
+        self.user.save(update_fields=["banner_gradient", "christmas_default_overridden"])
         page = self.client.get(reverse("accounts:update"))
         self.assertTrue(self.browser_login_theme(page, "2027-01-01T00:00:00Z", {
             "reqHubLoginTheme": "christmas", "reqHubLoginThemeExpiresAt": "2027-01-01T00:00:00+08:00",

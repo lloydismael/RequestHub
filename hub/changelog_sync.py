@@ -101,8 +101,22 @@ def _enrich_release(manifest: dict) -> Changelog | None:
             for field in ("before_text", "after_text", "requires_comparison"):
                 if note.get(field) and not item.get(field):
                     item[field] = note[field]
-            if note.get("comparisons") and not item.get("comparisons"):
-                item["comparisons"] = _store_comparisons(note)["comparisons"]
+            if note.get("comparisons"):
+                packaged = _store_comparisons(note)["comparisons"]
+                comparisons = item.get("comparisons")
+                if not isinstance(comparisons, list):
+                    comparisons = []
+                for index, comparison in enumerate(packaged):
+                    if index >= len(comparisons) or not isinstance(comparisons[index], dict):
+                        if index >= len(comparisons):
+                            comparisons.append(comparison)
+                        else:
+                            comparisons[index] = comparison
+                        continue
+                    for field, value in comparison.items():
+                        if value and not comparisons[index].get(field):
+                            comparisons[index][field] = value
+                item["comparisons"] = comparisons
         if changes == entry.changes:
             return None
         entry.changes = changes
