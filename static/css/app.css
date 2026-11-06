@@ -6253,6 +6253,7 @@ body:not(.dark-mode) .profile-tabs__vmt .profile-vmt__divider {
 body.dark-mode .profile-card,
 body.dark-mode .profile-card h3,
 body.dark-mode .profile-card .profile-card__title,
+body.dark-mode .profile-card .profile-card__subtitle,
 body.dark-mode .profile-card .profile-label,
 body.dark-mode .profile-card .list-group-item,
 body.dark-mode .profile-card .list-group-item .fw-semibold,
@@ -6362,6 +6363,23 @@ body.view-mobile .profile-tabs__vmt {
     gap: 0.4rem;
 }
 
+.profile-card__subtitle {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin: 0 0 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* Avatar upload lives inside the Personal Information card */
+.profile-avatar-block {
+    margin-top: 1.75rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+}
+
 .profile-label {
     color: #cbd5e1;
     font-weight: 500;
@@ -6433,6 +6451,7 @@ body:not(.dark-mode) .profile-tab--active {
 }
 /* Profile card internals: override the dark-mode explicit colors */
 body:not(.dark-mode) .profile-card__title { color: #0f172a !important; }
+body:not(.dark-mode) .profile-card__subtitle { color: #0f172a !important; }
 body:not(.dark-mode) .profile-label { color: #1e293b !important; }
 body:not(.dark-mode) .profile-card p,
 body:not(.dark-mode) .profile-card .text-muted,

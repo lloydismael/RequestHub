@@ -253,10 +253,13 @@ body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 22
 @keyframes christmas-santa-sparkle { 50% { opacity: 0.45; } }
 @media (pointer: fine) {
     body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off),
-    body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off) :is(a, button, label, [role="button"], input[type="radio"], input[type="checkbox"], select) {
+    body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off) :is(a, button, label, [role="button"], input[type="radio"], input[type="checkbox"], select),
+    html.login-christmas body.page-login.christmas-effects-on:not(.christmas-cursor-off),
+    html.login-christmas body.page-login.christmas-effects-on:not(.christmas-cursor-off) :is(a, button, label, [role="button"], input[type="radio"], input[type="checkbox"], select) {
         cursor: url('../images/christmas-cursor.svg') 16 16, auto;
     }
-    body[data-account-theme="christmas"] :is(input:not([type="radio"]):not([type="checkbox"]), textarea, [contenteditable="true"]) { cursor: text; }
+    body[data-account-theme="christmas"] :is(input:not([type="radio"]):not([type="checkbox"]), textarea, [contenteditable="true"]),
+    html.login-christmas body.page-login :is(input:not([type="radio"]):not([type="checkbox"]), textarea, [contenteditable="true"]) { cursor: text; }
 }
 @media (max-width: 991px) {
     body.account-themed.authenticated[data-account-theme="christmas"] .navbar[data-nav-surface] { border-radius: 32px !important; }

@@ -198,8 +198,9 @@ html.login-christmas body.page-login .login-card > .xmas-card-deco.xmas-only {
     overflow: visible;
 }
 
-/* Static snow/wire layer is filtered once and cached; only the bulb layer animates. */
-.xmas-deco-static {
+/* Cache the filtered snow/wire and glass bulbs independently of the glow layers. */
+.xmas-deco-static,
+.xmas-deco-lights {
     will-change: transform;
 }
 
@@ -271,9 +272,13 @@ body.dark-mode .xmas-frost {
     opacity: 1;
 }
 
-.xmas-bulb__halo,
-.xmas-bulb__core {
+.xmas-deco-glows {
+    will-change: opacity;
     animation: xmas-twinkle var(--twinkle-duration, 3s) ease-in-out var(--twinkle-delay, 0s) infinite;
+}
+
+html.xmas-effects-paused .xmas-deco-glows {
+    animation-play-state: paused;
 }
 
 body.dark-mode .xmas-halos {
@@ -519,9 +524,9 @@ html.login-christmas body.page-login .login-card .login-card__snowflake {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .xmas-bulb__halo,
-    .xmas-bulb__core {
+    .xmas-deco-glows {
         animation: none;
+        will-change: auto;
     }
 
     html.login-christmas body.page-login .login-card .login-card__submit-arrow {

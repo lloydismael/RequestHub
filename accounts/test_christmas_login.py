@@ -1,9 +1,14 @@
+import shutil
+import subprocess
 from datetime import date
+from pathlib import Path
+from unittest import skipUnless
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.staticfiles import finders
 from django.templatetags.static import static
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import User
@@ -32,6 +37,13 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertContains(response, '<i class="bi bi-person-fill login-form__icon xmas-only" aria-hidden="true"></i>', html=True)
         self.assertContains(response, '<i class="bi bi-lock-fill login-form__icon xmas-only" aria-hidden="true"></i>', html=True)
 
+    def test_login_loads_shared_snowflake_and_santa_effect_assets(self):
+        response = self.client.get(reverse("login"))
+
+        self.assertContains(response, static("css/christmas-theme.css") + "?v=")
+        self.assertContains(response, static("js/christmas-theme.js") + "?v=")
+        self.assertNotContains(response, static("js/christmas-lights.js"))
+
     def test_christmas_design_keeps_login_form_contracts(self):
         response = self.client.get(reverse("login"))
         form = response.context["form"]
@@ -52,6 +64,8 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertNotContains(response, "login-christmas")
         self.assertNotContains(response, "reqHubLoginTheme")
         self.assertNotContains(response, "xmas-")
+        self.assertNotContains(response, static("css/christmas-theme.css"))
+        self.assertNotContains(response, static("js/christmas-theme.js"))
         self.assertContains(response, 'class="login-card login-card--glass lg-surface lg-enter"')
 
     def test_signed_in_christmas_account_is_remembered_for_the_login_page(self):
@@ -87,3 +101,22 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertIn('url("../img/login-christmas-bg.webp")', css)
         self.assertIsNotNone(finders.find("img/login-christmas-bg.webp"))
         self.assertIsNotNone(finders.find("js/login-christmas.js"))
+
+
+@skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
+class LoginAnimationScriptTests(SimpleTestCase):
+    def test_login_animation_regressions(self):
+        checks = Path(settings.BASE_DIR) / "scripts_check"
+        result = subprocess.run(
+            [
+                shutil.which("node"), "--test",
+                str(checks / "test_login_christmas.cjs"),
+                str(checks / "test_liquid_glass.cjs"),
+                str(checks / "test_christmas_theme.cjs"),
+            ],
+            capture_output=True,
+            encoding="utf-8",
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

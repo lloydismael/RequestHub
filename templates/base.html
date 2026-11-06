@@ -56,7 +56,7 @@
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3"></noscript>
     <link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">
     {% if request.user.is_authenticated %}
-    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=9">
+    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=10">
     <link rel="stylesheet" href="{% static 'css/christmas-lights.css' %}?v=2">
     {% endif %}
     {% if assistant_widget.native_enabled %}
@@ -443,10 +443,10 @@
         <script src="{% static 'js/page-transitions.js' %}?v=1" defer></script>
     <script src="{% static 'js/navbar-contrast.js' %}?v=1" defer></script>
     {% if request.user.is_authenticated %}
-    <script src="{% static 'js/christmas-theme.js' %}?v=8" defer></script>
+    <script src="{% static 'js/christmas-theme.js' %}?v=9" defer></script>
     <script src="{% static 'js/christmas-lights.js' %}?v=5" defer></script>
     {% endif %}
-    <script src="{% static 'js/liquid-glass.js' %}?v=5" defer></script>
+    <script src="{% static 'js/liquid-glass.js' %}?v=6" defer></script>
     <script src="{% static 'js/smooth-scroll.js' %}?v=11" defer></script>
     <script src="{% static 'js/notification-toasts.js' %}?v=6" defer></script>
     <script src="{% static 'js/login-success.js' %}" defer></script>

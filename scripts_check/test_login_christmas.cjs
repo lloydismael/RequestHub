@@ -8,8 +8,14 @@ const vm = require('node:vm');
 // [data-xmas-card-deco]; a light/dark flip must only retint the palette
 // gradients, never tear the scene down (which would recreate the feTurbulence
 // and feGaussianBlur filters and every DPR-scaled canvas raster).
-function start({ width = 1280, height = 900, mobile = false, dark = false } = {}) {
+function start({ width = 1280, height = 900, mobile = false, dark = false, reducedMotion = false } = {}) {
     const observers = [];
+    const documentListeners = new Map();
+    const motionListeners = [];
+    const motionQuery = {
+        matches: reducedMotion,
+        addEventListener(name, handler) { if (name === 'change') motionListeners.push(handler); },
+    };
     const frames = new Map();
     let nextId = 1;
     let buildCalls = 0;
@@ -116,7 +122,11 @@ function start({ width = 1280, height = 900, mobile = false, dark = false } = {}
         documentElement, body, hidden: false, readyState: 'complete', fonts: null,
         createElementNS: (ns, tag) => element(tag, ns),
         createElement: tag => element(tag),
-        addEventListener() {}, removeEventListener() {},
+        addEventListener(name, handler) {
+            if (!documentListeners.has(name)) documentListeners.set(name, []);
+            documentListeners.get(name).push(handler);
+        },
+        removeEventListener() {},
         querySelector(sel) {
             if (sel === '.xmas-scene') return scene;
             if (sel === '.page-login .login-card') return card;
@@ -132,7 +142,7 @@ function start({ width = 1280, height = 900, mobile = false, dark = false } = {}
     const window = {
         innerWidth: width, innerHeight: height,
         getComputedStyle: () => ({ borderTopLeftRadius: '24px', padding: '16px' }),
-        matchMedia: query => ({
+        matchMedia: query => query.includes('reduced-motion') ? motionQuery : ({
             matches: query.includes('520px') ? mobile : false,
             addEventListener() {}, removeEventListener() {},
         }),
@@ -165,7 +175,7 @@ function start({ width = 1280, height = 900, mobile = false, dark = false } = {}
     const sceneNode = () => deco.children[0];
 
 
-    const lightsNode = () => deco.children[1];
+    const lightsNode = () => deco.children.find(node => node.getAttribute('class') === 'xmas-deco-lights');
 
 
     const treeKey = () => deco.children.map(c => c.uid).join('|');
@@ -251,7 +261,18 @@ function start({ width = 1280, height = 900, mobile = false, dark = false } = {}
 
 
 
-    return { body, deco, card, toggleTheme, heavy: treeKey, treeKey, sceneNode, lightsNode, resize, frame, switching, frames, stops, drawCalls };
+    return {
+        body, documentElement, deco, card, toggleTheme, heavy: treeKey, treeKey, sceneNode, lightsNode,
+        resize, frame, switching, frames, stops, drawCalls,
+        hidden(value) {
+            document.hidden = value;
+            (documentListeners.get('visibilitychange') || []).forEach(handler => handler());
+        },
+        reducedMotion(value) {
+            motionQuery.matches = value;
+            motionListeners.forEach(handler => handler(motionQuery));
+        },
+    };
 }
 
 test('a theme flip retints gradients instead of rebuilding the scene', () => {
@@ -304,4 +325,66 @@ test('a genuine resize still rebuilds the scene', () => {
     app.resize(700, 500);              // viewport change, not a theme change
     assert.notStrictEqual(app.sceneNode(), scene, 'geometry change rebuilds the scene');
     assert.ok(app.stops('xmas-puff'), 'gradients rebuilt for the new geometry');
+});
+
+function descendants(node) {
+    return node.children.flatMap(child => [child, ...descendants(child)]);
+}
+
+test('twinkle work is bounded to three glow layers without animating bulb descendants', () => {
+    for (const mobile of [false, true]) {
+        const app = start({ mobile });
+        const glows = app.deco.children.filter(node => node.getAttribute('class') === 'xmas-deco-glows');
+        assert.equal(glows.length, 3, 'one cached glow layer per colour, not one animation per bulb');
+        for (const layer of glows) {
+            assert.ok(layer.style['--twinkle-duration']);
+            assert.ok(layer.style['--twinkle-delay']);
+            const halos = descendants(layer).filter(node => node.getAttribute('class') === 'xmas-bulb__halo');
+            assert.ok(halos.length > 0, 'the animated layer contains visible glows');
+            assert.ok(halos.every(node => node.style['--twinkle-duration'] === undefined));
+        }
+        const bulbs = descendants(app.lightsNode());
+        const cores = bulbs.filter(node => node.getAttribute('class') === 'xmas-bulb__core');
+        assert.equal(cores.length, mobile ? 18 : 34, 'the original glass bulbs remain visible');
+        assert.ok(cores.every(node => node.style['--twinkle-duration'] === undefined));
+        assert.ok(bulbs.every(node => node.getAttribute('class') !== 'xmas-bulb__halo'), 'glows stay behind the glass');
+    }
+});
+
+test('glows pause with the snow while the theme is switching', () => {
+    const app = start();
+    const tree = app.treeKey();
+    app.switching(true);
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), true);
+    app.frame();
+    assert.equal(app.frames.size, 0);
+    app.switching(false);
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), false);
+    assert.equal(app.frames.size, 1);
+    assert.equal(app.treeKey(), tree, 'pausing must not rebuild the filtered decoration');
+});
+
+test('hidden pages park festive effects until they become visible', () => {
+    const app = start();
+    app.hidden(true);
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), true);
+    assert.equal(app.frames.size, 0);
+    app.hidden(false);
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), false);
+    assert.equal(app.frames.size, 1);
+});
+
+test('reduced motion keeps static snow and glows and can change at runtime', () => {
+    const app = start({ reducedMotion: true });
+    const tree = app.treeKey();
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), true);
+    assert.equal(app.frames.size, 0);
+    assert.ok(app.drawCalls.clearRect > 0, 'a static snow frame remains visible');
+    app.reducedMotion(false);
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), false);
+    assert.equal(app.frames.size, 1);
+    app.reducedMotion(true);
+    assert.equal(app.documentElement.classList.contains('xmas-effects-paused'), true);
+    assert.equal(app.frames.size, 0);
+    assert.equal(app.treeKey(), tree);
 });
