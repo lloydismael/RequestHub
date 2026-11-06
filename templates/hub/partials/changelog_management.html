@@ -32,6 +32,17 @@
             </div>
             {% include 'hub/partials/changelog_field.html' with field=changelog_form.release_date %}
             {% include 'hub/partials/changelog_field.html' with field=changelog_form.summary %}
+            {% for group in changelog_form.comparison_groups %}
+            <fieldset class="cl-editor-group">
+                <legend class="h6">{{ group.title }}</legend>
+                {% if group.required %}<p class="form-text">This UI/UX change needs before and after screenshots with descriptions before publishing.</p>{% endif %}
+                {% for pair in group.pairs %}
+                {% if pair.additional %}<details class="cl-add-comparison"><summary>Add another screenshot pair (optional)</summary>{% endif %}
+                    {% for field in pair.fields %}{% include 'hub/partials/changelog_field.html' %}{% endfor %}
+                {% if pair.additional %}</details>{% endif %}
+                {% endfor %}
+            </fieldset>
+            {% endfor %}
             <fieldset class="cl-editor-group">
                 <legend class="h6">Before</legend>
                 {% include 'hub/partials/changelog_field.html' with field=changelog_form.before_text %}
@@ -46,7 +57,7 @@
                 {{ changelog_form.is_published }}
                 <label class="form-check-label fw-semibold" for="{{ changelog_form.is_published.id_for_label }}">{{ changelog_form.is_published.label }}</label>
             </div>
-            <p class="form-text mb-3">{% if changelog_entry.is_automatic %}Automatic entries can be published as they are. Add all four Before / After fields to show a comparison.{% else %}Publishing requires both descriptions and screenshots.{% endif %} Future-dated releases stay hidden until their release date. Uncheck to return to draft.</p>
+            <p class="form-text mb-3">{% if changelog_form.comparison_groups %}Publishing requires complete before and after screenshots and descriptions for each UI/UX change. The release-wide comparison below is optional.{% elif changelog_entry.is_automatic %}Automatic entries can be published as they are. No UI/UX evidence is required for these changes. Add all four Before / After fields to show a release-wide comparison.{% else %}Publishing requires both descriptions and screenshots.{% endif %} Future-dated releases stay hidden until their release date. Uncheck to return to draft.</p>
             <div class="d-flex gap-2 flex-wrap">
                 <button class="btn btn-primary" type="submit">Save changelog</button>
                 {% if changelog_entry %}<a class="btn btn-outline-secondary" href="{% url 'hub:management' %}?tab=changelogs">Cancel / New entry</a>{% endif %}
@@ -60,7 +71,8 @@
                 <div class="cl-entry__header">
                     <div class="cl-prose">
                         <span class="badge {% if entry.is_published %}text-bg-success{% else %}text-bg-secondary{% endif %}">{% if entry.is_published %}Published / scheduled{% else %}Draft{% endif %}</span>{% if entry.is_automatic %}
-                        <span class="badge text-bg-info">Automatic</span>{% endif %}
+                        <span class="badge text-bg-info">Automatic</span>{% endif %}{% if entry.missing_comparisons %}
+                        <span class="badge text-bg-warning">Screenshots needed</span>{% endif %}
                         <h4 class="h6 my-2">{{ entry.title }}</h4>
                         <p class="text-muted small mb-0">{% if entry.previous_version %}{{ entry.previous_version }} &rarr; {% endif %}{{ entry.new_version }} &middot; {{ entry.release_date|date:"M j, Y" }}</p>
                     </div>

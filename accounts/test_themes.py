@@ -29,6 +29,16 @@ class ChristmasFrameAssetTests(SimpleTestCase):
         with open(finders.find("css/christmas-theme.css"), encoding="utf-8") as stylesheet:
             self.assertIn("url('../images/christmas-santa-sleigh.svg')", stylesheet.read())
 
+    def test_table_row_buttons_skip_backdrop_blur_over_animated_effects(self):
+        import re
+
+        with open(finders.find("css/christmas-theme.css"), encoding="utf-8") as stylesheet:
+            css = stylesheet.read()
+        rule = re.search(r'\[data-account-theme="christmas"\] table \.lg-btn\s*\{([^}]*)\}', css)
+        self.assertIsNotNone(rule)
+        self.assertIn("backdrop-filter: none !important", rule.group(1))
+        self.assertIn("-webkit-backdrop-filter: none !important", rule.group(1))
+
 
 class CustomThemeTests(SimpleTestCase):
     def test_normalize_hex_accepts_only_six_digit_hex(self):

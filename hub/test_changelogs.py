@@ -424,6 +424,109 @@ class ChangelogTests(TestCase):
         self.assertEqual(response.context["unread_count"], 1)
         self.assertEqual(response.context["total_count"], 2)
 
+    def visual_entry(self, **overrides):
+        from .test_changelog_evidence import visual_commit
+
+        item = visual_commit()
+        item["comparisons"][0].update(
+            before_revision="b" * 40, after_revision="c" * 40,
+            capture_note="Captured with synthetic data from historical revisions.",
+        )
+        for field in ("before_image", "after_image"):
+            image_entry = self.entry(**{field: screenshot()})
+            item["comparisons"][0][field] = getattr(image_entry, field).name
+            image_entry.delete()
+        return self.automatic(changes={"commits": [item]}, **overrides)
+
+    def test_per_change_comparisons_render_and_images_follow_release_visibility(self):
+        entry = self.visual_entry(is_published=False)
+        pair = entry.changes["commits"][0]["comparisons"][0]
+        self.client.force_login(self.reader)
+        urls = [reverse("accounts:media", kwargs={"name": pair[field]}) for field in ("before_image", "after_image")]
+        for url in urls:
+            self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.force_login(self.admin)
+        for url in urls:
+            self.assertEqual(self.client.get(url).status_code, 200)
+        entry.is_published = True
+        entry.save()
+        self.client.force_login(self.reader)
+        response = self.feed()
+        self.assertContains(response, "Request composer")
+        self.assertContains(response, "People could not be mentioned in an update.")
+        self.assertContains(response, "Eligible stakeholders can be mentioned and notified.")
+        self.assertContains(response, 'alt="Before: Request composer')
+        self.assertContains(response, 'alt="After: Request composer')
+        self.assertContains(response, "Captured with synthetic data from historical revisions.")
+        self.assertContains(response, "bbbbbbb")
+        for url in urls:
+            self.assertContains(response, url)
+            image_response = self.client.get(url)
+            self.assertEqual(image_response.status_code, 200)
+            self.assertIn("no-store", image_response["Cache-Control"])
+        entry.release_date = timezone.localdate() + timedelta(days=1)
+        entry.save()
+        for url in urls:
+            self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(urls[0]).status_code, 302)
+
+    def test_admin_can_add_required_visual_evidence_and_publish(self):
+        from .test_changelog_evidence import visual_commit
+
+        entry = self.automatic(changes={"commits": [visual_commit(comparisons=[])]}, is_published=False)
+        url = reverse("hub:changelog-edit", args=[entry.pk])
+        payload = self.payload(previous_version="", before_text="", after_text="", is_published="on")
+        response = self.client.post(url, payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "before and after screenshots")
+        entry.refresh_from_db()
+        self.assertFalse(entry.is_published)
+        payload.update({
+            "comparison_0_0_title": "New composer",
+            "comparison_0_0_before_text": "Plain update field.",
+            "comparison_0_0_after_text": "Mention suggestions are available.",
+            "comparison_0_0_before_image": screenshot("before.png"),
+            "comparison_0_0_after_image": screenshot("after.png"),
+        })
+        response = self.client.post(url, payload)
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        self.assertTrue(entry.is_published)
+        self.assertEqual(entry.changes["commits"][0]["comparisons"][0]["title"], "New composer")
+        self.assertContains(self.feed(), "New composer")
+
+    def test_optional_comparison_cannot_be_published_with_only_a_title(self):
+        entry = self.visual_entry()
+        response = self.client.post(reverse("hub:changelog-edit", args=[entry.pk]), self.payload(
+            previous_version="", before_text="", after_text="", is_published="on",
+            comparison_0_1_title="Mobile comparison",
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("comparison_0_1_before_image", response.context["changelog_form"].errors)
+
+    def test_comparison_form_retains_existing_files_and_allows_another_pair(self):
+        entry = self.visual_entry()
+        original = entry.changes["commits"][0]["comparisons"][0].copy()
+        response = self.client.post(reverse("hub:changelog-edit", args=[entry.pk]), self.payload(
+            previous_version="", before_text="", after_text="", is_published="on",
+            comparison_0_0_title=original["title"],
+            comparison_0_0_before_text=original["before_text"],
+            comparison_0_0_after_text=original["after_text"],
+            comparison_0_1_title="Mobile composer",
+            comparison_0_1_before_text="Plain field on mobile.",
+            comparison_0_1_after_text="Mention suggestions on mobile.",
+            comparison_0_1_before_image=screenshot("mobile-before.png"),
+            comparison_0_1_after_image=screenshot("mobile-after.png"),
+        ))
+        self.assertEqual(response.status_code, 302)
+        entry.refresh_from_db()
+        pairs = entry.changes["commits"][0]["comparisons"]
+        self.assertEqual(len(pairs), 2)
+        self.assertEqual(pairs[0], original)
+        self.assertEqual(pairs[1]["title"], "Mobile composer")
+        self.assertContains(self.feed(), "Mobile composer")
+
 
 class ReleaseChangelogTests(TestCase):
     def test_v55_1_release_is_logged_with_descriptions_and_screenshots(self):

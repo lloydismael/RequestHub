@@ -19,12 +19,12 @@
                 {% if group.key == "maintenance" %}
                 <details class="cl-change-group">
                     <summary><span class="h6">{{ group.label }}</span> <span class="cl-count">{{ group.titles|length }}</span></summary>
-                    <ul>{% for title in group.titles %}<li>{{ title }}</li>{% endfor %}</ul>
+                    {% include 'hub/partials/changelog_change_list.html' with items=group.items %}
                 </details>
                 {% else %}
                 <section class="cl-change-group" aria-labelledby="changes-{{ entry.pk }}-{{ group.key }}">
                     <h5 id="changes-{{ entry.pk }}-{{ group.key }}" class="h6">{{ group.label }} <span class="cl-count">{{ group.titles|length }}</span></h5>
-                    <ul>{% for title in group.titles %}<li>{{ title }}</li>{% endfor %}</ul>
+                    {% include 'hub/partials/changelog_change_list.html' with items=group.items %}
                 </section>
                 {% endif %}
             {% endfor %}
@@ -33,33 +33,19 @@
     {% endif %}
     {% endwith %}
     {% if entry.has_comparison %}
-    <div class="cl-comparison">
-        <section class="cl-panel cl-panel--before" aria-labelledby="before-{{ entry.pk }}">
-            <div class="cl-panel__heading">
-                <h4 id="before-{{ entry.pk }}" class="h6 mb-0"><i class="bi bi-clock-history" aria-hidden="true"></i> Before</h4>
-                <span>{{ entry.previous_version }}</span>
-            </div>
-            {% if entry.before_image %}
-                <a class="cl-screenshot" href="{{ entry.before_image.url }}" aria-label="View full before screenshot for {{ entry.title }}">
-                    <img src="{{ entry.before_image.url }}" alt="Before: {{ entry.title }} ({{ entry.previous_version }})" loading="lazy" decoding="async">
-                    <span><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full screenshot</span>
-                </a>
-            {% endif %}
-            <div class="cl-panel__text cl-prose">{{ entry.before_text|linebreaksbr }}</div>
-        </section>
-        <section class="cl-panel cl-panel--after" aria-labelledby="after-{{ entry.pk }}">
-            <div class="cl-panel__heading">
-                <h4 id="after-{{ entry.pk }}" class="h6 mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> After</h4>
-                <span>{{ entry.new_version }}</span>
-            </div>
-            {% if entry.after_image %}
-                <a class="cl-screenshot" href="{{ entry.after_image.url }}" aria-label="View full after screenshot for {{ entry.title }}">
-                    <img src="{{ entry.after_image.url }}" alt="After: {{ entry.title }} ({{ entry.new_version }})" loading="lazy" decoding="async">
-                    <span><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full screenshot</span>
-                </a>
-            {% endif %}
-            <div class="cl-panel__text cl-prose">{{ entry.after_text|linebreaksbr }}</div>
-        </section>
-    </div>
+        {% include 'hub/partials/changelog_comparison.html' with comparison=entry comparison_index='overview' %}
     {% endif %}
+    {% with comparisons=entry.change_comparisons %}
+    {% if comparisons %}
+    <section class="cl-visual-changes" aria-labelledby="visual-changes-{{ entry.pk }}">
+        <h4 id="visual-changes-{{ entry.pk }}" class="h6 mb-3">Visual changes <span class="cl-count">{{ comparisons|length }}</span></h4>
+        {% for comparison in comparisons %}
+        <details class="cl-visual-change"{% if forloop.first %} open{% endif %}>
+            <summary>{{ comparison.title }} <span class="cl-version">Before &amp; after</span></summary>
+            <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter %}</div>
+        </details>
+        {% endfor %}
+    </section>
+    {% endif %}
+    {% endwith %}
 </article>

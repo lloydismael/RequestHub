@@ -1,3 +1,6 @@
+from datetime import date
+from unittest.mock import patch
+
 from django.contrib.staticfiles import finders
 from django.templatetags.static import static
 from django.test import TestCase, override_settings
@@ -57,6 +60,7 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertContains(response, REMEMBER)
         self.assertNotContains(response, FORGET)
 
+    @patch("accounts.models.timezone.localdate", new=lambda **kwargs: date(2027, 1, 1))
     def test_other_themes_or_festive_effects_off_forget_the_christmas_login(self):
         cases = {
             "other-theme": {"banner_gradient": "blue"},

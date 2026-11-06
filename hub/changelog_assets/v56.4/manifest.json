@@ -1,0 +1,196 @@
+{
+  "version": "v56.4",
+  "revision": "f16b9f99be03490b9c99553070862897c9086393",
+  "generated_at": "2026-11-06T07:04:35+08:00",
+  "commits": [
+    {
+      "sha": "499d75b5e20965e27510f88710460455a2f4e5c1",
+      "type": "fixed",
+      "title": "Assistant tool results and validation feedback",
+      "before_text": "Tool summaries read an error attribute from results, and input validation returned a generic message.",
+      "after_text": "Tool summaries use their standard success/error fields without reading result.error; validation returns the input-specific feedback."
+    },
+    {
+      "sha": "e0ccd477d443e4d666228c497caa81702429e47c",
+      "type": "improved",
+      "title": "Mark helper tool text as untrusted data",
+      "before_text": "The helper wrapped raw tool text in JSON without an explicit instruction boundary.",
+      "after_text": "The helper labels text as untrusted data and encloses it in a text block; normal release tool rounds use compact summaries."
+    },
+    {
+      "sha": "63586bab173fa6f43ec4baf33266c9d7952f66bd",
+      "type": "improved",
+      "title": "Send compact assistant tool summaries",
+      "before_text": "Provider-facing tool messages included rendered directory text.",
+      "after_text": "Tool round-trips send counts, pagination and standard result fields instead of the full directory text."
+    },
+    {
+      "sha": "87423fd2649b6acbbc56433f1da4715521ceafa3",
+      "type": "maintenance",
+      "title": "Resolve workflow documentation conflict markers",
+      "before_text": "The GitHub Actions optimization plan contained committed merge-conflict markers.",
+      "after_text": "The plan reads as a resolved document without conflict delimiters; application screens are unchanged."
+    },
+    {
+      "sha": "cfcaca3a244207aedbc4aeb5ff841ffe7fcb80af",
+      "type": "improved",
+      "title": "Structure helper tool results as JSON",
+      "before_text": "The helper passed tool-result text directly as message content.",
+      "after_text": "The helper emits an explicit tool_result JSON object; subsequent release changes further limit provider-facing payloads."
+    },
+    {
+      "sha": "d97ebb64f17d93acfc23eafdc3305ab52c94aab6",
+      "type": "improved",
+      "title": "Use safe assistant provider error messages",
+      "before_text": "Provider exception text was returned directly to callers.",
+      "after_text": "Provider diagnostics are logged with a request ID while callers receive a temporary-unavailability message. Later changes in this release restore specific input-validation feedback."
+    },
+    {
+      "sha": "2f585e30f17c038105b6138a7c978fa8222cb552",
+      "type": "improved",
+      "title": "Christmas themes, mentions and request navigation",
+      "requires_comparison": true,
+      "before_text": "Themes lacked Christmas effect preferences; request updates used plain fields without mention suggestions; activity creation and requestor links needed additional navigation.",
+      "after_text": "Adds seasonal login and account themes, effect previews, stakeholder mention suggestions and notifications, highlighted update links, administrator activity creation, and requestor management links.",
+      "comparisons": [
+        {
+          "title": "Christmas login — desktop light",
+          "before_text": "Existing light login card without seasonal decorations.",
+          "after_text": "Opted-in login displays the release's snowy scene, frosted card, snow cap, and lights.",
+          "before_image": "v56.4/01-login-desktop-before.webp",
+          "after_image": "v56.4/01-login-desktop-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Seasonal login storage opt-in set; no credentials submitted."
+        },
+        {
+          "title": "Christmas login — mobile dark",
+          "before_text": "Existing dark login at a 390 × 844 mobile viewport.",
+          "after_text": "Same mobile authentication fields with the release's dark seasonal scene and card decoration.",
+          "before_image": "v56.4/02-login-mobile-dark-before.webp",
+          "after_image": "v56.4/02-login-mobile-dark-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Seasonal login opt-in and dark-mode storage set; 390×844 viewport; no credentials submitted."
+        },
+        {
+          "title": "Seasonal account theme and navbar",
+          "before_text": "Synthetic administrator dashboard uses the available Default account theme.",
+          "after_text": "Christmas account theme adds seasonal surfaces, a decorative frame, snowfall, and navbar lights.",
+          "before_image": "v56.4/03-dashboard-theme-before.webp",
+          "after_image": "v56.4/03-dashboard-theme-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Demo admin uses Default before and saved Christmas/all effects after."
+        },
+        {
+          "title": "Christmas profile preview and effect preferences",
+          "before_text": "Existing Themes chooser has no Christmas option or Christmas effect controls.",
+          "after_text": "Unsaved Christmas preview exposes master and individual effect controls, Apply Theme, and Cancel preview.",
+          "before_image": "v56.4/04-profile-christmas-before.webp",
+          "after_image": "v56.4/04-profile-christmas-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Demo account remains saved on Default; Christmas is an unsaved hash preview."
+        },
+        {
+          "title": "Related-person suggestions in request updates",
+          "before_text": "The same unsaved @ text remains in a plain update field without suggestions.",
+          "after_text": "Related-person suggestions list the requestor, backup engineer, administrator, and PM-ESG user.",
+          "before_image": "v56.4/05-update-mentions-before.webp",
+          "after_image": "v56.4/05-update-mentions-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Same unsaved @ text; suggestions are real form-generated stakeholders; nothing posted."
+        },
+        {
+          "title": "Shared mention composer in update editing",
+          "before_text": "Author-owned Edit Status Log screen has a plain message field.",
+          "after_text": "The editing form adds the Mention action and mention guidance beside the same saved message.",
+          "before_image": "v56.4/06-update-edit-before.webp",
+          "after_image": "v56.4/06-update-edit-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Author-owned synthetic update; editing form shown without saving."
+        },
+        {
+          "title": "Mention notification category and action",
+          "before_text": "A directly seeded ordinary status-update notification appears in the old notification UI.",
+          "after_text": "A directly seeded Mention notification shows its @ icon, category, and Review Update action.",
+          "before_image": "v56.4/07-mention-notification-before.webp",
+          "after_image": "v56.4/07-mention-notification-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Ordinary update/mention notifications seeded directly; sending and delivery not verified."
+        },
+        {
+          "title": "Navigate to a highlighted mentioned update",
+          "before_text": "The same timeline has no matching #update-2 target or target highlight.",
+          "after_text": "Opening #update-2 highlights the matching real timeline entry.",
+          "before_image": "v56.4/08-update-highlight-before.webp",
+          "after_image": "v56.4/08-update-highlight-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Actual #update-2 URL; old timeline manually scrolled into view without injecting markup."
+        },
+        {
+          "title": "Administrator activity creation workflow",
+          "before_text": "Administrator request view shows activity summaries without an Add Activity Logs action.",
+          "after_text": "Administrator can open New Activity Report with the synthetic request preselected.",
+          "before_image": "v56.4/09-admin-activity-before.webp",
+          "after_image": "v56.4/09-admin-activity-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Synthetic admin opens request-prefilled form; no activity saved or production permissions tested."
+        },
+        {
+          "title": "Requestor dashboard management links",
+          "before_text": "Requestor table displays the reference code as plain text.",
+          "after_text": "The Manage reference link opens collaborative request management.",
+          "before_image": "v56.4/12-requestor-reference-before.webp",
+          "after_image": "v56.4/12-requestor-reference-after.webp",
+          "before_revision": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Real old plain-text cell versus new management link; after destination checked locally."
+        }
+      ]
+    },
+    {
+      "sha": "c314cf730ee0383a1938cbecbdb49e99972d06f8",
+      "type": "maintenance",
+      "title": "Align assistant permission tests with development routes",
+      "before_text": "Assistant knowledge tests expected access that did not match the development branch routes.",
+      "after_text": "Test assertions match the existing route permissions; this is test maintenance rather than a visual change."
+    },
+    {
+      "sha": "8a08aa69ba656d8aa3fc77476fc7f63e1a8e5330",
+      "type": "new",
+      "title": "Native Hub Assistant experience",
+      "requires_comparison": true,
+      "before_text": "The native launcher and chat shell were unavailable; the application used its optional legacy assistant integration.",
+      "after_text": "Adds an opt-in native launcher and chat shell with starter actions and guided workflows. Provider integration stays disabled until configured; these captures show the shell only.",
+      "comparisons": [
+        {
+          "title": "Native Hub Assistant launcher",
+          "before_text": "Dashboard with the optional legacy assistant disabled for the demo account.",
+          "after_text": "Opt-in native Hub Assistant launcher is available on the dashboard.",
+          "before_image": "v56.4/10-assistant-launcher-before.webp",
+          "after_image": "v56.4/10-assistant-launcher-after.webp",
+          "before_revision": "fb70fad1bb276af0cbe633d3313d5887a1b50828",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Legacy assistant off before; native flag/account opt-in on after; no provider request."
+        },
+        {
+          "title": "Native Hub Assistant open panel",
+          "before_text": "Same genuine pre-assistant dashboard without an open assistant panel.",
+          "after_text": "Opened native panel shows starter actions and an empty composer; no prompt was submitted.",
+          "before_image": "v56.4/10-assistant-launcher-before.webp",
+          "after_image": "v56.4/11-assistant-panel-after.webp",
+          "before_revision": "fb70fad1bb276af0cbe633d3313d5887a1b50828",
+          "after_revision": "f16b9f99be03490b9c99553070862897c9086393",
+          "capture_note": "Historical git archives; synthetic SQLite model schema/WorkingDays adapter; reduced motion. Reuses genuine launcher baseline; only native shell opened, no question or provider output."
+        }
+      ]
+    }
+  ]
+}

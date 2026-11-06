@@ -1,0 +1,29 @@
+<div class="cl-comparison">
+    <section class="cl-panel cl-panel--before" aria-labelledby="before-{{ entry.pk }}-{{ comparison_index }}">
+        <div class="cl-panel__heading">
+            <h4 id="before-{{ entry.pk }}-{{ comparison_index }}" class="h6 mb-0"><i class="bi bi-clock-history" aria-hidden="true"></i> Before</h4>
+            <span>{% if comparison_index == 'overview' %}{{ entry.previous_version }}{% elif comparison.before_revision %}Revision {{ comparison.before_revision|slice:':7' }}{% else %}Before change{% endif %}</span>
+        </div>
+        {% if comparison.before_image %}
+            <a class="cl-screenshot" href="{{ comparison.before_image.url }}" aria-label="View full before screenshot for {{ comparison.title }}">
+                <img src="{{ comparison.before_image.url }}" alt="Before: {{ comparison.title }}{% if comparison_index == 'overview' and entry.previous_version %} ({{ entry.previous_version }}){% elif comparison.before_revision %} (revision {{ comparison.before_revision|slice:':7' }}){% endif %}" loading="lazy" decoding="async">
+                <span><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full screenshot</span>
+            </a>
+        {% endif %}
+        <div class="cl-panel__text cl-prose">{{ comparison.before_text|linebreaksbr }}</div>
+    </section>
+    <section class="cl-panel cl-panel--after" aria-labelledby="after-{{ entry.pk }}-{{ comparison_index }}">
+        <div class="cl-panel__heading">
+            <h4 id="after-{{ entry.pk }}-{{ comparison_index }}" class="h6 mb-0"><i class="bi bi-check2-circle" aria-hidden="true"></i> After</h4>
+            <span>{{ entry.new_version }}{% if comparison.after_revision %} · {{ comparison.after_revision|slice:':7' }}{% endif %}</span>
+        </div>
+        {% if comparison.after_image %}
+            <a class="cl-screenshot" href="{{ comparison.after_image.url }}" aria-label="View full after screenshot for {{ comparison.title }}">
+                <img src="{{ comparison.after_image.url }}" alt="After: {{ comparison.title }} ({{ entry.new_version }})" loading="lazy" decoding="async">
+                <span><i class="bi bi-arrows-fullscreen" aria-hidden="true"></i> View full screenshot</span>
+            </a>
+        {% endif %}
+        <div class="cl-panel__text cl-prose">{{ comparison.after_text|linebreaksbr }}</div>
+    </section>
+</div>
+{% if comparison.capture_note %}<p class="text-muted small mt-2 mb-0 cl-prose">{{ comparison.capture_note }}</p>{% endif %}

@@ -180,8 +180,11 @@
                     <ul class="mb-0 ps-3">{% for field, errors in theme_form.errors.items %}{% for error in errors %}<li>{{ error }}</li>{% endfor %}{% endfor %}</ul>
                 </div>
             {% endif %}
+            {% if request.user.uses_christmas_default %}
+                <p class="text-muted small" id="christmas-default-notice">Christmas is your temporary default through December 31, 2026. You can apply another theme at any time. Your previous theme returns afterward unless you apply a new choice.</p>
+            {% endif %}
             {% with selected_theme=theme_form.banner_gradient.value|default:request.user.account_theme %}
-            <fieldset aria-describedby="theme-description">
+            <fieldset aria-describedby="theme-description{% if request.user.uses_christmas_default %} christmas-default-notice{% endif %}">
                 <legend class="h6">Choose your theme</legend>
                 <div class="account-theme-grid">
                     {% for value, label in theme_form.fields.banner_gradient.choices %}

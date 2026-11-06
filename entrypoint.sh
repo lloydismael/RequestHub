@@ -16,7 +16,7 @@ case "${RUN_MIGRATIONS:-true}" in
 esac
 case "${RUN_CHANGELOG_SYNC:-true}" in
     true)
-        if [ -f hub/release_changelog_manifest.json ]; then
+        if [ -f hub/release_changelog_manifest.json ] || [ -d hub/changelog_assets ]; then
             timeout 60 python manage.py sync_release_changelog || echo "Release changelog sync failed; continuing startup" >&2
         fi
         ;;

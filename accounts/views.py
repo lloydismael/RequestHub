@@ -67,7 +67,8 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
             if theme_form.is_valid():
                 cleaned = theme_form.cleaned_data
                 self.object.banner_gradient = cleaned["banner_gradient"]
-                update_fields = ["banner_gradient"]
+                self.object.christmas_default_overridden = True
+                update_fields = ["banner_gradient", "christmas_default_overridden"]
                 if cleaned["banner_gradient"] == User.CUSTOM_THEME:
                     for name in ThemeForm.CUSTOM_FIELDS:
                         setattr(self.object, name, cleaned[name])
@@ -214,7 +215,11 @@ class StoredFileServeView(LoginRequiredMixin, View):
             from django.db.models import Q
             from hub.models import Changelog
 
-            entries = Changelog.objects.filter(Q(before_image=name) | Q(after_image=name))
+            entries = Changelog.objects.filter(
+                Q(before_image=name) | Q(after_image=name)
+                | Q(changes__commits__contains=[{"comparisons": [{"before_image": name}]}])
+                | Q(changes__commits__contains=[{"comparisons": [{"after_image": name}]}])
+            )
             if request.user.role != User.Roles.ADMIN:
                 entries = entries.filter(is_published=True, release_date__lte=timezone.localdate())
             if not entries.exists():
