@@ -96,6 +96,11 @@ body.account-themed.authenticated[data-account-theme="christmas"] .glass-card,
 body.account-themed.authenticated[data-account-theme="christmas"] .card {
     border-top: 2px solid #d5aa53 !important;
 }
+/* Snow and twinkling lights animate behind every row, so per-row glass blur would re-render each frame and stall painting. */
+body.account-themed.authenticated[data-account-theme="christmas"] table .lg-btn {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
 .account-theme-card[data-account-theme="christmas"] .account-theme-card__preview {
     background: radial-gradient(circle at 80% 20%, #ffedb4 0 2px, transparent 3px),
         radial-gradient(circle at 20% 60%, #ffffff 0 2px, transparent 3px),

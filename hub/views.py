@@ -7446,6 +7446,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             if self.changelog_form.is_valid():
                 with transaction.atomic():
                     saved = self.changelog_form.save()
+                    self.changelog_form.save_comparisons()
                 messages.success(request, "Changelog published." if saved.is_published else "Changelog saved as draft.")
                 return redirect(reverse("hub:management") + "?tab=changelogs")
             messages.error(request, "Please correct the changelog errors below.")

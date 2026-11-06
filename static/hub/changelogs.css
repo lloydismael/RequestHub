@@ -92,6 +92,16 @@
 .cl-change-group summary { cursor: pointer; }
 .cl-change-group ul { margin: 0; padding-left: 1.25rem; }
 .cl-change-group li { overflow-wrap: anywhere; }
+.cl-visual-changes { margin-top: 1.5rem; }
+.cl-visual-change { padding: 1rem 0; border-top: 1px solid var(--rh-border, rgba(128, 128, 128, .3)); }
+.cl-visual-change > summary, .cl-add-comparison > summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.cl-visual-change > summary .cl-version { margin-left: .5rem; font-weight: 400; }
+.cl-visual-change > summary:focus-visible, .cl-add-comparison > summary:focus-visible { outline: 3px solid var(--brand-primary); outline-offset: 3px; }
+.cl-change-description { margin: .5rem 0 1rem; font-size: .9rem; line-height: 1.6; }
+.cl-change-description > div { display: grid; grid-template-columns: 4rem minmax(0, 1fr); gap: .5rem; }
+.cl-change-description dd { margin: 0; }
+.cl-add-comparison { margin: 1rem 0; }
+.cl-add-comparison[open] > summary { margin-bottom: 1rem; }
 .cl-count { display: inline-block; min-width: 1.5rem; padding: 0 .4rem; border-radius: 999px; background: rgba(128, 128, 128, .15); color: var(--rh-text-secondary); font-size: .75rem; text-align: center; }
 .cl-prose, .cl-entry__header > div { min-width: 0; overflow-wrap: anywhere; }
 .cl-empty { padding: 3rem 1.5rem; text-align: center; }

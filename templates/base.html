@@ -29,9 +29,19 @@
     </script>
     {% if request.user.is_authenticated %}
     <script>
-        // Remembers the saved Christmas theme so the signed-out login page can match it on this browser.
+        // Remember the Christmas login look, with an expiry only for the temporary account default.
         try {
-            {% if request.user.account_theme == 'christmas' and request.user.pref_christmas_enabled %}localStorage.setItem('reqHubLoginTheme', 'christmas');{% else %}localStorage.removeItem('reqHubLoginTheme');{% endif %}
+            {% if request.user.account_theme == 'christmas' and request.user.pref_christmas_enabled %}
+                localStorage.setItem('reqHubLoginTheme', 'christmas');
+                {% if request.user.uses_christmas_default %}
+                    localStorage.setItem('reqHubLoginThemeExpiresAt', '{{ request.user.christmas_default_expires_at|date:"c" }}');
+                {% else %}
+                    localStorage.removeItem('reqHubLoginThemeExpiresAt');
+                {% endif %}
+            {% else %}
+                localStorage.removeItem('reqHubLoginTheme');
+                localStorage.removeItem('reqHubLoginThemeExpiresAt');
+            {% endif %}
         } catch (_) {}
     </script>
     {% endif %}
@@ -46,7 +56,7 @@
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3"></noscript>
     <link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">
     {% if request.user.is_authenticated %}
-    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=8">
+    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=9">
     <link rel="stylesheet" href="{% static 'css/christmas-lights.css' %}?v=2">
     {% endif %}
     {% if assistant_widget.native_enabled %}

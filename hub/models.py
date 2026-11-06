@@ -12,7 +12,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 from accounts.storage import DatabaseMediaStorage
-from .release_changelog import GROUPS
+from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, GROUPS, missing_comparisons
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -62,15 +62,43 @@ class Changelog(models.Model):
         if not isinstance(commits, list):
             return []
         titles = {key: [] for key, _ in GROUPS}
+        items = {key: [] for key, _ in GROUPS}
         for item in commits:
             if not isinstance(item, dict) or not isinstance(item.get("type"), str) or item.get("type") not in titles:
                 continue
             if isinstance(item.get("title"), str):
                 titles[item["type"]].append(item["title"])
+                items[item["type"]].append(item)
         return [
-            {"key": key, "label": label, "titles": titles[key]}
+            {"key": key, "label": label, "titles": titles[key], "items": items[key]}
             for key, label in GROUPS if titles[key]
         ]
+
+    @property
+    def change_comparisons(self):
+        commits = self.changes.get("commits", []) if isinstance(self.changes, dict) else []
+        comparisons = []
+        if not isinstance(commits, list):
+            return comparisons
+        for item in commits:
+            pairs = item.get("comparisons", []) if isinstance(item, dict) else []
+            if not isinstance(pairs, list):
+                continue
+            for pair in pairs:
+                if not isinstance(pair, dict) or not isinstance(pair.get("title"), str):
+                    continue
+                comparison = {field: pair.get(field, "") if isinstance(pair.get(field), str) else "" for field in (*COMPARISON_FIELDS, *COMPARISON_META_FIELDS)}
+                for field in ("before_image", "after_image"):
+                    name = comparison[field]
+                    image_field = self._meta.get_field(field)
+                    comparison[field] = image_field.attr_class(self, image_field, name if name.startswith("changelogs/") else "")
+                comparisons.append(comparison)
+        return comparisons
+
+    @property
+    def missing_comparisons(self):
+        commits = self.changes.get("commits", []) if isinstance(self.changes, dict) else []
+        return missing_comparisons(commits) if isinstance(commits, list) else []
 
 
 class Account(models.Model):

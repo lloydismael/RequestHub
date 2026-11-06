@@ -1,6 +1,8 @@
 import json
 import re
+from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 from django.conf import settings
 from django.core.cache import cache
@@ -234,7 +236,8 @@ class ProfileSmokeTests(TestCase):
         self.assertContains(reopened, 'data-account-theme="christmas"')
         self.assertContains(reopened, "Cancel preview")
 
-    def test_new_accounts_start_on_default_theme(self):
+    @patch("accounts.models.timezone.localdate", new=lambda **kwargs: date(2027, 1, 1))
+    def test_new_accounts_start_on_default_theme_outside_the_christmas_window(self):
         self.assertEqual(self.user.banner_gradient, "default")
         response = self.client.get(reverse("accounts:update"))
         self.assertContains(response, '<body data-account-theme="default"')
@@ -284,6 +287,7 @@ class ProfileSmokeTests(TestCase):
         self.assertEqual(self.user.banner_gradient, "teal")
         self.assertEqual(self.user.custom_theme_colors, ("#2563eb", "#7c3aed", "#06b6d4"))
 
+    @patch("accounts.models.timezone.localdate", new=lambda **kwargs: date(2027, 1, 1))
     def test_incomplete_custom_theme_falls_back_to_default(self):
         User.objects.filter(pk=self.user.pk).update(banner_gradient="custom")
         response = self.client.get(reverse("accounts:update"))

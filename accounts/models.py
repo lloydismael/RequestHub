@@ -1,3 +1,4 @@
+from datetime import date, datetime, time, timedelta
 from uuid import uuid4
 
 from django.contrib.auth.models import AbstractUser
@@ -117,6 +118,8 @@ class User(AbstractUser):
     )
     DEFAULT_THEME = "default"
     CUSTOM_THEME = "custom"
+    CHRISTMAS_DEFAULT_START = date(2026, 11, 6)
+    CHRISTMAS_DEFAULT_END = date(2026, 12, 31)
     BANNER_GRADIENT_CHOICES = [
         (DEFAULT_THEME, "Default"),
         ("blue", "Blue"),
@@ -146,6 +149,7 @@ class User(AbstractUser):
         default=DEFAULT_THEME,
         blank=True,
     )
+    christmas_default_overridden = models.BooleanField(default=False, db_default=False, editable=False)
     custom_theme_primary = models.CharField(max_length=7, blank=True, default="", validators=[HEX_COLOR_VALIDATOR])
     custom_theme_secondary = models.CharField(max_length=7, blank=True, default="", validators=[HEX_COLOR_VALIDATOR])
     custom_theme_tertiary = models.CharField(max_length=7, blank=True, default="", validators=[HEX_COLOR_VALIDATOR])
@@ -223,8 +227,24 @@ class User(AbstractUser):
         return (self.custom_theme_primary, self.custom_theme_secondary, self.custom_theme_tertiary)
 
     @property
+    def uses_christmas_default(self):
+        if self.christmas_default_overridden:
+            return False
+        today = timezone.localdate(timezone=timezone.get_default_timezone())
+        return self.CHRISTMAS_DEFAULT_START <= today <= self.CHRISTMAS_DEFAULT_END
+
+    @property
+    def christmas_default_expires_at(self):
+        return datetime.combine(
+            self.CHRISTMAS_DEFAULT_END + timedelta(days=1), time.min,
+            tzinfo=timezone.get_default_timezone(),
+        )
+
+    @property
     def account_theme(self):
-        """Effective theme key; unknown values and incomplete custom palettes fall back to default."""
+        """Seasonal default or validated saved theme; invalid palettes use the original default."""
+        if self.uses_christmas_default:
+            return "christmas"
         theme = self.banner_gradient
         if theme not in dict(self.BANNER_GRADIENT_CHOICES):
             return self.DEFAULT_THEME

@@ -96,16 +96,40 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 
 ## Release changelog
 
-Each release publishes its own entry under **Management → Changelogs**, with no manual step.
+Each release creates its own entry under **Management → Changelogs**. Non-visual releases publish automatically; a release with incomplete UI/UX screenshots stays in draft until an admin completes and publishes its evidence.
 
 - **Manifest.** In the `release-image` job, the step "Generate release changelog manifest" runs `python -m hub.release_changelog` after the tag is allocated and before the image is built. It writes the git-ignored `hub/release_changelog_manifest.json`, which `COPY . .` bakes into the image (`.dockerignore` has no rule for it). The step is `continue-on-error`: a failure only warns, and the image is built without a manifest. The checkout uses `fetch-depth: 0` so the full history is available.
 - **Range.** The generator lists `git log --no-merges BASELINE..revision`, capped at 500 commits. `BASELINE` is the v55.1 release (`a0f37126304c245797c346abf2df664e25fa5310`) and the range is cumulative on purpose: commits already logged are dropped when the entry is created. If the baseline is missing or not an ancestor of the release commit, the generator prints `error: ...`, exits 1, and writes nothing. Merge commits are ignored.
 - **Classification.** A subject such as `Prefix - text`, `prefix: text`, or `prefix(scope): text` is classified by its prefix, which is then stripped. `Feature`/`Features`/`Feat` → New; `Fix`/`Bugfix`/`Hotfix` → Fixed; `Docs`/`Doc`, `Test`/`Tests`, `Chore`, `CI`, `Build`, `Refactor`, `Style` → Maintenance; `Enhancement`/`Improvement`/`Perf` → Improved. Without a prefix, a subject starting "Fix ", "Fixes " or "Fixed " is Fixed, one starting "Bump " is Maintenance, and anything else is Improved and kept as written. Titles are capped at 200 characters.
 - **Skipping.** A commit whose subject or body contains `[skip changelog]` (any case) is left out, as is the subject "Initial plan" and a commit with an empty subject. Put the tag in the commit message of changes that users should not see.
-- **Sync at start.** When the container starts, `entrypoint.sh` runs `python manage.py sync_release_changelog` if the manifest file exists. The sync is limited to 60 seconds, and a failure or timeout prints `Release changelog sync failed; continuing startup` and the app still starts. It is independent of `RUN_MIGRATIONS`: production keeps `RUN_MIGRATIONS=false` and still syncs. Set `RUN_CHANGELOG_SYNC=false` to turn it off (`true` is the default; any other value stops startup). The entry therefore appears when the new container starts, not when the image is built.
-- **One entry per release.** The command creates one published entry per release revision and skips commits already stored on any automatic entry (published or not), so repeated starts print `Nothing new to log`. A corrupt manifest exits non-zero with `Invalid release manifest: ...`. The entry date is the manifest's generation time in Asia/Manila.
-- **Editing.** Admins can edit an automatic entry's title and text. To remove one, unpublish it rather than deleting it, so it is not recreated from the same commits. A release that is rolled back after its new container started keeps its published entry; edit or unpublish it under **Management → Changelogs**.
+- **Sync at start.** When the container starts, `entrypoint.sh` runs `python manage.py sync_release_changelog` when a release manifest or the packaged changelog-assets directory exists. Packaged evidence enriches matching existing releases even when there is no current manifest. The sync is limited to 60 seconds, and a failure or timeout prints `Release changelog sync failed; continuing startup` and the app still starts. It is independent of `RUN_MIGRATIONS`: production keeps `RUN_MIGRATIONS=false` and still syncs. Set `RUN_CHANGELOG_SYNC=false` to turn it off (`true` is the default; any other value stops startup). The entry therefore appears when the new container starts, not when the image is built.
+- **One entry per release.** The command creates one entry per release revision and skips commits already stored on any automatic entry (published or not), so repeated starts print `Nothing new to log`. New UI/UX changes without complete screenshot pairs are stored as drafts. A corrupt manifest or missing/invalid declared image exits non-zero with `Invalid release manifest: ...`; changelog/media writes roll back and startup still continues. The entry date is the manifest's generation time in Asia/Manila.
+- **Visual evidence.** Changes to `templates/` or `static/` set `requires_comparison: true`. Each affected commit requires at least one labeled pair containing `title`, `before_text`, `after_text`, `before_image` and `after_image`; up to 20 pairs per commit can document different screens and viewports. Images are PNG, JPEG or WebP, at most 5 MB each. Sync imports packaged image bytes into database-backed media with content-based names, so restarts do not duplicate files. New comparisons coexist with legacy release-wide before/after fields.
+- **Editing.** Admins can edit an automatic entry's title, summary and comparisons, upload missing screenshots, and add another screenshot pair. Publishing is rejected while a required pair is incomplete. To remove an entry, unpublish it rather than deleting it, so its commits are not relogged. Packaged evidence only fills missing comparison content, preserving existing comparison descriptions and publication choices; a later release can enrich an earlier draft but does not publish that draft automatically. A release that is rolled back after its container started keeps its entry; edit or unpublish it under **Management → Changelogs**.
 - **First release.** The first release after this feature is merged lists everything since v55.1. It also ships migration 0056 (adds `release_sha` and `changes` to changelog entries), so it runs the full migration window.
+
+### Preparing screenshot evidence
+
+Capture the actual previous and updated UI using the same synthetic fixture and viewport. Do not relabel an after-only screenshot as "before", use live personal/request data, or claim that a static screenshot proves provider calls, email delivery or animations. Include meaningful before/after descriptions for non-visual changes as well; do not invent UI screenshots for backend-only fixes.
+
+After the UI commit exists, add a follow-up evidence commit before release. Put its assets and a curated `manifest.json` in `hub/changelog_assets/<capture-set>/`. The file uses the normal manifest structure (`version`, full `revision`, timezone-aware `generated_at`, and `commits`). For pre-release evidence, `version` may be `next` and `revision` the captured after revision; the generator matches **commit SHA**, not the capture-set version. To repair a known shipped release, use its exact version and release revision. This repair includes a curated `v56.4` manifest; older release entries are not recreated.
+
+Each annotated commit retains its `sha`, `type` and `title`, and can add `before_text`, `after_text`, `requires_comparison` and `comparisons`. A screenshot pair looks like this (replace the example revision values with the actual full SHAs):
+
+```json
+{
+  "title": "Request update composer",
+  "before_text": "Updates used a plain text field.",
+  "after_text": "The composer suggests eligible stakeholders to mention.",
+  "before_image": "next/composer-before.webp",
+  "after_image": "next/composer-after.webp",
+  "before_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "after_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "capture_note": "Historical UI capture with synthetic data; no external messages were sent."
+}
+```
+
+Paths are relative to `hub/changelog_assets/`; absolute paths, traversal and unsupported formats are rejected. Capture revisions and notes are shown alongside the comparisons instead of implying that every pre-change snapshot came from the preceding numbered release. Replacing screenshot files in the editor clears their old capture provenance. Run `python manage.py sync_release_changelog` to import packaged evidence locally. Screenshots inherit the release's visibility: signed-in readers can view only published, non-future releases, admins can preview drafts, and responses use `no-store`.
 
 ## Release speed and timing
 

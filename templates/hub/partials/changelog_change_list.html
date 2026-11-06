@@ -1,0 +1,13 @@
+<ul>
+    {% for item in items %}
+    <li>
+        {{ item.title }}
+        {% if item.before_text or item.after_text %}
+        <dl class="cl-change-description">
+            {% if item.before_text %}<div><dt>Before</dt><dd>{{ item.before_text|linebreaksbr }}</dd></div>{% endif %}
+            {% if item.after_text %}<div><dt>After</dt><dd>{{ item.after_text|linebreaksbr }}</dd></div>{% endif %}
+        </dl>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>

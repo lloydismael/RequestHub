@@ -8,7 +8,9 @@
 <script>
     (function () {
         try {
-            if (localStorage.getItem('reqHubLoginTheme') === 'christmas') {
+            var expiresAt = localStorage.getItem('reqHubLoginThemeExpiresAt');
+            if (localStorage.getItem('reqHubLoginTheme') === 'christmas' &&
+                (!expiresAt || Date.now() < Date.parse(expiresAt))) {
                 document.documentElement.classList.add('login-christmas');
             }
         } catch (_) {}
