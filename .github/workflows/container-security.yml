@@ -162,7 +162,6 @@ jobs:
         run: >-
           python manage.py test
           --settings=request_hub.settings_ci
-          --parallel auto
           --durations 10
           --noinput
           --verbosity 2
