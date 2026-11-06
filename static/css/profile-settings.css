@@ -44,3 +44,58 @@ body.dark-mode .settings-danger-zone__badge { color: #fca5a5; }
     .settings-actions__buttons .btn { flex: 1; }
 }
 body.view-mobile .settings-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* -- Avatar crop step -- */
+.avatar-crop { margin-bottom: 1rem; }
+.avatar-crop__stage {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto 0.75rem;
+    overflow: hidden;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.85);
+    border: 2px solid var(--account-glow, rgba(255, 255, 255, 0.18));
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.3);
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+}
+.avatar-crop__stage:active { cursor: grabbing; }
+.avatar-crop__image {
+    position: absolute;
+    max-width: none;
+    transform-origin: top left;
+    -webkit-user-drag: none;
+}
+.avatar-crop__overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+.avatar-crop__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    max-width: 320px;
+    margin: 0 auto 0.75rem;
+}
+.avatar-crop__zoom-label {
+    font-size: 0.8rem;
+    color: var(--account-soft, #94a3b8);
+    flex-shrink: 0;
+}
+.avatar-crop__zoom { flex: 1; accent-color: #2f6cf3; }
+.avatar-crop__controls + .d-flex { max-width: 320px; margin: 0 auto; }
+body:not(.dark-mode) .avatar-crop__zoom-label { color: #64748b; }
+body.view-mobile .avatar-crop__stage { max-width: 240px; }
+body.view-mobile .avatar-crop__controls { max-width: 240px; }
+@media (max-width: 600px) {
+    .avatar-crop__stage { max-width: 240px; }
+    .avatar-crop__controls { max-width: 240px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+    .avatar-crop__stage { transition: border-color 0.2s ease; }
+    .avatar-crop__stage:hover { border-color: var(--account-accent, #2f6cf3); }
+}

@@ -7,7 +7,7 @@
 <div class="row justify-content-center">
     <div class="col-xl-9">
 
-        {# â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+        {# ── Header ──────────────────────────────────────────────────────── #}
         <div class="glass-card p-4 mb-4">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
                 <div>
@@ -69,7 +69,7 @@
             {% endif %}
         </div>
 
-        {# â”€â”€ Stage 1 Progress Indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+        {# ── Stage 1 Progress Indicator ──────────────────────────────────── #}
         <div class="glass-card p-3 mb-4">
             <div class="d-flex align-items-center flex-wrap gap-2">
                 <span class="small fw-semibold text-muted me-2">SQR Progress:</span>
@@ -109,7 +109,7 @@
             </div>
         </div>
 
-        {# â”€â”€ SECTION 1: Internal Review â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+        {# ── SECTION 1: Internal Review ───────────────────────────────────── #}
         <div class="glass-card p-4 mb-4">
             <h2 class="h6 mb-3 fw-bold">
                 <i class="bi bi-clipboard-check me-2 text-primary"></i>Step 1 &mdash; Internal Review
@@ -142,7 +142,7 @@
             </div>
         </div>
 
-        {# â”€â”€ SECTION 2: Proposal Details & Deal Status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+        {# ── SECTION 2: Proposal Details & Deal Status ───────────────────── #}
         {% if show_proposal_section %}
         <div class="glass-card p-4 mb-4">
             <h2 class="h6 mb-1 fw-bold">
@@ -299,7 +299,7 @@
         </div>
         {% endif %}
 
-        {# â”€â”€ SECTION 3: Service Delivery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ #}
+        {# ── SECTION 3: Service Delivery ──────────────────────────────────── #}
         {% if show_delivery_section %}
         <div class="glass-card p-4 mb-4">
             <h2 class="h6 mb-1 fw-bold">
@@ -465,7 +465,7 @@
         </div>
         {% endif %}
 
-        {# ── SECTION 4: Revenue Stage ─────────────────────────────────────────── #}
+        {# -- SECTION 4: Revenue Stage ------------------------------------------- #}
         {% if show_revenue_section %}
         <div class="glass-card p-4 mb-4{% if not revenue_unlocked %} opacity-50{% endif %}">
             <h2 class="h6 mb-1 fw-bold">
@@ -593,7 +593,7 @@
         updateCommentsLabel();
         updateTeamsBtn();
 
-        // Intercept Teams form submit → open URL in new tab without leaving the page
+        // Intercept Teams form submit ? open URL in new tab without leaving the page
         if (teamsBtnForm) {
             teamsBtnForm.addEventListener("submit", function (e) {
                 e.preventDefault();
@@ -616,7 +616,7 @@
         }
     })();
 
-    // ── Step 2: Managed Support auto-fill & Total Price auto-calc ──────────
+    // -- Step 2: Managed Support auto-fill & Total Price auto-calc ----------
     (function () {
         const GROUP = "{{ object.customer_company|escapejs }}";
         const SCOPE = "{{ object.project_details|escapejs }}";
@@ -724,7 +724,7 @@
         if (pmAmt)   pmAmt.addEventListener("input", recalcTotal);
         managed.addEventListener("input", recalcTotal);
 
-        // Discount preset select ↔ custom input ↔ hidden field sync
+        // Discount preset select ? custom input ? hidden field sync
         (function initDiscountWidget() {
             if (!discountPreset) return;
             var savedVal = parseInt(discountSel ? discountSel.value : 0, 10) || 0;
@@ -759,7 +759,7 @@
             }
         })();
 
-        // PM manhours preset select ↔ number input sync
+        // PM manhours preset select ? number input sync
         const pmPreset = document.getElementById("pm-manhrs-preset");
         if (pmPreset && pmMhrs) {
             // Sync select to current value on load
@@ -767,14 +767,14 @@
             if (["8", "16", "24", "32", "48"].indexOf(curVal) !== -1) {
                 pmPreset.value = curVal;
             }
-            // Preset → fill input
+            // Preset ? fill input
             pmPreset.addEventListener("change", function () {
                 if (this.value) {
                     pmMhrs.value = this.value;
                     calcPmAmount();
                 }
             });
-            // Manual typing → reset select to Custom
+            // Manual typing ? reset select to Custom
             pmMhrs.addEventListener("input", function () {
                 var typed = String(parseInt(this.value, 10));
                 pmPreset.value = (["8", "16", "24", "32", "48"].indexOf(typed) !== -1) ? typed : "";

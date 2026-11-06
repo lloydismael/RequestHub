@@ -263,3 +263,37 @@ class PackagedV564EvidenceTests(SimpleTestCase):
                         with Image.open(path) as image:
                             self.assertIn(image.format, {"PNG", "JPEG", "WEBP"})
                             image.verify()
+
+
+class PackagedV565EvidenceTests(SimpleTestCase):
+    def test_release_has_complete_packaged_evidence_for_publication(self):
+        from hub.release_changelog import ASSET_DIR, curated_manifests, missing_comparisons
+
+        matches = [data for data in curated_manifests() if data["version"] == "v56.5"]
+        self.assertEqual(len(matches), 1)
+        data = matches[0]
+        self.assertEqual(data["revision"], "09771520305297d6ef05533d25795f6dbe5c15e7")
+        self.assertEqual({item["sha"] for item in data["commits"]}, {
+            "4065e1370b494e98ab0718a4e8010dceb9195baa",
+            "78f0544039d269191e3a90abe201dd4b0c601d2f",
+            "7f1ba896bcb4634c77fa80a456e54cd0001fcb7e",
+        })
+        self.assertEqual(missing_comparisons(data["commits"]), [])
+        visual = next(item for item in data["commits"] if item["sha"] == "7f1ba896bcb4634c77fa80a456e54cd0001fcb7e")
+        self.assertTrue(visual.get("requires_comparison"))
+        self.assertTrue(visual.get("comparisons"))
+        for item in data["commits"]:
+            self.assertTrue(item.get("before_text"))
+            self.assertTrue(item.get("after_text"))
+            for pair in item.get("comparisons", []):
+                self.assertEqual(pair.get("before_revision"), "f16b9f99be03490b9c99553070862897c9086393")
+                self.assertEqual(pair.get("after_revision"), data["revision"])
+                self.assertTrue(pair.get("capture_note"))
+                paths = [ASSET_DIR.joinpath(*pair[field].split("/")) for field in ("before_image", "after_image")]
+                self.assertNotEqual(paths[0].read_bytes(), paths[1].read_bytes())
+                for path in paths:
+                    with self.subTest(image=path.name):
+                        self.assertLessEqual(path.stat().st_size, 5 * 1024 * 1024)
+                        with Image.open(path) as image:
+                            self.assertIn(image.format, {"PNG", "JPEG", "WEBP"})
+                            image.verify()

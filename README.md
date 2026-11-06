@@ -122,6 +122,14 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 - Microsoft Graph user sync via `fetch_phildata_users` management command
 - The Management Changelogs tab loads only its editor and paginated history, avoiding unrelated user/account editors and sign-in-log queries. Links back to the other tabs load their normal Management views.
 
+### Release changelogs and visual evidence
+
+- **Notifications → Changelogs** shows before/after descriptions and multiple labeled screenshot pairs per UI/UX change. Comparisons include historical revision/capture notes, open full-size images, and stack on mobile. Existing release-wide comparisons remain supported.
+- Changes to `templates/` or `static/` require visual evidence. Automatic releases with incomplete screenshot pairs stay in draft until an admin completes and publishes them in **Management → Changelogs**. Non-visual releases still publish automatically.
+- Package evidence in `hub/changelog_assets/<capture-set>/manifest.json`, with paths relative to `hub/changelog_assets/`. Sync stores the PNG/JPEG/WebP images (up to 5 MB each) in database-backed media, preserving them across deployments. Use genuine historical before/after captures with synthetic data, never after-only images relabeled as before.
+- Packaged evidence fills missing fields in existing and partially prepared comparisons without replacing admin text, images, or publication choices. Replays do not duplicate releases or files. Draft/future screenshots remain admin-only, and screenshot responses disable caching.
+- See [Release changelog workflow](docs/cd-workflow-testing.md#release-changelog) for the metadata format and publishing steps.
+
 ---
 
 ## Workflow
