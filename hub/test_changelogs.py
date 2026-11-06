@@ -340,7 +340,7 @@ class ChangelogTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "image/png")
         self.assertEqual(response["X-Content-Type-Options"], "nosniff")
-        self.assertEqual(response.content, stored.data)
+        self.assertEqual(response.content, bytes(stored.data))
 
     def test_svg_disguised_as_a_png_screenshot_is_rejected(self):
         from .changelog_forms import ScreenshotField
