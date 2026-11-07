@@ -25,6 +25,18 @@ These are genuine local before/after captures at the same 1440 × 1000 viewport.
 
 The notes and visual evidence are retained here for the next release. The login rendering/capture checks pass, and Notifications → Changelogs tests confirm published comparisons are visible while drafts stay hidden. An additional, pre-existing repository-report regression (`CaptureTests.test_mixed_changes_get_reports_even_without_a_comprehensive_recipe`) still fails with `Configured scenes show no observable change; choose relevant evidence.` The same failure was reproduced using the unchanged baseline capture implementation; it is outside this login fix. A numbered release needs exact parent/change screenshot evidence before publication. These working-tree screenshots are not mislabeled as exact committed-release evidence, and no live changelog or account data is changed by this local fix.
 
+## Unreleased maintenance: merge current master
+
+- Integrates the current `master` fixes without replacing the Christmas login
+  enhancements or packaged v57.6 evidence.
+- Before: the branches disagreed on how the Christmas browser tests extracted
+  inline scripts. After: the tests use master's HTML parser, retain all matching
+  scripts from each page, and explicitly assert that the theme script is present.
+  The parser's closing-tag whitespace regression test remains intact.
+- This maintenance note is not a published Notifications entry. Historical
+  before/after capture and Notifications visibility remain to be verified in
+  the release evidence workflow.
+
 ## Unreleased: Christmas themes and update mentions
 
 **Baseline:** `c314cf7` (`test: Align assistant permissions with dev routes`).
