@@ -1,6 +1,9 @@
+import json
+import re
 import shutil
 import subprocess
 from datetime import date
+from html import unescape
 from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
@@ -18,6 +21,81 @@ FORGET = "localStorage.removeItem('reqHubLoginTheme');"
 
 
 class ChristmasLoginThemeTests(TestCase):
+    def test_login_tab_title_has_a_clean_separator(self):
+        response = self.client.get(reverse("login"))
+        title = re.search(r"<title>(.*?)</title>", response.content.decode()).group(1)
+
+        self.assertEqual(unescape(title), "Login \N{MIDDLE DOT} Request Hub")
+
+    def test_first_visit_uses_christmas_only_during_the_2026_default_window(self):
+        cases = (
+            (date(2026, 11, 5), False),
+            (date(2026, 11, 6), True),
+            (date(2026, 11, 7), True),
+            (date(2026, 12, 31), True),
+            (date(2027, 1, 1), False),
+            (date(2027, 11, 6), False),
+        )
+        for today, expected in cases:
+            with self.subTest(today=today), patch("accounts.models.timezone.localdate", return_value=today):
+                response = self.client.get(reverse("login"))
+                root = re.search(r"<html\b[^>]*>", response.content.decode()).group(0)
+                self.assertEqual("login-christmas" in root, expected)
+
+    @skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
+    def test_login_default_and_remembered_choices_handle_storage_and_expiry(self):
+        pages = {}
+        for seasonal, today in ((True, date(2026, 12, 31)), (False, date(2027, 1, 1))):
+            with patch("accounts.models.timezone.localdate", return_value=today):
+                html = self.client.get(reverse("login")).content.decode()
+            root = re.search(r"<html\b[^>]*>", html).group(0)
+            scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+            pages[seasonal] = {
+                "initial": "login-christmas" in root,
+                "script": "\n".join(script for script in scripts if "reqHubLoginTheme" in script),
+            }
+        expired = {"reqHubLoginTheme": "christmas", "reqHubLoginThemeExpiresAt": "2027-01-01T00:00:00+08:00"}
+        cases = (
+            ("seasonal-first-visit", True, {}, False, True),
+            ("seasonal-other-choice", True, {"reqHubLoginTheme": "blue", "reqHubTheme": "dark"}, False, True),
+            ("seasonal-expired-flag", True, expired, False, True),
+            ("seasonal-blocked-storage", True, {}, True, True),
+            ("after-first-visit", False, {}, False, False),
+            ("after-expired-default", False, expired, False, False),
+            ("after-explicit-christmas", False, {"reqHubLoginTheme": "christmas"}, False, True),
+            ("after-other-choice", False, {"reqHubLoginTheme": "blue"}, False, False),
+            ("after-blocked-storage", False, {}, True, False),
+            ("after-invalid-expiry", False, {**expired, "reqHubLoginThemeExpiresAt": "invalid"}, False, False),
+        )
+        payload = [
+            {"name": name, **pages[seasonal], "storage": storage, "blocked": blocked}
+            for name, seasonal, storage, blocked, _ in cases
+        ]
+        result = subprocess.run(
+            [shutil.which("node"), "-e", """
+                const vm = require('node:vm');
+                const cases = JSON.parse(require('node:fs').readFileSync(0, 'utf8'));
+                const results = Object.fromEntries(cases.map(item => {
+                    const classes = new Set(item.initial ? ['login-christmas'] : []);
+                    vm.runInNewContext(item.script, {
+                        document: { documentElement: { classList: { add: name => classes.add(name) } } },
+                        localStorage: { getItem: key => {
+                            if (item.blocked) throw new Error('Storage unavailable');
+                            return item.storage[key] ?? null;
+                        } },
+                        Date: class extends Date {
+                            static now() { return Date.parse('2027-01-01T00:00:00+08:00'); }
+                        },
+                    });
+                    return [item.name, classes.has('login-christmas')];
+                }));
+                process.stdout.write(JSON.stringify(results));
+            """],
+            input=json.dumps(payload), capture_output=True, encoding="utf-8", timeout=30, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout), {name: expected for name, _, _, _, expected in cases})
+
     def signed_in_page(self, username, **fields):
         user = User.objects.create_user(
             username=username, role=User.Roles.ADMIN, must_change_password=False, **fields,

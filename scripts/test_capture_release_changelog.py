@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -366,6 +367,13 @@ class CaptureTests(unittest.TestCase):
 
 
 class HistoricalSceneTests(unittest.TestCase):
+    def test_login_scene_uses_the_seasonal_default_without_browser_storage(self):
+        document = _render(ROOT, {"kind": "ui", "fixture": "login"})
+        root = re.search(r"<html\b[^>]*>", document).group(0)
+
+        self.assertIn('class="login-christmas"', root)
+        self.assertIn("<title>Login &middot; Request Hub</title>", document)
+
     @unittest.skipUnless(os.environ.get("CHANGELOG_CAPTURE_VENDOR_DIR"), "Prepare offline vendor assets to exercise UI scenes.")
     def test_historical_ui_fixtures_render_without_application_database(self):
         from playwright.sync_api import sync_playwright

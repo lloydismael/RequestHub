@@ -6,8 +6,10 @@ import json
 import re
 import socket
 import sys
+from datetime import datetime, timezone
 from html import escape
 from pathlib import Path
+from unittest.mock import patch
 
 
 def _document(snapshot, scene):
@@ -78,6 +80,7 @@ def _ui(snapshot, fixture):
         TEMPLATES=[{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [str(snapshot / "templates")],
                     "APP_DIRS": True, "OPTIONS": {"context_processors": []}}],
         STATIC_URL="/static/", MEDIA_URL="/media/", USE_TZ=True, TIME_ZONE="Asia/Manila",
+        CHRISTMAS_LOGIN_THEME_ENABLED=True,
         STORAGES={"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
                   "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}},
     )
@@ -87,14 +90,15 @@ def _ui(snapshot, fixture):
     from django.template import engines
     from django.template.loader import render_to_string
     from django.test import RequestFactory
-    request = RequestFactory().get("/")
+    request = RequestFactory().get("/", HTTP_HOST="changelog.capture.invalid")
     request.user = AnonymousUser()
     request.META["CSRF_COOKIE"] = "0" * 32
     context = {"request": request, "assistant_widget": {"native_enabled": False}}
     if fixture == "login":
-        from accounts.forms import RoleAuthenticationForm
-        context.update(form=RoleAuthenticationForm(request), christmas_login_enabled=True)
-        return render_to_string("accounts/login.html", context, request=request)
+        from accounts.views import RoleLoginView
+        # Compare the real anonymous view on a fixed day within the 2026 seasonal window.
+        with patch("django.utils.timezone.now", return_value=datetime(2026, 12, 31, 4, tzinfo=timezone.utc)):
+            return RoleLoginView.as_view()(request).render().content.decode("utf-8")
     from hub.models import Changelog
     entry = Changelog(
         title="Synthetic release fixture", previous_version="v0", new_version="v1",

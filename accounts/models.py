@@ -226,12 +226,14 @@ class User(AbstractUser):
     def custom_theme_colors(self):
         return (self.custom_theme_primary, self.custom_theme_secondary, self.custom_theme_tertiary)
 
+    @classmethod
+    def christmas_default_active(cls):
+        today = timezone.localdate(timezone=timezone.get_default_timezone())
+        return cls.CHRISTMAS_DEFAULT_START <= today <= cls.CHRISTMAS_DEFAULT_END
+
     @property
     def uses_christmas_default(self):
-        if self.christmas_default_overridden:
-            return False
-        today = timezone.localdate(timezone=timezone.get_default_timezone())
-        return self.CHRISTMAS_DEFAULT_START <= today <= self.CHRISTMAS_DEFAULT_END
+        return not self.christmas_default_overridden and self.christmas_default_active()
 
     @property
     def christmas_default_expires_at(self):
