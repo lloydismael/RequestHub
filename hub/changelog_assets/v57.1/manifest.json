@@ -1,0 +1,29 @@
+{
+  "version": "v57.1",
+  "revision": "c362e18138374ce071e0f703a2979c541f0b40aa",
+  "generated_at": "2026-11-06T06:35:36.647445+00:00",
+  "commits": [
+    {
+      "sha": "bb2341fdf36cfe9518ad430765d6a6755d3e1f66",
+      "type": "improved",
+      "title": "Enhance responsive design for login and profile management; update CSS for better mobile experience and adjust versioning for stylesheets",
+      "parent_sha": "ecc284e1dd19e208e4e843c0ba4a6fc009dd5204",
+      "requires_comparison": true,
+      "before_text": "Login and profile styles used the previous viewport sizing, spacing and stylesheet versions.",
+      "after_text": "Login and profile layouts gain device-safe viewport sizing, improved mobile spacing and scrolling, and updated stylesheet cache versions.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Responsive login and profile layout",
+          "before_text": "Login and profile styles used the previous viewport sizing, spacing and stylesheet versions. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Login and profile layouts gain device-safe viewport sizing, improved mobile spacing and scrolling, and updated stylesheet cache versions. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.1/01-before.png",
+          "after_image": "v57.1/01-after.png",
+          "before_revision": "ecc284e1dd19e208e4e843c0ba4a6fc009dd5204",
+          "after_revision": "bb2341fdf36cfe9518ad430765d6a6755d3e1f66",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

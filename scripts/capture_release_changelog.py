@@ -181,13 +181,30 @@ def _select_recipe(repo, item, recipes):
     if exact:
         matches = exact
     else:
-        changed = _git(repo, "diff-tree", "--no-commit-id", "--name-only", "-r", item["sha"]).decode("utf-8").splitlines()
+        changed = [name for name in _git(
+            repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", item["sha"],
+        ).decode("utf-8").split("\0") if name]
         matches = [
             recipe for recipe in recipes if not recipe.get("commit") and changed
             and all(any(fnmatchcase(name, pattern) for pattern in recipe["paths"]) for name in changed)
         ]
     if not matches:
-        raise CaptureError("No capture recipe covers this change.")
+        public_paths = []
+        for name in changed:
+            try:
+                safe_relative(name)
+            except CaptureError:
+                continue
+            public_paths.append(name)
+        return {
+            "id": "repository-change",
+            "scenes": [{
+                "kind": "report", "fixture": "repository_change", "title": "Repository change report",
+                "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+                "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+                "paths": public_paths, "omitted_files": len(changed) - len(public_paths),
+            }],
+        }
     if len(matches) != 1:
         raise CaptureError("Ambiguous capture recipes; declare one exact change recipe.")
     return matches[0]
@@ -201,7 +218,7 @@ def _render(snapshot, scene):
     environment.update(PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1")
     result = subprocess.run(
         [sys.executable, str(Path(__file__).with_name("changelog_capture_scenes.py")), "--snapshot", str(snapshot)],
-        input=json.dumps({key: scene[key] for key in ("kind", "fixture", "path", "heading") if key in scene}),
+        input=json.dumps({key: scene[key] for key in ("kind", "fixture", "path", "heading", "paths", "omitted_files", "revision") if key in scene}),
         capture_output=True, text=True, encoding="utf-8", cwd=snapshot, env=environment, timeout=30,
     )
     if result.returncode:
@@ -299,17 +316,21 @@ def _capture_change(browser, repo, item, recipe, assets, vendor_dir):
             _snapshot(repo, item["sha"], after)
             for index, scene in enumerate(recipe["scenes"]):
                 names = (f"before-{index}.png", f"after-{index}.png")
-                for snapshot, name in zip((before, after), names):
+                for snapshot, name, revision in zip((before, after), names, (parents[1], item["sha"])):
                     output = directory / name
                     outputs.append(output)
-                    _screenshot(browser, snapshot, scene, output, vendor_dir)
+                    _screenshot(browser, snapshot, {**scene, "revision": revision}, output, vendor_dir)
                     _asset(assets, f"{relative}/{name}")
                 observable |= (directory / names[0]).read_bytes() != (directory / names[1]).read_bytes()
                 pairs.append({
                     "title": scene["title"], "before_text": scene["before_text"], "after_text": scene["after_text"],
                     "before_image": f"{relative}/{names[0]}", "after_image": f"{relative}/{names[1]}",
                     "before_revision": parents[1], "after_revision": item["sha"],
-                    "capture_note": f"Automatic {scene['kind']} capture, recipe {recipe['id']}. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled.",
+                    "capture_note": (
+                        f"Automatic {scene['kind']} capture, recipe {recipe['id']}. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled."
+                        + (" Repository change report; not a UI screenshot. No source code or live data is displayed."
+                           if scene.get("fixture") == "repository_change" else "")
+                    ),
                 })
         if not observable:
             raise CaptureError("Configured scenes show no observable change; choose relevant evidence.")

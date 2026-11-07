@@ -1,0 +1,50 @@
+{
+  "version": "v57.4",
+  "revision": "d42db5cec3d934d45c4eddaddbc62615a8243a41",
+  "generated_at": "2026-11-06T14:42:26.327422+00:00",
+  "commits": [
+    {
+      "sha": "a85e4429da77eafbaad9eee95969a319b0a67713",
+      "type": "improved",
+      "title": "Add Christmas-themed login enhancements and tests",
+      "parent_sha": "0825e1f98ea94338587180a475311281ab11943b",
+      "requires_comparison": true,
+      "before_text": "Christmas login effects and light/dark transitions used the earlier effect-state and animation handling.",
+      "after_text": "Refines Christmas login styling, festive interactions and light/dark transitions across the login and shared theme scripts. Adds regression coverage for login effects, theme behavior and liquid-glass interactions.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Christmas login effects and theme transitions",
+          "before_text": "Christmas login effects and light/dark transitions used the earlier effect-state and animation handling. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Refines Christmas login styling, festive interactions and light/dark transitions across the login and shared theme scripts. Adds regression coverage for login effects, theme behavior and liquid-glass interactions. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.4/01-before.png",
+          "after_image": "v57.4/01-after.png",
+          "before_revision": "0825e1f98ea94338587180a475311281ab11943b",
+          "after_revision": "a85e4429da77eafbaad9eee95969a319b0a67713",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    },
+    {
+      "sha": "0825e1f98ea94338587180a475311281ab11943b",
+      "type": "new",
+      "title": "Enhance profile card layout and avatar upload functionality",
+      "parent_sha": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
+      "requires_comparison": true,
+      "before_text": "The profile avatar card and upload controls used the previous layout and markup.",
+      "after_text": "Reorganizes the profile avatar card, upload controls and supporting styles for clearer responsive profile editing.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Profile avatar card and upload layout",
+          "before_text": "The profile avatar card and upload controls used the previous layout and markup. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Reorganizes the profile avatar card, upload controls and supporting styles for clearer responsive profile editing. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.4/02-before.png",
+          "after_image": "v57.4/02-after.png",
+          "before_revision": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
+          "after_revision": "0825e1f98ea94338587180a475311281ab11943b",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

@@ -218,22 +218,30 @@ class ChristmasDefaultAccountTests(TestCase):
         for response in (account_page, login_page):
             parser = InlineScriptParser()
             parser.feed(response.content.decode())
-            scripts.append(next(
+            matching_scripts = [
                 script for _, script in parser.scripts
                 if "reqHubLoginTheme" in script
-            ))
+            ]
+            self.assertTrue(matching_scripts, "the login Christmas theme script is missing")
+            scripts.extend(matching_scripts)
         program = """
             const vm = require('vm');
             const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             const values = new Map(Object.entries(input.storage));
             const classes = new Set();
+            const toggled = new Set();
             const context = {
                 localStorage: {
                     getItem: key => values.get(key) ?? null,
-                    setItem: (key, value) => values.set(key, value),
+                    setItem: (key, value) => values.set(key, String(value)),
                     removeItem: key => values.delete(key),
                 },
-                document: { documentElement: { classList: { add: value => classes.add(value) } } },
+                document: { documentElement: {
+                    classList: {
+                        add: value => classes.add(value),
+                        toggle: (value, on) => (on ? classes : toggled).add(value),
+                    },
+                } },
                 Date: { now: () => Date.parse(input.moment), parse: Date.parse },
             };
             input.scripts.forEach(script => vm.runInNewContext(script, context));

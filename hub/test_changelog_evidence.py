@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -352,6 +353,56 @@ class PackagedV566ToV568EvidenceTests(TestCase):
         self.assertFalse(entry.is_published)
         self.assertEqual(entry.missing_comparisons, [])
         self.assertGreaterEqual(len(entry.change_comparisons), 3)
+
+
+class PackagedV571ToV576EvidenceTests(SimpleTestCase):
+    def test_packaged_images_are_not_lost_in_the_ignored_capture_cache(self):
+        from hub.release_changelog import ASSET_DIR, curated_manifests
+
+        paths = [
+            str(ASSET_DIR.joinpath(*pair[field].split("/")))
+            for data in curated_manifests() if data["version"] in {f"v57.{patch}" for patch in range(1, 7)}
+            for item in data["commits"] for pair in item["comparisons"]
+            for field in ("before_image", "after_image")
+        ]
+        self.assertEqual(len(paths), 16)
+        result = subprocess.run(
+            ["git", "-C", str(ASSET_DIR.parent.parent), "check-ignore", "--no-index", "--", *paths],
+            capture_output=True, text=True, encoding="utf-8",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+
+    def test_hidden_releases_have_complete_exact_revision_evidence(self):
+        from hub.release_changelog import ASSET_DIR, curated_manifests, missing_comparisons
+
+        expected = {
+            "v57.1": {"bb2341fdf36cfe9518ad430765d6a6755d3e1f66"},
+            "v57.2": {"15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109"},
+            "v57.3": {"59c4ad9545daaeb3e6435f4fdcdfdb811bb46119", "d7289df6662e4f5cf3c36833c557fa5fba9032aa"},
+            "v57.4": {"0825e1f98ea94338587180a475311281ab11943b", "a85e4429da77eafbaad9eee95969a319b0a67713"},
+            "v57.5": {"c7cd3e17c1e93401d199a05d839586d9fcc536bb"},
+            "v57.6": {"cf93e4f66cce42c01fd6a3cf7e59fe2317991090"},
+        }
+        releases = {data["version"]: data for data in curated_manifests() if data["version"] in expected}
+        self.assertEqual(set(releases), set(expected))
+        for version, shas in expected.items():
+            with self.subTest(version=version):
+                data = releases[version]
+                self.assertEqual({item["sha"] for item in data["commits"]}, shas)
+                self.assertEqual(missing_comparisons(data["commits"], require_all=True), [])
+                for item in data["commits"]:
+                    self.assertTrue(item.get("before_text"))
+                    self.assertTrue(item.get("after_text"))
+                    for pair in item["comparisons"]:
+                        self.assertEqual(pair["before_revision"], item["parent_sha"])
+                        self.assertEqual(pair["after_revision"], item["sha"])
+                        self.assertTrue(pair.get("capture_note"))
+                        paths = [ASSET_DIR.joinpath(*pair[field].split("/")) for field in ("before_image", "after_image")]
+                        self.assertNotEqual(paths[0].read_bytes(), paths[1].read_bytes())
+                        for path in paths:
+                            self.assertLessEqual(path.stat().st_size, 5 * 1024 * 1024)
+                            with Image.open(path) as image:
+                                image.verify()
 
 
 class PackagedV565EvidenceTests(SimpleTestCase):
