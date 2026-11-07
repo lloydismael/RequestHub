@@ -187,7 +187,7 @@ class ChristmasDefaultAccountTests(TestCase):
         scripts = [
             script
             for response in (account_page, login_page)
-            for script in re.findall(r"<script[^>]*>(.*?)</script>", response.content.decode(), re.S | re.IGNORECASE)
+            for script in re.findall(r"<script\b[^>]*>(.*?)</script\b[^>]*>", response.content.decode(), re.S | re.IGNORECASE)
             if "reqHubLoginTheme" in script
         ]
         self.assertTrue(scripts, "the login Christmas theme script is missing")
