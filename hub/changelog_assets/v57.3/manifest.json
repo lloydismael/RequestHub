@@ -1,0 +1,50 @@
+{
+  "version": "v57.3",
+  "revision": "719e9390e125a5692cc22e368d2207000c36c086",
+  "generated_at": "2026-11-06T14:27:04.010038+00:00",
+  "commits": [
+    {
+      "sha": "d7289df6662e4f5cf3c36833c557fa5fba9032aa",
+      "type": "maintenance",
+      "title": "Compare stored image buffers as bytes",
+      "parent_sha": "59c4ad9545daaeb3e6435f4fdcdfdb811bb46119",
+      "requires_comparison": true,
+      "before_text": "The changelog image test compared a database-backed buffer directly with raw image bytes.",
+      "after_text": "The regression assertion converts the stored image buffer to bytes before comparison, supporting the PostgreSQL-backed image representation.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Stored-image regression assertion",
+          "before_text": "The changelog image test compared a database-backed buffer directly with raw image bytes. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "The regression assertion converts the stored image buffer to bytes before comparison, supporting the PostgreSQL-backed image representation. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.3/01-before.png",
+          "after_image": "v57.3/01-after.png",
+          "before_revision": "59c4ad9545daaeb3e6435f4fdcdfdb811bb46119",
+          "after_revision": "d7289df6662e4f5cf3c36833c557fa5fba9032aa",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    },
+    {
+      "sha": "59c4ad9545daaeb3e6435f4fdcdfdb811bb46119",
+      "type": "fixed",
+      "title": "Address code-scanning findings",
+      "parent_sha": "9fd9533091cf3e72e495a9628e60e64b771f36ce",
+      "requires_comparison": true,
+      "before_text": "Avatar processing, sign-in IP handling and server responses used the earlier validation and error-handling paths.",
+      "after_text": "Hardens avatar processing, sign-in audit IP handling, validation and error responses. Adds configuration guidance and regression checks for avatar uploads, sign-in logs, changelog rendering and request handling.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Validation and sign-in audit hardening",
+          "before_text": "Avatar processing, sign-in IP handling and server responses used the earlier validation and error-handling paths. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Hardens avatar processing, sign-in audit IP handling, validation and error responses. Adds configuration guidance and regression checks for avatar uploads, sign-in logs, changelog rendering and request handling. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.3/02-before.png",
+          "after_image": "v57.3/02-after.png",
+          "before_revision": "9fd9533091cf3e72e495a9628e60e64b771f36ce",
+          "after_revision": "59c4ad9545daaeb3e6435f4fdcdfdb811bb46119",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

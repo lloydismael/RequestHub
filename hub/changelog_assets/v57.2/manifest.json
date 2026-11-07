@@ -1,0 +1,29 @@
+{
+  "version": "v57.2",
+  "revision": "9fd9533091cf3e72e495a9628e60e64b771f36ce",
+  "generated_at": "2026-11-06T09:37:23.514684+00:00",
+  "commits": [
+    {
+      "sha": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
+      "type": "new",
+      "title": "Add changelog capture scenes script for rendering synthetic documentation",
+      "parent_sha": "c5f2535d241c4296cd23000af9800815851a274e",
+      "requires_comparison": true,
+      "before_text": "Release evidence relied on earlier capture/editor behavior, and the Management page loaded unrelated tab data. Form-editor and festive-effect interactions used their previous handling.",
+      "after_text": "Adds offline exact-revision capture for UI, documentation and behavior reports; all-change evidence requirements, actionable draft recovery, automatic publication and paginated comparison editors. Management isolates changelog queries. Also includes form-editor and festive-effect refinements, v56.6-v56.8 evidence and regression coverage.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Changelog capture, Management and festive effects",
+          "before_text": "Release evidence relied on earlier capture/editor behavior, and the Management page loaded unrelated tab data. Form-editor and festive-effect interactions used their previous handling. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Adds offline exact-revision capture for UI, documentation and behavior reports; all-change evidence requirements, actionable draft recovery, automatic publication and paginated comparison editors. Management isolates changelog queries. Also includes form-editor and festive-effect refinements, v56.6-v56.8 evidence and regression coverage. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.2/01-before.png",
+          "after_image": "v57.2/01-after.png",
+          "before_revision": "c5f2535d241c4296cd23000af9800815851a274e",
+          "after_revision": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

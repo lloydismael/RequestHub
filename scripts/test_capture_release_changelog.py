@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-from capture_release_changelog import CaptureError, ROOT, _screenshot, _snapshot, capture_manifest, load_recipes, main, prepare_assets
+from capture_release_changelog import CaptureError, ROOT, _render, _screenshot, _select_recipe, _snapshot, capture_manifest, load_recipes, main, prepare_assets
 from hub.release_changelog import build_manifest
 
 
@@ -75,13 +75,111 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(repeated, result)
 
-    def test_unmapped_change_remains_recorded_without_placeholder_images(self):
+    def test_unmapped_change_captures_exact_revision_report(self):
         self.write_recipes([])
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
         self.assertEqual(len(result["commits"]), 1)
-        self.assertEqual(len(failures), 1)
-        self.assertIn("recipe", result["commits"][0]["capture_error"].lower())
-        self.assertFalse(result["commits"][0].get("comparisons"))
+        item = result["commits"][0]
+        self.assertNotIn("capture_error", item)
+        pair = item["comparisons"][0]
+        self.assertEqual(pair["before_revision"], self.before)
+        self.assertEqual(pair["after_revision"], self.after)
+        self.assertIn("report", pair["title"].lower())
+        self.assertIn("not a UI screenshot", pair["capture_note"])
+        assets = self.repo / "hub" / "changelog_assets"
+        self.assertNotEqual((assets / pair["before_image"]).read_bytes(), (assets / pair["after_image"]).read_bytes())
+        repeated, failures = capture_manifest(result, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        self.assertEqual(repeated, result)
+
+    def test_repository_report_shows_snapshot_metadata_without_source_content(self):
+        snapshot = self.repo / "snapshot"
+        snapshot.mkdir()
+        _snapshot(self.repo, self.after, snapshot)
+        document = _render(snapshot, {
+            "kind": "report", "fixture": "repository_change", "paths": ["docs/guide.md"],
+            "revision": self.after,
+        })
+        self.assertIn("Repository change report", document)
+        self.assertIn("docs/guide.md", document)
+        self.assertIn(self.after, document)
+        self.assertIn("Present", document)
+        self.assertNotIn("Export is available directly from the dashboard", document)
+
+    def test_mixed_changes_get_reports_even_without_a_comprehensive_recipe(self):
+        (self.repo / "worker.py").write_text("SOURCE_CONTENT_MUST_NOT_BE_PUBLISHED = True\n", encoding="utf-8")
+        self.document.write_text("# Export\n\nThe backend now supports export.\n", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "feat: connect export backend and guide")
+        after = git(self.repo, "rev-parse", "HEAD")
+        data = build_manifest("v2", "HEAD", self.repo, baseline=self.after)
+        result, failures = capture_manifest(data, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        pair = result["commits"][0]["comparisons"][0]
+        self.assertEqual(pair["before_revision"], self.after)
+        self.assertEqual(pair["after_revision"], after)
+        snapshot = self.repo / "mixed-snapshot"
+        snapshot.mkdir()
+        _snapshot(self.repo, after, snapshot)
+        document = _render(snapshot, {
+            "kind": "report", "fixture": "repository_change",
+            "paths": ["docs/guide.md", "worker.py"], "revision": after,
+        })
+        self.assertIn("worker.py", document)
+        self.assertIn("docs/guide.md", document)
+        self.assertNotIn("SOURCE_CONTENT_MUST_NOT_BE_PUBLISHED", document)
+
+    def test_report_fallback_excludes_private_configuration(self):
+        (self.repo / ".env").write_text("FICTIONAL_PRIVATE_CONFIGURATION=not-a-credential\n", encoding="utf-8")
+        self.document.write_text("# Export\n\nPublic guide update.\n", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "chore: update guide and private configuration")
+        after = git(self.repo, "rev-parse", "HEAD")
+        data = build_manifest("v2", "HEAD", self.repo, baseline=self.after)
+        scene = _select_recipe(self.repo, data["commits"][0], [self.recipe])["scenes"][0]
+        snapshot = self.repo / "private-snapshot"
+        snapshot.mkdir()
+        _snapshot(self.repo, after, snapshot)
+        document = _render(snapshot, {**scene, "revision": after})
+        self.assertIn("docs/guide.md", document)
+        self.assertIn("Private or unsafe files excluded: 1", document)
+        self.assertNotIn(".env", document)
+        self.assertNotIn("FICTIONAL_PRIVATE_CONFIGURATION", document)
+        self.assertNotIn("Public guide update", document)
+
+    def test_report_fallback_tracks_renamed_files_and_escapes_file_names(self):
+        renamed = "notes & status.txt"
+        self.document.rename(self.repo / renamed)
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "docs: rename export guide")
+        after = git(self.repo, "rev-parse", "HEAD")
+        data = build_manifest("v2", "HEAD", self.repo, baseline=self.after)
+        scene = _select_recipe(self.repo, data["commits"][0], [])["scenes"][0]
+        for revision in (self.after, after):
+            with self.subTest(revision=revision):
+                snapshot = self.repo / revision
+                snapshot.mkdir()
+                _snapshot(self.repo, revision, snapshot)
+                document = _render(snapshot, {**scene, "revision": revision})
+                self.assertIn("docs/guide.md", document)
+                self.assertIn("notes &amp; status.txt", document)
+                self.assertIn("Present", document)
+                self.assertIn("Absent", document)
+
+    def test_report_renderer_rejects_private_paths(self):
+        scene = {"kind": "report", "fixture": "repository_change", "paths": [".env"], "revision": self.after}
+        with self.assertRaises(CaptureError):
+            _render(self.repo, scene)
+
+    def test_repository_report_cannot_be_declared_with_unverified_file_paths(self):
+        scene = {
+            "kind": "report", "fixture": "repository_change", "paths": ["unchanged.py"],
+            "title": "Unverified report", "before_text": "Before", "after_text": "After",
+        }
+        self.write_recipes([{"id": "unverified-report", "commit": self.after, "scenes": [scene]}])
+        with self.assertRaises(CaptureError):
+            load_recipes(self.recipes_path)
 
     def test_ambiguous_recipe_does_not_choose_arbitrary_evidence(self):
         duplicate = {**self.recipe, "id": "other-export-guide"}
@@ -111,16 +209,20 @@ class CaptureTests(unittest.TestCase):
         self.assertIn("observable", result["commits"][0]["capture_error"].lower())
         self.assertFalse(result["commits"][0].get("comparisons"))
 
-    def test_missing_cached_image_is_not_treated_as_capture_success(self):
+    def test_missing_cached_image_is_recaptured_with_verified_report(self):
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
         self.assertEqual(failures, [])
         pair = result["commits"][0]["comparisons"][0]
         (self.repo / "hub" / "changelog_assets" / pair["after_image"]).unlink()
         self.write_recipes([])
         repeated, failures = capture_manifest(result, self.repo, self.recipes_path)
-        self.assertEqual(len(failures), 1)
-        self.assertFalse(repeated["commits"][0].get("comparisons"))
-        self.assertTrue(repeated["commits"][0].get("capture_error"))
+        self.assertEqual(failures, [])
+        recovered = repeated["commits"][0]["comparisons"][0]
+        self.assertNotEqual(recovered["after_image"], pair["after_image"])
+        self.assertTrue((self.repo / "hub" / "changelog_assets" / recovered["after_image"]).is_file())
+        self.assertEqual(recovered["before_revision"], self.before)
+        self.assertEqual(recovered["after_revision"], self.after)
+        self.assertNotIn("capture_error", repeated["commits"][0])
 
     def test_browser_failure_replaces_previous_error_and_has_nonzero_failure_count(self):
         from playwright.sync_api import Error

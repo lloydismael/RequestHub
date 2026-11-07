@@ -184,24 +184,31 @@ class ChristmasDefaultAccountTests(TestCase):
 
     def browser_login_theme(self, account_page, moment, storage=None):
         login_page = Client().get(reverse("login"))
-        scripts = []
-        for response in (account_page, login_page):
-            scripts.append(next(
-                script for script in re.findall(r"<script[^>]*>(.*?)</script>", response.content.decode(), re.S | re.IGNORECASE)
-                if "reqHubLoginTheme" in script
-            ))
+        scripts = [
+            script
+            for response in (account_page, login_page)
+            for script in re.findall(r"<script[^>]*>(.*?)</script>", response.content.decode(), re.S | re.IGNORECASE)
+            if "reqHubLoginTheme" in script
+        ]
+        self.assertTrue(scripts, "the login Christmas theme script is missing")
         program = """
             const vm = require('vm');
             const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
             const values = new Map(Object.entries(input.storage));
             const classes = new Set();
+            const toggled = new Set();
             const context = {
                 localStorage: {
                     getItem: key => values.get(key) ?? null,
-                    setItem: (key, value) => values.set(key, value),
+                    setItem: (key, value) => values.set(key, String(value)),
                     removeItem: key => values.delete(key),
                 },
-                document: { documentElement: { classList: { add: value => classes.add(value) } } },
+                document: { documentElement: {
+                    classList: {
+                        add: value => classes.add(value),
+                        toggle: (value, on) => (on ? classes : toggled).add(value),
+                    },
+                } },
                 Date: { now: () => Date.parse(input.moment), parse: Date.parse },
             };
             input.scripts.forEach(script => vm.runInNewContext(script, context));

@@ -176,7 +176,6 @@ jobs:
 
       - name: Generate release changelog manifest
         id: changelog_manifest
-        continue-on-error: true
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           RELEASE_REVISION: ${{ github.event.workflow_run.head_sha }}

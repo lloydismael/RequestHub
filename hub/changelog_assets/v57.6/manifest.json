@@ -1,0 +1,29 @@
+{
+  "version": "v57.6",
+  "revision": "d4783683d2dcc293ece55ce692396110e1f5d644",
+  "generated_at": "2026-11-06T20:57:29.539286+00:00",
+  "commits": [
+    {
+      "sha": "cf93e4f66cce42c01fd6a3cf7e59fe2317991090",
+      "type": "improved",
+      "title": "Enhance Christmas login theme and implement Azure telemetry",
+      "parent_sha": "a85e4429da77eafbaad9eee95969a319b0a67713",
+      "requires_comparison": true,
+      "before_text": "Christmas login lighting used the earlier effect implementation, and the application lacked the new opt-in server telemetry integration.",
+      "after_text": "Refines Christmas login lighting, snow and interaction styling. Adds opt-in server telemetry to WSGI/ASGI startup with settings, dependency updates, deployment guidance and dedicated regression tests.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Christmas login lighting and opt-in server telemetry",
+          "before_text": "Christmas login lighting used the earlier effect implementation, and the application lacked the new opt-in server telemetry integration. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Refines Christmas login lighting, snow and interaction styling. Adds opt-in server telemetry to WSGI/ASGI startup with settings, dependency updates, deployment guidance and dedicated regression tests. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.6/01-before.png",
+          "after_image": "v57.6/01-after.png",
+          "before_revision": "a85e4429da77eafbaad9eee95969a319b0a67713",
+          "after_revision": "cf93e4f66cce42c01fd6a3cf7e59fe2317991090",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

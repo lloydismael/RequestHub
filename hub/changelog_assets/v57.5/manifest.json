@@ -1,0 +1,29 @@
+{
+  "version": "v57.5",
+  "revision": "c7cd3e17c1e93401d199a05d839586d9fcc536bb",
+  "generated_at": "2026-11-06T20:27:03.381531+00:00",
+  "commits": [
+    {
+      "sha": "c7cd3e17c1e93401d199a05d839586d9fcc536bb",
+      "type": "improved",
+      "title": "Add Contributor Covenant Code of Conduct",
+      "parent_sha": "d42db5cec3d934d45c4eddaddbc62615a8243a41",
+      "requires_comparison": true,
+      "before_text": "The repository did not contain the new contributor conduct document.",
+      "after_text": "Adds contributor conduct guidance covering participation expectations and reporting procedures.",
+      "comparisons": [
+        {
+          "title": "Repository change report — Contributor conduct guidance",
+          "before_text": "The repository did not contain the new contributor conduct document. Evidence: exact first-parent file metadata, not a UI screenshot.",
+          "after_text": "Adds contributor conduct guidance covering participation expectations and reporting procedures. Evidence: exact change-revision file metadata, not a UI screenshot.",
+          "before_image": "v57.5/01-before.png",
+          "after_image": "v57.5/01-after.png",
+          "before_revision": "d42db5cec3d934d45c4eddaddbc62615a8243a41",
+          "after_revision": "c7cd3e17c1e93401d199a05d839586d9fcc536bb",
+          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}
