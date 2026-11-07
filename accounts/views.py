@@ -146,6 +146,7 @@ class RoleLoginView(LoginView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["christmas_login_enabled"] = getattr(settings, "CHRISTMAS_LOGIN_THEME_ENABLED", False)
+        context["christmas_login_default"] = context["christmas_login_enabled"] and User.christmas_default_active()
         return context
 
     def _throttle_key(self) -> str:

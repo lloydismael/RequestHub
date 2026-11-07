@@ -1,5 +1,30 @@
 # Request Hub changelog — 2026-11-06
 
+## Unreleased follow-up — 2026-11-07: Login title and Christmas default
+
+**Baseline:** `d8cc94e`. This follow-up describes the current working-tree change, not a published numbered release.
+
+- Fixes the login browser tab separator so it displays **Login · Request Hub**, without the broken `Â` character. The template uses an HTML entity to avoid another encoding mismatch.
+- Makes the existing Christmas login design the server-rendered default for every visitor from November 6 through December 31, 2026, inclusive, in Asia/Manila. First visits, guest sessions, unavailable browser storage, expired browser markers, and saved light/dark choices do not prevent the public seasonal look.
+- Reuses the account seasonal calendar check for login rendering. On January 1, 2027, fresh login visits return to the standard design; the temporary default does not repeat annually. Remembered, explicitly selected Christmas can still enable the post-season login design.
+- Preserves account theme selection, Apply Theme, saved overrides, individual festive-effect preferences, light/dark controls, CSRF protection, and authentication fields. Saved account themes remain changeable during and after the campaign.
+- Preserves `CHRISTMAS_LOGIN_THEME_ENABLED=false` as a complete opt-out from Christmas login markup and assets. Updates the setting comment and [README appearance guidance](../README.md) to match the actual date-bound behavior.
+- Adds title, calendar-boundary, first-visit, storage-failure, and browser-expiry regressions in [the login tests](../accounts/test_christmas_login.py). Existing account/default/preference/animation coverage verifies that users can still apply every theme.
+- Updates [the historical login capture fixture](../scripts/changelog_capture_scenes.py) to render the real anonymous login view on December 31, 2026, at noon in Asia/Manila, with a synthetic allowed host and no application database. [Capture regressions](../scripts/test_capture_release_changelog.py) prevent release screenshots from silently omitting the new server-rendered default.
+- Requires no database migration, new dependency, or replacement artwork.
+
+### Login before/after evidence
+
+These are genuine local before/after captures at the same 1440 × 1000 viewport. Both simulate a first visit with no saved appearance preferences, use empty login fields, and do not display account data. The before capture was taken from the clean baseline; the after capture is the current working tree. The corrected tab title is separately verified in the browser and automated tests.
+
+| Before: browser marker required | After: Christmas by default |
+| --- | --- |
+| ![Login before the first-visit default fix](screenshots/2026-11-07/01-login-first-visit-before.webp) | ![Login after the first-visit default fix](screenshots/2026-11-07/01-login-first-visit-after.webp) |
+
+### Release publication
+
+The notes and visual evidence are retained here for the next release. The login rendering/capture checks pass, and Notifications → Changelogs tests confirm published comparisons are visible while drafts stay hidden. An additional, pre-existing repository-report regression (`CaptureTests.test_mixed_changes_get_reports_even_without_a_comprehensive_recipe`) still fails with `Configured scenes show no observable change; choose relevant evidence.` The same failure was reproduced using the unchanged baseline capture implementation; it is outside this login fix. A numbered release needs exact parent/change screenshot evidence before publication. These working-tree screenshots are not mislabeled as exact committed-release evidence, and no live changelog or account data is changed by this local fix.
+
 ## Unreleased maintenance: merge current master
 
 - Integrates the current `master` fixes without replacing the Christmas login

@@ -284,7 +284,7 @@ SQR_OUTLOOK_CERT_PASSWORD = os.getenv("SQR_OUTLOOK_CERT_PASSWORD", "")
 AI_ASSISTANT_NATIVE_ENABLED = (
     os.getenv("AI_ASSISTANT_NATIVE_ENABLED", "false").strip().lower() == "true"
 )
-# Site-wide switch for the Christmas login design (shown only after a Christmas-theme user signed in on that browser).
+# Site-wide switch for the seasonal Christmas login default and remembered post-season choices.
 CHRISTMAS_LOGIN_THEME_ENABLED = (
     os.getenv("CHRISTMAS_LOGIN_THEME_ENABLED", "true").strip().lower() == "true"
 )

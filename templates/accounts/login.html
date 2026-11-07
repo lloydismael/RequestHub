@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Login Â· Request Hub{% endblock %}
+{% block title %}Login &middot; Request Hub{% endblock %}
+{% block html_class %}{% if christmas_login_default %}login-christmas{% endif %}{% endblock %}
 {% block body_class %}page-login{% endblock %}
 {% block extra_head %}
 {% if christmas_login_enabled %}
