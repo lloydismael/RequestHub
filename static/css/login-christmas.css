@@ -75,7 +75,7 @@ html.login-christmas body.page-login .login-hero::after {
     /* Soft haze pools behind the card so the busy corners never compete with the form. */
     background:
         radial-gradient(ellipse 36% 50% at 50% 46%, rgba(228, 234, 247, 0.4) 0%, rgba(228, 234, 247, 0.16) 62%, rgba(228, 234, 247, 0) 100%),
-        #b8c4de url("../img/login-christmas-bg.webp") center / cover no-repeat;
+        #b8c4de url("../img/login-christmas-bg.webp?v=2") center / cover no-repeat;
     transition: filter 0.4s ease;
 }
 
@@ -94,7 +94,7 @@ html.login-christmas body.page-login .login-hero::after {
 .xmas-scene__glow {
     z-index: 2;
     display: none;
-    background: url("../img/login-christmas-bg.webp") center / cover no-repeat;
+    background: url("../img/login-christmas-bg.webp?v=2") center / cover no-repeat;
     filter: url("#xmas-warm-glow");
     mix-blend-mode: screen;
     opacity: 0.85;
@@ -280,7 +280,11 @@ body.dark-mode .xmas-frost {
 }
 
 .xmas-bulb__shine {
-    fill: rgba(255, 255, 255, 0.85);
+    fill: rgba(255, 255, 255, 0.78);
+}
+
+.xmas-bulb {
+    filter: drop-shadow(0 1.2px 1.2px rgba(10, 20, 45, 0.35));
 }
 
 .xmas-bulb__glint {
@@ -329,11 +333,14 @@ body.dark-mode .xmas-wire-shadow {
     stroke: rgba(0, 0, 0, 0.45);
 }
 
+/* Incandescent flicker: mostly steady, a quick dip and a soft recovery. */
 @keyframes xmas-twinkle {
     0%, 100% { opacity: 1; }
-    42% { opacity: 0.95; }
-    52% { opacity: 0.5; }
-    66% { opacity: 0.92; }
+    38% { opacity: 0.96; }
+    46% { opacity: 0.42; }
+    50% { opacity: 0.7; }
+    56% { opacity: 0.5; }
+    70% { opacity: 0.94; }
 }
 
 /* --------------------------------------------------------------------------
