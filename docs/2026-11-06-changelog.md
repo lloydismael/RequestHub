@@ -1,5 +1,17 @@
 # Request Hub changelog — 2026-11-06
 
+## Unreleased maintenance: merge current master
+
+- Integrates the current `master` fixes without replacing the Christmas login
+  enhancements or packaged v57.6 evidence.
+- Before: the branches disagreed on how the Christmas browser tests extracted
+  inline scripts. After: the tests use master's HTML parser, retain all matching
+  scripts from each page, and explicitly assert that the theme script is present.
+  The parser's closing-tag whitespace regression test remains intact.
+- This maintenance note is not a published Notifications entry. Historical
+  before/after capture and Notifications visibility remain to be verified in
+  the release evidence workflow.
+
 ## Unreleased: Christmas themes and update mentions
 
 **Baseline:** `c314cf7` (`test: Align assistant permissions with dev routes`).

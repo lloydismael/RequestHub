@@ -2,6 +2,7 @@ import json
 import re
 import subprocess
 from datetime import date, datetime, timezone as datetime_timezone
+from html.parser import HTMLParser
 from unittest.mock import patch
 
 from django.db import IntegrityError, connection, transaction
@@ -10,6 +11,35 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
+
+
+class InlineScriptParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.scripts = []
+        self._current_script = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "script":
+            self._current_script = (dict(attrs), [])
+
+    def handle_data(self, data):
+        if self._current_script is not None:
+            self._current_script[1].append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._current_script is not None:
+            attrs, data = self._current_script
+            self.scripts.append((attrs, "".join(data)))
+            self._current_script = None
+
+
+class InlineScriptParserTests(SimpleTestCase):
+    def test_handles_whitespace_before_script_closing_angle_bracket(self):
+        parser = InlineScriptParser()
+        parser.feed("<script>run()</script >")
+
+        self.assertEqual(parser.scripts, [({}, "run()")])
 
 
 class ChristmasDefaultThemeTests(SimpleTestCase):
@@ -184,13 +214,16 @@ class ChristmasDefaultAccountTests(TestCase):
 
     def browser_login_theme(self, account_page, moment, storage=None):
         login_page = Client().get(reverse("login"))
-        scripts = [
-            script
-            for response in (account_page, login_page)
-            for script in re.findall(r"<script\b[^>]*>(.*?)</script\b[^>]*>", response.content.decode(), re.S | re.IGNORECASE)
-            if "reqHubLoginTheme" in script
-        ]
-        self.assertTrue(scripts, "the login Christmas theme script is missing")
+        scripts = []
+        for response in (account_page, login_page):
+            parser = InlineScriptParser()
+            parser.feed(response.content.decode())
+            matching_scripts = [
+                script for _, script in parser.scripts
+                if "reqHubLoginTheme" in script
+            ]
+            self.assertTrue(matching_scripts, "the login Christmas theme script is missing")
+            scripts.extend(matching_scripts)
         program = """
             const vm = require('vm');
             const input = JSON.parse(require('fs').readFileSync(0, 'utf8'));
@@ -257,11 +290,13 @@ class ChristmasDefaultAccountTests(TestCase):
         self.user.save(update_fields=["pref_christmas_enabled", "pref_christmas_snow"])
         response = self.client.get(reverse("accounts:update"))
         self.assert_page_theme(response, "christmas")
-        effects = re.search(
-            r'<script id="christmas-effects-settings" type="application/json">(.*?)</script>',
-            response.content.decode(), re.S,
+        parser = InlineScriptParser()
+        parser.feed(response.content.decode())
+        effects = next(
+            script for attrs, script in parser.scripts
+            if attrs.get("id") == "christmas-effects-settings"
         )
-        self.assertEqual(json.loads(effects.group(1)), {
+        self.assertEqual(json.loads(effects), {
             "enabled": False, "border": True, "snow": False, "lights": True,
             "cursor": True, "clicks": True, "santa": True,
         })

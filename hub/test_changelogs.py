@@ -4,6 +4,7 @@ from io import BytesIO
 
 from PIL import Image
 from django.apps import apps
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, connection, transaction
 from django.test import RequestFactory, TestCase
@@ -12,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import StoredFile, User
+from accounts.storage import DatabaseMediaStorage
 from hub.release_changelog import GROUPS
 
 
@@ -322,6 +324,34 @@ class ChangelogTests(TestCase):
             {"before_text", "after_text", "before_image", "after_image"},
         )
         self.assertFalse(self.model().objects.exists())
+
+    def test_screenshot_mime_is_detected_before_storage_and_serving(self):
+        from .changelog_forms import ScreenshotField
+
+        upload = screenshot()
+        upload.content_type = "text/html"
+        validated = ScreenshotField().clean(upload)
+        storage = DatabaseMediaStorage()
+        name = storage.save("profile_photos/screenshot-mime-probe.png", validated)
+        stored = StoredFile.objects.get(name=name)
+
+        self.assertEqual(stored.content_type, "image/png")
+        response = self.client.get(storage.url(name))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/png")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.content, bytes(stored.data))
+
+    def test_svg_disguised_as_a_png_screenshot_is_rejected(self):
+        from .changelog_forms import ScreenshotField
+
+        upload = SimpleUploadedFile(
+            "screen.png",
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>document.title="probe"</script></svg>',
+            content_type="image/png",
+        )
+        with self.assertRaises(ValidationError):
+            ScreenshotField().clean(upload)
 
     def test_invalid_images_and_equal_versions_are_rejected(self):
         response = self.client.post(reverse("hub:changelog-create"), self.payload(
