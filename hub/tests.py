@@ -3419,6 +3419,7 @@ class SqrPerformanceTrackingTests(TestCase):
                 self.filters = set()
                 self.options = {}
                 self.select_id = None
+                self.performance_button = None
 
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
@@ -3429,6 +3430,8 @@ class SqrPerformanceTrackingTests(TestCase):
                     self.metrics.add(attrs["data-pm-metric"])
                 if "data-pm-filter" in attrs:
                     self.filters.add(attrs["data-pm-filter"])
+                if attrs.get("data-sqr-view-button") == "performance":
+                    self.performance_button = attrs
                 if tag == "select":
                     self.select_id = element_id
                 if tag == "option" and self.select_id:
@@ -3447,16 +3450,27 @@ class SqrPerformanceTrackingTests(TestCase):
             "reset", "refresh", "message", "snapshot", "count", "content", "empty",
             "coverage", "queue", "health-chart", "progress-chart", "timeline", "directory",
             "queue-count", "progress-count", "timeline-count", "prev", "next", "page",
+            "portfolio", "rating", "as-of", "closed-coverage", "rated-coverage",
+            "manager-chart", "status-queue", "rating-queue", "indicator-chart",
+            "status-rows", "indicator-rows",
         ):
             self.assertEqual(len(parser.ids.get("sqr-pm-" + suffix, [])), 1, suffix)
         self.assertIn("hidden", parser.ids["sqr-performance-dashboard"][0])
         self.assertEqual(parser.ids["sqr-pm-message"][0]["role"], "status")
-        self.assertEqual(parser.metrics, {"total", "attention", "overdue", "due_soon", "average", "missing_data"})
+        self.assertEqual(parser.metrics, {
+            "total", "attention", "overdue", "due_soon", "average", "missing_data",
+            "closed", "ongoing", "pipeline", "removed", "closed_percent",
+            "rating_good", "rating_warning", "rating_danger", "rating_unknown",
+        })
+        self.assertIsNotNone(parser.performance_button)
+        self.assertNotIn("disabled", parser.performance_button)
         self.assertEqual(parser.filters, {"", "attention", "overdue", "due_soon", "missing_data"})
         self.assertEqual(parser.options["sqr-pm-scope"], {"active", "all"})
         self.assertEqual(parser.options["sqr-pm-manager"], {""})
         self.assertEqual(parser.options["sqr-pm-health"], {"", "on_track", "at_risk", "off_track", "completed", "cancelled", "not_set"})
         self.assertEqual(parser.options["sqr-pm-status"], {"", "planning", "in_progress", "on_hold", "completed", "cancelled", "not_set"})
+        self.assertEqual(parser.options["sqr-pm-portfolio"], {"", "closed", "ongoing", "pipeline", "removed"})
+        self.assertEqual(parser.options["sqr-pm-rating"], {"", "good", "warning", "danger", "unknown"})
         self.assertEqual(parser.options["sqr-pm-attention"], {"", "attention", "overdue", "due_soon", "missing_data", "inconsistency", "off_track", "at_risk", "on_hold"})
         self.assertIn("window.setSqrView = setView", content)
         self.assertIn("window.focusSqrTrackerProject", content)

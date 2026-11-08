@@ -115,6 +115,46 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
     pm_name = _owner_name(pm)
     sse_name = _owner_name(submission.assigned_sse)
     updates = submission.key_updates_risks or ""
+    if cancelled or submission.proposal_status == "closed_lost":
+        portfolio_status = "removed"
+    elif completed:
+        portfolio_status = "closed"
+    elif status == "planning" or not delivery_candidate:
+        portfolio_status = "pipeline"
+    else:
+        portfolio_status = "ongoing"
+
+    indicators = {
+        key: {"state": "unknown", "label": "N/R"}
+        for key in ("schedule", "scope", "resources", "customer", "risks")
+    }
+    schedule_end = finish if completed else today
+    valid_schedule = bool(
+        target and schedule_end and portfolio_status in {"ongoing", "closed"}
+        and (not start or start <= target)
+        and (not start or start <= schedule_end)
+    )
+    if valid_schedule:
+        delay = (schedule_end - target).days
+        state, label = (
+            ("danger", "Delay >2 wks") if delay > 14
+            else ("warning", "Delay ≤2 wks") if delay > 0
+            else ("good", "On target")
+        )
+        indicators["schedule"] = {"state": state, "label": label}
+
+    # Recorded delivery health is not evidence for any individual indicator.
+    recorded_rating = {
+        "on_track": "good", "completed": "good",
+        "at_risk": "warning", "off_track": "danger",
+    }.get(health, "unknown")
+    states = {indicators["schedule"]["state"], recorded_rating}
+    if operationally_open and status == "on_hold":
+        states.add("warning")
+    overall_rating = next(
+        (state for state in ("danger", "warning", "good") if state in states),
+        "unknown",
+    ) if portfolio_status in {"ongoing", "closed"} else "unknown"
     return {
         "pk": submission.pk,
         "reference_code": submission.reference_code or "—",
@@ -144,6 +184,9 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
         "inconsistencies": inconsistencies,
         "reasons": reasons,
         "priority": priority,
+        "portfolio_status": portfolio_status,
+        "indicators": indicators,
+        "overall_rating": overall_rating,
         "search_text": " ".join((
             submission.reference_code or "", submission.project_title or "",
             submission.customer_name or "", pm_name, sse_name,
