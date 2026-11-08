@@ -97,7 +97,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 - **Project Performance Tracking** (Admin/PM): read-only, live status and performance dashboards, PM distribution, and paginated status/health trackers. Data loads on first entry; refresh retrieves a new snapshot. Portfolio scope starts at All SQRs, retaining the PM's My assigned default. Filters apply to every summary, chart and table.
 - Portfolio labels classify completion evidence as Closed, planning/no delivery evidence as Pipeline, cancellations/lost proposals as Removed, and other delivery candidates as Ongoing. Recorded Tracker status and health remain unchanged.
 - Schedule is date-based: ongoing targets are compared with the server snapshot date; closed targets with actual finish. Delays of 1-14 days need action; over 14 days are red. Missing/inconsistent dates remain N/R. The derived delivery rating is the worse of schedule and recorded health; open On Hold needs action. Pipeline and removed projects are not rated.
-- Separate scope, resource, customer/dependency and risk ratings are not captured in SQR and stay **Not recorded**, never inferred from notes. Delivery diagnostics retain progress coverage, deadline/data alerts, notes and View in Tracker navigation.
+- Separate scope, resource, customer/dependency and risk ratings are not captured in SQR and stay **Not recorded**, never inferred from notes. Project updates and risks appear as remarks in the status tracker.
 - Tracks quotation details, SSE/PM man-hours, managed support amount, discounting, approval metadata, and revenue fields
 - Status labels in the tracker:
       - `submitted` ? **For Processing**

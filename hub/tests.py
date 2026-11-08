@@ -3260,8 +3260,8 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertNotIn("applyPerfFilter", content)
         self.assertNotIn("sqr_performance_projects", response.context)
         self.assertNotIn("sqr_performance_summary", response.context)
-        self.assertIn('<div id="sqr-pm-queue" class="sqr-pm-queue"></div>', content)
-        self.assertIn('<div id="sqr-pm-directory" class="sqr-pm-directory"></div>', content)
+        self.assertNotIn('id="sqr-pm-queue"', content)
+        self.assertNotIn('id="sqr-pm-directory"', content)
         # Old complex drawer must stay retired.
         self.assertNotIn("sqr-perf-drawer", content)
         self.assertNotIn("sqr-perf-table", content)
@@ -3399,7 +3399,7 @@ class SqrPerformanceTrackingTests(TestCase):
         self.submission.save()
         self.client.force_login(self.pm)
         content = self.client.get(reverse("hub:sqr")).content.decode()
-        self.assertIn('id="sqr-pm-directory"', content)
+        self.assertIn('id="sqr-pm-status-rows"', content)
         self.assertNotIn('class="sqr-pm-project"', content)
         self.assertNotIn("sqr-perf-title", content)
         response = self.client.get(reverse("hub:sqr-performance-data"))
@@ -3448,8 +3448,7 @@ class SqrPerformanceTrackingTests(TestCase):
         for suffix in (
             "scope", "search", "manager", "health", "status", "attention", "mine",
             "reset", "refresh", "message", "snapshot", "count", "content", "empty",
-            "coverage", "queue", "health-chart", "progress-chart", "timeline", "directory",
-            "queue-count", "progress-count", "timeline-count", "prev", "next", "page",
+            "prev", "next", "page",
             "portfolio", "rating", "as-of", "closed-coverage", "rated-coverage",
             "manager-chart", "status-queue", "rating-queue", "indicator-chart",
             "status-rows", "indicator-rows",
@@ -3458,13 +3457,13 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertIn("hidden", parser.ids["sqr-performance-dashboard"][0])
         self.assertEqual(parser.ids["sqr-pm-message"][0]["role"], "status")
         self.assertEqual(parser.metrics, {
-            "total", "attention", "overdue", "due_soon", "average", "missing_data",
+            "total", "attention",
             "closed", "ongoing", "pipeline", "removed", "closed_percent",
             "rating_good", "rating_warning", "rating_danger", "rating_unknown",
         })
         self.assertIsNotNone(parser.performance_button)
         self.assertNotIn("disabled", parser.performance_button)
-        self.assertEqual(parser.filters, {"", "attention", "overdue", "due_soon", "missing_data"})
+        self.assertEqual(parser.filters, set())
         self.assertEqual(parser.options["sqr-pm-scope"], {"active", "all"})
         self.assertEqual(parser.options["sqr-pm-manager"], {""})
         self.assertEqual(parser.options["sqr-pm-health"], {"", "on_track", "at_risk", "off_track", "completed", "cancelled", "not_set"})
