@@ -2501,7 +2501,7 @@ body.sqr-page .sqr-pm :where(.form-select, .form-control) {
     align-items: center;
     flex-wrap: wrap;
     gap: 1.5rem;
-    padding: clamp(1.25rem, 3vw, 2.75rem) clamp(.5rem, 2vw, 1.5rem);
+    padding: clamp(1rem, 2vw, 1.5rem) clamp(.5rem, 2vw, 1.5rem);
     border-top: .5rem solid #176381;
 }
 .sqr-pm-hero h2 { font-size: clamp(1.7rem, 3vw, 2.5rem); font-weight: 750; margin: .45rem 0 .6rem; }
@@ -2653,6 +2653,12 @@ body.sqr-page .sqr-pm-focused-row:focus { outline: 3px solid var(--lg-accent); o
 .sqr-pm-filter-disclosure, .sqr-pm-delivery-details { margin-bottom: 1.5rem; }
 .sqr-pm-filter-disclosure > summary, .sqr-pm-delivery-details > summary { cursor: pointer; font-weight: 650; color: var(--pm-accent); padding: .75rem .25rem; }
 .sqr-pm-filter-disclosure > summary .sqr-pm-meta { margin-left: .75rem; }
+.sqr-pm-toolbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .75rem 1rem; padding: 0 .25rem .75rem; }
+.sqr-pm-toolbar .sqr-pm-filter-disclosure { flex: 1 1 12rem; min-width: 0; margin: 0; }
+.sqr-pm-toolbar > .sqr-pm-meta { padding-block: .75rem; }
+.sqr-pm-toolbar > .btn { flex: 0 0 auto; }
+.sqr-pm-toolbar .sqr-pm-filters { margin-top: .5rem; }
+.sqr-pm-attention-row > .sqr-pm-tag { flex-shrink: 0; text-align: center; }
 .sqr-pm-delivery-details { margin-top: 2rem; }
 .sqr-pm-delivery-details[open] > summary { margin-bottom: 1rem; }
 

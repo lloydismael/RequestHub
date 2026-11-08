@@ -27,10 +27,6 @@
     var searchTimer = 0;
     var requestState = '';
     var dateFormat = new Intl.DateTimeFormat(undefined, {year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'});
-    var healthOptions = [
-        ['on_track', 'On Track'], ['at_risk', 'At Risk'], ['off_track', 'Off Track'],
-        ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['not_set', 'Not set']
-    ];
     var portfolioLabels = {closed: 'Closed', ongoing: 'Ongoing', pipeline: 'Pipeline', removed: 'Removed'};
     var ratingLabels = {good: 'On target / no issue', warning: 'Action needed', danger: 'Delay >2 wks / Off Track', unknown: 'Not rated'};
     var indicatorLabels = [
@@ -40,24 +36,6 @@
     function visible() { return !root.hidden; }
     function formatDate(value) {
         return value ? dateFormat.format(new Date(value + 'T00:00:00Z')) : 'Not reported';
-    }
-    function deadline(project) {
-        if (!project.target_date) return 'Target not reported';
-        var suffix = '';
-        if (project.overdue) suffix = ' · ' + Math.abs(project.days_to_target) + ' days overdue';
-        else if (project.active_delivery && project.days_to_target === 0) suffix = ' · Due today';
-        else if (project.active_delivery && project.days_to_target > 0) suffix = ' · In ' + project.days_to_target + ' days';
-        return 'Target: ' + formatDate(project.target_date) + suffix;
-    }
-    function healthClass(key) {
-        return healthOptions.some(function (option) { return option[0] === key; }) ? key : 'not_set';
-    }
-    function openButton(project) {
-        var button = node('button', 'sqr-pm-open', 'View in Tracker');
-        button.type = 'button';
-        button.dataset.pmOpen = String(project.pk);
-        button.setAttribute('aria-label', 'View ' + project.reference_code + ' in Tracker');
-        return button;
     }
     function progressBlock(project) {
         var block = node('div');
@@ -72,43 +50,6 @@
             block.append(track);
         }
         return block;
-    }
-    function projectCard(project, compact) {
-        var card = node('article', 'sqr-pm-project');
-        var head = node('div', 'sqr-pm-project-head');
-        var identity = node('div');
-        identity.append(node('h4', 'sqr-pm-project-title', project.project_name));
-        identity.append(node('p', 'sqr-pm-row-meta', project.reference_code + ' · ' + project.customer_name));
-        head.append(identity, node('span', 'sqr-pm-tag sqr-pm-tag--' + healthClass(project.health_key), project.health_label));
-        card.append(head);
-        card.append(node('p', 'sqr-pm-row-meta', project.pm_name + (project.pm_fallback ? ' · Reviewer fallback' : '') + ' · ' + project.status_label));
-        if (project.reasons.length) {
-            var alerts = node('ul', 'sqr-pm-alerts');
-            alerts.setAttribute('aria-label', 'Attention reasons');
-            project.reasons.forEach(function (reason) { alerts.append(node('li', 'sqr-pm-alert', reason.label)); });
-            card.append(alerts);
-        }
-        card.append(progressBlock(project), node('p', 'sqr-pm-row-meta', deadline(project)));
-        if (compact && project.updates_risks) {
-            card.append(node('p', 'sqr-pm-row-meta', 'Updates / risks: ' + project.updates_risks.slice(0, 180) + (project.updates_risks.length > 180 ? '…' : '')));
-        }
-        if (!compact) {
-            var details = node('details', 'sqr-pm-details');
-            details.append(node('summary', '', 'Delivery details & notes'));
-            var list = node('dl');
-            [
-                ['Assigned SSE', project.sse_name], ['Start', formatDate(project.start_date)],
-                ['Target', formatDate(project.target_date)], ['Actual finish', formatDate(project.actual_finish_date)],
-                ['Completion signed', formatDate(project.completion_signed_date)],
-                ['Missing data', project.missing_data.join(', ') || 'None'],
-                ['Inconsistencies', project.inconsistencies.join('; ') || 'None'],
-                ['Updates / risks', project.updates_risks || 'No notes recorded']
-            ].forEach(function (entry) { list.append(node('dt', '', entry[0]), node('dd', '', entry[1])); });
-            details.append(list);
-            card.append(details);
-        }
-        card.append(openButton(project));
-        return card;
     }
     function replaceList(id, items, builder, emptyText) {
         var fragment = document.createDocumentFragment();
@@ -128,11 +69,9 @@
             : project.reasons.map(function (reason) { return reason.label; }).join(' · ')
         );
         identity.append(node('p', 'sqr-pm-row-meta', detail));
-        var actions = node('div', 'sqr-pm-attention-actions');
-        actions.append(node('span', 'sqr-pm-tag ' + (performance ? 'sqr-pm-rating--' + rating : 'sqr-pm-state--' + project.portfolio_status),
-            performance ? ratingLabels[rating] : portfolioLabels[project.portfolio_status] + (project.progress === null ? '' : ' · ' + project.progress + '%')));
-        actions.append(openButton(project));
-        row.append(identity, actions);
+        var badge = node('span', 'sqr-pm-tag ' + (performance ? 'sqr-pm-rating--' + rating : 'sqr-pm-state--' + project.portfolio_status),
+            performance ? ratingLabels[rating] : portfolioLabels[project.portfolio_status] + (project.progress === null ? '' : ' · ' + project.progress + '%'));
+        row.append(identity, badge);
         return row;
     }
     function renderPortfolio(counts) {
@@ -171,8 +110,8 @@
         var attention = filtered.filter(function (project) { return ['danger', 'warning'].includes(project.overall_rating); })
             .sort(function (a, b) { return (a.overall_rating === 'danger' ? 0 : 1) - (b.overall_rating === 'danger' ? 0 : 1); });
         replaceList('rating-queue', attention.slice(0, 5), function (project) { return attentionRow(project, true); }, 'No rated projects need attention in this view.');
-        el('status-queue').append(node('p', 'sqr-pm-row-meta', 'Showing up to 5 projects. Use the Needs attention filter for all flags.'));
-        el('rating-queue').append(node('p', 'sqr-pm-row-meta', 'Showing ' + Math.min(5, attention.length) + ' of ' + attention.length + ' rated projects needing action.'));
+        if (counts.attention > 5) el('status-queue').append(node('p', 'sqr-pm-row-meta', 'Showing 5 of ' + counts.attention));
+        if (attention.length > 5) el('rating-queue').append(node('p', 'sqr-pm-row-meta', 'Showing 5 of ' + attention.length));
         replaceList('indicator-chart', indicatorLabels, function (indicator) {
             var row = node('div', 'sqr-pm-indicator-chart-row');
             row.append(node('span', 'sqr-pm-row-title', indicator[1]));
@@ -210,9 +149,7 @@
             row.append(node('td', '', formatDate(project.start_date) + ' – ' + formatDate(project.target_date)));
             var progress = node('td');
             progress.append(progressBlock(project));
-            var action = node('td');
-            action.append(openButton(project));
-            row.append(progress, node('td', 'sqr-pm-table-notes', project.updates_risks || '—'), action);
+            row.append(progress, node('td', 'sqr-pm-table-notes', project.updates_risks || '—'));
             return row;
         }, '');
         replaceList('indicator-rows', projects, function (project) {
@@ -226,14 +163,11 @@
             return row;
         }, '');
     }
-    function renderDirectory() {
+    function renderPage() {
         var pages = Math.max(1, Math.ceil(filtered.length / pageSize));
         pageNumber = Math.min(pageNumber, pages);
         var projects = filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
         renderTrackerTables(projects);
-        replaceList('directory', projects, function (project) {
-            return projectCard(project, false);
-        }, 'No projects match this view. Try clearing filters or choosing All SQRs.');
         el('page').textContent = 'Page ' + pageNumber + ' of ' + pages + ' · ' + filtered.length + ' projects';
         el('prev').disabled = pageNumber <= 1;
         el('next').disabled = pageNumber >= pages;
@@ -247,12 +181,9 @@
     function render() {
         renderFrame = 0;
         if (!snapshot || !visible()) return;
-        el('snapshot').textContent = 'Retrieved ' + new Date(snapshot.fetched_at).toLocaleString() + ' · Server date ' + formatDate(snapshot.as_of);
+        el('snapshot').textContent = 'Updated ' + new Date(snapshot.fetched_at).toLocaleString();
         var query = controls.search.value.trim().toLowerCase();
-        var counts = {total: 0, attention: 0, overdue: 0, due_soon: 0, missing_data: 0};
-        var healthCounts = {};
-        var known = 0;
-        var totalProgress = 0;
+        var counts = {total: 0, attention: 0};
         filtered = snapshot.projects.filter(function (project) {
             var matches = (controls.scope.value !== 'active' || project.active_delivery)
                 && (!controls.mine.checked || project.pm_id === root.dataset.currentUserId)
@@ -265,63 +196,17 @@
                 && (!query || project.search_text.toLowerCase().includes(query));
             if (!matches) return false;
             counts.total++;
-            ['attention', 'overdue', 'due_soon'].forEach(function (key) {
-                if (project[key === 'attention' ? 'needs_attention' : key]) counts[key]++;
-            });
-            if (project.missing_data.length) counts.missing_data++;
-            healthCounts[project.health_key] = (healthCounts[project.health_key] || 0) + 1;
-            if (project.progress !== null) { known++; totalProgress += project.progress; }
+            if (project.needs_attention) counts.attention++;
             return true;
         });
-        counts.average = known ? (Math.round(totalProgress / known * 10) / 10) + '%' : 'N/A';
         renderPortfolio(counts);
         root.querySelectorAll('[data-pm-metric]').forEach(function (metric) { metric.textContent = counts[metric.dataset.pmMetric]; });
-        root.querySelectorAll('[data-pm-filter]').forEach(function (button) {
-            button.setAttribute('aria-pressed', String(button.dataset.pmFilter === controls.attention.value));
-        });
-        el('coverage').textContent = known + ' / ' + filtered.length + ' reported · Unweighted';
         el('count').textContent = filtered.length + ' of ' + snapshot.projects.length + ' SQRs · ' + (controls.scope.value === 'active' ? 'Active delivery' : 'All SQRs') + (controls.mine.checked ? ' · My assigned' : '');
         el('content').hidden = false;
         el('empty').hidden = filtered.length > 0;
         el('empty').textContent = !snapshot.projects.length ? 'No SQR records are available yet.' : 'No matching projects. Reset filters or choose All SQRs to widen your view.';
-        var attention = filtered.filter(function (project) { return project.needs_attention; });
-        el('queue-count').textContent = 'Showing ' + Math.min(8, attention.length) + ' of ' + attention.length + ' · Ordered by urgency';
-        replaceList('queue', attention.slice(0, 8), function (project) { return projectCard(project, true); }, 'No attention flags in this view.');
-        var options = healthOptions.slice();
-        Object.keys(healthCounts).forEach(function (key) {
-            if (!options.some(function (option) { return option[0] === key; })) options.push([key, key]);
-        });
-        replaceList('health-chart', options, function (option) {
-            var row = node('div', 'sqr-pm-health-row');
-            var label = node('div');
-            var count = healthCounts[option[0]] || 0;
-            label.append(node('span', '', option[1]), node('strong', '', count + ' / ' + filtered.length));
-            var bar = node('div', 'sqr-pm-bar');
-            bar.setAttribute('aria-hidden', 'true');
-            var fill = node('div', 'sqr-pm-bar-fill sqr-pm-tag--' + healthClass(option[0]), '');
-            fill.style.width = (filtered.length ? count / filtered.length * 100 : 0) + '%';
-            bar.append(fill);
-            row.append(label, bar);
-            return row;
-        });
-        el('progress-count').textContent = 'First ' + Math.min(12, filtered.length) + ' of ' + filtered.length + ' · Attention, then target date';
-        replaceList('progress-chart', filtered.slice(0, 12), function (project) {
-            var row = node('div', 'sqr-pm-row');
-            row.append(node('p', 'sqr-pm-row-title', project.project_name), node('p', 'sqr-pm-row-meta', project.reference_code), progressBlock(project));
-            return row;
-        }, 'No completion data in this view.');
-        var upcoming = filtered.filter(function (project) {
-            return project.active_delivery && project.days_to_target !== null && project.days_to_target >= 0 && project.days_to_target <= 30;
-        }).sort(function (a, b) { return a.days_to_target - b.days_to_target || a.pk - b.pk; });
-        el('timeline-count').textContent = 'Showing ' + Math.min(12, upcoming.length) + ' of ' + upcoming.length + ' upcoming targets';
-        replaceList('timeline', upcoming.slice(0, 12), function (project) {
-            var item = node('div', 'sqr-pm-timeline-item');
-            item.append(node('p', 'sqr-pm-date', formatDate(project.target_date)), node('p', 'sqr-pm-row-title', project.project_name), node('p', 'sqr-pm-row-meta', project.reference_code + ' · ' + project.pm_name), progressBlock(project));
-            return item;
-        }, 'No open targets within the next 30 days in this view.');
-        el('timeline').prepend(node('p', 'sqr-pm-today', 'Today · ' + formatDate(snapshot.as_of)));
-        renderDirectory();
-        if (!requestState) el('message').textContent = filtered.length + ' matching projects. All metrics reflect this filtered view.';
+        renderPage();
+        if (!requestState) el('message').textContent = '';
     }
     function scheduleRender() {
         if (visible() && !renderFrame) renderFrame = requestAnimationFrame(render);
@@ -369,7 +254,7 @@
                 dirty = false;
                 if (visible()) {
                     updateManagers();
-                    el('snapshot').textContent = 'Retrieved ' + new Date(data.fetched_at).toLocaleString() + ' · Server date ' + formatDate(data.as_of);
+                    el('snapshot').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleString();
                     message('', '');
                     scheduleRender();
                 }
@@ -404,22 +289,12 @@
     root.addEventListener('click', function (event) {
         var button = event.target.closest('button');
         if (!button) return;
-        if (button.hasAttribute('data-pm-filter')) {
-            var reason = button.dataset.pmFilter;
-            controls.attention.value = reason === controls.attention.value ? '' : reason;
-            pageNumber = 1;
-            scheduleRender();
-            if (!button.classList.contains('sqr-pm-kpi')) el('directory-title').focus();
-        }
         if (button.dataset.pmRetry) refresh();
-        if (button.dataset.pmOpen && (!window.focusSqrTrackerProject || !window.focusSqrTrackerProject(button.dataset.pmOpen))) {
-            message('stale', 'This project is not in the loaded Tracker. Reload the page to update Tracker records.');
-        }
     });
     ['prev', 'next'].forEach(function (direction) {
         el(direction).addEventListener('click', function () {
             pageNumber += direction === 'next' ? 1 : -1;
-            renderDirectory();
+            renderPage();
             el('status-tracker-title').setAttribute('tabindex', '-1');
             el('status-tracker-title').focus();
         });

@@ -66,6 +66,7 @@ function dashboard(projects) {
     const events = {};
     const frames = [];
     let requests = 0;
+    let offline = false;
     const context = {
         document: {
             getElementById: id => elements[id], createElement: tag => new Element(tag),
@@ -77,13 +78,14 @@ function dashboard(projects) {
         setTimeout, clearTimeout, AbortController,
         requestAnimationFrame: callback => { frames.push(callback); return frames.length; },
         cancelAnimationFrame: () => {},
-        fetch: async () => { requests++; return {ok: true, json: async () => ({
+        fetch: async () => { requests++; if (offline) throw new Error('Offline'); return {ok: true, json: async () => ({
             ok: true, as_of: '2026-11-01', fetched_at: '2026-11-01T00:00:00Z', projects
         })}; },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-performance.js'), 'utf8'), context);
     return {
         elements, metrics, requests: () => requests,
+        setOffline(value) { offline = value; },
         metric: key => metrics.find(metric => metric.dataset.pmMetric === key)?.textContent,
         async open() {
             root.hidden = false;
@@ -123,6 +125,35 @@ test('portfolio remains lazy and status and health summaries include terminal an
     app.flush();
     assert.equal(app.metric('total'), '1');
     assert.equal(app.metric('pipeline'), '1');
+});
+
+test('reference charts and tables show project details without repeated action buttons', async () => {
+    const app = dashboard([project(1, 'ongoing', 'danger')]);
+    await app.open();
+    for (const id of ['sqr-pm-manager-chart', 'sqr-pm-status-queue', 'sqr-pm-rating-queue', 'sqr-pm-indicator-chart', 'sqr-pm-status-rows', 'sqr-pm-indicator-rows']) {
+        assert.ok(app.elements[id].children.length > 0, id);
+        assert.ok(!app.elements[id].textContent.includes('View in Tracker'), id);
+    }
+    assert.ok(app.elements['sqr-pm-status-rows'].textContent.includes('Project 1'));
+    assert.ok(app.elements['sqr-pm-indicator-rows'].textContent.includes('N/R'));
+    assert.equal(app.elements['sqr-pm-directory'], undefined);
+    assert.equal(app.elements['sqr-pm-queue'], undefined);
+});
+
+test('refresh failure keeps the last snapshot and clearly offers retry', async () => {
+    const app = dashboard([project(1)]);
+    await app.open();
+    app.setOffline(true);
+    await app.elements['sqr-pm-refresh'].events.click();
+    assert.equal(app.metric('total'), '1');
+    assert.equal(app.elements['sqr-pm-message'].dataset.state, 'stale');
+    assert.match(app.elements['sqr-pm-message'].textContent, /Refresh failed/);
+    assert.match(app.elements['sqr-pm-message'].textContent, /Retry/);
+    app.setOffline(false);
+    await app.elements['sqr-pm-refresh'].events.click();
+    app.flush();
+    assert.equal(app.elements['sqr-pm-message'].dataset.state, '');
+    assert.equal(app.metric('total'), '1');
 });
 
 test('tracker renders untrusted text safely, paginates both tables and recomputes filtered charts', async () => {
