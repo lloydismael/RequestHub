@@ -13,7 +13,7 @@
         return result;
     }
     var controls = {};
-    ['scope', 'search', 'manager', 'health', 'status', 'attention', 'mine'].forEach(function (key) {
+    ['scope', 'search', 'manager', 'health', 'status', 'portfolio', 'rating', 'attention', 'mine'].forEach(function (key) {
         controls[key] = el(key);
     });
     var snapshot = null;
@@ -30,6 +30,12 @@
     var healthOptions = [
         ['on_track', 'On Track'], ['at_risk', 'At Risk'], ['off_track', 'Off Track'],
         ['completed', 'Completed'], ['cancelled', 'Cancelled'], ['not_set', 'Not set']
+    ];
+    var portfolioLabels = {closed: 'Closed', ongoing: 'Ongoing', pipeline: 'Pipeline', removed: 'Removed'};
+    var ratingLabels = {good: 'On target / no issue', warning: 'Action needed', danger: 'Delay >2 wks / Off Track', unknown: 'Not rated'};
+    var indicatorLabels = [
+        ['schedule', 'Schedule'], ['scope', 'Scope'], ['resources', 'Resources'],
+        ['customer', 'Customer / dependencies'], ['risks', 'Risks / issues']
     ];
     function visible() { return !root.hidden; }
     function formatDate(value) {
@@ -107,13 +113,125 @@
     function replaceList(id, items, builder, emptyText) {
         var fragment = document.createDocumentFragment();
         items.forEach(function (item) { fragment.append(builder(item)); });
-        if (!items.length) fragment.append(node('p', 'sqr-pm-empty', emptyText));
+        if (!items.length && emptyText) fragment.append(node('p', 'sqr-pm-empty', emptyText));
         el(id).replaceChildren(fragment);
+    }
+    function attentionRow(project, performance) {
+        var rating = performance ? project.overall_rating : (
+            project.overall_rating === 'danger' ? 'danger' : 'warning'
+        );
+        var row = node('article', 'sqr-pm-attention-row sqr-pm-tone--' + rating);
+        var identity = node('div');
+        identity.append(node('h5', '', project.project_name));
+        var detail = project.pm_name + ' · ' + (
+            performance ? project.indicators.schedule.label + ' · ' + project.health_label
+            : project.reasons.map(function (reason) { return reason.label; }).join(' · ')
+        );
+        identity.append(node('p', 'sqr-pm-row-meta', detail));
+        var actions = node('div', 'sqr-pm-attention-actions');
+        actions.append(node('span', 'sqr-pm-tag ' + (performance ? 'sqr-pm-rating--' + rating : 'sqr-pm-state--' + project.portfolio_status),
+            performance ? ratingLabels[rating] : portfolioLabels[project.portfolio_status] + (project.progress === null ? '' : ' · ' + project.progress + '%')));
+        actions.append(openButton(project));
+        row.append(identity, actions);
+        return row;
+    }
+    function renderPortfolio(counts) {
+        var statusCounts = {closed: 0, ongoing: 0, pipeline: 0, removed: 0};
+        var ratingCounts = {good: 0, warning: 0, danger: 0, unknown: 0};
+        var managers = new Map();
+        filtered.forEach(function (project) {
+            statusCounts[project.portfolio_status]++;
+            ratingCounts[project.overall_rating]++;
+            var manager = managers.get(project.pm_id) || {name: project.pm_name, count: 0};
+            manager.count++;
+            managers.set(project.pm_id, manager);
+        });
+        Object.keys(statusCounts).forEach(function (key) { counts[key] = statusCounts[key]; });
+        Object.keys(ratingCounts).forEach(function (key) { counts['rating_' + key] = ratingCounts[key]; });
+        counts.closed_percent = filtered.length ? Math.round(statusCounts.closed / filtered.length * 100) + '%' : 'N/A';
+        el('as-of').textContent = 'AS OF ' + formatDate(snapshot.as_of).toUpperCase();
+        el('closed-coverage').textContent = statusCounts.closed + ' of ' + filtered.length + ' projects closed';
+        el('rated-coverage').textContent = 'Of ' + (filtered.length - ratingCounts.unknown) + ' rated projects';
+        var owners = Array.from(managers.values()).sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
+        var maximum = owners.length ? owners[0].count : 0;
+        replaceList('manager-chart', owners, function (manager) {
+            var row = node('div', 'sqr-pm-health-row');
+            var label = node('div');
+            label.append(node('span', '', manager.name), node('strong', '', manager.count + ' projects'));
+            var bar = node('div', 'sqr-pm-manager-bar');
+            bar.setAttribute('aria-hidden', 'true');
+            var fill = node('span', 'sqr-pm-manager-fill');
+            fill.style.width = (maximum ? manager.count / maximum * 100 : 0) + '%';
+            bar.append(fill);
+            row.append(label, bar);
+            return row;
+        }, 'No project managers in this view.');
+        replaceList('status-queue', filtered.filter(function (project) { return project.needs_attention; }).slice(0, 5),
+            function (project) { return attentionRow(project, false); }, 'No attention flags in this view.');
+        var attention = filtered.filter(function (project) { return ['danger', 'warning'].includes(project.overall_rating); })
+            .sort(function (a, b) { return (a.overall_rating === 'danger' ? 0 : 1) - (b.overall_rating === 'danger' ? 0 : 1); });
+        replaceList('rating-queue', attention.slice(0, 5), function (project) { return attentionRow(project, true); }, 'No rated projects need attention in this view.');
+        el('status-queue').append(node('p', 'sqr-pm-row-meta', 'Showing up to 5 projects. Use the Needs attention filter for all flags.'));
+        el('rating-queue').append(node('p', 'sqr-pm-row-meta', 'Showing ' + Math.min(5, attention.length) + ' of ' + attention.length + ' rated projects needing action.'));
+        replaceList('indicator-chart', indicatorLabels, function (indicator) {
+            var row = node('div', 'sqr-pm-indicator-chart-row');
+            row.append(node('span', 'sqr-pm-row-title', indicator[1]));
+            var bar = node('div', 'sqr-pm-stacked-bar');
+            var totals = {good: 0, warning: 0, danger: 0, unknown: 0};
+            filtered.forEach(function (project) { totals[project.indicators[indicator[0]].state]++; });
+            var description = [];
+            Object.keys(totals).forEach(function (state) {
+                var count = totals[state];
+                description.push((state === 'unknown' ? 'Not recorded' : ratingLabels[state]) + ': ' + count);
+                if (!count) return;
+                var segment = node('span', 'sqr-pm-rating--' + state, count);
+                segment.style.width = count / filtered.length * 100 + '%';
+                segment.setAttribute('aria-hidden', 'true');
+                bar.append(segment);
+            });
+            bar.setAttribute('role', 'img');
+            bar.setAttribute('aria-label', indicator[1] + ' — ' + description.join('; '));
+            bar.title = description.join('; ');
+            row.append(bar);
+            return row;
+        });
+    }
+    function renderTrackerTables(projects) {
+        function titleCell(project) {
+            var cell = node('th');
+            cell.setAttribute('scope', 'row');
+            cell.append(node('span', 'sqr-pm-table-project', project.project_name), node('small', 'sqr-pm-row-meta', project.reference_code));
+            return cell;
+        }
+        replaceList('status-rows', projects, function (project) {
+            var row = node('tr');
+            row.append(node('td', '', filtered.indexOf(project) + 1), titleCell(project), node('td', '', project.pm_name + (project.pm_fallback ? ' (reviewer)' : '')));
+            row.append(node('td', 'sqr-pm-table-status sqr-pm-state--' + project.portfolio_status, portfolioLabels[project.portfolio_status]));
+            row.append(node('td', '', formatDate(project.start_date) + ' – ' + formatDate(project.target_date)));
+            var progress = node('td');
+            progress.append(progressBlock(project));
+            var action = node('td');
+            action.append(openButton(project));
+            row.append(progress, node('td', 'sqr-pm-table-notes', project.updates_risks || '—'), action);
+            return row;
+        }, '');
+        replaceList('indicator-rows', projects, function (project) {
+            var row = node('tr');
+            row.append(titleCell(project));
+            indicatorLabels.forEach(function (indicator) {
+                var value = project.indicators[indicator[0]];
+                row.append(node('td', 'sqr-pm-indicator-cell sqr-pm-rating--' + value.state, value.label));
+            });
+            row.append(node('td', '', project.health_label));
+            return row;
+        }, '');
     }
     function renderDirectory() {
         var pages = Math.max(1, Math.ceil(filtered.length / pageSize));
         pageNumber = Math.min(pageNumber, pages);
-        replaceList('directory', filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize), function (project) {
+        var projects = filtered.slice((pageNumber - 1) * pageSize, pageNumber * pageSize);
+        renderTrackerTables(projects);
+        replaceList('directory', projects, function (project) {
             return projectCard(project, false);
         }, 'No projects match this view. Try clearing filters or choosing All SQRs.');
         el('page').textContent = 'Page ' + pageNumber + ' of ' + pages + ' · ' + filtered.length + ' projects';
@@ -141,6 +259,8 @@
                 && (!controls.manager.value || project.pm_id === controls.manager.value)
                 && (!controls.health.value || project.health_key === controls.health.value)
                 && (!controls.status.value || project.status_key === controls.status.value)
+                && (!controls.portfolio.value || project.portfolio_status === controls.portfolio.value)
+                && (!controls.rating.value || project.overall_rating === controls.rating.value)
                 && matchesReason(project, controls.attention.value)
                 && (!query || project.search_text.toLowerCase().includes(query));
             if (!matches) return false;
@@ -154,6 +274,7 @@
             return true;
         });
         counts.average = known ? (Math.round(totalProgress / known * 10) / 10) + '%' : 'N/A';
+        renderPortfolio(counts);
         root.querySelectorAll('[data-pm-metric]').forEach(function (metric) { metric.textContent = counts[metric.dataset.pmMetric]; });
         root.querySelectorAll('[data-pm-filter]').forEach(function (button) {
             button.setAttribute('aria-pressed', String(button.dataset.pmFilter === controls.attention.value));
@@ -274,7 +395,7 @@
         });
     });
     el('reset').addEventListener('click', function () {
-        Object.keys(controls).forEach(function (key) { if (key !== 'mine') controls[key].value = key === 'scope' ? 'active' : ''; });
+        Object.keys(controls).forEach(function (key) { if (key !== 'mine') controls[key].value = key === 'scope' ? 'all' : ''; });
         controls.mine.checked = root.dataset.defaultMine === '1';
         pageNumber = 1;
         scheduleRender();
@@ -299,7 +420,8 @@
         el(direction).addEventListener('click', function () {
             pageNumber += direction === 'next' ? 1 : -1;
             renderDirectory();
-            el('directory-title').focus();
+            el('status-tracker-title').setAttribute('tabindex', '-1');
+            el('status-tracker-title').focus();
         });
     });
     document.addEventListener('sqr:performance-view', function (event) {

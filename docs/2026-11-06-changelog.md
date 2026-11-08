@@ -1,5 +1,14 @@
 # Request Hub changelog — 2026-11-06
 
+## Unreleased maintenance: Christmas login validation
+
+- Before: the background-image regression required an unversioned CSS URL and
+  failed on the existing `?v=2` cache buster. After: it accepts an optional
+  query string while still checking that the image and script are shipped.
+- This test-only change has no visual difference. Exact parent/change evidence
+  and Notifications visibility remain subject to the release evidence workflow;
+  this note is not a published release.
+
 ## Unreleased follow-up — 2026-11-07: Login title and Christmas default
 
 **Baseline:** `d8cc94e`. This follow-up describes the current working-tree change, not a published numbered release.

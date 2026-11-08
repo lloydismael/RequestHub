@@ -24,6 +24,7 @@ PROJECT_KEYS = {
     "updates_risks", "active_delivery", "delivery_candidate", "needs_attention", "overdue",
     "due_soon", "days_to_target", "missing_data", "inconsistencies", "reasons", "priority",
     "search_text",
+    "portfolio_status", "indicators", "overall_rating",
 }
 
 
@@ -64,6 +65,76 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
 
     def test_empty_portfolio(self):
         self.assertEqual(build_sqr_performance_snapshot([], today=TODAY, fetched_at=FETCHED_AT)["projects"], [])
+
+    def test_portfolio_status_uses_terminal_evidence_and_preserves_pipeline(self):
+        for changes, expected in (
+            ({}, "pipeline"),
+            ({"overall_status": "planning"}, "pipeline"),
+            ({"overall_status": "in_progress"}, "ongoing"),
+            ({"proposal_status": "closed_won"}, "ongoing"),
+            ({"delivery_actual_finish_date": TODAY}, "closed"),
+            ({"delivery_health": "completed"}, "closed"),
+            ({"overall_status": "cancelled"}, "removed"),
+            ({"proposal_status": "closed_lost"}, "removed"),
+            ({"overall_status": "completed", "delivery_health": "cancelled"}, "removed"),
+        ):
+            with self.subTest(changes=changes):
+                self.assertEqual(self.project(**changes)["portfolio_status"], expected)
+
+    def test_schedule_delay_boundaries_are_date_based_not_recorded_health(self):
+        for days, expected in ((-1, "good"), (0, "good"), (1, "warning"), (14, "warning"), (15, "danger")):
+            with self.subTest(days=days):
+                project = self.project(
+                    overall_status="in_progress", delivery_health="on_track",
+                    delivery_target_finish_date=TODAY - timedelta(days=days),
+                )
+                self.assertEqual(project["indicators"]["schedule"]["state"], expected)
+                self.assertEqual(project["health_key"], "on_track")
+                self.assertEqual(project["overall_rating"], expected)
+
+    def test_schedule_uses_actual_finish_for_closed_projects(self):
+        project = self.project(
+            overall_status="completed", delivery_target_finish_date=TODAY - timedelta(days=60),
+            delivery_actual_finish_date=TODAY - timedelta(days=70),
+        )
+        self.assertEqual(project["indicators"]["schedule"]["state"], "good")
+        for changes in (
+            {"overall_status": "completed"},
+            {"overall_status": "planning"},
+            {"overall_status": "cancelled"},
+            {"delivery_start_date": TODAY + timedelta(days=1)},
+            {"delivery_start_date": TODAY, "delivery_target_finish_date": TODAY - timedelta(days=1)},
+        ):
+            self.assertEqual(self.project(**changes)["indicators"]["schedule"]["state"], "unknown")
+
+    def test_unavailable_indicators_and_notes_never_invent_ratings(self):
+        project = self.project(key_updates_risks="No issue. Scope change. Blocked resources.")
+        self.assertEqual(project["overall_rating"], "unknown")
+        self.assertEqual(set(project["indicators"]), {"schedule", "scope", "resources", "customer", "risks"})
+        for indicator in project["indicators"].values():
+            self.assertEqual(indicator, {"state": "unknown", "label": "N/R"})
+
+    def test_closed_project_does_not_inherit_open_on_hold_warning(self):
+        project = self.project(
+            overall_status="on_hold", delivery_health="completed",
+            delivery_start_date=TODAY - timedelta(days=30),
+            delivery_target_finish_date=TODAY - timedelta(days=5),
+            delivery_actual_finish_date=TODAY - timedelta(days=10),
+        )
+        self.assertEqual(project["portfolio_status"], "closed")
+        self.assertEqual(project["indicators"]["schedule"]["state"], "good")
+        self.assertEqual(project["overall_rating"], "good")
+        self.assertIn("Terminal delivery conflicts with open status or health", project["inconsistencies"])
+
+    def test_recorded_health_contributes_separately_to_overall_rating(self):
+        for health, expected in (("on_track", "good"), ("at_risk", "warning"), ("off_track", "danger"), ("future", "unknown")):
+            project = self.project(overall_status="in_progress", delivery_health=health)
+            self.assertEqual(project["overall_rating"], expected)
+            self.assertEqual(project["indicators"]["risks"]["state"], "unknown")
+        project = self.project(overall_status="planning", delivery_health="off_track")
+        self.assertEqual(project["overall_rating"], "unknown")
+        project = self.project(overall_status="on_hold", delivery_health="on_track")
+        self.assertEqual(project["overall_rating"], "warning")
 
     def test_plain_proposal_is_not_deficient_delivery(self):
         project = self.project(key_updates_risks="Blocked!", assigned_pm=User(pk=4, username="pm"))

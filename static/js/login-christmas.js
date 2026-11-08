@@ -444,7 +444,13 @@
             radial(defs, `xmas-halo-${name}`, HALO_STOPS(c.glow, dark));
             radial(defs, `xmas-spill-${name}`, SPILL_STOPS(c.glow, dark));
         });
-        radial(defs, 'xmas-core', [['0', '#ffffff', 1], ['0.5', '#fffbe9', 0.95], ['1', '#fff8dc', 0]]);
+        radial(defs, 'xmas-core', [['0', '#ffffff', 1], ['0.45', '#fffbe9', 0.9], ['1', '#fff8dc', 0]]);
+        const shade = svg('linearGradient', { id: 'xmas-glass-shade', x1: '0', y1: '0', x2: '0', y2: '1' }, defs);
+        [['0', '#000', 0], ['0.6', '#000', 0], ['1', '#000', 0.32]].forEach(([offset, color, opacity]) =>
+            svg('stop', { offset, 'stop-color': color, 'stop-opacity': opacity }, shade));
+        const brass = svg('linearGradient', { id: 'xmas-brass', x1: '0', y1: '0', x2: '0', y2: '1' }, defs);
+        [['0', '#6b5420'], ['0.3', '#f1d78a'], ['0.55', '#b48a35'], ['1', '#3d2c0c']].forEach(([offset, color]) =>
+            svg('stop', { offset, 'stop-color': color }, brass));
     }
 
     /* ---------- Snow ---------- */
@@ -576,28 +582,35 @@
 
     function addBulb(layers, color, x, y, angle, scale) {
         const transform = `translate(${round(x)} ${round(y)}) rotate(${round(angle * 180 / Math.PI)}) scale(${scale})`;
+        const halos = layers.halos[color];
+        const spills = layers.spills[color];
         // Light leaves from the glass centre, not the socket.
-        const gx = x + Math.cos(angle) * 11 * scale;
-        const gy = y + Math.sin(angle) * 11 * scale;
+        const gx = x + Math.cos(angle) * 12 * scale;
+        const gy = y + Math.sin(angle) * 12 * scale;
         // Wide, faint bloom washing the snow scene behind the card.
-        svg('circle', { class: 'xmas-bulb__bloom', cx: round(gx), cy: round(gy), r: round(30 * scale), fill: `url(#xmas-halo-${color})` }, layers.halos[color]);
+        svg('circle', { class: 'xmas-bulb__bloom', cx: round(gx), cy: round(gy), r: round(30 * scale), fill: `url(#xmas-halo-${color})` }, halos);
         // Bounce light pooling on the frosted glass, fields and logo near the bulb.
-        svg('circle', { cx: round(gx), cy: round(gy), r: round(54 * scale), fill: `url(#xmas-spill-${color})` }, layers.spills[color]);
+        svg('circle', { cx: round(gx), cy: round(gy), r: round(54 * scale), fill: `url(#xmas-spill-${color})` }, spills);
         // Tight bloom that also colours the snow and wire right around the bulb.
-        svg('circle', { class: 'xmas-bulb__halo', cx: '11', cy: '0', r: '17', fill: `url(#xmas-halo-${color})`, transform }, layers.halos[color]);
+        svg('circle', { class: 'xmas-bulb__halo', cx: '12', cy: '0', r: '17', fill: `url(#xmas-halo-${color})`, transform }, halos);
 
         const bulb = svg('g', { class: `xmas-bulb xmas-bulb--${color}`, transform }, layers.bulbs);
         svg('path', { d: 'M-0.4 -2.5Q-0.4 -3 0.2 -3H5Q5.7 -3 5.7 -2.4V2.4Q5.7 3 5 3H0.2Q-0.4 3 -0.4 2.5Z', fill: 'url(#xmas-socket-fill)' }, bulb);
         svg('path', { class: 'xmas-socket-ribs', d: 'M1.5 -2.9V2.9M3 -2.9V2.9M4.5 -2.9V2.9' }, bulb);
-        // C9 "strawberry" glass: full shoulders tapering to a rounded tip.
-        svg('path', { d: 'M5.2 -3.3C7.4 -5.6 11.6 -5.9 14.4 -4C16.6 -2.5 18.1 -1 18.3 0C18.1 1 16.6 2.5 14.4 4C11.6 5.9 7.4 5.6 5.2 3.3Z', fill: `url(#xmas-glass-${color})` }, bulb);
-        svg('path', { class: 'xmas-bulb__facets', d: 'M6.8 -2.9Q11.6 -3.6 17 -0.7M6.8 2.9Q11.6 3.6 17 0.7M7 0H16.6' }, bulb);
-        // Refracted light gathering on the far rim of the glass.
-        svg('path', { class: 'xmas-bulb__rim', d: 'M8.5 4.5Q13.5 4.4 17.3 1' }, bulb);
-        svg('ellipse', { class: 'xmas-bulb__core', cx: '9.6', cy: '0', rx: '3.8', ry: '2.1', fill: 'url(#xmas-core)' }, bulb);
-        svg('path', { class: 'xmas-bulb__filament', d: 'M7.6 0.6L8.4 -0.6L9.2 0.6L10 -0.6L10.8 0.6L11.6 -0.6' }, bulb);
-        svg('ellipse', { class: 'xmas-bulb__shine', cx: '10.2', cy: '-3', rx: '3', ry: '0.65', transform: 'rotate(-8 10.2 -3)' }, bulb);
-        svg('circle', { class: 'xmas-bulb__glint', cx: '7.4', cy: '-2.6', r: '0.55' }, bulb);
+        // Brass neck where the glass seats into the socket.
+        svg('rect', { x: '5.2', y: '-2.5', width: '1.3', height: '5', rx: '0.4', fill: 'url(#xmas-brass)' }, bulb);
+        // C7 glass: round shoulder tapering to a soft flame tip.
+        const glass = 'M6.2 -2.6C7.4 -4.5 10 -5.1 12 -4.3C14.8 -3.2 17.6 -1.3 19.2 0C17.6 1.3 14.8 3.2 12 4.3C10 5.1 7.4 4.5 6.2 2.6Z';
+        svg('path', { d: glass, fill: `url(#xmas-glass-${color})` }, bulb);
+        // Darker glass thickness along the lower edge, opposite the light source.
+        svg('path', { d: glass, fill: 'url(#xmas-glass-shade)' }, bulb);
+        svg('path', { class: 'xmas-bulb__facets', d: 'M7.6 -2.6Q12.4 -3.4 18 -0.6M7.6 2.6Q12.4 3.4 18 0.6' }, bulb);
+        svg('path', { class: 'xmas-bulb__rim', d: 'M8.6 4.3Q13.8 4.3 18.4 0.9' }, bulb);
+        svg('ellipse', { class: 'xmas-bulb__core', cx: '10.4', cy: '0', rx: '4.6', ry: '2.6', fill: 'url(#xmas-core)' }, bulb);
+        svg('path', { class: 'xmas-bulb__filament', d: 'M8.4 0.5L9.1 -0.5L9.8 0.5L10.5 -0.5L11.2 0.5L11.9 -0.5' }, bulb);
+        // Long curved window reflection plus a pin-point glint, like real blown glass.
+        svg('path', { class: 'xmas-bulb__shine', d: 'M8 -3.3Q12 -4.5 16.4 -1.9Q12.4 -3.4 8.3 -2.7Z' }, bulb);
+        svg('circle', { class: 'xmas-bulb__glint', cx: '8.6', cy: '-2.9', r: '0.6' }, bulb);
     }
 
     /* ---------- Card decoration ---------- */
@@ -643,7 +656,7 @@
             const scene = canvas(width, height, 'xmas-deco-static');
             const glows = COLORS.map((name, index) => {
                 const layer = canvas(width, height, 'xmas-deco-glows');
-                layer.style.setProperty('--twinkle-duration', `${2.8 + index * 0.7}s`);
+                layer.style.setProperty('--twinkle-duration', `${2.3 + index * 0.75}s`);
                 layer.style.setProperty('--twinkle-delay', `${-index * 0.9}s`);
                 return layer;
             });
@@ -728,7 +741,7 @@
             const count = mobile ? 22 : 40;
             const spacing = total / count;
             const offset = random() * spacing;
-            const scale = mobile ? 1.25 : 1.5;
+            const scale = mobile ? 1.5 : 1.95;
             let previous = '';
             let placed = 0;
             const limit = mobile ? 18 : 34;

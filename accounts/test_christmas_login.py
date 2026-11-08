@@ -170,13 +170,15 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertNotContains(response, REMEMBER)
         self.assertNotContains(response, FORGET)
 
+
+class ChristmasLoginStaticFilesTests(SimpleTestCase):
     def test_background_image_ships_with_the_stylesheet(self):
         css_path = finders.find("css/login-christmas.css")
         with open(css_path, encoding="utf-8") as stylesheet:
             css = stylesheet.read()
 
         # Manifest static storage fails collectstatic if a referenced file is missing.
-        self.assertIn('url("../img/login-christmas-bg.webp")', css)
+        self.assertRegex(css, r'url\("\.\./img/login-christmas-bg\.webp(?:\?[^"#]*)?"\)')
         self.assertIsNotNone(finders.find("img/login-christmas-bg.webp"))
         self.assertIsNotNone(finders.find("js/login-christmas.js"))
 

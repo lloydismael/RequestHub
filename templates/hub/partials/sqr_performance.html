@@ -4,17 +4,20 @@
          data-default-mine="{% if default_my_assigned_filter %}1{% else %}0{% endif %}" aria-labelledby="sqr-pm-title">
     <header class="sqr-pm-hero">
         <div>
-            <p class="sqr-pm-eyebrow"><i class="bi bi-activity" aria-hidden="true"></i> Live SQR Tracker data</p>
-            <h2 id="sqr-pm-title">Delivery at a glance</h2>
-            <p class="sqr-pm-lead">Know what needs attention. Keep every project moving.</p>
+            <p class="sqr-pm-eyebrow">ESG project portfolio &middot; Live SQR Tracker data</p>
+            <h2 id="sqr-pm-title">Project Performance Tracking</h2>
+            <p class="sqr-pm-lead">Project status, delivery health and the next actions that matter.</p>
             <p class="sqr-pm-meta">Read-only dashboard &middot; Make changes in the SQR Tracker.</p>
         </div>
         <div class="sqr-pm-hero-actions">
+            <span id="sqr-pm-as-of" class="sqr-pm-as-of">AS OF &mdash;</span>
             <button type="button" id="sqr-pm-refresh" class="btn btn-outline-primary"><i class="bi bi-arrow-clockwise me-2" aria-hidden="true"></i>Refresh snapshot</button>
             <span id="sqr-pm-snapshot" class="sqr-pm-meta">Snapshot not retrieved yet</span>
         </div>
     </header>
 
+    <details class="sqr-pm-filter-disclosure">
+    <summary><i class="bi bi-sliders me-2" aria-hidden="true"></i>Filter portfolio <span class="sqr-pm-meta">Scope, PM, status &amp; health</span></summary>
     <section class="sqr-pm-surface sqr-pm-filters" aria-labelledby="sqr-pm-filters-title">
         <div class="sqr-pm-section-head">
             <h3 id="sqr-pm-filters-title"><i class="bi bi-sliders me-2" aria-hidden="true"></i>Your portfolio view</h3>
@@ -23,7 +26,7 @@
         <div class="sqr-pm-filter-grid">
             <div>
                 <label for="sqr-pm-scope" class="form-label">Scope</label>
-                <select id="sqr-pm-scope" class="form-select"><option value="active">Active delivery</option><option value="all">All SQRs</option></select>
+                <select id="sqr-pm-scope" class="form-select"><option value="all" selected>All SQRs</option><option value="active">Active delivery</option></select>
             </div>
             <div class="sqr-pm-search-field">
                 <label for="sqr-pm-search" class="form-label">Search projects</label>
@@ -46,6 +49,18 @@
                 </select>
             </div>
             <div>
+                <label for="sqr-pm-portfolio" class="form-label">Portfolio status</label>
+                <select id="sqr-pm-portfolio" class="form-select">
+                    <option value="">All portfolio statuses</option><option value="closed">Closed</option><option value="ongoing">Ongoing</option><option value="pipeline">Pipeline</option><option value="removed">Removed</option>
+                </select>
+            </div>
+            <div>
+                <label for="sqr-pm-rating" class="form-label">Derived delivery rating</label>
+                <select id="sqr-pm-rating" class="form-select">
+                    <option value="">All ratings</option><option value="good">On target / no issue</option><option value="warning">Action needed</option><option value="danger">Delay &gt;2 wks / Off Track</option><option value="unknown">Not rated</option>
+                </select>
+            </div>
+            <div>
                 <label for="sqr-pm-attention" class="form-label">Attention reason</label>
                 <select id="sqr-pm-attention" class="form-select">
                     <option value="">All projects</option><option value="attention">Needs attention</option><option value="overdue">Overdue</option><option value="due_soon">Due within 14 days</option><option value="missing_data">Missing delivery data</option><option value="inconsistency">Inconsistent delivery data</option><option value="off_track">Off Track</option><option value="at_risk">At Risk</option><option value="on_hold">On Hold</option>
@@ -60,12 +75,98 @@
             <span id="sqr-pm-count" class="sqr-pm-meta">Open this view to load your portfolio</span>
         </div>
     </section>
+    </details>
 
     <div id="sqr-pm-message" class="sqr-pm-message" role="status" aria-live="polite" aria-atomic="true">Dashboard data loads only when this view is opened.</div>
     <noscript><p class="sqr-pm-empty">Enable JavaScript to load this dashboard. Project records remain available in the SQR Tracker.</p></noscript>
     <div id="sqr-pm-empty" class="sqr-pm-empty" hidden></div>
 
     <div id="sqr-pm-content" hidden>
+        <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-status-dashboard-title">
+            <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">Portfolio overview</p><h3 id="sqr-pm-status-dashboard-title">Project Status Dashboard</h3></div><a class="sqr-pm-link" href="#sqr-pm-status-tracker-title">Explore project status &darr;</a></div>
+            <div class="sqr-pm-summary-grid">
+                <div class="sqr-pm-summary sqr-pm-tone--cyan"><span>Total projects</span><strong data-pm-metric="total">&mdash;</strong><small>Includes pipeline and removed</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--good"><span>Closed</span><strong data-pm-metric="closed_percent">&mdash;</strong><small id="sqr-pm-closed-coverage">Of projects in view</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--cyan"><span>In progress</span><strong data-pm-metric="ongoing">&mdash;</strong><small>Actively ongoing delivery</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--removed"><span>Needs attention</span><strong data-pm-metric="attention">&mdash;</strong><small>Deadline, health or data flags</small></div>
+            </div>
+            <h4 class="sqr-pm-subheading">Projects by status</h4>
+            <div class="sqr-pm-status-grid" aria-label="Project status totals">
+                <div class="sqr-pm-status-tile sqr-pm-state--closed"><strong data-pm-metric="closed">&mdash;</strong><span>Closed</span></div>
+                <div class="sqr-pm-status-tile sqr-pm-state--ongoing"><strong data-pm-metric="ongoing">&mdash;</strong><span>Ongoing</span></div>
+                <div class="sqr-pm-status-tile sqr-pm-state--pipeline"><strong data-pm-metric="pipeline">&mdash;</strong><span>Pipeline</span></div>
+                <div class="sqr-pm-status-tile sqr-pm-state--removed"><strong data-pm-metric="removed">&mdash;</strong><span>Removed</span></div>
+            </div>
+            <div class="sqr-pm-portfolio-grid">
+                <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-manager-title">
+                    <h4 id="sqr-pm-manager-title">Projects by PM (includes removed)</h4>
+                    <div id="sqr-pm-manager-chart"></div>
+                </section>
+                <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-status-attention-title">
+                    <h4 id="sqr-pm-status-attention-title">Needs attention</h4>
+                    <div id="sqr-pm-status-queue" class="sqr-pm-attention-list"></div>
+                </section>
+            </div>
+        </section>
+
+        <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-status-tracker-title">
+            <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">Delivery detail</p><h3 id="sqr-pm-status-tracker-title">Project Status Tracker</h3></div><span class="sqr-pm-meta">Current page &middot; All statuses included</span></div>
+            <div class="sqr-pm-table-scroll" role="region" aria-label="Project status tracker" tabindex="0">
+                <table class="sqr-pm-table sqr-pm-status-table">
+                    <caption class="visually-hidden">Project status, owner, timeline, progress and next action for this page</caption>
+                    <thead><tr><th scope="col">#</th><th scope="col">Project name</th><th scope="col">PM</th><th scope="col">Status</th><th scope="col">Start / target</th><th scope="col">Progress</th><th scope="col">Next action / remarks</th><th scope="col">Action</th></tr></thead>
+                    <tbody id="sqr-pm-status-rows"></tbody>
+                </table>
+            </div>
+            <p class="sqr-pm-note">Closed = recorded completion or finish evidence. Pipeline = planning or no delivery evidence. Removed = cancelled or lost. These portfolio labels do not change Tracker status.</p>
+        </section>
+
+        <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-performance-dashboard-title">
+            <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">ESG project health indicator</p><h3 id="sqr-pm-performance-dashboard-title">Project Performance Dashboard</h3></div></div>
+            <div class="sqr-pm-summary-grid">
+                <div class="sqr-pm-summary sqr-pm-tone--good"><span>On target / no issue</span><strong data-pm-metric="rating_good">&mdash;</strong><small id="sqr-pm-rated-coverage">Of rated projects</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--warning"><span>Action needed</span><strong data-pm-metric="rating_warning">&mdash;</strong><small>Delay &le;2 weeks, At Risk or On Hold</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--danger"><span>Delay &gt;2 wks / Off Track</span><strong data-pm-metric="rating_danger">&mdash;</strong><small>Schedule or recorded delivery health</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--unknown"><span>Not rated</span><strong data-pm-metric="rating_unknown">&mdash;</strong><small>No rating, pipeline or removed</small></div>
+            </div>
+            <div class="sqr-pm-portfolio-grid">
+                <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-indicator-chart-title">
+                    <h4 id="sqr-pm-indicator-chart-title">Ratings by health indicator</h4>
+                    <div id="sqr-pm-indicator-chart"></div>
+                    <div class="sqr-pm-legend">
+                        <span><i class="sqr-pm-rating--good" aria-hidden="true"></i>On target / no issue</span>
+                        <span><i class="sqr-pm-rating--warning" aria-hidden="true"></i>Action needed</span>
+                        <span><i class="sqr-pm-rating--danger" aria-hidden="true"></i>Delay &gt;2 wks / Off Track</span>
+                        <span><i class="sqr-pm-rating--unknown" aria-hidden="true"></i>Not recorded</span>
+                    </div>
+                </section>
+                <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-rating-attention-title">
+                    <h4 id="sqr-pm-rating-attention-title">Projects needing attention</h4>
+                    <div id="sqr-pm-rating-queue" class="sqr-pm-attention-list"></div>
+                </section>
+            </div>
+            <p class="sqr-pm-note">Overall rating is the worse of date-based schedule and recorded delivery health; open On Hold also needs action. It is not a complete five-indicator assessment. Unavailable ratings are not assumed healthy.</p>
+        </section>
+
+        <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-performance-tracker-title">
+            <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">Indicator scorecard</p><h3 id="sqr-pm-performance-tracker-title">Project Performance Tracker</h3></div><span class="sqr-pm-meta">Same projects and page as status tracker</span></div>
+            <div class="sqr-pm-table-scroll" role="region" aria-label="Project performance tracker" tabindex="0">
+                <table class="sqr-pm-table sqr-pm-indicator-table">
+                    <caption class="visually-hidden">Five project health indicators and separately recorded delivery health</caption>
+                    <thead><tr><th scope="col">Project</th><th scope="col">Schedule</th><th scope="col">Scope</th><th scope="col">Resources</th><th scope="col">Customer / dependencies</th><th scope="col">Risks / issues</th><th scope="col">Recorded delivery health</th></tr></thead>
+                    <tbody id="sqr-pm-indicator-rows"></tbody>
+                </table>
+            </div>
+            <p class="sqr-pm-note">N/R = not recorded. Schedule compares the target with today for ongoing projects, or actual finish for closed projects. Missing or inconsistent dates remain N/R. Scope, resources, customer/dependencies and risks are not separately captured in SQR; notes are shown as remarks, never parsed into scores.</p>
+        </section>
+        <nav class="sqr-pm-pagination" aria-label="Project tracker and directory pages">
+            <button type="button" id="sqr-pm-prev" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous</button>
+            <span id="sqr-pm-page" class="sqr-pm-meta" aria-live="polite">Page 1</span>
+            <button type="button" id="sqr-pm-next" class="btn btn-outline-secondary" disabled>Next<i class="bi bi-chevron-right ms-1" aria-hidden="true"></i></button>
+        </nav>
+
+        <details class="sqr-pm-delivery-details">
+        <summary>Delivery diagnostics &amp; project directory</summary>
         <section class="sqr-pm-kpis" aria-label="Metrics for the current filtered view">
             <button type="button" class="sqr-pm-kpi" data-pm-filter="" aria-pressed="true">
                 <span class="sqr-pm-kpi-label"><i class="bi bi-grid-1x2" aria-hidden="true"></i>Projects in view</span>
@@ -124,12 +225,8 @@
         <section class="sqr-pm-surface" aria-labelledby="sqr-pm-directory-title">
             <div class="sqr-pm-section-head"><div><p class="sqr-pm-eyebrow">Explore the detail</p><h3 id="sqr-pm-directory-title" tabindex="-1">Project directory</h3><p class="sqr-pm-meta">Attention first, then target date. Open any project in the Tracker to act.</p></div></div>
             <div id="sqr-pm-directory" class="sqr-pm-directory"></div>
-            <nav class="sqr-pm-pagination" aria-label="Project directory pages">
-                <button type="button" id="sqr-pm-prev" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous</button>
-                <span id="sqr-pm-page" class="sqr-pm-meta" aria-live="polite">Page 1</span>
-                <button type="button" id="sqr-pm-next" class="btn btn-outline-secondary" disabled>Next<i class="bi bi-chevron-right ms-1" aria-hidden="true"></i></button>
-            </nav>
         </section>
+        </details>
     </div>
 
     <details class="sqr-pm-methodology sqr-pm-details">
