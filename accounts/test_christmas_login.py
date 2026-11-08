@@ -176,7 +176,7 @@ class ChristmasLoginThemeTests(TestCase):
             css = stylesheet.read()
 
         # Manifest static storage fails collectstatic if a referenced file is missing.
-        self.assertIn('url("../img/login-christmas-bg.webp")', css)
+        self.assertRegex(css, r"""url\((["'])\.\./img/login-christmas-bg\.webp(?:\?[^"')\s]+)?\1\)""")
         self.assertIsNotNone(finders.find("img/login-christmas-bg.webp"))
         self.assertIsNotNone(finders.find("js/login-christmas.js"))
 
