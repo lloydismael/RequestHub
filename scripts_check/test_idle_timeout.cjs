@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 function idlePage(enabled = true) {
     const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'base.html'), 'utf8');
-    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)]
+    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script(?:\s[^>]*)?>/gi)]
         .map(match => match[1]).find(source => source.includes('var IDLE_MS'));
     let now = 0;
     let nextId = 0;
