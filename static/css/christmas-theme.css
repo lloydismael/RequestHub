@@ -185,72 +185,108 @@ body.account-themed.authenticated[data-account-theme="christmas"] table .lg-btn 
     from { opacity: 1; transform: translate(0, 0) scale(0.4); }
     to { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--spin)) scale(1); }
 }
-/* Light/dark toggle flyover: Santa crosses toward the right into dark mode, toward the left into light mode. */
+/* The quilt's leading edge stays aligned with the theme reveal and Santa's sleigh. */
 .christmas-santa {
+    --blanket-width: clamp(96px, 16vw, 180px);
+    --sleigh-width: clamp(190px, 26vw, 350px);
     position: fixed;
-    top: 13vh;
+    top: 0;
     left: 0;
-    z-index: 1035;
-    width: clamp(240px, 34vw, 460px);
-    aspect-ratio: 640 / 210;
+    z-index: 10002;
+    width: calc(var(--blanket-width) + var(--sleigh-width));
+    height: 100vh;
+    height: 100dvh;
     pointer-events: none;
     user-select: none;
-    animation: christmas-santa-to-dark 1.9s cubic-bezier(0.37, 0.12, 0.63, 0.88) forwards;
+    animation: christmas-santa-to-dark 1.5s cubic-bezier(0.45, 0.05, 0.55, 0.95) forwards;
     view-transition-name: christmas-santa;
 }
-.christmas-santa--to-light { animation-name: christmas-santa-to-light; }
-/* Keep Santa live above the theme-switch reveal snapshot instead of being clipped by it. */
+.christmas-santa--to-light {
+    right: 0;
+    left: auto;
+    animation-name: christmas-santa-to-light;
+}
+.christmas-santa--snapshot,
+.christmas-santa--fallback { animation: none; }
+body.christmas-blanket-switching:not(.page-login) .navbar { view-transition-name: none; }
 ::view-transition-group(christmas-santa) { z-index: 10002; animation: none; }
 ::view-transition-old(christmas-santa) { display: none; }
 ::view-transition-new(christmas-santa) { animation: none; }
-.christmas-santa__art {
+.christmas-santa__blanket {
+    position: absolute;
+    inset: 0 auto 0 0;
     display: block;
-    width: 100%;
-    height: 100%;
+    box-sizing: border-box;
+    width: var(--blanket-width);
+    border-right: 5px solid #e5c17a;
+    border-radius: 0 18px 18px 0;
+    background:
+        repeating-linear-gradient(90deg, transparent 0 32px, rgba(255, 221, 159, 0.35) 32px 35px, transparent 35px 64px),
+        repeating-linear-gradient(0deg, transparent 0 32px, rgba(255, 221, 159, 0.3) 32px 35px, transparent 35px 64px),
+        repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 8px),
+        linear-gradient(90deg, #692137, #b43b4a 52%, #8b2136);
+    box-shadow: 10px 0 24px rgba(22, 14, 18, 0.24), inset -8px 0 18px rgba(69, 10, 24, 0.25);
+}
+.christmas-santa__blanket::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border: 2px dashed rgba(255, 233, 181, 0.6);
+    border-radius: 10px;
+}
+.christmas-santa--to-light .christmas-santa__blanket {
+    right: 0;
+    left: auto;
+    border-right: 0;
+    border-left: 5px solid #e5c17a;
+    border-radius: 18px 0 0 18px;
+    box-shadow: -10px 0 24px rgba(22, 14, 18, 0.24), inset 8px 0 18px rgba(69, 10, 24, 0.25);
+}
+.christmas-santa__art {
+    position: absolute;
+    top: clamp(52px, 13vh, 140px);
+    left: var(--blanket-width);
+    width: var(--sleigh-width);
+    aspect-ratio: 640 / 210;
     background: url('../images/christmas-santa-sleigh.svg') center / contain no-repeat;
     filter: drop-shadow(0 8px 10px rgba(22, 52, 40, 0.28));
     animation: christmas-santa-gallop 420ms ease-in-out infinite alternate;
 }
-.christmas-santa--to-light .christmas-santa__art { scale: -1 1; }
-body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 221, 140, 0.55)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6)); }
-.christmas-santa::before {
+.christmas-santa__art::before {
     content: '';
     position: absolute;
-    top: 38%;
-    right: 92%;
-    width: 60%;
-    height: 34%;
-    background:
-        radial-gradient(circle, #fff3c4 0 1.6px, transparent 2.4px) 0 0 / 22px 16px,
-        radial-gradient(circle, #ffd36b 0 1.2px, transparent 2px) 11px 8px / 22px 16px;
-    -webkit-mask-image: linear-gradient(to left, #000, transparent);
-    mask-image: linear-gradient(to left, #000, transparent);
-    animation: christmas-santa-sparkle 360ms steps(2) infinite;
+    top: 67%;
+    left: -14px;
+    width: 28px;
+    height: 3px;
+    border-radius: 999px;
+    background: #efce87;
+    transform: rotate(-12deg);
 }
-.christmas-santa--to-light::before {
+.christmas-santa--to-light .christmas-santa__art {
+    right: var(--blanket-width);
+    left: auto;
+    transform: scaleX(-1);
+}
+body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 221, 140, 0.55)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6)); }
+.christmas-santa--fallback {
     right: auto;
-    left: 92%;
-    -webkit-mask-image: linear-gradient(to right, #000, transparent);
-    mask-image: linear-gradient(to right, #000, transparent);
+    left: 0;
+    width: 100vw;
+    view-transition-name: none;
 }
+.christmas-santa--fallback .christmas-santa__blanket { width: 100%; border-radius: 0; }
+.christmas-santa--fallback .christmas-santa__art { left: 0; }
+.christmas-santa--fallback.christmas-santa--to-light .christmas-santa__art { right: 0; left: auto; }
 @keyframes christmas-santa-to-dark {
-    0% { opacity: 0; transform: translate(-100%, 70px) rotate(-7deg); }
-    8%, 92% { opacity: 1; }
-    30% { transform: translate(calc(30vw - 50%), 10px) rotate(-2deg); }
-    55% { transform: translate(calc(55vw - 50%), 40px) rotate(3deg); }
-    80% { transform: translate(calc(80vw - 50%), -10px) rotate(-5deg); }
-    100% { opacity: 0; transform: translate(100vw, -60px) rotate(-9deg); }
+    from { translate: calc(0px - var(--blanket-width) - var(--blanket-width)) 0; }
+    to { translate: 100vw 0; }
 }
 @keyframes christmas-santa-to-light {
-    0% { opacity: 0; transform: translate(100vw, 70px) rotate(7deg); }
-    8%, 92% { opacity: 1; }
-    30% { transform: translate(calc(70vw - 50%), 10px) rotate(2deg); }
-    55% { transform: translate(calc(45vw - 50%), 40px) rotate(-3deg); }
-    80% { transform: translate(calc(20vw - 50%), -10px) rotate(5deg); }
-    100% { opacity: 0; transform: translate(-100%, -60px) rotate(9deg); }
+    from { translate: calc(var(--blanket-width) + var(--blanket-width)) 0; }
+    to { translate: -100vw 0; }
 }
 @keyframes christmas-santa-gallop { to { translate: 0 -6px; } }
-@keyframes christmas-santa-sparkle { 50% { opacity: 0.45; } }
 @media (pointer: fine) {
     body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off),
     body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off) :is(a, button, label, [role="button"], input[type="radio"], input[type="checkbox"], select),

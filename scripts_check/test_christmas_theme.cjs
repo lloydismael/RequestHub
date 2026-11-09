@@ -5,26 +5,36 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 const scriptPath = path.join(__dirname, '..', 'static', 'js', 'christmas-theme.js');
+const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'base.html'), 'utf8');
+const themeScriptMarker = template.indexOf("const toggle = document.getElementById('theme-checkbox');");
+const themeScript = template.slice(template.lastIndexOf('<script>', themeScriptMarker) + '<script>'.length, template.indexOf('</script>', themeScriptMarker));
 
 function start({
     theme = 'christmas', reduced = false, effects = false, stored = null, storageBlocked = false,
     account = null, controlsPresent = true, authenticated = true, login = false, loginChristmas = false,
+    nativeTransition = false, narrow = false, holdTransition = false, integrated = false,
+    transitionFailure = '', noAnimation = false,
 } = {}) {
     const keys = ['enabled', 'border', 'snow', 'lights', 'cursor', 'clicks', 'santa'];
     const preferences = account === null ? null : { ...Object.fromEntries(keys.map(key => [key, true])), ...account };
     const callbacks = {};
     const frames = new Map();
     const timers = new Map();
+    const animations = [];
+    const transitions = [];
     let observer;
     let nextId = 1;
     let time = 0;
     let storage = stored;
+    let colorTheme = null;
     function element() {
         const classes = new Set();
-        return {
+        const node = {
             children: [], dataset: {}, attributes: {}, hidden: false, checked: true,
             classList: {
                 contains: name => classes.has(name),
+                add: name => classes.add(name),
+                remove: name => classes.delete(name),
                 toggle(name, value) { if (value) classes.add(name); else classes.delete(name); },
             },
             style: { setProperty() {} },
@@ -32,8 +42,23 @@ function start({
             appendChild(child) { this.children.push(child); child.parentNode = this; return child; },
             remove() { if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; },
             addEventListener(name, callback) { this[name] = callback; },
+            animate(keyframes, options) {
+                if (transitionFailure === 'pseudo' && options.pseudoElement === '::view-transition-group(christmas-santa)') throw Error('pseudo-element animation unsupported');
+                let finish;
+                let reject;
+                const finished = new Promise((resolve, rejectPromise) => { finish = resolve; reject = rejectPromise; });
+                const animation = {
+                    element: this, keyframes, options, finished, finish,
+                    effect: { pseudoElement: transitionFailure === 'ignored-pseudo' ? null : options.pseudoElement || null },
+                    cancel() { this.cancelled = true; reject(Error('animation cancelled')); },
+                };
+                animations.push(animation);
+                return animation;
+            },
             getContext() { return { clearRect() {}, beginPath() {}, arc() {}, fill() {}, moveTo() {}, lineTo() {}, stroke() {}, setTransform() {} }; },
         };
+        if (noAnimation) node.animate = undefined;
+        return node;
     }
     const body = element();
     if (authenticated) body.dataset.accountTheme = theme;
@@ -44,6 +69,10 @@ function start({
     const nav = element();
     const panel = element();
     const toggle = element();
+    const themeToggle = element();
+    themeToggle.id = 'theme-checkbox';
+    const themeLabel = element();
+    themeLabel.getBoundingClientRect = () => ({ left: 20, top: 20, width: 40, height: 20 });
     const status = element();
     const controls = Object.fromEntries(keys.map(key => [key, key === 'enabled' ? toggle : element()]));
     if (preferences) {
@@ -59,39 +88,84 @@ function start({
     const document = {
         body, documentElement, hidden: false,
         createElement: element,
-        querySelector: selector => selector === '.navbar' ? nav : null,
-        querySelectorAll: selector => selector === '[data-christmas-effect]' && preferences && controlsPresent ? Object.values(controls) : [],
-        getElementById: id => id === 'christmas-effects-settings' ? settings : controlsPresent ? ({ 'christmas-controls': panel, 'christmas-effects-toggle': toggle, 'christmas-effects-status': status })[id] || null : null,
+        querySelector: selector => selector === '.navbar' ? nav : selector === 'label[for="theme-checkbox"]' ? themeLabel : null,
+        querySelectorAll: selector => {
+            if (selector === '[data-christmas-effect]' && preferences && controlsPresent) return Object.values(controls);
+            if (selector === '.theme-reveal-overlay') return body.children.filter(child => child.className === 'theme-reveal-overlay');
+            return [];
+        },
+        getElementById: id => {
+            if (id === 'theme-checkbox') return themeToggle;
+            if (id === 'christmas-effects-settings') return settings;
+            return controlsPresent ? ({ 'christmas-controls': panel, 'christmas-effects-toggle': toggle, 'christmas-effects-status': status })[id] || null : null;
+        },
         addEventListener(name, callback) { callbacks[name] = callback; },
     };
+    if (nativeTransition) {
+        document.startViewTransition = callback => {
+            if (transitionFailure === 'start') throw Error('view transition unavailable');
+            let resolveReady;
+            let rejectReady;
+            const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+            const transition = {
+                ready,
+                finished: ready,
+                release() {
+                    if (this.released) return;
+                    this.released = true;
+                    if (transitionFailure === 'ready') {
+                        rejectReady(Error('view transition was skipped'));
+                        return;
+                    }
+                    callback();
+                    resolveReady();
+                },
+                skipTransition() { this.skipped = true; this.release(); },
+            };
+            transitions.push(transition);
+            if (!holdTransition) queueMicrotask(() => transition.release());
+            return transition;
+        };
+    }
     const window = {
         innerWidth: 1200, innerHeight: 800, devicePixelRatio: 1,
-        matchMedia: () => media,
+        matchMedia: query => query.includes('max-width') ? { matches: narrow } : media,
         localStorage: {
-            getItem() { if (storageBlocked) throw Error('unavailable'); return storage; },
-            setItem(key, value) { if (storageBlocked) throw Error('unavailable'); storage = value; },
+            getItem(key) { if (storageBlocked) throw Error('unavailable'); return key === 'reqHubTheme' ? colorTheme : storage; },
+            setItem(key, value) { if (storageBlocked) throw Error('unavailable'); if (key === 'reqHubTheme') colorTheme = value; else storage = value; },
         },
         requestAnimationFrame(callback) { const id = nextId++; frames.set(id, callback); return id; },
         cancelAnimationFrame(id) { frames.delete(id); },
         setTimeout(callback, delay) { const id = nextId++; timers.set(id, { callback, due: time + delay }); return id; },
         clearTimeout(id) { timers.delete(id); },
         addEventListener(name, callback) { callbacks[name] = callback; },
+        dispatchEvent() {},
     };
-    vm.runInNewContext(fs.readFileSync(scriptPath, 'utf8'), {
-        document, window, Math, performance: { now: () => 0 },
+    const context = {
+        document, window, Math, localStorage: window.localStorage, performance: { now: () => 0 },
+        CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
         MutationObserver: class { constructor(callback) { observer = callback; } observe() {} },
-    });
+    };
+    if (integrated) vm.runInNewContext(themeScript, context);
+    vm.runInNewContext(fs.readFileSync(scriptPath, 'utf8'), context);
     return {
-        body, nav, panel, toggle, status, media, frames, timers, document, controls,
+        body, nav, panel, toggle, status, media, frames, timers, document, controls, window, animations, transitions, themeToggle,
+        finishAnimations() { animations.forEach(animation => animation.finish()); },
         effect(key, value) { const control = controls[key]; control.checked = value; callbacks.change({ target: control }); },
         preview(values) { if (callbacks['requesthub:christmas-effects-preview']) callbacks['requesthub:christmas-effects-preview']({ detail: values }); },
         storageEvent(value) { callbacks.storage({ key: 'reqHubChristmasEffects', newValue: value }); },
         changeTheme(value) { body.dataset.accountTheme = value; observer(); },
         preference(name, value) { body.classList.toggle(name, value); observer(); },
-        switchMode(dark, id = 'theme-checkbox') { if (callbacks.change) callbacks.change({ target: { id, checked: dark } }); },
+        switchMode(dark, id = 'theme-checkbox') {
+            const target = id === 'theme-checkbox' ? themeToggle : { id };
+            target.checked = dark;
+            if (integrated && id === 'theme-checkbox') themeToggle.change.call(themeToggle);
+            if (callbacks.change) callbacks.change({ target });
+        },
         santas() { return body.children.filter(child => String(child.className).startsWith('christmas-santa')); },
         click(x = 100, y = 100, detail = 1) { if (callbacks.click) callbacks.click({ clientX: x, clientY: y, detail, button: 0 }); },
         visibility(hidden) { document.hidden = hidden; callbacks.visibilitychange(); },
+        resize(width, height) { window.innerWidth = width; window.innerHeight = height; callbacks.resize(); },
         frame() { const pending = [...frames.values()]; frames.clear(); pending.forEach(callback => callback(16)); },
         expire(delay = Infinity) {
             time = delay === Infinity
@@ -220,6 +294,221 @@ test('light/dark toggle sends one Santa sleigh across in the matching direction'
     assert.equal(app.santas().length, 0);
     app.switchMode(true, 'christmas-effects-toggle-other');
     assert.equal(app.santas().length, 0);
+});
+
+test('Santa carries a decorative blanket in both theme directions', () => {
+    for (const dark of [true, false]) {
+        const app = start();
+        app.switchMode(dark);
+        const santa = app.santas()[0];
+        const blanket = santa.children.find(child => child.className === 'christmas-santa__blanket');
+        assert.ok(blanket, 'Santa must pull a blanket during the theme change');
+        assert.equal(blanket.attributes['aria-hidden'], 'true');
+    }
+});
+
+test('Santa and the theme reveal sweep together in both directions', async () => {
+    for (const dark of [true, false]) {
+        const app = start({ nativeTransition: true });
+        const blanket = app.window.requestHubChristmasBlanket;
+        assert.ok(blanket && typeof blanket.play === 'function', 'the Christmas blanket transition must be available');
+        let theme = 'unchanged';
+        const pending = blanket.play(dark, () => { theme = dark ? 'dark' : 'light'; });
+        await new Promise(setImmediate);
+
+        assert.equal(theme, dark ? 'dark' : 'light');
+        assert.equal(app.santas().length, 1);
+        const reveal = app.animations.find(animation => animation.options.pseudoElement === '::view-transition-new(root)');
+        const sleigh = app.animations.find(animation => animation.options.pseudoElement === '::view-transition-group(christmas-santa)');
+        assert.ok(reveal, 'the new theme must be revealed across the page');
+        assert.ok(sleigh, 'Santa must travel with the edge of the reveal');
+        assert.equal(reveal.options.duration, sleigh.options.duration);
+        assert.equal(reveal.options.easing, sleigh.options.easing);
+        assert.deepEqual(Array.from(reveal.keyframes.clipPath), dark
+            ? ['inset(0 1380px 0 0)', 'inset(0 -180px 0 0)']
+            : ['inset(0 0 0 1380px)', 'inset(0 0 0 -180px)']);
+        assert.deepEqual(Array.from(sleigh.keyframes.translate), dark
+            ? ['-360px 0px', '1200px 0px']
+            : ['360px 0px', '-1200px 0px']);
+
+        app.finishAnimations();
+        await pending;
+        assert.equal(app.santas().length, 0);
+        assert.ok(app.animations.every(animation => animation.cancelled), 'finished view-transition animations must not remain attached');
+    }
+});
+
+test('the real theme toggle uses the Christmas blanket reveal and saves the chosen mode', async () => {
+    const app = start({ integrated: true, nativeTransition: true });
+    app.switchMode(true);
+    await new Promise(setImmediate);
+    assert.equal(app.body.classList.contains('dark-mode'), true);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+    const reveal = app.animations.find(animation => animation.options.pseudoElement === '::view-transition-new(root)');
+    const sleigh = app.animations.find(animation => animation.options.pseudoElement === '::view-transition-group(christmas-santa)');
+    assert.ok(reveal.keyframes.clipPath[0].startsWith('inset('), 'the toggle must use a sweeping blanket instead of the circular reveal');
+    assert.ok(sleigh, 'the real toggle must synchronize Santa with the sweep');
+    app.finishAnimations();
+    await new Promise(setImmediate);
+    assert.equal(app.santas().length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
+});
+
+test('rapid theme toggles keep the last choice even if an older snapshot updates late', async () => {
+    for (const firstReady of [false, true]) {
+        const app = start({ integrated: true, nativeTransition: true, holdTransition: true });
+        app.switchMode(true);
+        if (firstReady) {
+            app.transitions[0].release();
+            await new Promise(setImmediate);
+            assert.equal(app.body.classList.contains('dark-mode'), true);
+        }
+        app.switchMode(false);
+        assert.equal(app.transitions[0].skipped, true);
+        app.transitions[1].release();
+        await new Promise(setImmediate);
+        assert.equal(app.body.classList.contains('dark-mode'), false);
+        assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'light');
+        assert.equal(app.themeToggle.checked, false);
+        assert.equal(app.santas().length, 1);
+        app.finishAnimations();
+        await new Promise(setImmediate);
+        assert.equal(app.santas().length, 0);
+        assert.equal(app.body.classList.contains('theme-switching'), false);
+    }
+});
+
+test('the real switch skips Santa outside Christmas or when festive motion is disabled', async () => {
+    for (const options of [
+        { theme: 'blue' }, { account: { enabled: false } }, { account: { santa: false } },
+        { reduced: true }, { effects: true },
+    ]) {
+        const app = start({ ...options, integrated: true, nativeTransition: true });
+        app.switchMode(true);
+        await new Promise(setImmediate);
+        assert.equal(app.body.classList.contains('dark-mode'), true);
+        assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+        assert.equal(app.santas().length, 0);
+        assert.equal(app.animations.some(animation => animation.options.pseudoElement === '::view-transition-group(christmas-santa)'), false);
+        app.finishAnimations();
+        await new Promise(setImmediate);
+        assert.equal(app.body.classList.contains('theme-switching'), false);
+    }
+});
+
+test('the switch honors the operating system reduced-motion setting', async () => {
+    const app = start({ integrated: true, nativeTransition: true });
+    app.media.matches = true;
+    app.media.change();
+    app.switchMode(true);
+    await new Promise(setImmediate);
+    assert.equal(app.body.classList.contains('dark-mode'), true);
+    assert.equal(app.santas().length, 0);
+    assert.equal(app.animations.length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
+});
+
+test('the remembered Christmas login uses the same blanket sweep', async () => {
+    const app = start({
+        integrated: true, nativeTransition: true, authenticated: false,
+        login: true, loginChristmas: true, controlsPresent: false,
+    });
+    app.switchMode(true);
+    await new Promise(setImmediate);
+    assert.equal(app.body.classList.contains('dark-mode'), true);
+    assert.ok(app.animations.some(animation => animation.options.pseudoElement === '::view-transition-group(christmas-santa)'));
+    assert.equal(app.santas().length, 1);
+    app.finishAnimations();
+    await new Promise(setImmediate);
+    assert.equal(app.santas().length, 0);
+});
+
+test('disabling festive motion during a pending sweep finishes the selected theme immediately', async () => {
+    for (const stop of [
+        app => app.effect('santa', false),
+        app => app.effect('enabled', false),
+        app => app.preference('pref-reduce-motion', true),
+        app => app.visibility(true),
+        app => app.changeTheme('blue'),
+    ]) {
+        const app = start({ integrated: true, nativeTransition: true, holdTransition: true, account: {} });
+        app.switchMode(true);
+        assert.equal(app.body.classList.contains('dark-mode'), false, 'the native update has not run yet');
+        stop(app);
+        assert.equal(app.body.classList.contains('dark-mode'), true, 'the selected theme must not be lost');
+        assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+        assert.equal(app.transitions[0].skipped, true);
+        assert.equal(app.santas().length, 0);
+        await new Promise(setImmediate);
+        assert.equal(app.body.classList.contains('theme-switching'), false);
+    }
+});
+
+test('resizing during a pending sweep completes the selected theme and removes the old snapshot', async () => {
+    const app = start({ integrated: true, nativeTransition: true, holdTransition: true });
+    app.switchMode(true);
+    app.resize(375, 812);
+    assert.equal(app.body.classList.contains('dark-mode'), true);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+    assert.equal(app.transitions[0].skipped, true);
+    await new Promise(setImmediate);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
+    assert.equal(app.santas().length, 0);
+});
+
+test('phones and unsupported browsers reveal the theme underneath a moving blanket', async () => {
+    for (const options of [{ nativeTransition: true, narrow: true }, { nativeTransition: false }]) {
+        for (const dark of [true, false]) {
+            const app = start(options);
+            const blanket = app.window.requestHubChristmasBlanket;
+            let theme;
+            let blanketsAtSwitch;
+            const pending = blanket.play(dark, () => {
+                blanketsAtSwitch = app.santas().length;
+                theme = dark ? 'dark' : 'light';
+            });
+            const santa = app.santas()[0];
+            assert.equal(theme, dark ? 'dark' : 'light');
+            assert.equal(blanketsAtSwitch, 1, 'the blanket must cover the page before the theme changes');
+            assert.ok(santa.className.includes('christmas-santa--fallback'));
+            assert.equal(app.transitions.length, 0, 'the lightweight fallback must avoid page snapshots');
+            const motion = app.animations.find(animation => animation.element === santa);
+            assert.ok(motion, 'the blanket must move to reveal the page');
+            assert.deepEqual(Array.from(motion.keyframes.translate), dark
+                ? ['0px 0px', '1200px 0px']
+                : ['0px 0px', '-1200px 0px']);
+            app.finishAnimations();
+            await pending;
+            assert.equal(app.santas().length, 0);
+        }
+    }
+});
+
+test('failed native transitions fall back to the lightweight blanket without losing the theme', async () => {
+    for (const failure of ['start', 'ready', 'pseudo', 'ignored-pseudo']) {
+        const app = start({ integrated: true, nativeTransition: true, transitionFailure: failure });
+        app.switchMode(true);
+        await new Promise(setImmediate);
+        assert.equal(app.body.classList.contains('dark-mode'), true, failure);
+        assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+        const santa = app.santas()[0];
+        assert.ok(santa && santa.className.includes('christmas-santa--fallback'), failure);
+        assert.ok(app.animations.some(animation => animation.element === santa), failure);
+        app.finishAnimations();
+        await new Promise(setImmediate);
+        assert.equal(app.santas().length, 0);
+        assert.equal(app.body.classList.contains('theme-switching'), false);
+    }
+});
+
+test('the theme still changes when web animations are unavailable', async () => {
+    const app = start({ integrated: true, noAnimation: true });
+    app.switchMode(true);
+    await new Promise(setImmediate);
+    assert.equal(app.body.classList.contains('dark-mode'), true);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+    assert.equal(app.santas().length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
 });
 
 test('Santa safety cleanup waits for the faster flight then removes it without animationend', () => {

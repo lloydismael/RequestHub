@@ -57,6 +57,8 @@ class ThemeForm(forms.ModelForm):
         model = User
         fields = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary", *User.CHRISTMAS_EFFECT_FIELDS]
         widgets = {"banner_gradient": forms.RadioSelect()}
+        labels = {"pref_christmas_santa": "Santa blanket transition"}
+        help_texts = {"pref_christmas_santa": "Santa pulls a festive blanket across the page when you switch light/dark mode."}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
