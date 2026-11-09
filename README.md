@@ -94,7 +94,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 ### ?? SQR (Service Quotation Request)
 - Engineers and reviewers manage SQR entries directly from the tracker
-- **Project Performance Tracking** (Admin/PM): read-only, live status and performance dashboards, PM distribution, and paginated status/health trackers. Data loads on first entry; refresh retrieves a new snapshot. Portfolio scope starts at All SQRs, retaining the PM's My assigned default. Filters apply to every summary, chart and table.
+- **Project Performance Tracking** (Admin/PM): read-only, live status and performance dashboards, PM distribution, and paginated status/health trackers. Data loads on entry and refreshes after tracker changes or when returning to the browser tab; retry is available after errors. Portfolio scope starts at All SQRs, retaining the PM's My assigned default. Filters apply to every summary, chart and table.
 - Portfolio labels classify completion evidence as Closed, planning/no delivery evidence as Pipeline, cancellations/lost proposals as Removed, and other delivery candidates as Ongoing. Recorded Tracker status and health remain unchanged.
 - Schedule is date-based: ongoing targets are compared with the server snapshot date; closed targets with actual finish. Delays of 1-14 days need action; over 14 days are red. Missing/inconsistent dates remain N/R. The derived delivery rating is the worse of schedule and recorded health; open On Hold needs action. Pipeline and removed projects are not rated.
 - Separate scope, resource, customer/dependency and risk ratings are not captured in SQR and stay **Not recorded**, never inferred from notes. Project updates and risks appear as remarks in the status tracker.
@@ -126,6 +126,7 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
   - **Background image:** `static/img/login-christmas-bg.webp`, shown with `background-size: cover; background-position: center`. To use a different scene, replace the file with a background-only image (no card or toggle) at the same path, ideally 16:9 or 3:2 and at least 1920px wide, then run `collectstatic`. Keep the corner decorations away from the centre, where the card sits.
   - **Turn it off entirely:** set `CHRISTMAS_LOGIN_THEME_ENABLED=false` and restart. The login page then renders without any Christmas markup or assets, including remembered post-season choices. The temporary public default already ends automatically on January 1, 2027.
 - Forced password-change on first login or admin reset
+- **5-Minute Idle Timeout:** when enabled, five minutes of inactivity opens a one-minute sign-out warning. Saving it off cancels timers and warnings in other open tabs in the same browser; stale tabs cannot sign you out because the server also checks the saved preference. Manual sign-out and the separate eight-hour session limit remain unchanged.
 - Microsoft Graph user sync via `fetch_phildata_users` management command
 - The Management Changelogs tab loads only its editor and paginated history, avoiding unrelated user/account editors and sign-in-log queries. Links back to the other tabs load their normal Management views.
 

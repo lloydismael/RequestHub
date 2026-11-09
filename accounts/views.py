@@ -3,7 +3,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView
+from django.contrib.auth.views import LoginView, LogoutView
 from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
@@ -17,7 +17,7 @@ from django.views.generic import UpdateView
 
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
-from accounts.sign_in_log import client_ip as _client_ip, touch_sign_in_session
+from accounts.sign_in_log import IDLE_LOGOUT_REASON, client_ip as _client_ip, touch_sign_in_session
 from .recovery_views import recovery_context
 
 from .forms import (
@@ -97,7 +97,10 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
                 "pref_reduce_effects", "pref_reduce_motion",
             ])
             if request.headers.get("Accept") == "application/json":
-                return JsonResponse({"message": "Settings saved."})
+                return JsonResponse({
+                    "message": "Settings saved.",
+                    "idle_timeout_enabled": user.idle_timeout_enabled,
+                })
             messages.success(request, "Settings saved.")
             return redirect(reverse_lazy("accounts:update") + "#settings")
         return super().post(request, *args, **kwargs)
@@ -134,6 +137,18 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         else:
             messages.success(self.request, "Profile updated successfully.")
         return response
+
+
+class RoleLogoutView(LogoutView):
+    def post(self, request, *args, **kwargs):
+        # Older tabs can still submit timers created before the preference changed.
+        if (
+            request.POST.get("reason") == IDLE_LOGOUT_REASON
+            and request.user.is_authenticated
+            and not request.user.idle_timeout_enabled
+        ):
+            return redirect("accounts:update")
+        return super().post(request, *args, **kwargs)
 
 
 @method_decorator(never_cache, name="dispatch")
