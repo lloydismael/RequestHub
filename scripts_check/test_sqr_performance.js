@@ -93,6 +93,18 @@ function dashboard(projects) {
             await new Promise(resolve => setImmediate(resolve));
             this.flush();
         },
+        async invalidate() {
+            events['sqr:performance-invalidated']();
+            await new Promise(resolve => setImmediate(resolve));
+            this.flush();
+        },
+        async retry() {
+            const button = elements['sqr-pm-message'].children.find(child => child.dataset.pmRetry);
+            assert.ok(button, 'retry button available');
+            root.events.click({target: {closest: () => button}});
+            await new Promise(resolve => setImmediate(resolve));
+            this.flush();
+        },
         flush() { while (frames.length) frames.shift()(); },
     };
 }
@@ -102,9 +114,13 @@ test('portfolio remains lazy and status and health summaries include terminal an
         project(1, 'closed'), project(2), project(3, 'pipeline', 'unknown'), project(4, 'removed', 'unknown'),
         project(5, 'ongoing', 'danger'),
     ]);
+    for (const id of ['sqr-pm-count', 'sqr-pm-refresh', 'sqr-pm-snapshot']) {
+        assert.equal(app.elements[id], undefined, id);
+    }
     assert.equal(app.requests(), 0);
     await app.open();
     assert.equal(app.requests(), 1);
+    assert.match(app.elements['sqr-pm-as-of'].textContent, /^AS OF .*2026/);
     assert.equal(app.metric('total'), '5');
     assert.equal(app.metric('closed'), '1');
     assert.equal(app.metric('ongoing'), '2');
@@ -140,20 +156,45 @@ test('reference charts and tables show project details without repeated action b
     assert.equal(app.elements['sqr-pm-queue'], undefined);
 });
 
-test('refresh failure keeps the last snapshot and clearly offers retry', async () => {
-    const app = dashboard([project(1)]);
+test('automatic refresh failure keeps the last snapshot and retry restores it', async () => {
+    const projects = [project(1)];
+    const app = dashboard(projects);
     await app.open();
     app.setOffline(true);
-    await app.elements['sqr-pm-refresh'].events.click();
+    await app.invalidate();
     assert.equal(app.metric('total'), '1');
     assert.equal(app.elements['sqr-pm-message'].dataset.state, 'stale');
     assert.match(app.elements['sqr-pm-message'].textContent, /Refresh failed/);
     assert.match(app.elements['sqr-pm-message'].textContent, /Retry/);
+    projects.push(project(2));
     app.setOffline(false);
-    await app.elements['sqr-pm-refresh'].events.click();
-    app.flush();
+    await app.retry();
+    assert.equal(app.requests(), 3);
+    assert.equal(app.elements['sqr-pm-message'].dataset.state, '');
+    assert.equal(app.metric('total'), '2');
+});
+
+test('initial load failure offers retry without a refresh button', async () => {
+    const app = dashboard([project(1)]);
+    app.setOffline(true);
+    await app.open();
+    assert.equal(app.elements['sqr-pm-message'].dataset.state, 'error');
+    assert.match(app.elements['sqr-pm-message'].textContent, /Retry/);
+    app.setOffline(false);
+    await app.retry();
+    assert.equal(app.requests(), 2);
     assert.equal(app.elements['sqr-pm-message'].dataset.state, '');
     assert.equal(app.metric('total'), '1');
+});
+
+test('tracker changes automatically refresh the portfolio without a refresh button', async () => {
+    const projects = [project(1)];
+    const app = dashboard(projects);
+    await app.open();
+    projects.push(project(2));
+    await app.invalidate();
+    assert.equal(app.requests(), 2);
+    assert.equal(app.metric('total'), '2');
 });
 
 test('tracker renders untrusted text safely, paginates both tables and recomputes filtered charts', async () => {

@@ -1,6 +1,7 @@
 """Render only allowlisted synthetic scenes from a disposable Git snapshot."""
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import re
@@ -8,8 +9,12 @@ import socket
 import sys
 from datetime import datetime, timezone
 from html import escape
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import patch
+
+PRIVATE_PARTS = {".git", ".azure", ".ssh"}
+PRIVATE_SUFFIXES = {".pem", ".key", ".pfx", ".p12"}
+FINGERPRINT_LENGTH = 16
 
 
 def _document(snapshot, scene):
@@ -41,7 +46,61 @@ def _document(snapshot, scene):
     )
 
 
-def _report(snapshot):
+def _is_private(name):
+    if not isinstance(name, str) or not name or "\\" in name:
+        return True
+    path = PurePosixPath(name)
+    if path.is_absolute() or any(part in {".", ".."} or ":" in part for part in name.split("/")):
+        return True
+    if any(part.startswith(".env") or part in PRIVATE_PARTS for part in path.parts):
+        return True
+    return path.suffix.lower() in PRIVATE_SUFFIXES
+
+
+def _repository_change(snapshot, scene):
+    paths = scene.get("paths")
+    if not isinstance(paths, list) or not paths:
+        raise ValueError("A repository change report requires the changed repository paths.")
+    for name in paths:
+        if _is_private(name):
+            raise ValueError(f"Private or unsafe path cannot be reported: {name}")
+    rows = []
+    omitted = scene.get("omitted_files")
+    omitted = omitted if type(omitted) is int and omitted > 0 else 0
+    for name in paths:
+        target = snapshot.joinpath(*PurePosixPath(name).parts)
+        if target.is_file():
+            payload = target.read_bytes()
+            status = "Present"
+            detail = f"{len(payload)} bytes · sha256:{hashlib.sha256(payload).hexdigest()[:FINGERPRINT_LENGTH]}"
+        else:
+            status = "Absent"
+            detail = "No file content at this revision"
+        rows.append((name, status, detail))
+    revision = scene.get("revision")
+    revision = revision if isinstance(revision, str) and revision else "unknown"
+    body = [
+        "<h1>Repository change report</h1>",
+        "<p>Verified file presence, sizes and content fingerprints from the exact Git snapshot. "
+        "This is a repository change report; not a UI screenshot. Source code and private configuration are not displayed.</p>",
+        f"<p>Revision: <code>{escape(revision)}</code></p>",
+    ]
+    if omitted:
+        body.append(f"<p>Private or unsafe files excluded: {omitted}</p>")
+    body.append(
+        "<table><tr><th>Path</th><th>Status</th><th>Fingerprint</th></tr>"
+        + "".join(
+            f"<tr><td>{escape(name)}</td><td>{status}</td><td>{escape(detail)}</td></tr>"
+            for name, status, detail in rows
+        )
+        + "</table>"
+    )
+    return "".join(body)
+
+
+def _report(snapshot, scene):
+    if scene.get("fixture") == "repository_change":
+        return _repository_change(snapshot, scene)
     path = snapshot / "hub" / "release_changelog.py"
     if not path.is_file():
         return "<h1>Release changelog contract</h1><p>This feature is absent at this revision.</p>"
@@ -99,6 +158,25 @@ def _ui(snapshot, fixture):
         # Compare the real anonymous view on a fixed day within the 2026 seasonal window.
         with patch("django.utils.timezone.now", return_value=datetime(2026, 12, 31, 4, tzinfo=timezone.utc)):
             return RoleLoginView.as_view()(request).render().content.decode("utf-8")
+    if fixture == "sqr_performance":
+        # The dashboard is a lazy shell: its filters and headings are server-rendered, while the data
+        # tables are filled by JavaScript, which capture disables. Render the real partial and reveal
+        # both hidden containers so the before/after diff shows the server-rendered controls.
+        context["capture_component"] = render_to_string(
+            "hub/partials/sqr_performance.html",
+            {"default_my_assigned_filter": False, "sqr_current_user_id": ""},
+        )
+        template = engines["django"].from_string(
+            "{% extends 'base.html' %}{% load static %}"
+            "{% block extra_head %}<link rel='stylesheet' href='{% static \"css/liquid-glass-sqr.css\" %}'>{% endblock %}"
+            "{% block content %}{{ capture_component|safe }}{% endblock %}"
+        )
+        document = template.render(context, request=request)
+        return document.replace(
+            'class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance" hidden',
+            'class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance"',
+            1,
+        ).replace('id="sqr-pm-content" hidden', 'id="sqr-pm-content"', 1)
     from hub.models import Changelog
     entry = Changelog(
         title="Synthetic release fixture", previous_version="v0", new_version="v1",
@@ -131,7 +209,7 @@ def main():
     if scene["kind"] == "ui":
         document = _ui(snapshot, scene["fixture"])
     else:
-        content = _document(snapshot, scene) if scene["kind"] == "document" else _report(snapshot)
+        content = _document(snapshot, scene) if scene["kind"] == "document" else _report(snapshot, scene)
         document = (
             "<!doctype html><html lang='en'><meta charset='utf-8'><title>Synthetic change evidence</title>"
             "<style>body{font:18px/1.6 system-ui,sans-serif;color:#17233b;background:#f5f7fb;padding:40px;}"

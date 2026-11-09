@@ -951,7 +951,10 @@
         try {
             const response = await fetch(form.action, {method: 'POST', body: data, headers: {'Accept': 'application/json'}, credentials: 'same-origin'});
             if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Save failed');
-            await response.json();
+            const preferences = await response.json();
+            document.dispatchEvent(new CustomEvent('requesthub:idle-timeout-changed', {
+                detail: {enabled: preferences.idle_timeout_enabled},
+            }));
             saved = toggles.map(input => input.checked);
             toggles.forEach(input => { input.defaultChecked = input.checked; });
             saving = false;

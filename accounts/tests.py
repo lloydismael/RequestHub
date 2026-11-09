@@ -159,7 +159,9 @@ class ProfileSmokeTests(TestCase):
                     data.update({name: "1" for name in names})
                 response = self.client.post(reverse("accounts:update"), data, HTTP_ACCEPT="application/json")
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json(), {"message": "Settings saved."})
+                self.assertEqual(response.json(), {
+                    "message": "Settings saved.", "idle_timeout_enabled": enabled,
+                })
                 self.user.refresh_from_db()
                 for name in names:
                     self.assertEqual(getattr(self.user, name), enabled)

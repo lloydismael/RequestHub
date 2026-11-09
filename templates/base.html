@@ -829,7 +829,7 @@
     </script>
     {% endif %}
 
-    {% if request.user.is_authenticated and request.user.idle_timeout_enabled %}
+    {% if request.user.is_authenticated %}
     {# ── Auto-logout idle warning ── #}
     {# Hidden form used to POST to the logout URL (CSRF-safe) #}
     <form id="alo-logout-form" action="{% url 'logout' %}" method="post" style="display:none">
@@ -860,8 +860,11 @@
         var countEl      = document.getElementById('aloCountdown');
         var stayBtn      = document.getElementById('aloStayBtn');
         var logoutForm   = document.getElementById('alo-logout-form');
+        var enabled      = {{ request.user.idle_timeout_enabled|yesno:'true,false' }};
+        var storageKey   = 'reqHubIdleTimeout:{{ request.user.pk }}';
 
         function logout() {
+            if (!enabled) return;
             clearTimers();
             logoutForm.submit();
         }
@@ -897,11 +900,13 @@
         }
 
         function showWarning() {
+            if (!enabled) return;
             overlay.classList.add('is-open');
             startCountdown();
         }
 
         function resetIdleTimer() {
+            if (!enabled) return;
             if (overlay.classList.contains('is-open')) return; // don't reset while warning is shown
             clearTimeout(idleTimer);
             idleTimer = setTimeout(showWarning, IDLE_MS);
@@ -910,7 +915,7 @@
         // Throttle high-frequency activity so scroll/mousemove don't thrash timers every frame
         var highFreqPending = false;
         function resetIdleTimerThrottled() {
-            if (highFreqPending || overlay.classList.contains('is-open')) return;
+            if (!enabled || highFreqPending || overlay.classList.contains('is-open')) return;
             highFreqPending = true;
             requestAnimationFrame(function () {
                 highFreqPending = false;
@@ -938,6 +943,29 @@
             if (e.key === 'Escape' && overlay.classList.contains('is-open')) {
                 hideWarning();
                 resetIdleTimer();
+            }
+        });
+
+        function applyPreference(value) {
+            enabled = value;
+            clearTimers();
+            hideWarning();
+            resetIdleTimer();
+        }
+
+        document.addEventListener('requesthub:idle-timeout-changed', function (event) {
+            if (typeof event.detail.enabled !== 'boolean') return;
+            applyPreference(event.detail.enabled);
+            try {
+                localStorage.setItem(storageKey, String(enabled));
+            } catch (error) {
+                console.warn('Could not sync idle timeout across tabs; the server will enforce the saved preference.', error);
+            }
+        });
+        window.addEventListener('storage', function (event) {
+            if (event.key !== storageKey) return;
+            if (event.newValue === 'true' || event.newValue === 'false') {
+                applyPreference(event.newValue === 'true');
             }
         });
 

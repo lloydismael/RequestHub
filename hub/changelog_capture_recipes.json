@@ -29,7 +29,35 @@
       ]
     },
     {
-      "id": "changelog-guide",
+          "id": "sqr-dashboard-filters",
+          "commit": "6e334332d72d3b1f3bd0703f5c3596bca9b596c4",
+          "scenes": [
+            {
+              "kind": "ui",
+              "fixture": "sqr_performance",
+              "title": "SQR dashboard portfolio and rating filters",
+              "before_text": "The SQR dashboard shell before this change: a 'Delivery at a glance' hero with Scope, search and manager, health and delivery-status filters only.",
+              "after_text": "The dashboard shell at this change: a 'Project Performance Tracking' hero with the collapsible filter panel, plus the new Portfolio status and derived delivery-rating filters.",
+              "viewport": {"width": 1440, "height": 1200}
+            }
+          ]
+        },
+        {
+          "id": "sqr-dashboard-refactor",
+          "commit": "89bc71ba2edf02346faeb558e8bf50335b253655",
+          "scenes": [
+            {
+              "kind": "ui",
+              "fixture": "sqr_performance",
+              "title": "SQR performance dashboard refactor",
+              "before_text": "The dashboard shell before this refactor, rendered from the same synthetic fixture.",
+              "after_text": "The refactored dashboard shell at this change, rendered from the same synthetic fixture.",
+              "viewport": {"width": 1440, "height": 1200}
+            }
+          ]
+        },
+        {
+          "id": "changelog-guide",
       "paths": ["README.md"],
       "scenes": [
         {

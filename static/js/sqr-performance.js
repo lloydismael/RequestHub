@@ -181,7 +181,6 @@
     function render() {
         renderFrame = 0;
         if (!snapshot || !visible()) return;
-        el('snapshot').textContent = 'Updated ' + new Date(snapshot.fetched_at).toLocaleString();
         var query = controls.search.value.trim().toLowerCase();
         var counts = {total: 0, attention: 0};
         filtered = snapshot.projects.filter(function (project) {
@@ -201,7 +200,6 @@
         });
         renderPortfolio(counts);
         root.querySelectorAll('[data-pm-metric]').forEach(function (metric) { metric.textContent = counts[metric.dataset.pmMetric]; });
-        el('count').textContent = filtered.length + ' of ' + snapshot.projects.length + ' SQRs · ' + (controls.scope.value === 'active' ? 'Active delivery' : 'All SQRs') + (controls.mine.checked ? ' · My assigned' : '');
         el('content').hidden = false;
         el('empty').hidden = filtered.length > 0;
         el('empty').textContent = !snapshot.projects.length ? 'No SQR records are available yet.' : 'No matching projects. Reset filters or choose All SQRs to widen your view.';
@@ -240,7 +238,6 @@
         var controller = new AbortController();
         var timeout = setTimeout(function () { controller.abort(); }, 20000);
         root.setAttribute('aria-busy', 'true');
-        el('refresh').disabled = true;
         message('loading', snapshot ? 'Refreshing snapshot… Showing the previous snapshot until ready.' : 'Loading your project portfolio…');
         inFlight = (async function () {
             try {
@@ -254,7 +251,6 @@
                 dirty = false;
                 if (visible()) {
                     updateManagers();
-                    el('snapshot').textContent = 'Updated ' + new Date(data.fetched_at).toLocaleString();
                     message('', '');
                     scheduleRender();
                 }
@@ -265,7 +261,6 @@
                 clearTimeout(timeout);
                 inFlight = null;
                 root.setAttribute('aria-busy', 'false');
-                el('refresh').disabled = false;
                 if (version !== revision && visible()) refresh();
             }
         })();
@@ -285,7 +280,6 @@
         pageNumber = 1;
         scheduleRender();
     });
-    el('refresh').addEventListener('click', refresh);
     root.addEventListener('click', function (event) {
         var button = event.target.closest('button');
         if (!button) return;

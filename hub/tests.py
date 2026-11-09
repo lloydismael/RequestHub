@@ -3447,13 +3447,15 @@ class SqrPerformanceTrackingTests(TestCase):
         parser.feed(content)
         for suffix in (
             "scope", "search", "manager", "health", "status", "attention", "mine",
-            "reset", "refresh", "message", "snapshot", "count", "content", "empty",
+            "reset", "message", "content", "empty",
             "prev", "next", "page",
             "portfolio", "rating", "as-of", "closed-coverage", "rated-coverage",
             "manager-chart", "status-queue", "rating-queue", "indicator-chart",
             "status-rows", "indicator-rows",
         ):
             self.assertEqual(len(parser.ids.get("sqr-pm-" + suffix, [])), 1, suffix)
+        for suffix in ("count", "refresh", "snapshot"):
+            self.assertFalse(parser.ids.get("sqr-pm-" + suffix), suffix)
         self.assertIn("hidden", parser.ids["sqr-performance-dashboard"][0])
         self.assertEqual(parser.ids["sqr-pm-message"][0]["role"], "status")
         self.assertEqual(parser.metrics, {

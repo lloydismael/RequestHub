@@ -1,4 +1,5 @@
 import json
+import re
 from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
@@ -80,6 +81,15 @@ def _store_comparisons(item: dict) -> dict:
     return item
 
 
+def _automatic_recipe(pair: dict) -> str:
+    """Return the capture recipe named by an automatic capture note, or "" for manual evidence."""
+    note = pair.get("capture_note")
+    if not isinstance(note, str):
+        return ""
+    match = re.match(r"Automatic (?:ui|document|report) capture, recipe ([^.\s]+)\.", note)
+    return match.group(1) if match else ""
+
+
 def _merge_comparisons(current: list, supplied: list) -> list:
     pairs = deepcopy([pair for pair in current if isinstance(pair, dict)]) if isinstance(current, list) else []
     matched = set()
@@ -96,6 +106,15 @@ def _merge_comparisons(current: list, supplied: list) -> list:
             continue
         matched.add(target)
         pair = pairs[target]
+        if (
+            source.get("capture_note")
+            and _automatic_recipe(pair)
+            and _automatic_recipe(pair) != _automatic_recipe(source)
+        ):
+            # A newer automatic capture from another recipe supersedes stale generated evidence.
+            # Manual comparisons have no automatic recipe and are never replaced.
+            pairs[target] = _store_comparisons({"comparisons": [source]})["comparisons"][0]
+            continue
         missing = [field for field in COMPARISON_FIELDS if not isinstance(pair.get(field), str) or not pair[field].strip()]
         incoming = source
         if "before_image" in missing or "after_image" in missing:

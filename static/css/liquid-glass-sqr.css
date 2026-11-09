@@ -2655,8 +2655,6 @@ body.sqr-page .sqr-pm-focused-row:focus { outline: 3px solid var(--lg-accent); o
 .sqr-pm-filter-disclosure > summary .sqr-pm-meta { margin-left: .75rem; }
 .sqr-pm-toolbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .75rem 1rem; padding: 0 .25rem .75rem; }
 .sqr-pm-toolbar .sqr-pm-filter-disclosure { flex: 1 1 12rem; min-width: 0; margin: 0; }
-.sqr-pm-toolbar > .sqr-pm-meta { padding-block: .75rem; }
-.sqr-pm-toolbar > .btn { flex: 0 0 auto; }
 .sqr-pm-toolbar .sqr-pm-filters { margin-top: .5rem; }
 .sqr-pm-attention-row > .sqr-pm-tag { flex-shrink: 0; text-align: center; }
 .sqr-pm-delivery-details { margin-top: 2rem; }
