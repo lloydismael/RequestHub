@@ -13,4 +13,4 @@ gunicorn>=23.0.0,<24
 whitenoise>=6.9.0,<7
 openpyxl>=3.1.5,<4
 azure-monitor-opentelemetry-exporter>=1.0.0b59,<1.0.1
-opentelemetry-sdk>=1.45.1,<2
+opentelemetry-sdk>=1.45.2,<2
