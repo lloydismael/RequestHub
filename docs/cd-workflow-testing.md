@@ -16,6 +16,12 @@ The workflow serializes releases without cancelling an active one and rejects su
 
 CI runs `bash scripts/test-deploy-production.sh`, `bash scripts/test-ci-routing.sh`, and `bash scripts/test-release-preflight.sh` before the full Django suite. It uses synthetic settings and mocks GitHub, Azure, Docker, and HTTP calls; it never deploys or connects to production. Run it in Linux or Git Bash. Git Bash uses a narrowly scoped test-only permission shim for its synthetic env file because Windows cannot enforce Unix mode 0600; production scripts and Linux CI retain the actual mode check. Node toast behavior tests also run in the existing Django CI job, without npm packages.
 
+### Container runtime compatibility fix
+
+The container stays on digest-pinned Python 3.12, matching Django validation and the build-tool cleanup paths. Before this fix, the Python 3.15 image upgrade forced locked `psycopg2-binary==2.9.10` to build from source and stopped Container Security with `Error: pg_config executable not found.` Restoring `python:3.12.13-alpine3.24` restores binary-wheel installation without adding a compiler or PostgreSQL development packages.
+
+Dependabot still proposes Python patch/digest updates, but minor/major runtime upgrades require a coordinated dependency, CI, and cleanup review. `python -m unittest discover -s scripts -p test_workflow_steps.py` covers the runtime pin and update policy alongside the existing workflow checks. This fix is included in the generated release changelog; its exact-parent repository-change captures supply before/after evidence for publication in Notifications → Changelogs.
+
 ## Measuring release latency
 
 Use the offline analyzer and export commands in [the CI testing guide](ci-workflow-testing.md#measuring-latency-and-duplicate-work). Annotate individual release REST objects with `migration_window: "executed"` or `"skipped"` only when the controlled-deployment timing log proves it; otherwise the analyzer reports `unknown`. Never infer skipped migrations merely from a fast release.
