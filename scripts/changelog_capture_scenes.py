@@ -161,7 +161,7 @@ def _ui(snapshot, fixture):
     if fixture == "sqr_performance":
         # The dashboard is a lazy shell: its filters and headings are server-rendered, while the data
         # tables are filled by JavaScript, which capture disables. Render the real partial and reveal
-        # the lazy panel so the before/after diff shows the server-rendered controls.
+        # both hidden containers so the before/after diff shows the server-rendered controls.
         context["capture_component"] = render_to_string(
             "hub/partials/sqr_performance.html",
             {"default_my_assigned_filter": False, "sqr_current_user_id": ""},
@@ -171,7 +171,12 @@ def _ui(snapshot, fixture):
             "{% block extra_head %}<link rel='stylesheet' href='{% static \"css/liquid-glass-sqr.css\" %}'>{% endblock %}"
             "{% block content %}{{ capture_component|safe }}{% endblock %}"
         )
-        return template.render(context, request=request).replace('id="sqr-pm-content" hidden', 'id="sqr-pm-content"', 1)
+        document = template.render(context, request=request)
+        return document.replace(
+            'class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance" hidden',
+            'class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance"',
+            1,
+        ).replace('id="sqr-pm-content" hidden', 'id="sqr-pm-content"', 1)
     from hub.models import Changelog
     entry = Changelog(
         title="Synthetic release fixture", previous_version="v0", new_version="v1",
