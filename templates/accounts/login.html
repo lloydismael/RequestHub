@@ -5,7 +5,8 @@
 {% block body_class %}page-login{% endblock %}
 {% block extra_head %}
 {% if christmas_login_enabled %}
-{% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=12">{% endif %}
+{% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=13">
+<link rel="preload" as="image" href="{% static 'images/christmas-santa-sleigh.svg' %}">{% endif %}
 <link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=11">
 <script>
     (function () {
@@ -93,7 +94,8 @@
     </div>
 </section>
 {% if christmas_login_enabled %}
-{% if not request.user.is_authenticated %}<script src="{% static 'js/christmas-theme.js' %}?v=16" defer></script>{% endif %}
+{% if not request.user.is_authenticated %}<script src="{% static 'js/christmas-theme-snapshot.js' %}?v=2" defer></script>
+<script src="{% static 'js/christmas-theme.js' %}?v=17" defer></script>{% endif %}
 <script src="{% static 'js/login-christmas.js' %}?v=13" defer></script>
 {% endif %}
 <script>

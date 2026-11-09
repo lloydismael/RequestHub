@@ -38,10 +38,10 @@
     const bursts = new Map();
     let santa = null;
     let santaTimer = null;
+    let santaGifts = null;
     let blanketTransition = null;
     const blanketDuration = 1500;
     const blanketEasing = 'cubic-bezier(0.45, 0.05, 0.55, 0.95)';
-    const narrowTransition = window.matchMedia('(max-width: 640px), (pointer: coarse)');
 
     const isChristmas = () => login ? root.classList.contains('login-christmas') : body.dataset.accountTheme === 'christmas';
     const reduced = () => media.matches || body.classList.contains('pref-reduce-motion') || body.classList.contains('pref-reduce-effects');
@@ -104,7 +104,9 @@
         if (santaTimer !== null) window.clearTimeout(santaTimer);
         santaTimer = null;
         if (santa) santa.remove();
+        if (santaGifts) santaGifts.remove();
         santa = null;
+        santaGifts = null;
     }
     function flySanta(toDark, mode = '') {
         removeSanta();
@@ -139,32 +141,94 @@
         if (!run) return;
         if (finishTheme) run.commit();
         run.cancelled = true;
+        run.abort.abort();
+        if (run.snapshot) run.snapshot.dispose();
+        run.source = null;
+        window.clearTimeout(run.timer);
         cancelAnimations(run);
         if (run.transition && typeof run.transition.skipTransition === 'function') {
             try { run.transition.skipTransition(); } catch (_) {}
         }
         removeSanta();
         body.classList.remove('christmas-blanket-switching');
+        root.classList.remove('christmas-blanket-transition');
         blanketTransition = null;
+    }
+    function blanketGeometry(toDark) {
+        const width = window.innerWidth;
+        // Keep the hem width in sync with --blanket-width in the stylesheet.
+        const edge = Math.min(180, Math.max(64, width * 0.16));
+        return {
+            width, edge,
+            from: toDark ? -2 * edge : 2 * edge,
+            to: toDark ? width : -width,
+            translate: toDark ? [`${-2 * edge}px 0px`, `${width}px 0px`] : [`${2 * edge}px 0px`, `${-width}px 0px`],
+            clipPath: toDark ? [`inset(0 ${width + edge}px 0 0)`, `inset(0 ${-edge}px 0 0)`] : [`inset(0 0 0 ${width + edge}px)`, `inset(0 0 0 ${-edge}px)`],
+            oldClipPath: toDark ? [`inset(0 0 0 ${-edge}px)`, `inset(0 0 0 ${width + edge}px)`] : [`inset(0 ${-edge}px 0 0)`, `inset(0 ${width + edge}px 0 0)`],
+        };
+    }
+    function giftTimeline(geometry, toDark) {
+        // Travel is the shared cubic-bezier progress at each gift's release time.
+        return [
+            { at: 0.24, travel: 0.124582, spin: -35 },
+            { at: 0.43, travel: 0.380836, spin: 30 },
+            { at: 0.62, travel: 0.698770, spin: -25 },
+        ].map(drop => {
+            const x = geometry.from + (geometry.to - geometry.from) * drop.travel;
+            const rest = `${x + (toDark ? 24 : -24)}px 0px`;
+            return {
+                moving: [
+                    { offset: 0, translate: `${geometry.from}px 0px` },
+                    { offset: drop.at, translate: `${x}px 0px` },
+                    { offset: drop.at + 0.32, translate: rest },
+                    { offset: 1, translate: rest },
+                ],
+                falling: [
+                    { offset: 0, opacity: 0, transform: 'translateY(0px) scale(0.7)' },
+                    { offset: drop.at, opacity: 0, transform: 'translateY(0px) scale(0.7)' },
+                    { offset: drop.at + 0.03, opacity: 1, transform: 'translateY(0px) scale(1)', easing: 'ease-in' },
+                    { offset: drop.at + 0.25, opacity: 1, transform: `translateY(30vh) rotate(${drop.spin}deg)` },
+                    { offset: drop.at + 0.32, opacity: 0, transform: `translateY(42vh) rotate(${drop.spin}deg) scale(0.8)` },
+                    { offset: 1, opacity: 0, transform: `translateY(42vh) rotate(${drop.spin}deg) scale(0.8)` },
+                ],
+            };
+        });
     }
     async function revealWithBlanket(run, toDark) {
         run.fallback = true;
-        const layer = flySanta(toDark, 'fallback');
-        if (typeof layer.animate !== 'function') {
-            removeSanta();
-            run.commit();
-            return;
-        }
         try {
-            const distance = toDark ? window.innerWidth : -window.innerWidth;
-            const motion = layer.animate({ translate: ['0px 0px', `${distance}px 0px`] }, {
-                duration: blanketDuration, easing: blanketEasing, fill: 'forwards',
+            const helper = window.requestHubChristmasSnapshot;
+            if (!helper || !run.source || typeof root.animate !== 'function') {
+                run.commit();
+                return;
+            }
+            run.snapshot = await helper.mount(run.source, { signal: run.abort.signal, timeoutMs: 1000 });
+            run.source = null;
+            if (run.cancelled) { run.snapshot.dispose(); return; }
+            const layer = flySanta(toDark, 'fallback');
+            const art = layer.querySelector('.christmas-santa__art');
+            const gifts = Array.from(art.children);
+            const positions = gifts.map(gift => gift.getBoundingClientRect());
+            santaGifts = decorative('christmas-gifts', body);
+            gifts.forEach((gift, index) => {
+                gift.style.left = `${positions[index].left}px`;
+                gift.style.top = `${positions[index].top}px`;
+                santaGifts.appendChild(gift);
             });
-            run.animations.push(motion);
+            const timing = { duration: blanketDuration, easing: blanketEasing, fill: 'forwards' };
+            const animate = (element, keyframes, easing = blanketEasing) => {
+                const animation = element.animate(keyframes, { ...timing, easing });
+                run.animations.push(animation);
+            };
             run.commit();
-            await motion.finished.catch(() => {});
+            animate(run.snapshot.element, { clipPath: run.geometry.oldClipPath });
+            animate(layer, { translate: run.geometry.translate });
+            giftTimeline(run.geometry, toDark).forEach((frames, index) => {
+                animate(gifts[index], frames.moving, 'linear');
+                animate(gifts[index], frames.falling, 'linear');
+            });
+            await Promise.all(run.animations.map(animation => animation.finished.catch(() => {})));
         } catch (_) {
-            removeSanta();
             run.commit();
         }
     }
@@ -176,6 +240,9 @@
         }
         const run = {
             cancelled: false, applied: false, fallback: false, animations: [], transition: null,
+            geometry: blanketGeometry(toDark),
+            source: window.requestHubChristmasSnapshot ? window.requestHubChristmasSnapshot.capture() : null,
+            snapshot: null, abort: new AbortController(), timer: null,
             commit() {
                 if (!this.cancelled && !this.applied) {
                     this.applied = true;
@@ -184,9 +251,11 @@
             },
         };
         blanketTransition = run;
+        run.timer = window.setTimeout(() => { if (blanketTransition === run) cancelBlanket(true); }, 5000);
         body.classList.add('christmas-blanket-switching');
+        root.classList.add('christmas-blanket-transition');
         try {
-            if (typeof document.startViewTransition !== 'function' || narrowTransition.matches) {
+            if (typeof document.startViewTransition !== 'function') {
                 await revealWithBlanket(run, toDark);
                 return;
             }
@@ -197,15 +266,7 @@
             });
             await run.transition.ready;
             if (run.cancelled) return;
-            const width = window.innerWidth;
-            // Match --blanket-width in the stylesheet so the sleigh tracks the reveal edge.
-            const edge = Math.min(180, Math.max(96, width * 0.16));
-            const clipPath = toDark
-                ? [`inset(0 ${width + edge}px 0 0)`, `inset(0 ${-edge}px 0 0)`]
-                : [`inset(0 0 0 ${width + edge}px)`, `inset(0 0 0 ${-edge}px)`];
-            const translate = toDark
-                ? [`${-2 * edge}px 0px`, `${width}px 0px`]
-                : [`${2 * edge}px 0px`, `${-width}px 0px`];
+            const { clipPath, translate } = run.geometry;
             const timing = { duration: blanketDuration, fill: 'forwards' };
             const animateSnapshot = (keyframes, pseudoElement, easing = blanketEasing) => {
                 const animation = root.animate(keyframes, { ...timing, easing, pseudoElement });
@@ -217,36 +278,12 @@
             animateSnapshot({ clipPath }, '::view-transition-new(root)');
             animateSnapshot({ translate }, '::view-transition-group(christmas-santa)');
 
-            // The travel values are blanketEasing's progress at each release offset.
-            const drops = [
-                { at: 0.24, travel: 0.124582, spin: -35 },
-                { at: 0.43, travel: 0.380836, spin: 30 },
-                { at: 0.62, travel: 0.698770, spin: -25 },
-            ];
-            const from = toDark ? -2 * edge : 2 * edge;
-            const to = toDark ? width : -width;
-            drops.forEach((drop, index) => {
-                const x = from + (to - from) * drop.travel;
-                const drift = toDark ? 24 : -24;
-                const rest = `${x + drift}px 0px`;
-                const moving = [
-                    { offset: 0, translate: `${from}px 0px` },
-                    { offset: drop.at, translate: `${x}px 0px` },
-                    { offset: drop.at + 0.32, translate: rest },
-                    { offset: 1, translate: rest },
-                ];
-                const falling = [
-                    { offset: 0, opacity: 0, transform: 'translateY(0px) scale(0.7)' },
-                    { offset: drop.at, opacity: 0, transform: 'translateY(0px) scale(0.7)' },
-                    { offset: drop.at + 0.03, opacity: 1, transform: 'translateY(0px) scale(1)', easing: 'ease-in' },
-                    { offset: drop.at + 0.25, opacity: 1, transform: `translateY(30vh) rotate(${drop.spin}deg)` },
-                    { offset: drop.at + 0.32, opacity: 0, transform: `translateY(42vh) rotate(${drop.spin}deg) scale(0.8)` },
-                    { offset: 1, opacity: 0, transform: `translateY(42vh) rotate(${drop.spin}deg) scale(0.8)` },
-                ];
+            giftTimeline(run.geometry, toDark).forEach((frames, index) => {
                 const name = `christmas-gift-${index + 1}`;
-                animateSnapshot(moving, `::view-transition-group(${name})`, 'linear');
-                animateSnapshot(falling, `::view-transition-new(${name})`, 'linear');
+                animateSnapshot(frames.moving, `::view-transition-group(${name})`, 'linear');
+                animateSnapshot(frames.falling, `::view-transition-new(${name})`, 'linear');
             });
+            run.source = null;
             await Promise.all(run.animations.map(animation => animation.finished.catch(() => {})));
             if (run.cancelled) return;
             removeSanta();
@@ -262,10 +299,15 @@
                 await revealWithBlanket(run, toDark);
             }
         } finally {
+            window.clearTimeout(run.timer);
+            run.source = null;
+            if (run.snapshot) run.snapshot.dispose();
+            run.abort.abort();
             cancelAnimations(run);
             if (blanketTransition === run) {
                 removeSanta();
                 body.classList.remove('christmas-blanket-switching');
+                root.classList.remove('christmas-blanket-transition');
                 blanketTransition = null;
             }
         }

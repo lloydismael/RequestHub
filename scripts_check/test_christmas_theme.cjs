@@ -13,7 +13,7 @@ function start({
     theme = 'christmas', reduced = false, effects = false, stored = null, storageBlocked = false,
     account = null, controlsPresent = true, authenticated = true, login = false, loginChristmas = false,
     nativeTransition = false, narrow = false, holdTransition = false, integrated = false,
-    transitionFailure = '', noAnimation = false,
+    transitionFailure = '', noAnimation = false, holdSnapshot = false, snapshotFailure = false,
 } = {}) {
     const keys = ['enabled', 'border', 'snow', 'lights', 'cursor', 'clicks', 'santa'];
     const preferences = account === null ? null : { ...Object.fromEntries(keys.map(key => [key, true])), ...account };
@@ -39,9 +39,11 @@ function start({
             },
             style: { setProperty() {} },
             setAttribute(name, value) { this.attributes[name] = value; },
-            appendChild(child) { this.children.push(child); child.parentNode = this; return child; },
+            appendChild(child) { if (child.parentNode) child.remove(); this.children.push(child); child.parentNode = this; return child; },
+            querySelector(selector) { return this.children.find(child => child.className === selector.slice(1)) || null; },
             remove() { if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); this.parentNode = null; },
             addEventListener(name, callback) { this[name] = callback; },
+            getBoundingClientRect() { return { left: 0, top: 0 }; },
             animate(keyframes, options) {
                 if (transitionFailure === 'pseudo' && options.pseudoElement === '::view-transition-group(christmas-santa)') throw Error('pseudo-element animation unsupported');
                 if (transitionFailure === 'gift-pseudo' && options.pseudoElement === '::view-transition-new(christmas-gift-2)') throw Error('gift animation unsupported');
@@ -142,15 +144,36 @@ function start({
         addEventListener(name, callback) { callbacks[name] = callback; },
         dispatchEvent() {},
     };
+    const snapshots = [];
+    window.requestHubChristmasSnapshot = {
+        capture() { return { theme: body.classList.contains('dark-mode') ? 'dark' : 'light' }; },
+        mount(source, { signal }) {
+            const frame = element(); frame.className = 'christmas-frozen-viewport';
+            frame.dataset.snapshotTheme = source.theme;
+            body.appendChild(frame);
+            return new Promise((resolve, reject) => {
+                const dispose = () => { frame.remove(); signal.removeEventListener('abort', abort); };
+                const abort = () => { dispose(); reject(Error('aborted snapshot')); };
+                signal.addEventListener('abort', abort, { once: true });
+                const release = () => {
+                    if (signal.aborted) return;
+                    if (snapshotFailure) { dispose(); reject(Error('snapshot failed')); }
+                    else resolve({ element: frame, dispose });
+                };
+                snapshots.push({ release, frame });
+                if (!holdSnapshot) queueMicrotask(release);
+            });
+        },
+    };
     const context = {
-        document, window, Math, localStorage: window.localStorage, performance: { now: () => 0 },
+        document, window, Math, AbortController, localStorage: window.localStorage, performance: { now: () => 0 },
         CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
         MutationObserver: class { constructor(callback) { observer = callback; } observe() {} },
     };
     if (integrated) vm.runInNewContext(themeScript, context);
     vm.runInNewContext(fs.readFileSync(scriptPath, 'utf8'), context);
     return {
-        body, nav, panel, toggle, status, media, frames, timers, document, controls, window, animations, transitions, themeToggle,
+        body, nav, panel, toggle, status, media, frames, timers, document, controls, window, animations, transitions, themeToggle, snapshots,
         finishAnimations() { animations.forEach(animation => animation.finish()); },
         effect(key, value) { const control = controls[key]; control.checked = value; callbacks.change({ target: control }); },
         preview(values) { if (callbacks['requesthub:christmas-effects-preview']) callbacks['requesthub:christmas-effects-preview']({ detail: values }); },
@@ -524,39 +547,84 @@ test('resizing during a pending sweep completes the selected theme and removes t
     assert.equal(app.santas().length, 0);
 });
 
-test('phones and unsupported browsers reveal the theme underneath a moving blanket', async () => {
-    for (const options of [{ nativeTransition: true, narrow: true }, { nativeTransition: false }]) {
-        for (const dark of [true, false]) {
-            const app = start(options);
-            const blanket = app.window.requestHubChristmasBlanket;
-            let theme;
-            let blanketsAtSwitch;
-            const pending = blanket.play(dark, () => {
-                blanketsAtSwitch = app.santas().length;
-                theme = dark ? 'dark' : 'light';
-            });
-            const santa = app.santas()[0];
-            assert.equal(theme, dark ? 'dark' : 'light');
-            assert.equal(blanketsAtSwitch, 1, 'the blanket must cover the page before the theme changes');
-            assert.ok(santa.className.includes('christmas-santa--fallback'));
-            assert.equal(app.transitions.length, 0, 'the lightweight fallback must avoid page snapshots');
-            const motion = app.animations.find(animation => animation.element === santa);
-            assert.ok(motion, 'the blanket must move to reveal the page');
-            assert.deepEqual(Array.from(motion.keyframes.translate), dark
-                ? ['0px 0px', '1200px 0px']
-                : ['0px 0px', '-1200px 0px']);
-            app.finishAnimations();
-            await pending;
-            assert.equal(app.santas().length, 0);
+test('late fallback readiness cannot replace the latest selected theme', async () => {
+    const app = start({ integrated: true, holdSnapshot: true });
+    app.switchMode(true);
+    assert.equal(app.snapshots.length, 1);
+    app.switchMode(false);
+    assert.equal(app.snapshots.length, 2);
+    app.snapshots[0].release(); app.snapshots[1].release();
+    await new Promise(setImmediate);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'light');
+    assert.equal(app.santas().length, 1);
+    app.finishAnimations(); await new Promise(setImmediate);
+    assert.equal(app.body.children.filter(n => n.className === 'christmas-frozen-viewport').length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
+});
+
+test('failed fallback preparation still applies the selected theme without decorations', async () => {
+    const app = start({ integrated: true, snapshotFailure: true });
+    app.switchMode(true); await new Promise(setImmediate);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+    assert.equal(app.santas().length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
+});
+
+test('interruption while preparing a fallback commits the current choice and disposes it', async () => {
+    for (const stop of [app => app.visibility(true), app => app.resize(375, 800), app => app.preference('pref-reduce-motion', true)]) {
+        const app = start({ integrated: true, holdSnapshot: true });
+        app.switchMode(true); stop(app); app.snapshots[0].release();
+        await new Promise(setImmediate);
+        assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+        assert.equal(app.body.children.filter(n => n.className === 'christmas-frozen-viewport').length, 0);
+        assert.equal(app.body.classList.contains('theme-switching'), false);
+    }
+});
+
+test('phones use the same native continuous reveal as desktop', async () => {
+    const app = start({ nativeTransition: true, narrow: true });
+    const pending = app.window.requestHubChristmasBlanket.play(true, () => {});
+    await new Promise(setImmediate);
+    assert.equal(app.transitions.length, 1);
+    assert.ok(app.animations.some(a => a.options.pseudoElement === '::view-transition-new(root)'));
+    assert.equal(app.snapshots.length, 0);
+    app.finishAnimations(); await pending;
+});
+
+test('unsupported browsers clip the old viewport along the moving blanket edge', async () => {
+    for (const dark of [true, false]) {
+        const app = start();
+        const pending = app.window.requestHubChristmasBlanket.play(dark, () => {});
+        await new Promise(setImmediate);
+        assert.equal(app.snapshots.length, 1);
+        const frame = app.snapshots[0].frame;
+        const reveal = app.animations.find(a => a.element === frame);
+        const santa = app.santas()[0];
+        const motion = app.animations.find(a => a.element === santa);
+        assert.ok(reveal && motion);
+        assert.equal(reveal.options.duration, motion.options.duration);
+        assert.equal(reveal.options.easing, motion.options.easing);
+        assert.deepEqual(Array.from(motion.keyframes.translate), dark
+            ? ['-360px 0px', '1200px 0px'] : ['360px 0px', '-1200px 0px']);
+        assert.ok(reveal.keyframes.clipPath.at(-1).includes('1380px'));
+        const gifts = app.body.children.find(n => n.className === 'christmas-gifts');
+        assert.equal(gifts.children.length, 3);
+        for (const gift of gifts.children) {
+            assert.equal(app.animations.filter(a => a.element === gift).length, 2);
         }
+        app.finishAnimations(); await pending;
+        assert.equal(app.santas().length, 0); assert.equal(frame.parentNode, null);
+        assert.ok(!app.body.children.includes(gifts));
     }
 });
 
 test('rapid mobile switches replace the falling gifts and keep the last theme', async () => {
     const app = start({ integrated: true, nativeTransition: true, narrow: true });
     app.switchMode(true);
+    await new Promise(setImmediate);
     const first = app.santas()[0];
     app.switchMode(false);
+    await new Promise(setImmediate);
     const santa = app.santas()[0];
     assert.notEqual(santa, first);
     assert.equal(app.santas().length, 1);
