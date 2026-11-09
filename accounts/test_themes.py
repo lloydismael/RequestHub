@@ -2,7 +2,15 @@ from django.contrib.staticfiles import finders
 from django.test import SimpleTestCase
 from PIL import Image
 
+from accounts.forms import ThemeForm
 from accounts.themes import contrast_ratio, custom_theme_style, custom_theme_vars, normalize_hex
+
+
+class ChristmasThemePreferenceTests(SimpleTestCase):
+    def test_santa_setting_describes_the_blanket_theme_transition(self):
+        option = ThemeForm()["pref_christmas_santa"]
+        self.assertIn("blanket", option.label.lower())
+        self.assertIn("light/dark", option.help_text.lower())
 
 
 class ChristmasFrameAssetTests(SimpleTestCase):

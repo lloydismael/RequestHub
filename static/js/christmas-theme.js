@@ -38,6 +38,10 @@
     const bursts = new Map();
     let santa = null;
     let santaTimer = null;
+    let blanketTransition = null;
+    const blanketDuration = 1500;
+    const blanketEasing = 'cubic-bezier(0.45, 0.05, 0.55, 0.95)';
+    const narrowTransition = window.matchMedia('(max-width: 640px), (pointer: coarse)');
 
     const isChristmas = () => login ? root.classList.contains('login-christmas') : body.dataset.accountTheme === 'christmas';
     const reduced = () => media.matches || body.classList.contains('pref-reduce-motion') || body.classList.contains('pref-reduce-effects');
@@ -102,13 +106,131 @@
         if (santa) santa.remove();
         santa = null;
     }
-    function flySanta(toDark) {
+    function flySanta(toDark, mode = '') {
         removeSanta();
-        santa = decorative(`christmas-santa christmas-santa--to-${toDark ? 'dark' : 'light'}`, body);
+        const modifier = mode ? ` christmas-santa--${mode}` : '';
+        santa = decorative(`christmas-santa christmas-santa--to-${toDark ? 'dark' : 'light'}${modifier}`, body);
+        decorative('christmas-santa__blanket', santa, 'span');
         decorative('christmas-santa__art', santa, 'span');
         santa.addEventListener('animationend', removeSanta);
         santaTimer = window.setTimeout(removeSanta, 2300);
+        return santa;
     }
+    function cancelAnimations(run) {
+        run.animations.forEach(animation => {
+            try {
+                animation.finished.catch(() => {});
+                animation.cancel();
+            } catch (_) {}
+        });
+    }
+    function cancelBlanket(finishTheme = false) {
+        const run = blanketTransition;
+        if (!run) return;
+        if (finishTheme) run.commit();
+        run.cancelled = true;
+        cancelAnimations(run);
+        if (run.transition && typeof run.transition.skipTransition === 'function') {
+            try { run.transition.skipTransition(); } catch (_) {}
+        }
+        removeSanta();
+        body.classList.remove('christmas-blanket-switching');
+        blanketTransition = null;
+    }
+    async function revealWithBlanket(run, toDark) {
+        run.fallback = true;
+        const layer = flySanta(toDark, 'fallback');
+        if (typeof layer.animate !== 'function') {
+            removeSanta();
+            run.commit();
+            return;
+        }
+        try {
+            const distance = toDark ? window.innerWidth : -window.innerWidth;
+            const motion = layer.animate({ translate: ['0px 0px', `${distance}px 0px`] }, {
+                duration: blanketDuration, easing: blanketEasing, fill: 'forwards',
+            });
+            run.animations.push(motion);
+            run.commit();
+            await motion.finished.catch(() => {});
+        } catch (_) {
+            removeSanta();
+            run.commit();
+        }
+    }
+    async function playBlanket(toDark, applyTheme) {
+        cancelBlanket();
+        if (!canFlySanta()) {
+            applyTheme();
+            return;
+        }
+        const run = {
+            cancelled: false, applied: false, fallback: false, animations: [], transition: null,
+            commit() {
+                if (!this.cancelled && !this.applied) {
+                    this.applied = true;
+                    applyTheme();
+                }
+            },
+        };
+        blanketTransition = run;
+        body.classList.add('christmas-blanket-switching');
+        try {
+            if (typeof document.startViewTransition !== 'function' || narrowTransition.matches) {
+                await revealWithBlanket(run, toDark);
+                return;
+            }
+            run.transition = document.startViewTransition(() => {
+                if (run.cancelled || run.fallback) return;
+                run.commit();
+                flySanta(toDark, 'snapshot');
+            });
+            await run.transition.ready;
+            if (run.cancelled) return;
+            const width = window.innerWidth;
+            // Match --blanket-width in the stylesheet so the sleigh tracks the reveal edge.
+            const edge = Math.min(180, Math.max(96, width * 0.16));
+            const clipPath = toDark
+                ? [`inset(0 ${width + edge}px 0 0)`, `inset(0 ${-edge}px 0 0)`]
+                : [`inset(0 0 0 ${width + edge}px)`, `inset(0 0 0 ${-edge}px)`];
+            const translate = toDark
+                ? [`${-2 * edge}px 0px`, `${width}px 0px`]
+                : [`${2 * edge}px 0px`, `${-width}px 0px`];
+            const timing = { duration: blanketDuration, easing: blanketEasing, fill: 'forwards' };
+            for (const [keyframes, pseudoElement] of [
+                [{ clipPath }, '::view-transition-new(root)'],
+                [{ translate }, '::view-transition-group(christmas-santa)'],
+            ]) {
+                const animation = root.animate(keyframes, { ...timing, pseudoElement });
+                run.animations.push(animation);
+                if (!animation.effect || animation.effect.pseudoElement !== pseudoElement) {
+                    throw new Error('View-transition animation is not supported');
+                }
+            }
+            await Promise.all(run.animations.map(animation => animation.finished.catch(() => {})));
+            if (run.cancelled) return;
+            removeSanta();
+            await run.transition.finished.catch(() => {});
+        } catch (_) {
+            if (!run.cancelled) {
+                run.fallback = true;
+                cancelAnimations(run);
+                if (run.transition && typeof run.transition.skipTransition === 'function') {
+                    try { run.transition.skipTransition(); } catch (_) {}
+                }
+                removeSanta();
+                await revealWithBlanket(run, toDark);
+            }
+        } finally {
+            cancelAnimations(run);
+            if (blanketTransition === run) {
+                removeSanta();
+                body.classList.remove('christmas-blanket-switching');
+                blanketTransition = null;
+            }
+        }
+    }
+    window.requestHubChristmasBlanket = { canRun: canFlySanta, play: playBlanket, cancel: cancelBlanket };
     function pauseSnow() {
         if (frameId !== null) window.cancelAnimationFrame(frameId);
         frameId = null;
@@ -116,6 +238,7 @@
         if (canvas && context) context.clearRect(0, 0, width, height);
     }
     function pause() {
+        cancelBlanket(true);
         pauseSnow();
         for (const burst of bursts.keys()) removeBurst(burst);
         removeSanta();
@@ -179,7 +302,10 @@
         if (!canAnimate('snow')) pauseSnow();
         else if (context && frameId === null) frameId = window.requestAnimationFrame(draw);
         if (!canAnimate('clicks')) for (const burst of bursts.keys()) removeBurst(burst);
-        if (!canFlySanta()) removeSanta();
+        if (!canFlySanta()) {
+            cancelBlanket(true);
+            removeSanta();
+        }
     }
     document.addEventListener('click', event => {
         if (!canAnimate('clicks') || !event.detail || event.button !== 0) return;
@@ -205,7 +331,7 @@
         if (key === 'enabled' || effectKeys.includes(key)) {
             applyPreferences({ [key]: target.checked });
             reconcile();
-        } else if (target.id === 'theme-checkbox' && canFlySanta()) {
+        } else if (target.id === 'theme-checkbox' && !blanketTransition && canFlySanta()) {
             flySanta(target.checked);
         }
     });
@@ -223,7 +349,10 @@
     new MutationObserver(reconcile).observe(body, { attributes: true, attributeFilter: ['data-account-theme', 'class'] });
     media.addEventListener('change', reconcile);
     document.addEventListener('visibilitychange', reconcile);
-    window.addEventListener('resize', resize, { passive: true });
+    window.addEventListener('resize', () => {
+        cancelBlanket(true);
+        resize();
+    }, { passive: true });
     window.addEventListener('pagehide', pause);
     window.addEventListener('pageshow', reconcile);
     window.addEventListener('storage', event => {
