@@ -185,10 +185,21 @@ body.account-themed.authenticated[data-account-theme="christmas"] table .lg-btn 
     from { opacity: 1; transform: translate(0, 0) scale(0.4); }
     to { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--spin)) scale(1); }
 }
+.christmas-frozen-viewport {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 10000;
+    border: 0;
+    margin: 0;
+    pointer-events: none;
+    user-select: none;
+    contain: strict;
+}
 /* The quilt's leading edge stays aligned with the theme reveal and Santa's sleigh. */
 .christmas-santa {
-    --blanket-width: clamp(96px, 16vw, 180px);
-    --sleigh-width: clamp(190px, 26vw, 350px);
+    --blanket-width: clamp(64px, 16vw, 180px);
+    --sleigh-width: clamp(150px, 26vw, 350px);
     position: fixed;
     top: 0;
     left: 0;
@@ -209,6 +220,11 @@ body.account-themed.authenticated[data-account-theme="christmas"] table .lg-btn 
 .christmas-santa--snapshot,
 .christmas-santa--fallback { animation: none; }
 body.christmas-blanket-switching:not(.page-login) .navbar { view-transition-name: none; }
+html.christmas-blanket-transition::view-transition-old(root),
+html.christmas-blanket-transition::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
 ::view-transition-group(christmas-santa) { z-index: 10002; animation: none; }
 ::view-transition-old(christmas-santa) { display: none; }
 ::view-transition-new(christmas-santa) { animation: none; }
@@ -230,6 +246,7 @@ body.christmas-blanket-switching:not(.page-login) .navbar { view-transition-name
     border-right: 5px solid #e5c17a;
     border-radius: 0 18px 18px 0;
     background:
+        linear-gradient(90deg, transparent 6%, rgba(255, 242, 209, 0.22) 18%, rgba(53, 9, 26, 0.3) 33%, transparent 47%, rgba(255, 237, 197, 0.18) 72%, rgba(53, 9, 26, 0.28) 88%),
         repeating-linear-gradient(90deg, transparent 0 32px, rgba(255, 221, 159, 0.35) 32px 35px, transparent 35px 64px),
         repeating-linear-gradient(0deg, transparent 0 32px, rgba(255, 221, 159, 0.3) 32px 35px, transparent 35px 64px),
         repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 8px),
@@ -265,9 +282,9 @@ body.christmas-blanket-switching:not(.page-login) .navbar { view-transition-name
     content: '';
     position: absolute;
     top: 67%;
-    left: -14px;
-    width: 28px;
-    height: 3px;
+    left: -20px;
+    width: 48px;
+    height: 4px;
     border-radius: 999px;
     background: #efce87;
     transform: rotate(-12deg);
@@ -325,15 +342,19 @@ body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 22
 .christmas-santa--snapshot .christmas-santa__gift--1 { view-transition-name: christmas-gift-1; }
 .christmas-santa--snapshot .christmas-santa__gift--2 { view-transition-name: christmas-gift-2; }
 .christmas-santa--snapshot .christmas-santa__gift--3 { view-transition-name: christmas-gift-3; }
-.christmas-santa--fallback {
-    right: auto;
-    left: 0;
-    width: 100vw;
-    view-transition-name: none;
+.christmas-santa--fallback { view-transition-name: none; }
+.christmas-gifts {
+    position: fixed;
+    inset: 0;
+    z-index: 10003;
+    pointer-events: none;
+    user-select: none;
 }
-.christmas-santa--fallback .christmas-santa__blanket { width: 100%; border-radius: 0; }
-.christmas-santa--fallback .christmas-santa__art { left: 0; }
-.christmas-santa--fallback.christmas-santa--to-light .christmas-santa__art { right: 0; left: auto; }
+.christmas-gifts .christmas-santa__gift {
+    position: fixed;
+    animation: none;
+    opacity: 0;
+}
 @keyframes christmas-santa-to-dark {
     from { translate: calc(0px - var(--blanket-width) - var(--blanket-width)) 0; }
     to { translate: 100vw 0; }
@@ -371,8 +392,8 @@ body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 22
 }
 body.pref-reduce-effects .christmas-frame { display: none; }
 @media (prefers-reduced-motion: reduce) {
-    .christmas-burst, .christmas-snow, .christmas-santa { display: none; }
+    .christmas-burst, .christmas-snow, .christmas-santa, .christmas-gifts, .christmas-frozen-viewport { display: none; }
 }
 @media print {
-    .christmas-frame, .christmas-snow, .christmas-burst, .christmas-santa, .christmas-controls { display: none !important; }
+    .christmas-frame, .christmas-snow, .christmas-burst, .christmas-santa, .christmas-gifts, .christmas-frozen-viewport, .christmas-controls { display: none !important; }
 }

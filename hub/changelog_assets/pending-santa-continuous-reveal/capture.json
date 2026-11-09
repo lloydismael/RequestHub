@@ -1,0 +1,49 @@
+{
+  "status": "unreleased",
+  "base_revision": "c0414b8e3299076179546ec45769dcf4e1a525dd",
+  "after_revision": null,
+  "capture_note": "Actual production JavaScript/CSS rendered in identical synthetic fixtures; the matching native or fallback animation is ready before pausing all motion at 375, 750 and 1125 ms. Not live dashboard data, not an end-state-only comparison. After images were captured from the verified working tree, including nested-scroll and hidden-preparation fixes; release revision binding remains pending.",
+  "source_sha256": {
+    "css/christmas-theme.css": "22e7dd4642bae4a13a2feca3e4f326c1d5dbb2eede985dbacf290995f70f7b27",
+    "js/christmas-theme.js": "913d500281ad7ad09375ad1395d61e449951ba2294380b6b7cf07ce4f0534da4",
+    "js/christmas-theme-snapshot.js": "a9f9b08527ddf56950a218406f28befca78f8fa6f9b6c8e559cd35328bff524e"
+  },
+  "comparisons": [
+    {
+      "case": "desktop-native",
+      "phase": "early",
+      "before": "desktop-native-early-before.png",
+      "after": "desktop-native-early-after.png"
+    },
+    {
+      "case": "desktop-native",
+      "phase": "middle",
+      "before": "desktop-native-middle-before.png",
+      "after": "desktop-native-middle-after.png"
+    },
+    {
+      "case": "desktop-native",
+      "phase": "late",
+      "before": "desktop-native-late-before.png",
+      "after": "desktop-native-late-after.png"
+    },
+    {
+      "case": "phone-fallback",
+      "phase": "early",
+      "before": "phone-fallback-early-before.png",
+      "after": "phone-fallback-early-after.png"
+    },
+    {
+      "case": "phone-fallback",
+      "phase": "middle",
+      "before": "phone-fallback-middle-before.png",
+      "after": "phone-fallback-middle-after.png"
+    },
+    {
+      "case": "phone-fallback",
+      "phase": "late",
+      "before": "phone-fallback-late-before.png",
+      "after": "phone-fallback-late-after.png"
+    }
+  ]
+}

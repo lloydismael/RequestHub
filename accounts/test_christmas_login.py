@@ -120,7 +120,20 @@ class ChristmasLoginThemeTests(TestCase):
 
         self.assertContains(response, static("css/christmas-theme.css") + "?v=")
         self.assertContains(response, static("js/christmas-theme.js") + "?v=")
+        self.assertContains(response, static("js/christmas-theme-snapshot.js") + "?v=")
+        html = response.content.decode()
+        self.assertLess(html.index(static("js/christmas-theme-snapshot.js")), html.index(static("js/christmas-theme.js")))
+        self.assertEqual(html.count(static("js/christmas-theme-snapshot.js")), 1)
+        self.assertContains(response, f'rel="preload" as="image" href="{static("images/christmas-santa-sleigh.svg")}"')
         self.assertNotContains(response, static("js/christmas-lights.js"))
+
+    def test_signed_in_pages_load_the_snapshot_helper_before_santa(self):
+        response = self.signed_in_page("santa-snapshot-wiring", banner_gradient="christmas")
+        html = response.content.decode()
+        helper = static("js/christmas-theme-snapshot.js")
+        self.assertEqual(html.count(helper), 1)
+        self.assertLess(html.index(helper), html.index(static("js/christmas-theme.js")))
+        self.assertContains(response, f'rel="preload" as="image" href="{static("images/christmas-santa-sleigh.svg")}"')
 
     def test_christmas_design_keeps_login_form_contracts(self):
         response = self.client.get(reverse("login"))

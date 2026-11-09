@@ -56,8 +56,9 @@
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3"></noscript>
     <link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">
     {% if request.user.is_authenticated %}
-    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=12">
+    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=13">
     <link rel="stylesheet" href="{% static 'css/christmas-lights.css' %}?v=2">
+    <link rel="preload" as="image" href="{% static 'images/christmas-santa-sleigh.svg' %}">
     {% endif %}
     {% if assistant_widget.native_enabled %}
     <link rel="stylesheet" href="{% static 'css/assistant.css' %}?v=3">
@@ -462,7 +463,8 @@
         <script src="{% static 'js/page-transitions.js' %}?v=1" defer></script>
     <script src="{% static 'js/navbar-contrast.js' %}?v=1" defer></script>
     {% if request.user.is_authenticated %}
-    <script src="{% static 'js/christmas-theme.js' %}?v=16" defer></script>
+    <script src="{% static 'js/christmas-theme-snapshot.js' %}?v=2" defer></script>
+    <script src="{% static 'js/christmas-theme.js' %}?v=17" defer></script>
     <script src="{% static 'js/christmas-lights.js' %}?v=5" defer></script>
     {% endif %}
     <script src="{% static 'js/liquid-glass.js' %}?v=6" defer></script>
