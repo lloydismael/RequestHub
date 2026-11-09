@@ -212,6 +212,15 @@ body.christmas-blanket-switching:not(.page-login) .navbar { view-transition-name
 ::view-transition-group(christmas-santa) { z-index: 10002; animation: none; }
 ::view-transition-old(christmas-santa) { display: none; }
 ::view-transition-new(christmas-santa) { animation: none; }
+::view-transition-group(christmas-gift-1),
+::view-transition-group(christmas-gift-2),
+::view-transition-group(christmas-gift-3) { z-index: 10003; animation: none; }
+::view-transition-old(christmas-gift-1),
+::view-transition-old(christmas-gift-2),
+::view-transition-old(christmas-gift-3) { display: none; }
+::view-transition-new(christmas-gift-1),
+::view-transition-new(christmas-gift-2),
+::view-transition-new(christmas-gift-3) { animation: none; }
 .christmas-santa__blanket {
     position: absolute;
     inset: 0 auto 0 0;
@@ -269,6 +278,53 @@ body.christmas-blanket-switching:not(.page-login) .navbar { view-transition-name
     transform: scaleX(-1);
 }
 body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 221, 140, 0.55)) drop-shadow(0 0 2px rgba(255, 255, 255, 0.6)); }
+.christmas-santa__gift {
+    --gift-color: #2c9265;
+    --gift-ribbon: #ffe2a2;
+    --gift-delay: 360ms;
+    --gift-drift: -48vw;
+    --gift-spin: -35deg;
+    position: absolute;
+    top: 20%;
+    left: 8%;
+    width: clamp(20px, 2.5vw, 34px);
+    aspect-ratio: 1;
+    border: 2px solid rgba(70, 32, 30, 0.45);
+    border-radius: 4px;
+    background:
+        linear-gradient(90deg, transparent 40%, var(--gift-ribbon) 40% 60%, transparent 60%),
+        linear-gradient(0deg, transparent 40%, var(--gift-ribbon) 40% 60%, transparent 60%),
+        var(--gift-color);
+    box-shadow: 0 3px 6px rgba(24, 29, 33, 0.3);
+    opacity: 0;
+    animation: christmas-gift-fall 480ms ease-in var(--gift-delay) forwards;
+}
+.christmas-santa__gift::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    left: 29%;
+    width: 42%;
+    height: 7px;
+    border: 2px solid var(--gift-ribbon);
+    border-radius: 50% 50% 0 0;
+}
+.christmas-santa__gift--2 {
+    --gift-color: #d83e4e;
+    --gift-ribbon: #fff4dc;
+    --gift-delay: 645ms;
+    --gift-spin: 30deg;
+}
+.christmas-santa__gift--3 {
+    --gift-color: #5a79bd;
+    --gift-delay: 930ms;
+    --gift-drift: -30vw;
+    --gift-spin: -25deg;
+}
+.christmas-santa--snapshot .christmas-santa__gift { opacity: 1; animation: none; }
+.christmas-santa--snapshot .christmas-santa__gift--1 { view-transition-name: christmas-gift-1; }
+.christmas-santa--snapshot .christmas-santa__gift--2 { view-transition-name: christmas-gift-2; }
+.christmas-santa--snapshot .christmas-santa__gift--3 { view-transition-name: christmas-gift-3; }
 .christmas-santa--fallback {
     right: auto;
     left: 0;
@@ -287,6 +343,12 @@ body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 22
     to { translate: -100vw 0; }
 }
 @keyframes christmas-santa-gallop { to { translate: 0 -6px; } }
+@keyframes christmas-gift-fall {
+    0% { opacity: 0; transform: translate(0, 0) scale(0.7); }
+    10% { opacity: 1; transform: translate(0, 0) scale(1); }
+    75% { opacity: 1; }
+    100% { opacity: 0; transform: translate(var(--gift-drift), 42vh) rotate(var(--gift-spin)) scale(0.8); }
+}
 @media (pointer: fine) {
     body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off),
     body[data-account-theme="christmas"].christmas-effects-on:not(.christmas-cursor-off) :is(a, button, label, [role="button"], input[type="radio"], input[type="checkbox"], select),

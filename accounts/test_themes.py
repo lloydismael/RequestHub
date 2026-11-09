@@ -10,6 +10,7 @@ class ChristmasThemePreferenceTests(SimpleTestCase):
     def test_santa_setting_describes_the_blanket_theme_transition(self):
         option = ThemeForm()["pref_christmas_santa"]
         self.assertIn("blanket", option.label.lower())
+        self.assertIn("gift", option.help_text.lower())
         self.assertIn("light/dark", option.help_text.lower())
 
 

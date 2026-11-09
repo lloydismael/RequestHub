@@ -44,6 +44,7 @@ function start({
             addEventListener(name, callback) { this[name] = callback; },
             animate(keyframes, options) {
                 if (transitionFailure === 'pseudo' && options.pseudoElement === '::view-transition-group(christmas-santa)') throw Error('pseudo-element animation unsupported');
+                if (transitionFailure === 'gift-pseudo' && options.pseudoElement === '::view-transition-new(christmas-gift-2)') throw Error('gift animation unsupported');
                 let finish;
                 let reject;
                 const finished = new Promise((resolve, rejectPromise) => { finish = resolve; reject = rejectPromise; });
@@ -307,6 +308,22 @@ test('Santa carries a decorative blanket in both theme directions', () => {
     }
 });
 
+test('Santa drops decorative gifts without ending the blanket transition', () => {
+    for (const dark of [true, false]) {
+        const app = start();
+        app.switchMode(dark);
+        const santa = app.santas()[0];
+        const art = santa.children.find(child => child.className === 'christmas-santa__art');
+        const gifts = art.children.filter(child => child.className.startsWith('christmas-santa__gift'));
+        assert.equal(gifts.length, 3, 'Santa should carry three falling gifts');
+        assert.ok(gifts.every(gift => gift.attributes['aria-hidden'] === 'true'));
+        santa.animationend({ target: gifts[0] });
+        assert.equal(app.santas().length, 1, 'a gift finishing must not remove Santa early');
+        santa.animationend({ target: santa });
+        assert.equal(app.santas().length, 0);
+    }
+});
+
 test('Santa and the theme reveal sweep together in both directions', async () => {
     for (const dark of [true, false]) {
         const app = start({ nativeTransition: true });
@@ -336,6 +353,57 @@ test('Santa and the theme reveal sweep together in both directions', async () =>
         assert.equal(app.santas().length, 0);
         assert.ok(app.animations.every(animation => animation.cancelled), 'finished view-transition animations must not remain attached');
     }
+});
+
+test('native transitions animate falling gifts alongside the moving sleigh', async () => {
+    for (const dark of [true, false]) {
+        const app = start({ nativeTransition: true });
+        const pending = app.window.requestHubChristmasBlanket.play(dark, () => {});
+        await new Promise(setImmediate);
+        const sleigh = app.animations.find(animation => animation.options.pseudoElement === '::view-transition-group(christmas-santa)');
+        for (let index = 1; index <= 3; index++) {
+            const movingGift = app.animations.find(animation => animation.options.pseudoElement === `::view-transition-group(christmas-gift-${index})`);
+            const fallingGift = app.animations.find(animation => animation.options.pseudoElement === `::view-transition-new(christmas-gift-${index})`);
+            assert.ok(movingGift, `gift ${index} must follow Santa until release`);
+            assert.ok(fallingGift, `gift ${index} must fall during the transition`);
+            const releases = [0.24, 0.43, 0.62];
+            const positions = [-165.65, 234.10, 730.08];
+            const release = movingGift.keyframes.find(frame => frame.offset === releases[index - 1]);
+            assert.ok(release);
+            assert.ok(Math.abs(parseFloat(release.translate) - (dark ? positions[index - 1] : -positions[index - 1])) < 1);
+            assert.equal(fallingGift.options.duration, sleigh.options.duration);
+            assert.ok(fallingGift.keyframes.some(frame => frame.opacity === 1));
+            assert.ok(fallingGift.keyframes.some(frame => String(frame.transform).includes('translateY(')));
+            assert.equal(fallingGift.keyframes.at(-1).opacity, 0);
+        }
+        app.finishAnimations();
+        await pending;
+        assert.equal(app.santas().length, 0);
+        assert.ok(app.animations.every(animation => animation.cancelled));
+    }
+});
+
+test('managed gift animations remain visible until the transition finishes', async () => {
+    const app = start({ nativeTransition: true });
+    const pending = app.window.requestHubChristmasBlanket.play(true, () => {});
+    await new Promise(setImmediate);
+    app.expire(2300);
+    assert.equal(app.santas().length, 1, 'a slow transition must not lose Santa or the gifts early');
+    app.finishAnimations();
+    await pending;
+    assert.equal(app.santas().length, 0);
+});
+
+test('a stalled gift transition eventually applies the theme and removes decorations', async () => {
+    const app = start({ integrated: true, nativeTransition: true });
+    app.switchMode(true);
+    await new Promise(setImmediate);
+    assert.equal(app.santas().length, 1);
+    app.expire(5000);
+    await new Promise(setImmediate);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'dark');
+    assert.equal(app.santas().length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
 });
 
 test('the real theme toggle uses the Christmas blanket reveal and saves the chosen mode', async () => {
@@ -484,8 +552,26 @@ test('phones and unsupported browsers reveal the theme underneath a moving blank
     }
 });
 
+test('rapid mobile switches replace the falling gifts and keep the last theme', async () => {
+    const app = start({ integrated: true, nativeTransition: true, narrow: true });
+    app.switchMode(true);
+    const first = app.santas()[0];
+    app.switchMode(false);
+    const santa = app.santas()[0];
+    assert.notEqual(santa, first);
+    assert.equal(app.santas().length, 1);
+    assert.ok(santa.className.includes('christmas-santa--to-light'));
+    const art = santa.children.find(child => child.className === 'christmas-santa__art');
+    assert.equal(art.children.length, 3);
+    assert.equal(app.window.localStorage.getItem('reqHubTheme'), 'light');
+    app.finishAnimations();
+    await new Promise(setImmediate);
+    assert.equal(app.santas().length, 0);
+    assert.equal(app.body.classList.contains('theme-switching'), false);
+});
+
 test('failed native transitions fall back to the lightweight blanket without losing the theme', async () => {
-    for (const failure of ['start', 'ready', 'pseudo', 'ignored-pseudo']) {
+    for (const failure of ['start', 'ready', 'pseudo', 'gift-pseudo', 'ignored-pseudo']) {
         const app = start({ integrated: true, nativeTransition: true, transitionFailure: failure });
         app.switchMode(true);
         await new Promise(setImmediate);

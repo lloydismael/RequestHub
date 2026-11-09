@@ -111,9 +111,19 @@
         const modifier = mode ? ` christmas-santa--${mode}` : '';
         santa = decorative(`christmas-santa christmas-santa--to-${toDark ? 'dark' : 'light'}${modifier}`, body);
         decorative('christmas-santa__blanket', santa, 'span');
-        decorative('christmas-santa__art', santa, 'span');
-        santa.addEventListener('animationend', removeSanta);
-        santaTimer = window.setTimeout(removeSanta, 2300);
+        const art = decorative('christmas-santa__art', santa, 'span');
+        for (let index = 1; index <= 3; index++) {
+            decorative(`christmas-santa__gift christmas-santa__gift--${index}`, art, 'span');
+        }
+        const layer = santa;
+        layer.addEventListener('animationend', event => {
+            if (event.target === layer && santa === layer) removeSanta();
+        });
+        santaTimer = window.setTimeout(() => {
+            if (santa !== layer) return;
+            if (mode) cancelBlanket(true);
+            else removeSanta();
+        }, mode ? 5000 : 2300);
         return santa;
     }
     function cancelAnimations(run) {
@@ -196,17 +206,47 @@
             const translate = toDark
                 ? [`${-2 * edge}px 0px`, `${width}px 0px`]
                 : [`${2 * edge}px 0px`, `${-width}px 0px`];
-            const timing = { duration: blanketDuration, easing: blanketEasing, fill: 'forwards' };
-            for (const [keyframes, pseudoElement] of [
-                [{ clipPath }, '::view-transition-new(root)'],
-                [{ translate }, '::view-transition-group(christmas-santa)'],
-            ]) {
-                const animation = root.animate(keyframes, { ...timing, pseudoElement });
+            const timing = { duration: blanketDuration, fill: 'forwards' };
+            const animateSnapshot = (keyframes, pseudoElement, easing = blanketEasing) => {
+                const animation = root.animate(keyframes, { ...timing, easing, pseudoElement });
                 run.animations.push(animation);
                 if (!animation.effect || animation.effect.pseudoElement !== pseudoElement) {
                     throw new Error('View-transition animation is not supported');
                 }
-            }
+            };
+            animateSnapshot({ clipPath }, '::view-transition-new(root)');
+            animateSnapshot({ translate }, '::view-transition-group(christmas-santa)');
+
+            // The travel values are blanketEasing's progress at each release offset.
+            const drops = [
+                { at: 0.24, travel: 0.124582, spin: -35 },
+                { at: 0.43, travel: 0.380836, spin: 30 },
+                { at: 0.62, travel: 0.698770, spin: -25 },
+            ];
+            const from = toDark ? -2 * edge : 2 * edge;
+            const to = toDark ? width : -width;
+            drops.forEach((drop, index) => {
+                const x = from + (to - from) * drop.travel;
+                const drift = toDark ? 24 : -24;
+                const rest = `${x + drift}px 0px`;
+                const moving = [
+                    { offset: 0, translate: `${from}px 0px` },
+                    { offset: drop.at, translate: `${x}px 0px` },
+                    { offset: drop.at + 0.32, translate: rest },
+                    { offset: 1, translate: rest },
+                ];
+                const falling = [
+                    { offset: 0, opacity: 0, transform: 'translateY(0px) scale(0.7)' },
+                    { offset: drop.at, opacity: 0, transform: 'translateY(0px) scale(0.7)' },
+                    { offset: drop.at + 0.03, opacity: 1, transform: 'translateY(0px) scale(1)', easing: 'ease-in' },
+                    { offset: drop.at + 0.25, opacity: 1, transform: `translateY(30vh) rotate(${drop.spin}deg)` },
+                    { offset: drop.at + 0.32, opacity: 0, transform: `translateY(42vh) rotate(${drop.spin}deg) scale(0.8)` },
+                    { offset: 1, opacity: 0, transform: `translateY(42vh) rotate(${drop.spin}deg) scale(0.8)` },
+                ];
+                const name = `christmas-gift-${index + 1}`;
+                animateSnapshot(moving, `::view-transition-group(${name})`, 'linear');
+                animateSnapshot(falling, `::view-transition-new(${name})`, 'linear');
+            });
             await Promise.all(run.animations.map(animation => animation.finished.catch(() => {})));
             if (run.cancelled) return;
             removeSanta();

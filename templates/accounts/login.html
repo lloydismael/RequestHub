@@ -5,7 +5,7 @@
 {% block body_class %}page-login{% endblock %}
 {% block extra_head %}
 {% if christmas_login_enabled %}
-{% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=11">{% endif %}
+{% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=12">{% endif %}
 <link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=11">
 <script>
     (function () {
@@ -93,7 +93,7 @@
     </div>
 </section>
 {% if christmas_login_enabled %}
-{% if not request.user.is_authenticated %}<script src="{% static 'js/christmas-theme.js' %}?v=13" defer></script>{% endif %}
+{% if not request.user.is_authenticated %}<script src="{% static 'js/christmas-theme.js' %}?v=16" defer></script>{% endif %}
 <script src="{% static 'js/login-christmas.js' %}?v=13" defer></script>
 {% endif %}
 <script>
