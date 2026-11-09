@@ -202,6 +202,52 @@ class EvidenceSyncTests(TestCase):
         self.assertFalse(entry.is_published)
         self.assertIsNone(sync_release(data))
 
+    def test_newer_automatic_capture_replaces_stale_automatic_pair(self):
+        entry = sync_release(manifest(commits=[visual_commit()]))
+        item = entry.changes["commits"][0]
+        item["comparisons"] = [{
+            "title": "Repository change report",
+            "before_text": "Verified file presence at the parent revision.",
+            "after_text": "Verified file presence at this change.",
+            "before_image": "changelogs/stale-before.png",
+            "after_image": "changelogs/stale-after.png",
+            "capture_note": "Automatic report capture, recipe repository-change. Exact Git snapshots.",
+        }]
+        entry.save()
+        ui_pair = comparison(
+            title="SQR dashboard portfolio and rating filters",
+            capture_note="Automatic ui capture, recipe sqr-dashboard-filters. Exact Git snapshots.",
+        )
+        self.assertIsNotNone(sync_release(manifest(commits=[visual_commit(comparisons=[ui_pair])])))
+        entry.refresh_from_db()
+        pairs = entry.changes["commits"][0]["comparisons"]
+        self.assertEqual(len(pairs), 1)
+        self.assertEqual(pairs[0]["title"], "SQR dashboard portfolio and rating filters")
+        self.assertTrue(pairs[0]["before_image"].startswith("changelogs/"))
+        self.assertNotEqual(pairs[0]["before_image"], "changelogs/stale-before.png")
+
+    def test_newer_automatic_capture_cannot_replace_manual_evidence(self):
+        entry = sync_release(manifest(commits=[visual_commit()]))
+        item = entry.changes["commits"][0]
+        item["comparisons"] = [{
+            "title": "Hand-authored comparison",
+            "before_text": "Hand before",
+            "after_text": "Hand after",
+            "before_image": "changelogs/hand-before.png",
+            "after_image": "changelogs/hand-after.png",
+            "capture_note": "Hand-authored screenshot; not automatic capture.",
+        }]
+        entry.save()
+        ui_pair = comparison(
+            title="SQR dashboard portfolio and rating filters",
+            capture_note="Automatic ui capture, recipe sqr-dashboard-filters. Exact Git snapshots.",
+        )
+        sync_release(manifest(commits=[visual_commit(comparisons=[ui_pair])]))
+        entry.refresh_from_db()
+        pairs = entry.changes["commits"][0]["comparisons"]
+        self.assertEqual(pairs[0]["title"], "Hand-authored comparison")
+        self.assertEqual(pairs[0]["before_image"], "changelogs/hand-before.png")
+
     def test_older_text_only_manifest_cannot_remove_curated_descriptions_or_titles(self):
         data = manifest(commits=[visual_commit()])
         entry = sync_release(data)
