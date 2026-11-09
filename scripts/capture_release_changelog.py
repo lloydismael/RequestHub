@@ -95,7 +95,7 @@ def load_recipes(path):
                 source = safe_relative(scene.get("path"))
                 if source.suffix.lower() not in {".md", ".txt", ".rst"} or not isinstance(scene.get("heading"), str) or not scene["heading"].strip():
                     raise CaptureError("Documentation capture needs a selected text section.")
-            elif scene.get("fixture") not in ({"login", "changelog"} if scene["kind"] == "ui" else {"changelog_contract"}):
+            elif scene.get("fixture") not in ({"login", "changelog", "sqr_performance"} if scene["kind"] == "ui" else {"changelog_contract"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             viewport = scene.get("viewport", {"width": 1200, "height": 900})
             if not isinstance(viewport, dict) or set(viewport) != {"width", "height"}:
@@ -284,7 +284,7 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         page.goto(ORIGIN, wait_until="networkidle", timeout=15000)
         if failed_resources:
             raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
-        selector = ".login-card" if scene.get("fixture") == "login" else ".cl-entry" if scene.get("fixture") == "changelog" else "body"
+        selector = ".login-card" if scene.get("fixture") == "login" else ".cl-entry" if scene.get("fixture") == "changelog" else "#sqr-performance-dashboard" if scene.get("fixture") == "sqr_performance" else "body"
         page.locator(selector).screenshot(path=str(output), animations="disabled", timeout=15000)
     finally:
         context.close()
