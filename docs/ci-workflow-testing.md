@@ -9,7 +9,7 @@ The workflow is `.github/workflows/container-security.yml`, displayed as **Conta
 | Push to `master` | Run all three validation jobs after event classification |
 | Push to `dev` without a matching open master PR | Run all three validation jobs |
 | Push to `dev` with a same-repository master PR at the exact pushed SHA | Lightweight classification; the three heavy jobs are skipped in this branch run |
-| Open, update, reopen, edit, or mark a master PR ready for review | Run all three jobs against the PR merge ref, including draft PRs |
+| Open, update, reopen, or edit a master PR | Run validation against the PR merge ref, including draft PRs; edits remain enabled for base-branch retargeting |
 | Run workflow manually | Run all three jobs on the selected branch |
 
 There are no path filters. Application, template, and documentation changes all trigger CI on these branches. Runs for the same workflow/ref cancel superseded runs; a dev branch run cannot cancel its PR merge run. The read-only classifier checks open state, exact head/base repository and branch, and head SHA. An unavailable or malformed PR lookup falls back to full validation. If the classifier itself fails, the heavy jobs still attempt validation and the workflow remains failed rather than hiding that error. A lightweight successful dev routing run is **not** a passing PR validation signal; always inspect the PR's own checks. Master CI never skips heavy validation.
@@ -49,6 +49,26 @@ flowchart TD
 ```
 
 When full validation is required, the three heavy jobs run independently after classification. Any failed job makes CI fail, including a build or scanner error. Upload steps can still preserve files after a failure but cannot turn that failure into a pass. Reports are uploaded only when they exist; fork PRs skip the privileged code-scanning upload. Production deployment and image publishing are not part of this workflow.
+
+## Reproducible dependencies and added validation
+
+Runtime dependencies in `requirements.lock` now include the complete transitive dependency set and hashes. The Docker build, Django CI, and audit enforce those hashes. `requirements-ci.txt` is generated from `requirements-ci.in`; `requirements-tooling.txt` from `requirements-tooling.in` pins audit and lock-generation tools. The capture lock includes the runtime lock plus Playwright, so capture and runtime use consistent dependency versions. `requirements-evidence.txt` pins only the Pillow decoder needed by release import. On Windows, also install `requirements-windows.txt` with the runtime/test or capture locks: it hash-pins the Windows-only `tzdata` and `colorama` transitive dependencies omitted by a Linux resolver. Use Python 3.12 for supported local reproduction. For Windows Node-based test subprocesses, set `$env:PYTHONUTF8='1'` so stdin uses the same UTF-8 encoding as Linux CI. Never install tooling or Playwright in the production image.
+
+Regenerate on Linux Python 3.12 using the pinned tooling, not a Windows or newer-Python resolver. Use a Debian-based environment for Playwright (Alpine has no supported Playwright wheel). Existing locks seed the resolver; do not use `--upgrade` for unrelated changes:
+
+```text
+python -m pip install --require-hashes -r requirements-tooling.txt
+python -m piptools compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements.lock requirements.txt
+python -m piptools compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-ci.txt requirements-ci.in
+python -m piptools compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-tooling.txt requirements-tooling.in
+python -m piptools compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-changelog-capture.txt requirements-changelog-capture.in
+python -m piptools compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-evidence.txt requirements-evidence.in
+python -m piptools compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url --no-emit-trusted-host --output-file requirements-windows.txt requirements-windows.in
+```
+
+The additional **Workflow and shell validation** job uses digest-pinned Actionlint and ShellCheck containers. Both image jobs now run `bash scripts/smoke-container.sh IMAGE FULL_REVISION` against uniquely named, disposable PostgreSQL/container/network resources. The helper checks production configuration, applies migrations to that disposable database, and verifies actual Gunicorn startup, revision, liveness, readiness, login, and image-packaged static assets. Only the loopback port is published; no production settings or database are used. Cleanup removes only resources created by that invocation and failures fail image validation.
+
+Trusted master pushes also prepare cached screenshot evidence in a non-blocking job; see [the exact-run handoff](cd-workflow-testing.md#preparing-screenshot-evidence). A capture failure holds changelog publication, not deployment. `ready_for_review` no longer repeats tests already run for a draft PR. `edited` stays enabled for base-branch retargeting: do not skip required jobs on edits in a way that can replace a failed merge check with a skipped-success signal.
 
 ## 1. Publish the correct workflow version
 
@@ -128,7 +148,7 @@ For future missing-migration failures, have the owning developer generate, revie
 Baseline from the `master` run on October 22, 2026: the Django Validation job took about 200 seconds, of which the test suite was 163 seconds. The other two jobs run in parallel and finish in under 70 seconds, so test time sets total CI time. Speed measures:
 
 - **Fast password hasher for tests.** `python manage.py test --settings=request_hub.settings_ci` swaps PBKDF2 for MD5 (see `request_hub/settings_ci.py`). Hundreds of tests create users or log in, and PBKDF2 cost dominated runtime. The production-security checks still use the real settings. Never point a deployed process at `settings_ci`.
-- **Parallel tests.** `--parallel auto` uses every runner CPU. `tblib` (via `requirements-ci.txt`) is required so a failing test reports its traceback instead of aborting the parallel runner and cascading into "database does not exist" errors.
+- **Serial tests.** Parallel execution was intentionally removed on November 6 after failed runs. Keep tests serial until the failure mechanism is reproduced and fixed. `tblib` remains available for controlled parallel investigation; old workstation timing comparisons below are historical, not the current CI command.
 - **Docker layer cache.** The image build restores dependency layers from the GitHub Actions cache. Per-build values (`APP_VERSION`, `VCS_REF`, `BUILD_DATE`) are declared late in the `Dockerfile` so they no longer invalidate the dependency layers. `APK_REFRESH` receives the run ID so OS packages are upgraded on every build; Trivy still scans a fresh package set.
 - **pip cache** for the Django and audit jobs.
 

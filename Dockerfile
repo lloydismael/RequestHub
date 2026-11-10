@@ -13,8 +13,7 @@ WORKDIR /app
 # Per-build values (version, commit, date) are declared at the end of the file so
 # they do not invalidate the cached dependency layers below on every commit.
 COPY requirements.txt requirements.lock ./
-RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install -r requirements.lock \
+RUN python -m pip install --require-hashes -r requirements.lock \
     && python -m pip check \
     && rm -rf \
         /usr/local/bin/pip* \

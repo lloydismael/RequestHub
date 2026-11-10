@@ -6,9 +6,9 @@
 
 It is disabled unless repository variable `CD_ENABLED` is exactly `true`. This is the only activation switch. Do not enable it until every prerequisite below has been reviewed. Production releases have no staging or reviewer gate, as requested; a restart or failed deployment can directly affect users.
 
-The **Check release eligibility and configuration** job combines the two preflight stages in one hosted runner allocation. Its summary distinguishes **DISABLED** (switch unset/false) from **INELIGIBLE** (upstream CI is not a successful trusted master push). Only eligible runs execute the configuration step. Missing values fail that job with configuration names only, before image building or publishing. Its `ready` output becomes `true` only after configuration succeeds; disabled/ineligible runs return `false`. Configuration checks require production debug settings and database TLS but do not prove permissions or recovery readiness.
+The **Check release eligibility and configuration** job now rejects disabled or ineligible upstream completions at job level, before allocating a hosted runner or entering the production environment. Eligible runs still execute the existing explanatory and configuration checks. Missing values fail with configuration names only, before image building or publishing. Its `ready` output becomes `true` only after configuration succeeds. Configuration checks require production debug settings and database TLS but do not prove permissions or recovery readiness.
 
-The combined job uses the `production` environment earlier than before. If environment reviewers or branch restrictions are added, they apply before eligibility is explained, including disabled/ineligible upstream completions. Review that behavior before rollout; no repository or environment settings are changed by this optimization. Image publishing still requires successful trusted master-push CI, and the deploy job retains its own production environment.
+Both eligible preflight and deployment use the `production` environment. Restrict it to `master`; a human deployment approval gate is not added. The approved merge policy separately requires one PR approval and the three existing CI checks. Repository/environment policies are live GitHub settings, not enforced by editing workflow YAML alone.
 
 The workflow serializes releases without cancelling an active one and rejects superseded commits before publishing/deploying. CI keeps its own cancellation policy. Use branch protection to restrict changes to `master` and require all three CI jobs plus review. Restrict the GitHub `production` environment to the default `master` branch. The environment ref is the downstream workflow's default-branch ref, not the upstream merge ref.
 
@@ -83,7 +83,7 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 ## Deployment sequence
 
 1. A successful trusted `master` CI run triggers a serialized release. Check eligibility and production configuration before building or publishing.
-2. Allocate an unused numbered tag; generate the release changelog manifest (a failure there only warns); build, generate SBOM, and scan the exact image. Failed security checks prevent publishing/deployment, while generated evidence is retained for 30 days.
+2. Allocate an unused numbered tag; generate the required release changelog manifest (failure stops the release); import validated screenshot evidence from the exact upstream CI run/attempt; build, smoke-test against disposable PostgreSQL, generate SBOM, and scan the exact image. Failed security checks prevent publishing/deployment, while generated evidence is retained for 30 days.
 3. Publish the scanned image and pass its version, commit, and digest to the production job.
 4. Verify current `master` and prepare the temporary protected migration configuration.
 5. Authenticate to Azure using OIDC and to Docker Hub using the scoped token.
@@ -98,7 +98,7 @@ Configure the Web App's `RUN_MIGRATIONS=false` only after hosted migration execu
 
 `/release/` exposes only version/revision metadata. `APP_REVISION` is baked from the build commit; remove any stale platform override before activation. `APP_VERSION` can also be overridden by existing App Settings, so the commit/digest is the authoritative verification signal; reconcile an existing version override deliberately before enabling numbered-version reporting.
 
-`/readyz/` checks a database connection with `SELECT 1`. `/healthz/` remains database-independent. Static collection remains at runtime in this implementation, using the existing startup default; build-time static collection is not enabled. Do not set `RUN_COLLECTSTATIC=false` unless static assets have been prepared independently.
+`/readyz/` checks a database connection with `SELECT 1`. `/healthz/` remains database-independent. Static files are collected during the Docker build; the image defaults `RUN_COLLECTSTATIC=false`. The new container smoke check exercises packaged static files without enabling runtime collection. Production retains controlled migrations with `RUN_MIGRATIONS=false`.
 
 ## Release changelog
 
@@ -133,7 +133,11 @@ The approved images are stored alongside each versioned manifest, not in the Git
 
 ### Preparing screenshot evidence
 
-Production Release installs `requirements.lock` plus the capture-only `requirements-changelog-capture.txt` in an isolated virtual environment and installs Chromium. It prepares pinned, SHA-256-checked Bootstrap assets, then runs `scripts/capture_release_changelog.py` before Docker build. Setup, asset preparation and capture failures only warn: the manifest retains each change with a visible `capture_error`, so startup can log the draft. Capture is bounded to eight minutes. The Actions summary lists missing evidence, and the enriched manifest/screenshots are retained as a 30-day artifact. Capture tools/vendor caches are excluded from the runtime image; generated screenshot assets are included.
+The non-blocking **Prepare release screenshot evidence** job runs only on trusted `master` pushes, alongside CI validation. It uses Python 3.12, installs the complete hash-verified `requirements-changelog-capture.txt` in an isolated virtual environment, and caches pip downloads, Chromium, verified vendor assets, and fingerprinted historical captures. It prepares SHA-256-checked Bootstrap assets and runs `scripts/capture_release_changelog.py`, bounded to eight minutes. Historical Chromium regression tests run in this environment too. Capture setup/failure does not turn successful required CI red; missing evidence retains every change as a draft with an actionable reason.
+
+CI exports only the manifest, referenced images, checksums, and run/revision metadata as `changelog-evidence-SHA-ATTEMPT`, retained for 30 days. Production Release downloads from `github.event.workflow_run.id`, never from the latest unrelated run. The importer verifies run ID/attempt, revision, the complete commit set, first-parent provenance, image checksums, size limits, and safe asset destinations before copying files. A minimal hash-pinned Pillow decoder validates actual image integrity and decoding before accepting a bundle; missing decoder or malformed evidence falls back to drafts rather than losing the changelog during startup. It preserves the numbered release identity and never imports executable content or overwrites different packaged images. Missing/rejected artifacts annotate incomplete changes; manifest generation remains required. Captured assets are included in the final scanned image, so no new production database importer or firewall window is needed.
+
+`workflow_run` still waits for the entire CI workflow, including optional capture. This overlaps capture with validation and removes browser setup from the release-image job; it is not a fully asynchronous release and does not guarantee a three-minute end-to-end saving. Compare actual CI-to-production timings after rollout. Capture dependencies, scripts, tests, and vendor caches remain excluded from the runtime image.
 
 Recipes in `hub/changelog_capture_recipes.json` use schema 1, a unique `id`, and either a full `commit` SHA or `paths` patterns covering **all files changed by that commit**. Exact-commit recipes take precedence. Multiple matching recipes are an error, not an arbitrary choice. When no recipe covers the whole change, capture generates a `repository_change` report from the exact parent and change snapshots. Its before/after images list public changed files, presence, byte counts and SHA-256 fingerprint prefixes; private/unsafe paths are excluded and source contents are never rendered. Reports are explicitly labeled as reports, not UI screenshots. An explicitly selected recipe that fails or shows no observable change remains a capture failure; the report fallback does not conceal it. Each scene declares a bounded `title`, `before_text`, `after_text`, and optional `viewport` (`width` 320-1920; `height` 240-1600):
 
@@ -146,7 +150,7 @@ Initial recipes cover login layout, changelog display, the README changelog sect
 For local capture/retry (Windows, from the repository root):
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-changelog-capture.txt
+.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements-changelog-capture.txt -r requirements-windows.txt
 .\.venv\Scripts\python.exe -m playwright install chromium
 .\.venv\Scripts\python.exe scripts\capture_release_changelog.py --prepare-assets
 .\.venv\Scripts\python.exe -m hub.release_changelog --version vNEXT --revision HEAD

@@ -56,6 +56,11 @@ class CaptureTests(unittest.TestCase):
     def write_recipes(self, recipes):
         self.recipes_path.write_text(json.dumps({"schema": 1, "recipes": recipes}), encoding="utf-8")
 
+    def write_manifest(self, directory, data):
+        destination = self.repo / "hub" / "changelog_assets" / directory
+        destination.mkdir(parents=True, exist_ok=True)
+        (destination / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
+
     def test_real_before_after_document_screenshots_have_exact_provenance(self):
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
         self.assertEqual(failures, [])
@@ -213,6 +218,9 @@ class CaptureTests(unittest.TestCase):
     def test_missing_cached_image_is_recaptured_with_verified_report(self):
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
         self.assertEqual(failures, [])
+        self.write_manifest("automatic", result)
+        self.write_manifest("v56.6", self.manifest)
+        result = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
         pair = result["commits"][0]["comparisons"][0]
         (self.repo / "hub" / "changelog_assets" / pair["after_image"]).unlink()
         self.write_recipes([])
@@ -259,9 +267,37 @@ class CaptureTests(unittest.TestCase):
     def test_changed_recipe_invalidates_automatic_cached_evidence(self):
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
         self.assertEqual(failures, [])
+        self.write_manifest("automatic", result)
+        self.write_manifest("v56.6", self.manifest)
+        result = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
         self.recipe["scenes"][0]["heading"] = "Unrelated absent heading"
         self.write_recipes([self.recipe])
         repeated, failures = capture_manifest(result, self.repo, self.recipes_path)
+        self.assertEqual(len(failures), 1)
+        self.assertFalse(repeated["commits"][0].get("comparisons"))
+
+    def test_rebuilt_manifest_reuses_cache_with_overlapping_curated_metadata(self):
+        result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        assets = self.repo / "hub" / "changelog_assets"
+        (assets / "automatic" / "manifest.json").write_text(json.dumps(result), encoding="utf-8")
+        curated = {**result, "commits": [{
+            "sha": self.after, "type": "maintenance", "title": "Curated guide",
+            "before_text": "Manual export", "after_text": "Dashboard export",
+        }]}
+        (assets / "v56.6").mkdir()
+        (assets / "v56.6" / "manifest.json").write_text(json.dumps(curated), encoding="utf-8")
+        rebuilt = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
+        with patch("capture_release_changelog._capture_change") as capture:
+            repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        capture.assert_not_called()
+        self.assertEqual(repeated["commits"][0]["comparisons"], result["commits"][0]["comparisons"])
+        self.assertEqual(repeated["commits"][0]["title"], "Curated guide")
+
+        self.recipe["scenes"][0]["heading"] = "Unrelated absent heading"
+        self.write_recipes([self.recipe])
+        repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
         self.assertEqual(len(failures), 1)
         self.assertFalse(repeated["commits"][0].get("comparisons"))
 
