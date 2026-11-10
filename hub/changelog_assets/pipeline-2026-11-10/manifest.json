@@ -1,0 +1,29 @@
+{
+  "version": "next",
+  "revision": "f81bf9496d87996710e9221cb7605a38b6f3051f",
+  "generated_at": "2026-11-10T07:30:14.872768+00:00",
+  "commits": [
+    {
+      "sha": "f81bf9496d87996710e9221cb7605a38b6f3051f",
+      "type": "maintenance",
+      "title": "Harden releases and cache changelog evidence",
+      "parent_sha": "05624c0d3daa50a8b57f296f5ec1b7b9cf1bc253",
+      "requires_comparison": true,
+      "before_text": "Release builds performed synchronous screenshot setup/capture; dependency locks covered direct packages only; image startup/static assets were not smoke-tested.",
+      "after_text": "CI overlaps cached capture with validation, hands exact-run decoded evidence to releases, enforces complete hashes and final-container smoke/lint gates, preserves runtime SDK versions, and documents verified GitHub protections.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "pipeline-2026-11-10/01-before.png",
+          "after_image": "pipeline-2026-11-10/01-after.png",
+          "before_revision": "05624c0d3daa50a8b57f296f5ec1b7b9cf1bc253",
+          "after_revision": "f81bf9496d87996710e9221cb7605a38b6f3051f",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

@@ -39,5 +39,22 @@ class FastGateTests(unittest.TestCase):
         self.assertIn('PASS: rollback-unhealthy', result.stdout)
 
 
+class ContainerRuntimeTests(unittest.TestCase):
+    def test_container_uses_validated_python_runtime(self):
+        dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
+        workflow = (ROOT / '.github/workflows/container-security.yml').read_text(encoding='utf-8')
+        self.assertRegex(dockerfile.splitlines()[0], r'^FROM python:3\.12\.\d+-alpine[\d.]+@sha256:[0-9a-f]{64}$')
+        self.assertIn("python-version: '3.12'", workflow)
+        self.assertIn('/usr/local/lib/python3.12/site-packages/', dockerfile)
+
+    def test_dependabot_keeps_python_patch_updates_enabled(self):
+        config = (ROOT / '.github/dependabot.yml').read_text(encoding='utf-8')
+        docker_config = config.split('package-ecosystem: docker', 1)[1].split('package-ecosystem:', 1)[0]
+        self.assertIn('dependency-name: python', docker_config)
+        self.assertIn('version-update:semver-major', docker_config)
+        self.assertIn('version-update:semver-minor', docker_config)
+        self.assertNotIn('version-update:semver-patch', docker_config)
+
+
 if __name__ == '__main__':
     unittest.main()

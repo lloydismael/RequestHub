@@ -140,7 +140,7 @@ Mobile regressions live in [hub/test_mobile_ui.py](hub/test_mobile_ui.py). Templ
 
 - Notifications and Management sort releases newest first by release date, then numeric version (major/minor/patch), before pagination. Backfilled notes cannot jump ahead of newer same-day versions; custom version labels retain release-date ordering with record IDs as the final tie-breaker.
 - **Notifications → Changelogs** shows before/after descriptions and multiple labeled screenshot pairs per UI/UX change. Comparisons include historical revision/capture notes, open full-size images, and stack on mobile. Existing release-wide comparisons remain supported.
-- New automatic releases require before/after screenshot evidence for **every logged change**, including backend, documentation, tests and maintenance. Production Release captures declared historical scenes before building the image. Missing evidence keeps the release in draft, never blocks deployment, and displays an actionable reason in **Management → Changelogs**.
+- New automatic releases require before/after screenshot evidence for **every logged change**, including backend, documentation, tests and maintenance. Trusted master CI captures declared historical scenes while validation runs. Production Release imports validated evidence from that exact upstream run before building the image. Missing evidence keeps the release in draft, never blocks deployment, and displays an actionable reason in **Management → Changelogs**.
 - Automatic system drafts publish when their evidence becomes complete. Admins can disable **Automatically publish when every change has screenshot evidence** to hold a draft; unpublishing also disables automatic republication. Existing policy-less releases retain their historical publication rules.
 - Capture recipes in `hub/changelog_capture_recipes.json` explicitly select synthetic UI components, documentation sections or deterministic behavior reports. A change without a comprehensive recipe automatically receives a clearly labeled **repository change report** from its exact Git parent and change revision. These before/after captures show changed public files, their presence, byte counts and content fingerprints—not source code, private configuration or a pretend UI screenshot. Explicit recipes that are ambiguous, fail or show no observable change still require attention instead of silently substituting evidence. Collection retains the entire eligible commit history, with the existing explicit skip rules.
 - Release-manifest generation is required: a failure stops the numbered image build instead of deploying a release with no changelog. Evidence failures still retain every change as a draft with an actionable capture error.
@@ -676,11 +676,11 @@ The `Container Security` GitHub Actions workflow runs on every push to `dev` or 
 
 A read-only event classifier avoids duplicate full dev-push validation when an open same-repository master PR matches the exact pushed SHA. That update is validated by the separate PR merge-ref run; its lightweight branch result is not PR approval. Standalone dev pushes, master pushes, PR runs, and manual dispatch still run all three validation jobs. Lookup failures default to full validation. See [CI testing and timing](docs/ci-workflow-testing.md) for routing cases and offline latency analysis.
 
-Three jobs run in parallel when full validation is required:
+The three required validation jobs run alongside workflow/shell linting when full validation is required. Trusted `master` pushes also prepare non-blocking release screenshot evidence in parallel:
 
-- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements.lock` and `requirements-ci.txt` (the runtime dependencies and test-only `tblib`) with a pip cache, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, runs fast offline analyzer/toast/deployment/routing regressions, and runs the complete Django test suite in parallel with migrations enabled. Tests use `request_hub.settings_ci`, which only swaps the password hasher for a fast one; every other check uses the real settings.
-- **Python dependency audit** checks dependencies with `pip-audit`.
-- **Build, scan, and publish SBOM** builds the Docker image without pushing it, generates an SPDX SBOM, and fails on fixable HIGH/CRITICAL vulnerabilities found by Trivy. Dependency layers are restored from the GitHub Actions cache; OS packages are refreshed on every build, so security fixes are never served from cache. Generated scan reports and SBOM artifacts are retained for 14 days, including after scan failures. Fork PRs retain report artifacts without attempting a privileged code-scanning upload.
+- **Django Validation** uses Python 3.12 and disposable PostgreSQL 16. It installs `requirements.lock` and `requirements-ci.txt` (the runtime dependencies and test-only `tblib`) with a pip cache, checks dependency compatibility and Django configuration, checks production security settings, detects missing migrations, collects static files, runs fast offline analyzer/toast/deployment/routing regressions, and runs the complete Django test suite serially with migrations enabled. Parallel execution remains disabled pending investigation of the earlier failures. Tests use `request_hub.settings_ci`, which only swaps the password hasher for a fast one; every other check uses the real settings.
+- **Python dependency audit** uses pinned, hash-verified audit tooling to check the complete runtime dependency lock.
+- **Build, scan, and publish SBOM** builds the Docker image without pushing it, smoke-tests its startup, revision, database readiness, login, and packaged static files against disposable PostgreSQL, generates an SPDX SBOM, and fails on fixable HIGH/CRITICAL vulnerabilities found by Trivy. Dependency layers are restored from the GitHub Actions cache; OS packages are refreshed on every build, so security fixes are never served from cache. Generated scan reports and SBOM artifacts are retained for 14 days, including after scan failures. Fork PRs retain report artifacts without attempting a privileged code-scanning upload.
 
 CI uses only test credentials and an isolated database. It does not publish container images, deploy to Azure, or require production secrets. The separate production-configuration check disables debug mode; application tests keep debug mode enabled to avoid production HTTPS redirects.
 
@@ -695,10 +695,10 @@ python -m pip check
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py collectstatic --noinput
-python manage.py test --settings=request_hub.settings_ci --parallel auto --noinput --verbosity 2
+python manage.py test --settings=request_hub.settings_ci --noinput --verbosity 2
 ```
 
-Omit `--settings=request_hub.settings_ci` to run tests with the production password hasher (several times slower), and omit `--parallel auto` to run serially. Never use `settings_ci` for a deployed process.
+Omit `--settings=request_hub.settings_ci` to run tests with the production password hasher (several times slower). Never use `settings_ci` for a deployed process. Re-enable parallel tests only after reproducing and resolving the earlier failures.
 
 Separately set `DJANGO_DEBUG=False` and run `python manage.py check --deploy --fail-level WARNING`, then restore the test configuration.
 

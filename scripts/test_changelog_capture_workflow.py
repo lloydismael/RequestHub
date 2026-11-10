@@ -50,7 +50,7 @@ class CaptureWorkflowTests(unittest.TestCase):
             }
             timeout() { shift; "$@"; }
             """
-            script = read_run_block("production-release.yml", "Capture release changelog screenshots")
+            script = read_run_block("container-security.yml", "Capture release changelog screenshots")
             result = subprocess.run([BASH, "-e", "-o", "pipefail", "-c", stub + script],
                                     cwd=root, env=environment, capture_output=True, text=True)
             return (result, json.loads(path.read_text(encoding="utf-8")),
