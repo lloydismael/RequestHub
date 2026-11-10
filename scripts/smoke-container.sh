@@ -14,7 +14,7 @@ cleanup() {
     local status=$?
     trap - EXIT
     if "$application_owned"; then docker rm -f "$application" >/dev/null || status=1; fi
-    if "$database_owned"; then docker rm -f "$database" >/dev/null || status=1; fi
+    if "$database_owned"; then docker rm -fv "$database" >/dev/null || status=1; fi
     if "$network_owned"; then docker network rm "$network" >/dev/null || status=1; fi
     exit "$status"
 }
@@ -31,7 +31,7 @@ database_owned=true
 docker start "$database" >/dev/null
 ready=false
 for _attempt in {1..30}; do
-    if docker exec "$database" pg_isready -U smoke -d container_smoke >/dev/null 2>&1; then ready=true; break; fi
+    if docker exec "$database" pg_isready -h 127.0.0.1 -U smoke -d container_smoke >/dev/null 2>&1; then ready=true; break; fi
     sleep 1
 done
 "$ready" || { echo 'Disposable PostgreSQL did not become ready' >&2; exit 1; }

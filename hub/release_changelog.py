@@ -238,11 +238,17 @@ def build_manifest(version, revision, repo=".", baseline=BASELINE, now=None):
         "--format=%x1e%H%x1f%P%x1f%s%x1f%b%x1f",
         f"{baseline}..{sha}",
     ).stdout
-    notes = {
-        item["sha"]: item
-        for manifest in curated_manifests(Path(repo) / "hub" / "changelog_assets")
-        for item in manifest["commits"]
-    }
+    notes = {}
+    for manifest in curated_manifests(Path(repo) / "hub" / "changelog_assets"):
+        for item in manifest["commits"]:
+            previous = notes.get(item["sha"])
+            if (
+                previous and missing_comparisons([item], require_all=True)
+                and not missing_comparisons([previous], require_all=True)
+            ):
+                item = {**item, "comparisons": previous["comparisons"]}
+                item.pop("capture_error", None)
+            notes[item["sha"]] = item
     commits = []
     for record in log.split("\x1e"):
         record = record.strip("\n")

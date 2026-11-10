@@ -12,12 +12,20 @@ import tempfile
 
 class ContainerCleanupTests(unittest.TestCase):
     def test_failed_start_removes_every_owned_container(self):
+        self.run_smoke(fail_start=True)
+
+    def test_successful_run_removes_every_owned_container_and_volume(self):
+        self.run_smoke(fail_start=False)
+
+    def run_smoke(self, *, fail_start):
         bash = os.environ.get("TEST_BASH") or shutil.which("bash")
         with tempfile.TemporaryDirectory() as temporary:
             live = Path(temporary) / "live"
             live.write_text("")
+            commands = Path(temporary) / "commands"
             stub = r'''
             docker() {
+              echo "$*" >> "$DOCKER_COMMANDS"
               case "$1" in
                 run|create)
                   local name= previous= arg
@@ -28,7 +36,8 @@ class ContainerCleanupTests(unittest.TestCase):
                   if [ -n "$name" ]; then echo "$name" >> "$LIVE_CONTAINERS"; fi
                   if [ "$1" = run ] && [[ "$name" == *-app ]]; then return 42; fi
                   ;;
-                start) [[ "$2" != *-app ]] || return 42 ;;
+                start) if [ "$FAIL_START" = true ] && [[ "$2" == *-app ]]; then return 42; fi ;;
+                port) echo "127.0.0.1:8000" ;;
                 rm) grep -Fxv "$3" "$LIVE_CONTAINERS" > "$LIVE_CONTAINERS.tmp" || true
                     mv "$LIVE_CONTAINERS.tmp" "$LIVE_CONTAINERS" ;;
               esac
@@ -37,10 +46,19 @@ class ContainerCleanupTests(unittest.TestCase):
             export -f docker
             bash scripts/smoke-container.sh image:test aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             '''
-            result = subprocess.run([bash, "-c", stub], env={**os.environ, "LIVE_CONTAINERS": str(live)},
+            result = subprocess.run([bash, "-c", stub], env={
+                                        **os.environ, "LIVE_CONTAINERS": str(live),
+                                        "DOCKER_COMMANDS": str(commands), "FAIL_START": str(fail_start).lower(),
+                                        "SMOKE_PYTHON": "true",
+                                    },
                                     capture_output=True, text=True)
-            self.assertEqual(result.returncode, 42, result.stdout + result.stderr)
-            self.assertEqual(live.read_text(), "", "A failed start leaked an owned container")
+            self.assertEqual(result.returncode, 42 if fail_start else 0, result.stdout + result.stderr)
+            self.assertEqual(live.read_text(), "", "Smoke cleanup leaked an owned container")
+            log = commands.read_text().splitlines()
+            self.assertTrue(any(line.startswith("rm -fv ") and line.endswith("-db") for line in log))
+            readiness = next(line for line in log if "pg_isready" in line)
+            self.assertIn("pg_isready -h 127.0.0.1 -U smoke -d container_smoke", readiness)
+            self.assertLess(log.index(readiness), next(i for i, line in enumerate(log) if "manage.py migrate" in line))
 
 
 class ContainerSmokeProbeTests(unittest.TestCase):
