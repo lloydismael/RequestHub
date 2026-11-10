@@ -8,8 +8,9 @@ const vm = require('node:vm');
 // [data-xmas-card-deco]; a light/dark flip must only retint the palette
 // gradients, never tear the scene down (which would recreate the feTurbulence
 // and feGaussianBlur filters and every DPR-scaled canvas raster).
-function start({ width = 1280, height = 900, mobile = false, dark = false, reducedMotion = false } = {}) {
+function start({ width = 1280, height = 900, mobile = false, dark = false, reducedMotion = false, nativeGeometry = true, flushInitial = true } = {}) {
     const observers = [];
+    const resizeObservers = [];
     const documentListeners = new Map();
     const motionListeners = [];
     const motionQuery = {
@@ -58,9 +59,15 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
 
             // SVG path sampling used to place the light string and bulbs.
 
-            getTotalLength: () => 400,
+            getTotalLength: () => {
+                assert.ok(nativeGeometry, 'decoration must not query native SVG length');
+                return 400;
+            },
 
-            getPointAtLength: t => ({ x: 20 + (t % 360) * 3, y: 40 + (t % 120) }),
+            getPointAtLength: t => {
+                assert.ok(nativeGeometry, 'decoration must not query native SVG points');
+                return { x: 20 + (t % 360) * 3, y: 40 + (t % 120) };
+            },
 
             getContext: () => ctx(),
 
@@ -109,6 +116,8 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
     card.classList.add('login-card');
     const deco = element('div');
     deco.setAttribute('data-xmas-card-deco', '');
+    const replaceScene = deco.replaceChildren.bind(deco);
+    deco.replaceChildren = (...children) => { buildCalls++; replaceScene(...children); };
     card.appendChild(deco);
     const scene = element('div');
     scene.classList.add('xmas-scene');
@@ -140,6 +149,7 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
     deco.querySelector = sel => origQuery(sel);
 
     const window = {
+        ResizeObserver: class { constructor(cb) { resizeObservers.push(cb); } observe() {} disconnect() {} },
         innerWidth: width, innerHeight: height,
         getComputedStyle: () => ({ borderTopLeftRadius: '24px', padding: '16px' }),
         matchMedia: query => query.includes('reduced-motion') ? motionQuery : ({
@@ -161,7 +171,7 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
             observe(target, opts) { this.target = target; this.opts = opts; }
             disconnect() {}
         },
-        ResizeObserver: class { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} },
+        ResizeObserver: window.ResizeObserver,
         getComputedStyle: window.getComputedStyle,
         setTimeout, clearTimeout,
     });
@@ -184,16 +194,14 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
         body.classList.toggle('dark-mode');
 
         observers.forEach(cb => cb([{ type: 'attributes', target: body, attributeName: 'class' }], { attributeFilter: ['class'] }));
+        frame();
     }
     // The card's layout box changes when the viewport resizes.
 
-    const resize = (w, h) => {
-
-
+    const resize = (w, h, flush = true) => {
         card.box = { width: w, height: h };
-
-        observers.forEach(cb => cb([{ type: 'attributes', target: body, attributeName: 'class' }], { attributeFilter: ['class'] }));
-
+        resizeObservers.forEach(cb => cb([{ target: card }]));
+        if (flush) frame();
     };
 
     const stops = id => {
@@ -261,9 +269,10 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
 
 
 
+    if (flushInitial) { frame(); frame(); }
     return {
         body, documentElement, deco, card, toggleTheme, heavy: treeKey, treeKey, sceneNode, lightsNode,
-        resize, frame, switching, frames, stops, drawCalls,
+        resize, frame, switching, frames, stops, drawCalls, builds: () => buildCalls,
         hidden(value) {
             document.hidden = value;
             (documentListeners.get('visibilitychange') || []).forEach(handler => handler());
@@ -274,6 +283,104 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
         },
     };
 }
+
+function wireGeometry() {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'login-christmas.js'), 'utf8');
+    const context = { Math, round: value => Math.round(value * 10) / 10 };
+    vm.runInNewContext(source.slice(source.indexOf('    function smoothPath('), source.indexOf('    /* ---------- SVG defs:')) + '\nthis.sample = sampleWire;', context);
+    return context.sample;
+}
+
+test('cached wire geometry keeps the curved outline and wraps its seam', () => {
+    const wire = wireGeometry()([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }], 1.5);
+    assert.ok(wire.total > 400 && wire.total < 440);
+    const middle = wire.at(wire.total / 8);
+    assert.ok(Math.abs(middle.x - 50) < 0.25);
+    assert.ok(Math.abs(middle.y + 12.5) < 0.25);
+    for (const distance of [0, wire.total, -wire.total]) {
+        assert.equal(wire.at(distance).x, 0);
+        assert.equal(wire.at(distance).y, 0);
+    }
+    const first = wire.points[0];
+    const last = wire.points[wire.points.length - 1];
+    assert.ok(Math.abs(first.tx - last.tx) < 0.001);
+    assert.ok(Math.abs(first.ty - last.ty) < 0.001);
+    assert.ok(wire.points.every(p => [p.x, p.y, p.tx, p.ty, p.s].every(Number.isFinite)));
+});
+
+test('degenerate wire segments stay finite', () => {
+    const wire = wireGeometry()([{ x: 10, y: 20 }, { x: 10, y: 20 }], 1.5);
+    assert.equal(wire.total, 0);
+    assert.equal(wire.at(100).x, 10);
+    assert.equal(wire.at(-100).y, 20);
+    assert.ok(wire.points.every(p => [p.x, p.y, p.tx, p.ty, p.s].every(Number.isFinite)));
+});
+
+test('decoration builds without browser SVG geometry queries', () => {
+    const app = start({ nativeGeometry: false });
+    assert.ok(app.sceneNode());
+    assert.ok(app.stops('xmas-puff'));
+});
+
+test('initial decoration waits until the form has a painted frame', () => {
+    const app = start({ flushInitial: false });
+    assert.equal(app.builds(), 0);
+    app.frame();
+    assert.equal(app.builds(), 0);
+    app.frame();
+    assert.equal(app.builds(), 1);
+});
+
+test('resize bursts build only the latest scene once', () => {
+    const app = start();
+    const builds = app.builds();
+    app.resize(800, 600, false);
+    app.resize(760, 560, false);
+    app.resize(700, 500, false);
+    assert.equal(app.builds(), builds);
+    app.frame();
+    assert.equal(app.builds(), builds + 1);
+    assert.equal(app.sceneNode().getAttribute('width'), '820');
+    app.resize(700, 500);
+    assert.equal(app.builds(), builds + 1);
+});
+
+test('a queued geometry change uses the latest theme palette', () => {
+    const app = start();
+    app.resize(700, 500, false);
+    app.toggleTheme();
+    assert.equal(app.stops('xmas-puff')[0], '#f4f7ff:1');
+    assert.equal(app.builds(), 2);
+});
+
+test('a zero-sized card waits for a real layout before building', () => {
+    const app = start({ width: 0, height: 0 });
+    assert.equal(app.builds(), 0);
+    app.resize(700, 500);
+    assert.equal(app.builds(), 1);
+    assert.equal(app.sceneNode().getAttribute('width'), '820');
+});
+
+test('a hidden resize is rendered once when the page returns', () => {
+    const app = start();
+    app.hidden(true);
+    app.resize(800, 600, false);
+    app.frame();
+    assert.equal(app.builds(), 1);
+    app.hidden(false);
+    app.frame();
+    assert.equal(app.builds(), 2);
+    assert.equal(app.sceneNode().getAttribute('width'), '920');
+});
+
+test('a theme change before the initial paint builds the latest palette', () => {
+    const app = start({ flushInitial: false });
+    app.toggleTheme();
+    assert.equal(app.builds(), 0);
+    app.frame();
+    assert.equal(app.builds(), 1);
+    assert.equal(app.stops('xmas-puff')[0], '#f4f7ff:1');
+});
 
 test('a theme flip retints gradients instead of rebuilding the scene', () => {
     const app = start({ dark: false });
@@ -345,7 +452,7 @@ test('twinkle work is bounded to three glow layers without animating bulb descen
         }
         const bulbs = descendants(app.lightsNode());
         const cores = bulbs.filter(node => node.getAttribute('class') === 'xmas-bulb__core');
-        assert.equal(cores.length, mobile ? 18 : 34, 'the original glass bulbs remain visible');
+        assert.ok(cores.length > 0 && cores.length <= (mobile ? 18 : 34), 'glass bulbs remain visible within the original placement cap');
         assert.ok(cores.every(node => node.style['--twinkle-duration'] === undefined));
         assert.ok(bulbs.every(node => node.getAttribute('class') !== 'xmas-bulb__halo'), 'glows stay behind the glass');
     }

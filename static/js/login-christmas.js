@@ -295,19 +295,27 @@
     }
 
     function smoothPath(points, closed) {
-        const n = points.length;
-        const at = index => (closed ? points[(index + n) % n] : points[Math.max(0, Math.min(n - 1, index))]);
         let d = `M${round(points[0].x)} ${round(points[0].y)}`;
-        const last = closed ? n : n - 1;
-        for (let index = 0; index < last; index++) {
+        for (const [, a, b, end] of curveSegments(points, closed)) {
+            d += `C${a.x} ${a.y} ${b.x} ${b.y} ${end.x} ${end.y}`;
+        }
+        return closed ? `${d}Z` : d;
+    }
+
+    function curveSegments(points, closed) {
+        const n = points.length;
+        const at = index => closed ? points[(index + n) % n] : points[Math.max(0, Math.min(n - 1, index))];
+        const rounded = p => ({ x: round(p.x), y: round(p.y) });
+        return Array.from({ length: closed ? n : Math.max(0, n - 1) }, (_, index) => {
             const p0 = at(index - 1);
             const p1 = at(index);
             const p2 = at(index + 1);
             const p3 = at(index + 2);
-            d += `C${round(p1.x + (p2.x - p0.x) / 6)} ${round(p1.y + (p2.y - p0.y) / 6)} `
-                + `${round(p2.x - (p3.x - p1.x) / 6)} ${round(p2.y - (p3.y - p1.y) / 6)} ${round(p2.x)} ${round(p2.y)}`;
-        }
-        return closed ? `${d}Z` : d;
+            return [rounded(p1),
+                rounded({ x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 }),
+                rounded({ x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 }),
+                rounded(p2)];
+        });
     }
 
     const linePath = points => points.map((p, i) => `${i ? 'L' : 'M'}${round(p.x)} ${round(p.y)}`).join('');
@@ -336,23 +344,64 @@
         return points;
     }
 
-    function sampleWire(path, spacing) {
-        const total = path.getTotalLength();
-        const count = Math.max(8, Math.round(total / spacing));
-        const points = [];
-        for (let index = 0; index <= count; index++) {
-            const s = (index / count) * total;
-            const p = path.getPointAtLength(s % total);
-            points.push({ x: p.x, y: p.y, s });
+    function sampleWire(controlPoints, spacing) {
+        const start = controlPoints[0] || { x: 0, y: 0 };
+        const flat = [{ x: round(start.x), y: round(start.y), s: 0 }];
+        const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        function distanceToChord(p, a, b) {
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const lengthSquared = dx * dx + dy * dy;
+            const t = lengthSquared ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSquared)) : 0;
+            return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
         }
+        // Sample the same rounded cubic curves without repeatedly flattening an SVG path in the browser.
+        function flatten(a, b, c, d, depth) {
+            if (depth === 10 || Math.max(distanceToChord(b, a, d), distanceToChord(c, a, d)) <= 0.25) {
+                const previous = flat[flat.length - 1];
+                const length = Math.hypot(d.x - previous.x, d.y - previous.y);
+                if (length) flat.push({ x: d.x, y: d.y, s: previous.s + length });
+                return;
+            }
+            const ab = midpoint(a, b);
+            const bc = midpoint(b, c);
+            const cd = midpoint(c, d);
+            const abc = midpoint(ab, bc);
+            const bcd = midpoint(bc, cd);
+            const center = midpoint(abc, bcd);
+            flatten(a, ab, abc, center, depth + 1);
+            flatten(center, bcd, cd, d, depth + 1);
+        }
+        curveSegments(controlPoints, true).forEach(segment => flatten(...segment, 0));
+        const total = flat[flat.length - 1].s;
+        function at(distance) {
+            if (!total) return { x: flat[0].x, y: flat[0].y };
+            const s = ((distance % total) + total) % total;
+            let low = 0;
+            let high = flat.length - 1;
+            while (high - low > 1) {
+                const middle = (low + high) >>> 1;
+                if (flat[middle].s <= s) low = middle;
+                else high = middle;
+            }
+            const a = flat[low];
+            const b = flat[high];
+            const t = (s - a.s) / (b.s - a.s);
+            return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+        }
+        const count = Math.max(8, Math.round(total / spacing));
+        const points = Array.from({ length: count + 1 }, (_, index) => {
+            const s = index / count * total;
+            return { ...at(s), s };
+        });
         points.forEach((p, index) => {
-            const a = points[Math.max(0, index - 1)];
-            const b = points[Math.min(points.length - 1, index + 1)];
+            const a = points[(index + count - 1) % count];
+            const b = points[(index + 1) % count];
             const length = Math.hypot(b.x - a.x, b.y - a.y) || 1;
             p.tx = (b.x - a.x) / length;
             p.ty = (b.y - a.y) / length;
         });
-        return { points, total };
+        return { points, total, at };
     }
 
     /* ---------- SVG defs: snow material, frost, bulb glass, halos ---------- */
@@ -662,7 +711,6 @@
             });
             const lights = canvas(width, height, 'xmas-deco-lights');
             buildDefs(scene, dark, width, height, shape.r);
-            deco.replaceChildren(scene, ...glows, lights);
 
             // Frost haze and crystals creeping in from the glass edges.
             const frostBand = svg('g', { class: 'xmas-frost', 'clip-path': 'url(#xmas-card-clip)' }, scene);
@@ -692,8 +740,9 @@
             drawPuffs(svg('g', { class: 'xmas-snow', filter: 'url(#xmas-snow-tex)' }, scene), capPuffs);
 
             // Twisted two-strand wire in front of the snowpack, shadowed onto the glass.
-            const guide = svg('path', { d: smoothPath(wirePoints(shape, random), true), fill: 'none', stroke: 'none' }, scene);
-            const { points, total } = sampleWire(guide, 1.5);
+            const controlPoints = wirePoints(shape, random);
+            const guide = svg('path', { d: smoothPath(controlPoints, true), fill: 'none', stroke: 'none' }, scene);
+            const { points, total, at: pointAt } = sampleWire(controlPoints, 1.5);
             const strand = phase => points.map(p => {
                 const twist = 0.95 * Math.sin((p.s / 13) * Math.PI * 2 + phase);
                 return { x: p.x - p.ty * twist, y: p.y + p.tx * twist };
@@ -747,7 +796,7 @@
             const limit = mobile ? 18 : 34;
             for (let index = 0; index < count && placed < limit; index++) {
                 const at = offset + (index + (random() - 0.5) * 0.5) * spacing;
-                const point = guide.getPointAtLength(((at % total) + total) % total);
+                const point = pointAt(at);
                 // The bottom run is mostly bare wire, like a string hung from the top.
                 if (point.y > height - shape.r * 0.6 && point.x > shape.r && point.x < width - shape.r && random() < 0.6) continue;
                 const angle = bulbAngle(point, width, height, shape.r, random);
@@ -757,19 +806,47 @@
                 addBulb(layers, color, point.x, point.y, angle, scale);
                 placed++;
             }
+            deco.replaceChildren(scene, ...glows, lights);
         }
 
-        render();
+        let pending = 0;
+        let firstPaint = false;
+        let dirty = true;
+        function scheduleRender() {
+            dirty = true;
+            if (pending || document.hidden || !firstPaint) return;
+            pending = requestAnimationFrame(() => {
+                pending = 0;
+                if (!document.hidden) {
+                    dirty = false;
+                    render();
+                }
+            });
+        }
+        requestAnimationFrame(() => {
+            firstPaint = true;
+            scheduleRender();
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && pending) {
+                cancelAnimationFrame(pending);
+                pending = 0;
+            } else if (dirty) {
+                scheduleRender();
+            }
+        });
         if ('ResizeObserver' in window) {
-            const observer = new ResizeObserver(render);
+            const observer = new ResizeObserver(scheduleRender);
             observer.observe(card);
             card.querySelectorAll('.login-card__logo, .login-form .form-control, .login-card__submit').forEach(element => observer.observe(element));
         }
-        window.addEventListener('resize', render);
-        onChange(mobileQuery, render);
-        new MutationObserver(render).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-        if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
-        window.addEventListener('load', render);
+        window.addEventListener('resize', scheduleRender);
+        onChange(mobileQuery, scheduleRender);
+        new MutationObserver(() => {
+            if (document.body.classList.contains('dark-mode') !== lastDark) scheduleRender();
+        }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(scheduleRender);
+        window.addEventListener('load', scheduleRender);
     }
 
     function init() {

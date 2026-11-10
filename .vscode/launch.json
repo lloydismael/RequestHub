@@ -1,0 +1,47 @@
+﻿{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Django: Request Hub",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+            "program": "${workspaceFolder}/manage.py",
+            "args": [
+                "runserver",
+                "127.0.0.1:8000",
+                "--noreload"
+            ],
+            "django": true,
+            "justMyCode": true,
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "DJANGO_SETTINGS_MODULE": "request_hub.settings",
+                "DJANGO_DEBUG": "True"
+            }
+        },
+        {
+            "name": "Django: Request Hub (auto-reload)",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+            "program": "${workspaceFolder}/manage.py",
+            "args": [
+                "runserver",
+                "127.0.0.1:8000"
+            ],
+            "django": true,
+            "justMyCode": true,
+            "subProcess": true,
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "envFile": "${workspaceFolder}/.env",
+            "env": {
+                "DJANGO_SETTINGS_MODULE": "request_hub.settings",
+                "DJANGO_DEBUG": "True"
+            }
+        }
+    ]
+}

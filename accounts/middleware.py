@@ -13,7 +13,7 @@ def _is_exempt(view_name: str) -> bool:
     if not view_name:
         return False
     exempt = set(settings.PROFILE_COMPLETION_EXEMPT_URLS)
-    exempt.update({"login", "logout", "accounts:update", "healthz"})
+    exempt.update({"login", "legacy-login", "logout", "accounts:update", "healthz"})
     if view_name in exempt:
         return True
     if view_name.startswith("admin:"):
@@ -32,7 +32,7 @@ def _get_view_name(request):
 def _is_password_change_exempt(view_name: str) -> bool:
     if not view_name:
         return False
-    exempt = {"accounts:update", "accounts:sign-in-heartbeat", "logout", "login", "healthz"}
+    exempt = {"accounts:update", "accounts:sign-in-heartbeat", "logout", "login", "legacy-login", "healthz"}
     if view_name in exempt:
         return True
     if view_name.startswith("admin:"):

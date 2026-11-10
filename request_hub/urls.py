@@ -9,7 +9,7 @@ from django.urls import include, path
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 
-from accounts.views import RoleLoginView, RoleLogoutView
+from accounts.views import LegacyLoginRedirectView, RoleLoginView, RoleLogoutView
 
 
 @never_cache
@@ -44,8 +44,9 @@ urlpatterns = [
     path("readyz/", readyz, name="readyz"),
     path("release/", release_info, name="release_info"),
     path("admin/", admin.site.urls),
+    path("", RoleLoginView.as_view(), name="login"),
     path("", RoleLoginView.as_view(), name="landing"),
-    path("accounts/login/", RoleLoginView.as_view(), name="login"),
+    path("accounts/login/", LegacyLoginRedirectView.as_view(), name="legacy-login"),
     path("accounts/logout/", RoleLogoutView.as_view(), name="logout"),
     path("accounts/", include("accounts.urls")),
     path("", include(("hub.urls", "hub"), namespace="hub")),

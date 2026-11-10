@@ -56,7 +56,11 @@
         {% endif %}
 
         <div class="login-card__brand lg-enter" data-lg-delay="0.12">
-            <img src="{% static 'img/phil-data-full-logo.png' %}" alt="Phil-Data Business Systems logo" class="login-card__logo">
+            <img src="{% static 'img/phil-data-full-logo-login-384.webp' %}"
+                 srcset="{% static 'img/phil-data-full-logo-login-384.webp' %} 384w, {% static 'img/phil-data-full-logo-login-768.webp' %} 768w"
+                 sizes="(max-width: 640px) 208px, (max-height: 700px) 208px, 380px"
+                 width="384" height="192" loading="eager" fetchpriority="high"
+                 alt="Phil-Data Business Systems logo" class="login-card__logo">
         </div>
 
         <h1 class="login-card__title lg-enter" data-lg-delay="0.18">Welcome back</h1>
@@ -96,7 +100,7 @@
 {% if christmas_login_enabled %}
 {% if not request.user.is_authenticated %}<script src="{% static 'js/christmas-theme-snapshot.js' %}?v=2" defer></script>
 <script src="{% static 'js/christmas-theme.js' %}?v=17" defer></script>{% endif %}
-<script src="{% static 'js/login-christmas.js' %}?v=13" defer></script>
+<script src="{% static 'js/login-christmas.js' %}?v=14" defer></script>
 {% endif %}
 <script>
     window.addEventListener('pageshow', function (event) {

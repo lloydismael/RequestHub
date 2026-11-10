@@ -13,7 +13,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.generic import UpdateView
+from django.views.generic import RedirectView, UpdateView
 
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
@@ -152,6 +152,17 @@ class RoleLogoutView(LogoutView):
 
 
 @method_decorator(never_cache, name="dispatch")
+class LegacyLoginRedirectView(RedirectView):
+    pattern_name = "login"
+    query_string = True
+    http_method_names = ["get", "post", "head", "options"]
+
+    def post(self, request, *args, **kwargs):
+        # Old login forms must resend their POST body to the canonical route.
+        return redirect(self.get_redirect_url(*args, **kwargs), preserve_request=True)
+
+
+@method_decorator(never_cache, name="dispatch")
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class RoleLoginView(LoginView):
     authentication_form = RoleAuthenticationForm
@@ -160,6 +171,7 @@ class RoleLoginView(LoginView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context["login_asset_profile"] = True
         context["christmas_login_enabled"] = getattr(settings, "CHRISTMAS_LOGIN_THEME_ENABLED", False)
         context["christmas_login_default"] = context["christmas_login_enabled"] and User.christmas_default_active()
         return context

@@ -1,8 +1,30 @@
+import json
 import os
+import runpy
+from pathlib import Path
 from unittest.mock import patch
 
 from django.db import DatabaseError
 from django.test import SimpleTestCase, override_settings
+
+
+class DebugLaunchVersionTests(SimpleTestCase):
+    def test_launch_versions_use_default_or_explicit_environment(self):
+        root = Path(__file__).resolve().parents[1]
+        launch = json.loads((root / ".vscode" / "launch.json").read_text(encoding="utf-8-sig"))
+        for config in launch["configurations"]:
+            for explicit_version, expected in ((None, "dev"), ("v58.0", "v58.0")):
+                with self.subTest(configuration=config["name"], version=explicit_version):
+                    environment = {}
+                    if explicit_version is not None:
+                        environment["APP_VERSION"] = explicit_version
+                    environment.update(config.get("env", {}))
+                    with patch.dict(os.environ, environment, clear=True), patch("dotenv.load_dotenv"):
+                        loaded = runpy.run_path(str(root / "request_hub" / "settings.py"))
+                    with override_settings(APP_VERSION=loaded["APP_VERSION"], SECURE_SSL_REDIRECT=False):
+                        response = self.client.get("/release/")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.json()["version"], expected)
 
 
 @override_settings(SECURE_SSL_REDIRECT=False)
