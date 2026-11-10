@@ -158,6 +158,66 @@ class ValidateManifestTests(SimpleTestCase):
 
 
 class BuildManifestTests(RepoMixin, SimpleTestCase):
+    def test_curated_metadata_preserves_complete_cached_comparisons(self):
+        repo = self.make_repo()
+        base = commit(repo, "Baseline")
+        sha = commit(repo, "fix: cached evidence")
+        pair = {
+            "title": "Cached comparison", "before_text": "Before", "after_text": "After",
+            "before_image": "automatic/before.png", "after_image": "automatic/after.png",
+            "before_revision": base, "after_revision": sha,
+            "capture_note": "Automatic capture with exact revisions.",
+        }
+        cached = {"sha": sha, "parent_sha": base, "type": "fixed", "title": "Cached title", "comparisons": [pair]}
+        curated = {"sha": sha, "type": "maintenance", "title": "Curated title",
+                   "before_text": "Curated before", "after_text": "Curated after"}
+        assets = repo / "hub" / "changelog_assets"
+        for directory in ("automatic", "v56.6"):
+            (assets / directory).mkdir(parents=True)
+        for overrides in ({}, {"comparisons": []}, {"capture_error": "Previous capture failed."}):
+            with self.subTest(overrides=overrides):
+                for directory, item in (("automatic", cached), ("v56.6", {**curated, **overrides})):
+                    (assets / directory / "manifest.json").write_text(
+                        json.dumps(valid_manifest(revision=sha, commits=[item])), encoding="utf-8",
+                    )
+                item = build_manifest("v1", "HEAD", repo, baseline=base)["commits"][0]
+                self.assertEqual(item["comparisons"], [pair])
+                self.assertEqual(item["parent_sha"], base)
+                self.assertNotIn("capture_error", item)
+                for field in ("type", "title", "before_text", "after_text"):
+                    self.assertEqual(item[field], curated[field])
+
+        curated["parent_sha"] = base
+        curated["comparisons"] = [{**pair, "title": "Curated comparison"}]
+        (assets / "v56.6" / "manifest.json").write_text(
+            json.dumps(valid_manifest(revision=sha, commits=[curated])), encoding="utf-8",
+        )
+        item = build_manifest("v1", "HEAD", repo, baseline=base)["commits"][0]
+        self.assertEqual(item["comparisons"], curated["comparisons"])
+
+    def test_metadata_merge_does_not_accept_cached_evidence_with_wrong_provenance(self):
+        repo = self.make_repo()
+        base = commit(repo, "Baseline")
+        sha = commit(repo, "fix: cached evidence")
+        for parent, before, after in ((base, SHA_A, sha), (base, base, SHA_A), (SHA_A, SHA_A, sha)):
+            with self.subTest(parent=parent, before=before, after=after):
+                cached = {
+                    "sha": sha, "parent_sha": parent, "type": "fixed", "title": "Cached title",
+                    "comparisons": [{
+                        "title": "Cached comparison", "before_text": "Before", "after_text": "After",
+                        "before_image": "automatic/before.png", "after_image": "automatic/after.png",
+                        "before_revision": before, "after_revision": after,
+                    }],
+                }
+                curated = {"sha": sha, "type": "fixed", "title": "Curated title"}
+                for directory, item in (("automatic", cached), ("v56.6", curated)):
+                    path = repo / "hub" / "changelog_assets" / directory / "manifest.json"
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(json.dumps(valid_manifest(revision=sha, commits=[item])), encoding="utf-8")
+                item = build_manifest("v1", "HEAD", repo, baseline=base)["commits"][0]
+                self.assertFalse(item.get("comparisons"))
+                self.assertEqual(item["parent_sha"], base)
+
     def test_every_change_requires_evidence_from_its_actual_parent(self):
         repo = self.make_repo()
         base = commit(repo, "Baseline")

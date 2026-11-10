@@ -265,6 +265,31 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(len(failures), 1)
         self.assertFalse(repeated["commits"][0].get("comparisons"))
 
+    def test_rebuilt_manifest_reuses_cache_with_overlapping_curated_metadata(self):
+        result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        assets = self.repo / "hub" / "changelog_assets"
+        (assets / "automatic" / "manifest.json").write_text(json.dumps(result), encoding="utf-8")
+        curated = {**result, "commits": [{
+            "sha": self.after, "type": "maintenance", "title": "Curated guide",
+            "before_text": "Manual export", "after_text": "Dashboard export",
+        }]}
+        (assets / "v56.6").mkdir()
+        (assets / "v56.6" / "manifest.json").write_text(json.dumps(curated), encoding="utf-8")
+        rebuilt = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
+        with patch("capture_release_changelog._capture_change") as capture:
+            repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        capture.assert_not_called()
+        self.assertEqual(repeated["commits"][0]["comparisons"], result["commits"][0]["comparisons"])
+        self.assertEqual(repeated["commits"][0]["title"], "Curated guide")
+
+        self.recipe["scenes"][0]["heading"] = "Unrelated absent heading"
+        self.write_recipes([self.recipe])
+        repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
+        self.assertEqual(len(failures), 1)
+        self.assertFalse(repeated["commits"][0].get("comparisons"))
+
     def test_partial_scene_failure_does_not_keep_a_successful_pair(self):
         self.recipe["scenes"].append({**self.recipe["scenes"][0], "heading": "Missing section"})
         self.write_recipes([self.recipe])
