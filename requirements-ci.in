@@ -1,0 +1,2 @@
+# Test traceback serialization only; runtime dependencies are installed separately.
+tblib==3.2.2
