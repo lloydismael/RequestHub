@@ -53,6 +53,10 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 > Role-aware dashboards, glass-morphism UI, dark mode, and responsive layouts across all pages.
 
+Phones below 768px automatically use full-width mobile layouts, including wider phones and landscape views. Shared mobile styles improve text sizing, touch controls, table scrolling, and viewport-safe dialogs. Ambient orb animation and login-card tilt are disabled on phones; desktop effects and themes remain unchanged. Profile's mobile preview remains a 390px frame on larger screens.
+
+Mobile regressions live in [hub/test_mobile_ui.py](hub/test_mobile_ui.py). Template checks run normally; opt-in Chromium checks render local templates without database access or live network requests. Install the existing browser-test dependencies and Chromium if needed, then set `RUN_MOBILE_BROWSER_TESTS=1`, `MOBILE_BOOTSTRAP_CSS` to a local Bootstrap 5.3.2 CSS file, and `MOBILE_BOOTSTRAP_JS` to its bundle JS file before running `python manage.py test hub.test_mobile_ui --settings=request_hub.settings_ci`. These fixture checks cover widths from 320px to 1280px, navigation, dialogs, scrolling, and motion preferences; they do not replace real-device workflow testing.
+
 | Page | Description |
 |------|-------------|
 | ?? **Login** | Clean auth page with branded background and forced password-change flow |

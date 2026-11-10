@@ -52,8 +52,8 @@
     <link rel="stylesheet" href="{% static 'css/liquid-glass.css' %}?v=16">
     {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'css/liquid-glass-dashboard.css' %}?v=56">{% endif %}
     <!-- Ambient background layer renders below content; defer so it doesn't block first paint -->
-    <link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3" media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=3"></noscript>
+    <link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=4" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=4"></noscript>
     {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">{% endif %}
     {% if request.user.is_authenticated %}
     <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=13">
@@ -64,6 +64,7 @@
     <link rel="stylesheet" href="{% static 'css/assistant.css' %}?v=3">
     {% endif %}
     {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="{% static 'css/mobile.css' %}?v=1">
     {{ sqr_json_scripts }}
     <link rel="icon" type="image/png" sizes="32x32" href="{% static 'images/request-hub-favicon-32.png' %}">
 </head>
@@ -134,7 +135,7 @@
                         </div>
                     </div>
                 </div>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
                 </button>
                 <!-- Nav links: order-lg-1 → on desktop appears before the always-visible controls -->
@@ -193,29 +194,19 @@
         }());
     </script>
     <script>
-        // view-mobile: shared phone skin (auto on ≤520px, or saved Profile toggle).
-        // view-mobile-preview: 390px mock — only when the toggle is on AND width > 520.
+        // Real phones use the full viewport; the saved Profile mode previews a phone on desktop.
         (function() {
-            try {
-                var MQ = window.matchMedia('(max-width: 520px)');
-                function syncViewMode() {
-                    var preferMobile = localStorage.getItem('reqHubViewMode') === 'mobile';
-                    var isPhone = MQ.matches;
-                    var body = document.body;
-                    if (isPhone) {
-                        body.classList.add('view-mobile');
-                        body.classList.remove('view-mobile-preview');
-                    } else if (preferMobile) {
-                        body.classList.add('view-mobile');
-                        body.classList.add('view-mobile-preview');
-                    } else {
-                        body.classList.remove('view-mobile');
-                        body.classList.remove('view-mobile-preview');
-                    }
-                }
-                syncViewMode();
-                MQ.addEventListener('change', syncViewMode);
-            } catch (_) {}
+            var MQ = window.matchMedia('(max-width: 767.98px)');
+            function syncViewMode() {
+                var preferMobile = false;
+                try {
+                    preferMobile = localStorage.getItem('reqHubViewMode') === 'mobile';
+                } catch (_) {}
+                document.body.classList.toggle('view-mobile', MQ.matches || preferMobile);
+                document.body.classList.toggle('view-mobile-preview', !MQ.matches && preferMobile);
+            }
+            syncViewMode();
+            MQ.addEventListener('change', syncViewMode);
         })();
     </script>
     <script>
@@ -467,7 +458,7 @@
     <script src="{% static 'js/christmas-theme.js' %}?v=17" defer></script>
     <script src="{% static 'js/christmas-lights.js' %}?v=5" defer></script>
     {% endif %}
-    <script src="{% static 'js/liquid-glass.js' %}?v=6" defer></script>
+    <script src="{% static 'js/liquid-glass.js' %}?v=7" defer></script>
     {% if not login_asset_profile %}
     <script src="{% static 'js/smooth-scroll.js' %}?v=11" defer></script>
     <script src="{% static 'js/notification-toasts.js' %}?v=6" defer></script>
