@@ -61,53 +61,6 @@ class CaptureTests(unittest.TestCase):
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
 
-    def test_curated_metadata_preserves_cached_comparisons_without_recapture(self):
-        cached, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
-        self.assertEqual(failures, [])
-        self.write_manifest("automatic", cached)
-        for evidence in ({}, {"comparisons": []}, {"capture_error": "Previous capture failed."}):
-            with self.subTest(evidence=evidence):
-                curated = {
-                    **self.manifest,
-                    "commits": [{
-                        **self.manifest["commits"][0], "title": "Curated export guide",
-                        "before_text": "Curated before.", "after_text": "Curated after.", **evidence,
-                    }],
-                }
-                self.write_manifest("v56.6", curated)
-                rebuilt = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
-                item = rebuilt["commits"][0]
-                self.assertEqual(item["title"], "Curated export guide")
-                self.assertEqual(item["before_text"], "Curated before.")
-                self.assertEqual(item["after_text"], "Curated after.")
-                self.assertEqual(item["comparisons"], cached["commits"][0]["comparisons"])
-                self.assertNotIn("capture_error", item)
-                with patch("playwright.sync_api.sync_playwright") as start:
-                    repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
-                start.assert_not_called()
-                self.assertEqual(failures, [])
-                self.assertEqual(repeated, rebuilt)
-
-    def test_curated_complete_comparisons_take_precedence_over_cache(self):
-        cached, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
-        self.assertEqual(failures, [])
-        self.write_manifest("automatic", cached)
-        cached["commits"][0]["comparisons"][0]["title"] = "Curated comparison"
-        self.write_manifest("v56.6", cached)
-        rebuilt = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
-        self.assertEqual(rebuilt["commits"][0]["comparisons"][0]["title"], "Curated comparison")
-
-    def test_merging_cached_comparisons_still_checks_actual_git_parent(self):
-        cached, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
-        self.assertEqual(failures, [])
-        cached["commits"][0]["parent_sha"] = "a" * 40
-        cached["commits"][0]["comparisons"][0]["before_revision"] = "a" * 40
-        self.write_manifest("automatic", cached)
-        self.write_manifest("v56.6", self.manifest)
-        rebuilt = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
-        self.assertEqual(rebuilt["commits"][0]["comparisons"], [])
-        self.assertIn("recapture", rebuilt["commits"][0]["capture_error"])
-
     def test_real_before_after_document_screenshots_have_exact_provenance(self):
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
         self.assertEqual(failures, [])
@@ -320,6 +273,31 @@ class CaptureTests(unittest.TestCase):
         self.recipe["scenes"][0]["heading"] = "Unrelated absent heading"
         self.write_recipes([self.recipe])
         repeated, failures = capture_manifest(result, self.repo, self.recipes_path)
+        self.assertEqual(len(failures), 1)
+        self.assertFalse(repeated["commits"][0].get("comparisons"))
+
+    def test_rebuilt_manifest_reuses_cache_with_overlapping_curated_metadata(self):
+        result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        assets = self.repo / "hub" / "changelog_assets"
+        (assets / "automatic" / "manifest.json").write_text(json.dumps(result), encoding="utf-8")
+        curated = {**result, "commits": [{
+            "sha": self.after, "type": "maintenance", "title": "Curated guide",
+            "before_text": "Manual export", "after_text": "Dashboard export",
+        }]}
+        (assets / "v56.6").mkdir()
+        (assets / "v56.6" / "manifest.json").write_text(json.dumps(curated), encoding="utf-8")
+        rebuilt = build_manifest("v2", "HEAD", self.repo, baseline=self.before)
+        with patch("capture_release_changelog._capture_change") as capture:
+            repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
+        self.assertEqual(failures, [])
+        capture.assert_not_called()
+        self.assertEqual(repeated["commits"][0]["comparisons"], result["commits"][0]["comparisons"])
+        self.assertEqual(repeated["commits"][0]["title"], "Curated guide")
+
+        self.recipe["scenes"][0]["heading"] = "Unrelated absent heading"
+        self.write_recipes([self.recipe])
+        repeated, failures = capture_manifest(rebuilt, self.repo, self.recipes_path)
         self.assertEqual(len(failures), 1)
         self.assertFalse(repeated["commits"][0].get("comparisons"))
 

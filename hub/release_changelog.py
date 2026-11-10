@@ -241,14 +241,13 @@ def build_manifest(version, revision, repo=".", baseline=BASELINE, now=None):
     notes = {}
     for manifest in curated_manifests(Path(repo) / "hub" / "changelog_assets"):
         for item in manifest["commits"]:
-            previous = notes.get(item["sha"])
-            if (
-                previous and missing_comparisons([item], require_all=True)
-                and not missing_comparisons([previous], require_all=True)
-            ):
-                item = {**item, "comparisons": previous["comparisons"]}
-                item.pop("capture_error", None)
-            notes[item["sha"]] = item
+            previous = notes.get(item["sha"], {})
+            merged = dict(item)
+            if not item.get("comparisons") and not missing_comparisons([previous], require_all=True):
+                merged["comparisons"] = previous["comparisons"]
+                merged["parent_sha"] = previous["parent_sha"]
+                merged.pop("capture_error", None)
+            notes[item["sha"]] = merged
     commits = []
     for record in log.split("\x1e"):
         record = record.strip("\n")
