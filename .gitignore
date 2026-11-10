@@ -6,7 +6,8 @@ __pycache__/
 staticfiles/
 media/
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
 *.log
 .env
 .env.*

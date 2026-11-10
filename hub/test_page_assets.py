@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.urls import reverse
 
 
 class LiveRefreshScriptTests(SimpleTestCase):
@@ -22,8 +23,9 @@ class LiveRefreshScriptTests(SimpleTestCase):
 
 class PageAssetTests(TestCase):
     def test_shared_theme_assets_remain_on_login(self):
-        response = self.client.get('/accounts/login/')
-        self.assertContains(response, 'css/account-themes')
+        response = self.client.get(reverse('login'))
+        self.assertNotContains(response, 'css/account-themes')
+        self.assertContains(response, 'css/app')
         self.assertContains(response, 'css/liquid-glass')
         self.assertNotContains(response, 'Server-Timing')
 

@@ -10,7 +10,7 @@ from django.core import serializers as django_serializers
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.templatetags.static import static
-from django.urls import reverse
+from django.urls import resolve, reverse
 
 from accounts.models import StoredFile, User
 from accounts.themes import contrast_ratio, custom_theme_vars
@@ -101,6 +101,169 @@ class LoginPageTests(TestCase):
         self.assertNotIn("@Password", html)
         self.assertNotIn("Default login", html)
         self.assertNotIn("default_password", html)
+
+
+class LoginRoutingTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(
+            username="login-routing-user", password="routing-test-password",
+            role=User.Roles.ADMIN, must_change_password=False,
+        )
+
+    def setUp(self):
+        cache.clear()
+
+    def test_login_links_use_root(self):
+        self.assertEqual(reverse("login"), "/")
+        self.assertEqual(reverse("landing"), "/")
+        self.assertEqual(resolve("/").view_name, "login")
+
+    def test_anonymous_protected_page_redirects_to_root(self):
+        response = self.client.get("/accounts/profile/")
+
+        self.assertRedirects(response, "/?next=/accounts/profile/")
+
+    def test_logout_redirects_to_root(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(reverse("logout"))
+
+        self.assertRedirects(response, "/")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_legacy_login_redirects_to_root(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertRedirects(response, "/")
+        self.assertIn("no-store", response.headers["Cache-Control"])
+
+    def test_legacy_login_preserves_query_string(self):
+        response = self.client.get(
+            "/accounts/login/?next=%2Faccounts%2Fprofile%2F%3Ftab%3Dsettings&role=admin&role=engineer"
+        )
+
+        self.assertRedirects(
+            response, "/?next=%2Faccounts%2Fprofile%2F%3Ftab%3Dsettings&role=admin&role=engineer",
+        )
+
+    def test_legacy_head_redirects_to_root(self):
+        response = self.client.head("/accounts/login/?next=%2Fdashboard%2F")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/?next=%2Fdashboard%2F")
+        self.assertEqual(response.content, b"")
+
+    def test_legacy_post_preserves_method_without_credentials_in_url(self):
+        response = self.client.post(
+            "/accounts/login/?next=%2Faccounts%2Fprofile%2F",
+            {"username": self.user.username, "password": "routing-test-password"},
+        )
+
+        self.assertEqual(response.status_code, 307)
+        self.assertEqual(response.url, "/?next=%2Faccounts%2Fprofile%2F")
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertIn("no-store", response.headers["Cache-Control"])
+
+    def test_root_and_legacy_login_preserve_successful_sign_in(self):
+        for path in ("/", "/accounts/login/"):
+            with self.subTest(path=path):
+                self.client.logout()
+                response = self.client.post(
+                    path + "?next=%2Faccounts%2Fprofile%2F",
+                    {"username": self.user.username, "password": "routing-test-password"},
+                    follow=True,
+                )
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.request["PATH_INFO"], "/accounts/profile/")
+                self.assertEqual(self.client.session["_auth_user_id"], str(self.user.pk))
+                if path == "/accounts/login/":
+                    self.assertEqual(response.redirect_chain[0], ("/?next=%2Faccounts%2Fprofile%2F", 307))
+
+    def test_legacy_invalid_credentials_render_validation_at_root(self):
+        response = self.client.post(
+            "/accounts/login/", {"username": self.user.username, "password": "incorrect-password"},
+            follow=True,
+        )
+
+        self.assertEqual(response.redirect_chain, [("/", 307)])
+        self.assertEqual(response.request["PATH_INFO"], "/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].errors)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_legacy_post_keeps_csrf_protection(self):
+        client = Client(enforce_csrf_checks=True)
+        client.get("/")
+        credentials = {"username": self.user.username, "password": "routing-test-password"}
+
+        self.assertEqual(client.post("/accounts/login/", credentials).status_code, 403)
+        response = client.post(
+            "/accounts/login/?next=%2Faccounts%2Fprofile%2F",
+            {**credentials, "csrfmiddlewaretoken": client.cookies["csrftoken"].value},
+            follow=True,
+        )
+
+        self.assertEqual(response.redirect_chain[0], ("/?next=%2Faccounts%2Fprofile%2F", 307))
+        self.assertEqual(client.session["_auth_user_id"], str(self.user.pk))
+
+    def test_legacy_login_preserves_next_destination(self):
+        response = self.client.post(
+            "/accounts/login/?next=%2Faccounts%2Fprofile%2F",
+            {"username": self.user.username, "password": "routing-test-password"},
+            follow=True,
+        )
+
+        self.assertEqual(response.request["PATH_INFO"], "/accounts/profile/")
+        self.assertEqual(response.redirect_chain, [("/?next=%2Faccounts%2Fprofile%2F", 307), ("/accounts/profile/", 302)])
+
+    def test_legacy_login_rejects_external_next_destination(self):
+        credentials = {"username": self.user.username, "password": "routing-test-password"}
+        response = self.client.post(
+            "/accounts/login/?next=https%3A%2F%2Fexample.com%2F", credentials,
+        )
+
+        self.assertEqual(response.status_code, 307)
+        response = self.client.post(response.url, credentials)
+
+        self.assertRedirects(response, "/dashboard/", fetch_redirect_response=False)
+        self.assertEqual(self.client.session["_auth_user_id"], str(self.user.pk))
+
+    def test_login_throttle_is_shared_with_legacy_route(self):
+        for _ in range(LOGIN_THROTTLE_LIMIT):
+            self.client.post(
+                "/accounts/login/", {"username": self.user.username, "password": "incorrect-password"},
+                follow=True,
+            )
+
+        response = self.client.post(
+            "/", {"username": self.user.username, "password": "routing-test-password"},
+        )
+
+        self.assertContains(response, LOGIN_THROTTLE_MESSAGE)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_authenticated_legacy_login_redirects_through_root(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get("/accounts/login/")
+
+        self.assertRedirects(response, "/", fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(response.url), "/dashboard/", fetch_redirect_response=False)
+        self.assertEqual(self.client.session["_auth_user_id"], str(self.user.pk))
+
+    def test_password_change_required_still_reaches_profile_from_both_routes(self):
+        self.user.must_change_password = True
+        self.user.save(update_fields=["must_change_password"])
+        self.client.force_login(self.user)
+
+        for path in ("/", "/accounts/login/"):
+            with self.subTest(path=path):
+                response = self.client.get(path, follow=True)
+
+                self.assertEqual(response.request["PATH_INFO"], "/accounts/profile/")
+                self.assertEqual(self.client.session["_auth_user_id"], str(self.user.pk))
 
 
 class AccountSettingsTests(TestCase):

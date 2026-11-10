@@ -1,5 +1,21 @@
 # Request Hub changelog — 2026-11-06
 
+## Unreleased fix — 2026-11-10: Local debug version
+
+- Before: both VS Code Django launch configurations forced `APP_VERSION` to
+  `v49.0-debug`, including when an explicit runtime version was supplied.
+  After: they leave version selection to Django's existing environment setting,
+  so an unset version displays **App Version dev** and explicit versions are preserved.
+- Made only the shared VS Code launch configuration eligible for Git tracking;
+  other local editor settings and MCP configuration remain ignored, so the fix
+  and its regression coverage can travel together to other checkouts.
+- Added release-endpoint regression coverage for both launch configurations and
+  their default/explicit versions. Updated the local-development restart guidance
+  in [README](../README.md).
+- This is an unpublished local configuration fix; no numbered release or live
+  Notifications entry is created. Exact committed before/after release evidence
+  and Notifications visibility must be verified by the release workflow.
+
 ## Unreleased maintenance: Christmas login validation
 
 - Before: the background-image regression required an unversioned CSS URL and
