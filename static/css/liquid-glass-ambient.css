@@ -379,6 +379,8 @@ body.page-landing .ambient-mesh::after {
 @media (prefers-reduced-motion: reduce) {
     .ambient-mesh__orb {
         animation: none;
+        will-change: auto;
+        transform: none;
     }
 }
 

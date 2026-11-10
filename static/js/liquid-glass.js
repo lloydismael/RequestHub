@@ -6,6 +6,7 @@
         (document.body && (document.body.classList.contains('pref-reduce-motion') ||
             document.body.classList.contains('pref-reduce-effects')));
     var coarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    var phoneViewport = window.matchMedia('(max-width: 767.98px)');
 
     /* ---- Staggered entrance (CSS-driven, no dependency) ---- */
     function normalizeDelaySeconds(raw, index) {
@@ -39,7 +40,7 @@
 
     /* ---- Smoothed light vector; the pane stays stable while its optics move ---- */
     function bindCardMotion(card) {
-        if (reduceMotion) {
+        if (reduceMotion || phoneViewport.matches) {
             return;
         }
 
@@ -107,7 +108,7 @@
         });
 
         function handleOrientation(event) {
-            if (!coarsePointer || event.gamma === null || event.beta === null) {
+            if (phoneViewport.matches || !coarsePointer || event.gamma === null || event.beta === null) {
                 return;
             }
             // Tilt is a slow input; sampling it every frame keeps the filtered

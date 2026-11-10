@@ -6876,9 +6876,9 @@ body.dark-mode .ai-chat-close-btn {
 /* ══════════════════════════════════════════════════════════
    MOBILE VIEW MODE  (body.view-mobile / body.view-mobile-preview)
    ──────────────────────────────────────────────────────────
-   view-mobile          = shared phone skin (auto MQ ≤520 or Profile toggle).
+   view-mobile          = shared phone skin (auto MQ ≤767.98px or Profile toggle).
    view-mobile-preview  = 390px mock, only when Profile toggle is on AND
-                          the viewport is wider than 520px. Real phones
+                          the viewport is wider than 767.98px. Real phones
                           never get the mock, dark stage, or inner 390 frame.
    Desktop without these classes is unchanged.
    ══════════════════════════════════════════════════════════ */

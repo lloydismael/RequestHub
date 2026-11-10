@@ -1,0 +1,113 @@
+/* Shared phone refinements load after page styles; desktop is unchanged. */
+body.view-mobile .row {
+    margin-left: 0;
+    margin-right: 0;
+}
+
+body.view-mobile :is(.row > *, .card, .glass-card, .table-responsive,
+    .dashboard-toolbar, .dashboard-toolbar__search, .dashboard-toolbar__actions,
+    .sqr-toolbar-search-wrap, .mgmt-search-box) {
+    min-width: 0;
+}
+
+body.view-mobile :is(.table-responsive, .dashboard-table-wrapper) {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+}
+
+body.view-mobile :is(h4, .h4) { font-size: 1.125rem !important; }
+body.view-mobile :is(h5, .h5) { font-size: 1rem !important; }
+body.view-mobile :is(h6, .h6) { font-size: 0.9375rem !important; }
+body.view-mobile :is(p, li, label, .form-label) {
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+body.view-mobile table { font-size: 0.875rem; }
+body.view-mobile :is(.dashboard-metric-card__label, .dashboard-metric-card__hint) {
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+    overflow-wrap: anywhere;
+}
+
+body.view-mobile :is(.form-control, .form-select, .mgmt-search-input, input[type="search"]) {
+    min-height: 44px;
+    max-width: 100%;
+    font-size: 1rem !important;
+}
+body.view-mobile :is(.btn, .nav-link, .dropdown-item, .page-link, .btn-close,
+    .mgmt-tab, .rpt-tab, .profile-tab, .dbd-stat-pill, .profile-vmt__btn) {
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 0.875rem;
+}
+body.view-mobile :is(.nav-link, .page-link, .btn-close) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+body.view-mobile .navbar-nav .nav-link { justify-content: flex-start; }
+body.view-mobile .nav-avatar {
+    width: 44px;
+    height: 44px;
+}
+body.view-mobile .nav-avatar-menu__item {
+    min-height: 44px;
+    font-size: 0.875rem;
+}
+body.view-mobile .btn-close {
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+body.view-mobile .form-check {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    column-gap: 0.5rem;
+}
+body.view-mobile .form-check-input { flex-shrink: 0; }
+body.view-mobile .form-check-label {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+body.view-mobile :is(.dashboard-toolbar, .dashboard-toolbar__actions, .modal-footer) {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+body.view-mobile .modal-dialog {
+    width: auto;
+    max-width: calc(100% - 1rem);
+    margin: 0.5rem auto;
+}
+body.view-mobile .modal-content {
+    max-height: calc(100vh - 1rem);
+    max-height: calc(100dvh - 1rem);
+}
+body.view-mobile .modal-body {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+}
+body.view-mobile :is(.modal-header, .modal-footer) { flex-shrink: 0; }
+body.view-mobile .modal-dialog-centered {
+    min-height: calc(100vh - 1rem);
+    min-height: calc(100dvh - 1rem);
+}
+
+body.view-mobile :is(.dbd-stats-row, .mgmt-tabs, .rpt-tabs, .profile-tabs) {
+    max-width: 100%;
+    scrollbar-width: thin;
+    scroll-padding-inline: 0.5rem;
+}
+body.view-mobile :is(.dbd-stats-row, .mgmt-tabs, .rpt-tabs, .profile-tabs)::-webkit-scrollbar {
+    display: block;
+    height: 4px;
+}
+
+/* Static washes keep theme colors without continuously moving composited layers. */
+body.view-mobile .ambient-mesh__orb {
+    animation: none !important;
+    will-change: auto;
+    transform: none;
+}
