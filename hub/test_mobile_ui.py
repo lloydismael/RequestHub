@@ -44,7 +44,7 @@ class MobileBrowserTests(SimpleTestCase):
         cls.browser = cls.playwright.chromium.launch()
         cls.bootstrap = Path(os.environ['MOBILE_BOOTSTRAP_CSS']).read_text(encoding='utf-8')
         base = (settings.BASE_DIR / 'templates' / 'base.html').read_text(encoding='utf-8')
-        cls.mode_script = next(script for script in re.findall(r'<script>(.*?)</script>', base, re.S)
+        cls.mode_script = next(script for script in re.findall(r'<script>(.*?)</script>', base, re.S | re.I)
                                if 'function syncViewMode' in script)
 
     @classmethod
@@ -73,7 +73,7 @@ class MobileBrowserTests(SimpleTestCase):
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<main class="container"></main>')
         # Keep all verification local: no remote scripts, user data or CDN requests.
-        html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S)
+        html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S | re.I)
         def inline_styles(match):
             href = re.search(r'href="([^"]+)"', match.group())
             if not href:
@@ -166,7 +166,7 @@ class MobileBrowserTests(SimpleTestCase):
         page.locator('#navbarNav.show').wait_for()
         self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
         base = (settings.BASE_DIR / 'templates' / 'base.html').read_text(encoding='utf-8')
-        avatar_script = next(script for script in re.findall(r'<script>(.*?)</script>', base, re.S)
+        avatar_script = next(script for script in re.findall(r'<script>(.*?)</script>', base, re.S | re.I)
                              if '// Nav avatar dropdown' in script)
         page.evaluate(avatar_script)
         avatar = page.locator('#nav-avatar-trigger')
