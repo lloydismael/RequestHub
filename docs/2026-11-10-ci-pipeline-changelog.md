@@ -25,7 +25,7 @@ Status: proposed pipeline changes for a reviewed PR; not a published production 
 
 ## Evidence and Notifications
 
-No production version has been allocated to these proposed changes. Package the implementation commit's real first-parent/after-revision report captures before publishing the PR; never fabricate a historical after revision or create a production changelog entry for an unshipped change. Once reviewed commits reach master, CI captures remaining maintenance/evidence commits and the release packages validated pairs for the existing startup synchronization.
+No production version has been allocated to these proposed changes. The implementation evidence is packaged in `hub/changelog_assets/pipeline-2026-11-10/`: genuine repository reports compare first parent `05624c0d3daa50a8b57f296f5ec1b7b9cf1bc253` with implementation commit `f81bf9496d87996710e9221cb7605a38b6f3051f`. They are file-metadata reports, not UI screenshots or proof of live deployment. Once reviewed commits reach master, CI captures remaining maintenance/evidence commits and the release packages validated pairs for the existing startup synchronization.
 
 Validate importer rejection/safe fallback, existing packaged evidence enrichment, and Notifications → Changelogs visibility using synthetic fixtures and an isolated PostgreSQL database. Complete published entries appear to signed-in readers; incomplete evidence stays draft and is not exposed as a published notification. Record actual before/after captures and the deployed version only after an authorized release.
 
@@ -44,5 +44,6 @@ Staging/slot upgrades, a fully asynchronous protected production evidence import
 - Offline workflow/fast-gate contracts: 5 tests passed; digest-pinned Actionlint and ShellCheck passed.
 - A fresh Windows hash-mode install reproduced the missing-platform-dependency failure, then passed with the supplemental lock and `pip check`. Existing direct runtime pins remain unchanged.
 - Independent review findings were reproduced and corrected with regression tests. GitHub policy readback confirmed strict required checks, one approval, administrator enforcement, and the sole production branch policy `master`.
+- The actual packaged implementation reports were decoded and verified with distinct before/after checksums. An additional isolated-database check confirmed that their release draft is absent from Notifications until importing complete evidence, then publishes once and becomes visible to a signed-in reader.
 
 These checks do not publish the pending commits, deploy production, prove live CI latency, or fabricate release-specific screenshot provenance.
