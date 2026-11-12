@@ -252,11 +252,12 @@ class PrototypeTabRenderTests(TestCase):
                     ("table", "To SQR Tracker", "bi-table", "btn-primary lg-btn--accent"),
                     ("reports", "To Reports", "bi-bar-chart-line-fill", "btn-outline-primary lg-btn--ghost"),
                 ):
-                    href = "/sqr/" if destination == "table" else "/sqr/?tab=reports"
+                    href = "/sqr/?view=tracker" if destination == "table" else "/sqr/?tab=reports"
+                    tracker_link = " data-sqr-tracker-link" if destination == "table" else ""
                     current = ' aria-current="page"' if tab == destination else ""
                     self.assertContains(
                         response,
-                        f'<a href="{href}" class="btn btn-sm sqr-toggle-btn lg-btn {style}"{current}>'
+                        f'<a href="{href}" class="btn btn-sm sqr-toggle-btn lg-btn {style}"{tracker_link}{current}>'
                         f'<i class="bi {icon} me-1" aria-hidden="true"></i>{label}</a>',
                         html=True,
                     )

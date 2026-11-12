@@ -39,6 +39,25 @@ test('filter navigation does not reopen onboarding or steal filter focus', () =>
     assert.equal(focusCalls, 0);
 });
 
+test('PPT skips the prototype notice while tracker retains it', () => {
+    const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hub', 'sqr.html'), 'utf8');
+    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)].map(match => match[1])
+        .find(source => source.includes("var storageKey = 'requestHub.sqr.hideNewVersionNotice'"));
+    for (const performanceHidden of [false, true]) {
+        let visible = false;
+        let focusCalls = 0;
+        const element = {addEventListener: () => {}, classList: {toggle: (name, value) => { visible = value; }},
+            setAttribute: () => {}, focus: () => { focusCalls += 1; }};
+        vm.runInNewContext(script, {
+            document: {body: {dataset: {}}, getElementById: () => element, addEventListener: () => {},
+                querySelector: () => ({hidden: performanceHidden})},
+            window: {localStorage: {getItem: () => null}},
+        });
+        assert.equal(visible, performanceHidden);
+        assert.equal(focusCalls, performanceHidden ? 1 : 0);
+    }
+});
+
 test('edits and undo refresh authoritative pipeline counts and monetary totals', async () => {
     const app = tracker();
     await app.context.refreshRecord(1);

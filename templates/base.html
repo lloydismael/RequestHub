@@ -142,11 +142,14 @@
                 <div class="collapse navbar-collapse order-lg-1" id="navbarNav">
                     <ul class="navbar-nav me-auto">
                         <li class="nav-item"><a class="nav-link" href="{% url 'hub:dashboard' %}"><i class="bi bi-grid-fill nav-icon"></i>Dashboard</a></li>
+                        {% if request.user.role == 'admin' or request.user.role == 'pm_esg' %}
+                            <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'sqr' and request.GET.view == 'performance' and active_sqr_tab != 'reports' %} active{% endif %}" href="{% url 'hub:sqr' %}?view=performance" data-sqr-nav-view="performance" title="Project Performance Tracking"{% if request.resolver_match.url_name == 'sqr' and request.GET.view == 'performance' and active_sqr_tab != 'reports' %} aria-current="page"{% endif %}><i class="bi bi-speedometer2 nav-icon" aria-hidden="true"></i>PPT</a></li>
+                        {% endif %}
                         {% if request.user.is_engineer_access_role %}
                             <li class="nav-item"><a class="nav-link" href="{% url 'hub:activity-logs' %}"><i class="bi bi-activity nav-icon"></i>Activity Logs</a></li>
                         {% endif %}
                         {% if request.user.role == 'admin' or request.user.is_engineer_access_role or request.user.role == 'pm_esg' %}
-                            <li class="nav-item"><a class="nav-link" href="{% url 'hub:sqr' %}"><i class="bi bi-clipboard-data-fill nav-icon"></i>SQR</a></li>
+                            <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'sqr' %}{% if request.GET.view != 'performance' or active_sqr_tab == 'reports' or request.user.is_engineer_access_role %} active{% endif %}{% endif %}" href="{% url 'hub:sqr' %}?view=tracker" data-sqr-nav-view="tracker"{% if request.resolver_match.url_name == 'sqr' %}{% if request.GET.view != 'performance' or active_sqr_tab == 'reports' or request.user.is_engineer_access_role %} aria-current="page"{% endif %}{% endif %}><i class="bi bi-clipboard-data-fill nav-icon"></i>SQR</a></li>
                         {% endif %}
                         {% if request.user.role == 'admin' %}
                             <li class="nav-item"><a class="nav-link" href="{% url 'hub:management' %}"><i class="bi bi-gear-fill nav-icon"></i>Management</a></li>

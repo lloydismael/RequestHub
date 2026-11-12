@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load form_customization %}
 {% load tz humanize static %}
-{% block title %}SQR &middot; Request Hub{% endblock %}
+{% block title %}{% if is_pm and active_sqr_tab != 'reports' and request.GET.view == 'performance' %}PPT{% else %}SQR{% endif %} &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=23">
@@ -19,7 +19,7 @@
     <div class="col-12">
 
         {# ── Header card ──────────────────────────────────────────────────── #}
-        <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme">
+        <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme" data-sqr-header{% if is_pm and active_sqr_tab != 'reports' and request.GET.view == 'performance' and 'focus' not in request.GET %} hidden{% endif %}>
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
                     <h2 class="h5 mb-0"><i class="bi bi-clipboard-data-fill me-2 text-primary"></i>Service Quotation Request</h2>
@@ -27,7 +27,7 @@
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     {% if is_pm %}
                         <div class="d-flex align-items-center gap-2">
-                            <a href="{% url 'hub:sqr' %}" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent"{% if active_sqr_tab != 'reports' %} aria-current="page"{% endif %}>
+                            <a href="{% url 'hub:sqr' %}?view=tracker" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and request.GET.view != 'performance' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-table me-1" aria-hidden="true"></i>To SQR Tracker
                             </a>
                             <a href="{% url 'hub:sqr' %}?tab=reports" class="btn btn-sm sqr-toggle-btn lg-btn btn-outline-primary lg-btn--ghost"{% if active_sqr_tab == 'reports' %} aria-current="page"{% endif %}>
@@ -68,11 +68,6 @@
                     <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="tracker" aria-pressed="true">
                         <i class="bi bi-table me-1"></i>SQR Tracker
                     </button>
-                    {% if is_pm %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="performance" aria-pressed="false">
-                        <i class="bi bi-speedometer2 me-1"></i>Project Performance Tracking
-                    </button>
-                    {% endif %}
                     <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="prototype" aria-pressed="false">
                         <i class="bi bi-stars me-1"></i>SQR Tracker Prototype
                     </button>
@@ -3461,6 +3456,9 @@
     var storageKey = 'requestHub.sqr.tableView';
     var buttons = document.querySelectorAll('[data-sqr-view-button]');
     var panels = document.querySelectorAll('[data-sqr-view-panel]');
+    var header = document.querySelector('[data-sqr-header]');
+    var navLinks = document.querySelectorAll('[data-sqr-nav-view]');
+    var trackerLinks = document.querySelectorAll('[data-sqr-tracker-link]');
     if (!buttons.length || !panels.length) return;
     var trackerControls = Array.from(document.querySelectorAll('[data-sqr-tracker-only]')).map(function (element) {
         return {element: element, wasHidden: element.hidden};
@@ -3477,6 +3475,7 @@
         });
         var activeView = available[viewName] ? viewName : 'tracker';
         if (!available[activeView]) activeView = 'tracker';
+        if (header) header.hidden = activeView === 'performance';
         buttons.forEach(function (button) {
             var isActive = button.dataset.sqrViewButton === activeView;
             button.classList.toggle('btn-primary', isActive);
@@ -3491,6 +3490,22 @@
             control.element.hidden = activeView !== 'tracker' || control.wasHidden;
         });
         prototypeControls.forEach(function (element) { element.hidden = activeView !== 'prototype'; });
+        navLinks.forEach(function (link) {
+            var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'tracker');
+            link.classList.toggle('active', isCurrent);
+            if (isCurrent) link.setAttribute('aria-current', 'page');
+            else link.removeAttribute('aria-current');
+        });
+        trackerLinks.forEach(function (link) {
+            if (activeView === 'tracker') link.setAttribute('aria-current', 'page');
+            else link.removeAttribute('aria-current');
+        });
+        document.title = (activeView === 'performance' ? 'PPT' : 'SQR') + ' · Request Hub';
+        try {
+            var params = new URLSearchParams(window.location.search);
+            params.set('view', activeView);
+            window.history.replaceState(window.history.state, '', window.location.pathname + '?' + params.toString() + window.location.hash);
+        } catch (error) {}
         document.dispatchEvent(new CustomEvent('sqr:performance-view', {detail: {view: activeView}}));
         try { window.localStorage.setItem(storageKey, activeView); } catch (error) {}
     }
@@ -3507,7 +3522,10 @@
 
     var savedView = 'tracker';
     try { savedView = window.localStorage.getItem(storageKey) || 'tracker'; } catch (error) {}
-    setView(savedView);
+    if (savedView === 'performance') savedView = 'tracker';
+    var initialParams = new URLSearchParams(window.location.search);
+    var requestedView = initialParams.has('focus') ? 'tracker' : initialParams.get('view');
+    setView(requestedView || savedView);
 })();
 </script>
 
@@ -3848,6 +3866,7 @@
             if (!document.getElementById('sqr-pagination')) return false;
             var params = new URLSearchParams(window.location.search);
             params.set('focus', exactPk);
+            params.set('view', 'tracker');
             params.delete('page');
             window.location.assign(window.location.pathname + '?' + params.toString());
             return true;
@@ -4129,6 +4148,8 @@
 
     // Skip when opted out, or when the user already lands on the prototype tab.
     if (document.body.dataset.sqrFilterNavigation === '1' || readFlag(storageKey) === '1' || readFlag(viewStorageKey) === 'prototype') return;
+    var performancePanel = document.querySelector('[data-sqr-view-panel="performance"]');
+    if (performancePanel && !performancePanel.hidden) return;
 
     var previousFocus = null;
 

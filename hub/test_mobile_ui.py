@@ -157,6 +157,27 @@ class MobileBrowserTests(SimpleTestCase):
                         self.assertGreater(wrapper.evaluate('el => el.scrollLeft'), 0)
                         self.assertLessEqual(wrapper.bounding_box()['width'], width)
 
+    def test_ppt_hides_sqr_header_from_view_and_keyboard(self):
+        template = (settings.BASE_DIR / 'templates' / 'hub' / 'sqr.html').read_text(encoding='utf-8')
+        view_script = next(script for script in re.findall(r'<script>(.*?)</script>', template, re.S)
+                           if '// ── SQR table view toggle' in script)
+        for width, dark in ((375, False), (375, True), (1280, False), (1280, True)):
+            with self.subTest(width=width, dark=dark):
+                page = self.page(width, template='hub/sqr.html', dark=dark)
+                page.locator('main').evaluate("el => el.insertAdjacentHTML('beforeend', '<section data-sqr-view-panel=\"performance\" hidden></section>')")
+                page.evaluate(view_script)
+                page.evaluate("window.setSqrView('performance')")
+                header = page.locator('[data-sqr-header]')
+                button = header.locator('[data-sqr-view-button="tracker"]')
+                heading = page.get_by_role('heading', name='Service Quotation Request', exact=True)
+                self.assertFalse(header.is_visible())
+                self.assertEqual(heading.count(), 0)
+                self.assertFalse(button.evaluate("el => { el.focus(); return document.activeElement === el; }"))
+                page.evaluate("window.setSqrView('tracker')")
+                self.assertTrue(header.is_visible())
+                self.assertEqual(heading.count(), 1)
+                self.assertTrue(button.evaluate("el => { el.focus(); return document.activeElement === el; }"))
+
     def test_navigation_remains_touch_and_keyboard_accessible(self):
         page = self.page(320, template='hub/dashboard.html')
         toggle = page.locator('.navbar-toggler')

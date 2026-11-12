@@ -3236,14 +3236,15 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertEqual(perf.overall_health, "yellow")
         self.assertEqual(str(perf.finish_date), "2026-09-30")
 
-    def test_performance_tab_renders_for_pm_only(self):
+    def test_performance_shell_renders_for_pm_only(self):
         # PM receives a lazy shell, not a second server-rendered project list.
         self.client.force_login(self.pm)
         response = self.client.get(reverse("hub:sqr"))
         self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertIn("Project Performance Tracking", content)
-        self.assertIn('data-sqr-view-button="performance"', content)
+        self.assertIn('data-sqr-nav-view="performance"', content)
+        self.assertNotIn('data-sqr-view-button="performance"', content)
         self.assertIn('data-sqr-view-panel="performance"', content)
         self.assertIn('id="sqr-performance-dashboard"', content)
         self.assertIn('data-endpoint="' + reverse("hub:sqr-performance-data") + '"', content)
@@ -3275,12 +3276,13 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertNotIn("sqr_performance_dashboards", content)
         # SQR Tracker tab still renders for both roles.
         self.assertIn("SQR Tracker", content)
-        # Engineer (non-PM) does not see the performance tab.
+        # Engineer (non-PM) does not see the performance navigation or panel.
         self.client.force_login(self.engineer)
         eng_content = self.client.get(reverse("hub:sqr")).content.decode()
         self.assertIn("SQR Tracker", eng_content)
+        self.assertNotIn('data-sqr-nav-view="performance"', eng_content)
         self.assertNotIn('data-sqr-view-button="performance"', eng_content)
-        self.assertNotIn('data-sqr-view-panel="performance"', eng_content)
+        self.assertNotRegex(eng_content, r'<section\b[^>]*data-sqr-view-panel="performance"')
         self.assertNotIn('id="sqr-performance-dashboard"', eng_content)
         self.assertNotIn('js/sqr-performance.js', eng_content)
 
@@ -3419,7 +3421,7 @@ class SqrPerformanceTrackingTests(TestCase):
                 self.filters = set()
                 self.options = {}
                 self.select_id = None
-                self.performance_button = None
+                self.performance_link = None
 
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
@@ -3430,8 +3432,8 @@ class SqrPerformanceTrackingTests(TestCase):
                     self.metrics.add(attrs["data-pm-metric"])
                 if "data-pm-filter" in attrs:
                     self.filters.add(attrs["data-pm-filter"])
-                if attrs.get("data-sqr-view-button") == "performance":
-                    self.performance_button = attrs
+                if tag == "a" and attrs.get("data-sqr-nav-view") == "performance":
+                    self.performance_link = attrs
                 if tag == "select":
                     self.select_id = element_id
                 if tag == "option" and self.select_id:
@@ -3463,8 +3465,8 @@ class SqrPerformanceTrackingTests(TestCase):
             "closed", "ongoing", "pipeline", "removed", "closed_percent",
             "rating_good", "rating_warning", "rating_danger", "rating_unknown",
         })
-        self.assertIsNotNone(parser.performance_button)
-        self.assertNotIn("disabled", parser.performance_button)
+        self.assertIsNotNone(parser.performance_link)
+        self.assertEqual(parser.performance_link["href"], reverse("hub:sqr") + "?view=performance")
         self.assertEqual(parser.filters, set())
         self.assertEqual(parser.options["sqr-pm-scope"], {"active", "all"})
         self.assertEqual(parser.options["sqr-pm-manager"], {""})
