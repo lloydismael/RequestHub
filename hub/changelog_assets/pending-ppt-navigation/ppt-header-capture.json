@@ -1,0 +1,35 @@
+{
+  "status": "unreleased",
+  "git_base": "6329c4c84b3aa9bbfeb42f24f425dc2d891223f4",
+  "before_revision": null,
+  "after_revision": null,
+  "capture_note": "Both captures use an unsaved administrator, an empty portfolio, the actual shared view-switch script and application styles, and locally embedded Bootstrap assets. No live database or external requests are used. Both are uncommitted working-tree states: the before state already includes the preceding PPT navigation change, and neither state represents an exact committed revision.",
+  "before_captured_at": "2026-11-12T18:12:02.449202+00:00",
+  "after_captured_at": "2026-11-12T18:24:26.134438+00:00",
+  "before_source_sha256": {
+    "templates/base.html": "843db9557a39dd8fc4be86afad69c27797823e28be1d11b1f3686b635823bc70",
+    "templates/hub/sqr.html": "ac0e38a410fc1ddc05288dbc05ed4cb069f2e9881b20f3728a2e0315217186d6",
+    "static/css/liquid-glass-sqr.css": "30f263c79539fcb1dcb20978cc4b988567f69c23b567ed5f85c6191ad842d930"
+  },
+  "after_source_sha256": {
+    "templates/base.html": "843db9557a39dd8fc4be86afad69c27797823e28be1d11b1f3686b635823bc70",
+    "templates/hub/sqr.html": "9b8523d2f6fa06c3fdd4b0d2f7aa4fc8249b42f2463cfd7ce8c62755e0dce8ce",
+    "static/css/liquid-glass-sqr.css": "30f263c79539fcb1dcb20978cc4b988567f69c23b567ed5f85c6191ad842d930"
+  },
+  "comparisons": [
+    {
+      "viewport": "desktop 1280 x 560",
+      "before": "ppt-header-desktop-before.png",
+      "before_sha256": "b4fc3e6f86b1fd50d7a9dd918dcc87c2b0edee066e6037196459b4d6796951b3",
+      "after": "ppt-header-desktop-after.png",
+      "after_sha256": "4107f8ae00798d4567de88dd11ce3867ceb5fb34e7cdd82041dc29b04dd49efa"
+    },
+    {
+      "viewport": "mobile 375 x 780",
+      "before": "ppt-header-mobile-before.png",
+      "before_sha256": "0272ac5deac7b5fae5bda889971123a75b79e9a6cd614af947732875ef8cc867",
+      "after": "ppt-header-mobile-after.png",
+      "after_sha256": "ca279b8cc0cb3b22b4847abce5af002881d6c365c310f5323e4d51448d5a92da"
+    }
+  ]
+}

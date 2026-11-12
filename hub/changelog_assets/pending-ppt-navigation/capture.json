@@ -1,0 +1,36 @@
+{
+  "status": "unreleased",
+  "base_revision": "6329c4c84b3aa9bbfeb42f24f425dc2d891223f4",
+  "after_revision": null,
+  "capture_note": "Same unsaved administrator fixture and application templates/CSS at both states; no project records, live database, external requests or browser scripts. External icon fonts were omitted and the mobile menu was expanded for both captures. Before files match the Git baseline after Windows CRLF checkout conversion; after files are from the verified working tree and have not yet been bound to a release revision.",
+  "before_sources": {
+    "templates/base.html": {
+      "git_blob": "58df70388d1b7247edce7685d15a4a5a1afc1433",
+      "checkout_sha256": "7ed56eefe9f2e51a847ce7434eb0fde1cb7a59e235549fd3ab91be09d919d41c"
+    },
+    "templates/hub/sqr.html": {
+      "git_blob": "9d85a453636b438d5768398ee329cae9c5b620f0",
+      "checkout_sha256": "f27d6f8170fb909d11c923d7934ea60d2914d5ed6753c45f9e0759df1ee33854"
+    }
+  },
+  "after_source_sha256": {
+    "templates/base.html": "843db9557a39dd8fc4be86afad69c27797823e28be1d11b1f3686b635823bc70",
+    "templates/hub/sqr.html": "ac0e38a410fc1ddc05288dbc05ed4cb069f2e9881b20f3728a2e0315217186d6"
+  },
+  "comparisons": [
+    {
+      "viewport": "desktop 1280 x 420",
+      "before": "desktop-before.png",
+      "before_sha256": "bc0f68970041fce856ce2e359bda44a5dba99fc5338e14103aa953195208b20e",
+      "after": "desktop-after.png",
+      "after_sha256": "d3aa6c11c6a7901d4d3388feab68451013e249432021f8f0f06ed51c3f782683"
+    },
+    {
+      "viewport": "mobile 375 x 550, expanded menu",
+      "before": "mobile-before.png",
+      "before_sha256": "0be9756abfc7e2846b885d96192715c7c9d9908142346144f2b990f53e1bea99",
+      "after": "mobile-after.png",
+      "after_sha256": "b8e71e8d88722d36c25fb8f034dd42c872b2365ef33dc9b8607b173df1c254de"
+    }
+  ]
+}
