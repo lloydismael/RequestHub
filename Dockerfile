@@ -1,4 +1,4 @@
-FROM python:3.12.13-alpine3.24@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+FROM python:3.12.16-alpine3.24@sha256:e064671ca452259bab50e8e2c7bd896e39e9a343bb06ca25234adf6fe18d0fc7
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -13,8 +13,7 @@ WORKDIR /app
 # Per-build values (version, commit, date) are declared at the end of the file so
 # they do not invalidate the cached dependency layers below on every commit.
 COPY requirements.txt requirements.lock ./
-RUN python -m pip install --upgrade pip setuptools wheel \
-    && python -m pip install -r requirements.lock \
+RUN python -m pip install --require-hashes -r requirements.lock \
     && python -m pip check \
     && rm -rf \
         /usr/local/bin/pip* \

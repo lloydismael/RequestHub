@@ -19,6 +19,12 @@ env:
 jobs:
   release-preflight:
     name: Check release eligibility and configuration
+    if: >-
+      vars.CD_ENABLED == 'true' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
     environment: production
     timeout-minutes: 5
@@ -124,6 +130,9 @@ jobs:
     needs: release-preflight
     if: needs.release-preflight.outputs.ready == 'true'
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
     timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -174,6 +183,17 @@ jobs:
           print(f'Allocated {version}; latest will not be changed')
           PY
 
+      - name: Set up release Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-evidence.txt
+
+      - name: Install pinned evidence decoder
+        continue-on-error: true
+        run: python -m pip install --require-hashes -r requirements-evidence.txt
+
       - name: Generate release changelog manifest
         id: changelog_manifest
         env:
@@ -181,75 +201,22 @@ jobs:
           RELEASE_REVISION: ${{ github.event.workflow_run.head_sha }}
         run: python -m hub.release_changelog --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION"
 
-      - name: Set up changelog capture Python
-        id: capture_python
-        if: steps.changelog_manifest.outcome == 'success'
+      - name: Download exact upstream screenshot evidence
         continue-on-error: true
-        uses: actions/setup-python@v6
+        uses: actions/download-artifact@v4
         with:
-          python-version: '3.14'
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          name: changelog-evidence-${{ github.event.workflow_run.head_sha }}-${{ github.event.workflow_run.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence/
 
-      - name: Install isolated changelog capture tools
-        id: capture_tools
-        if: steps.capture_python.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 5
-        run: |
-          python -m venv "$RUNNER_TEMP/changelog-capture"
-          "$RUNNER_TEMP/changelog-capture/bin/python" -m pip install -r requirements.lock -r requirements-changelog-capture.txt
-          "$RUNNER_TEMP/changelog-capture/bin/python" -m playwright install --with-deps chromium
-          echo "$RUNNER_TEMP/changelog-capture/bin" >> "$GITHUB_PATH"
-
-      - name: Capture release changelog screenshots
-        if: steps.changelog_manifest.outcome == 'success'
-        continue-on-error: true
-        timeout-minutes: 10
+      - name: Validate and import upstream screenshot evidence
         env:
-          CAPTURE_SETUP_OUTCOME: ${{ steps.capture_tools.outcome }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+          UPSTREAM_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         run: |
-          export CAPTURE_FAILURE_REASON="Capture did not complete; retry automatic capture or add evidence in Management."
-          if [ "$CAPTURE_SETUP_OUTCOME" = "success" ]; then
-            if python scripts/capture_release_changelog.py --prepare-assets; then
-              if ! timeout 8m python scripts/capture_release_changelog.py; then
-                echo "::warning::Some changelog screenshots could not be captured; deployment continues."
-              fi
-            else
-              export CAPTURE_FAILURE_REASON="Offline screenshot assets could not be prepared; retry capture."
-            fi
-          else
-            export CAPTURE_FAILURE_REASON="Screenshot capture tools could not be installed; retry capture."
-          fi
-          python - <<'PY'
-          import json
-          import os
-          from hub.release_changelog import MANIFEST_PATH, missing_comparisons, validate_manifest
-
-          manifest = validate_manifest(json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
-          missing = [item for item in manifest["commits"] if missing_comparisons([item], require_all=True)]
-          for item in missing:
-              if not item.get("capture_error"):
-                  item["capture_error"] = os.environ["CAPTURE_FAILURE_REASON"]
-          temporary = MANIFEST_PATH.with_suffix(".json.tmp")
-          temporary.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-          temporary.replace(MANIFEST_PATH)
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              summary.write(f"## Changelog screenshots\n{len(manifest['commits']) - len(missing)} complete; {len(missing)} need evidence.\n")
-              summary.write("Missing evidence holds publication only; deployment continues.\n")
-              for item in missing:
-                  summary.write(f"- `{item['sha'][:12]}`: {item['capture_error']}\n")
-          raise SystemExit(1 if missing else 0)
-          PY
-
-      - name: Retain changelog capture evidence
-        if: ${{ !cancelled() && steps.changelog_manifest.outcome == 'success' }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v4
-        with:
-          name: changelog-evidence-${{ github.event.workflow_run.head_sha }}
-          path: |
-            hub/release_changelog_manifest.json
-            hub/changelog_assets/automatic/
-          retention-days: 30
+          python scripts/release_evidence.py import --bundle "$RUNNER_TEMP/release-evidence" --run-id "$UPSTREAM_RUN_ID" --run-attempt "$UPSTREAM_RUN_ATTEMPT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -270,6 +237,12 @@ jobs:
             APP_VERSION=${{ steps.version.outputs.version }}
             VCS_REF=${{ github.event.workflow_run.head_sha }}
             APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Smoke-test final release container
+        env:
+          EXPECTED_REVISION: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/smoke-container.sh "$IMAGE_NAME:$RELEASE_VERSION" "$EXPECTED_REVISION"
 
       - name: Generate release SBOM
         uses: anchore/sbom-action@v0

@@ -76,7 +76,7 @@ touch "$PRODUCTION_ENV_FILE.firewall"
 az postgres flexible-server firewall-rule create "${server_args[@]}" --name "$rule" --start-ip-address "$runner_ip" --end-ip-address "$runner_ip" --output none
 timing 'Firewall rule create'
 connected=false
-for attempt in {1..12}; do
+for _attempt in {1..12}; do
     if docker run --rm --env-file "$PRODUCTION_ENV_FILE" -e DJANGO_SETTINGS_MODULE=request_hub.settings --entrypoint python "$MIGRATION_IMAGE" -c '
 import sys
 try:

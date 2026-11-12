@@ -1,0 +1,3 @@
+# Minimal release-side decoder, constrained to the audited runtime Pillow.
+-c requirements.lock
+Pillow

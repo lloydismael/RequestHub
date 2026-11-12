@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - master
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, edited]
   push:
     branches:
       - dev
@@ -84,6 +84,144 @@ jobs:
             echo 'Full CI required for this event.' >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  workflow-validation:
+    name: Workflow and shell validation
+    needs: classify-event
+    if: ${{ !cancelled() && (needs.classify-event.result != 'success' || needs.classify-event.outputs.run_full_ci != 'false') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate workflow syntax
+        run: >-
+          docker run --rm -v "$PWD:/workspace" -w /workspace
+          rhysd/actionlint:1.7.11@sha256:5457037ba91acd225478edac3d4b32e45cf6c10291e0dabbfd2491c63129afe1
+          -shellcheck=
+
+      - name: Validate production shell scripts
+        run: |
+          bash -n scripts/deploy-production.sh scripts/migrate-production.sh scripts/smoke-container.sh
+          docker run --rm -v "$PWD:/workspace" -w /workspace koalaman/shellcheck:v0.11.0@sha256:b9389b73c8f26f710a7171cb7d8848a34a9c1e07a7865e727c9ec4ce99f9a83f --severity=warning scripts/deploy-production.sh scripts/migrate-production.sh scripts/smoke-container.sh
+
+  changelog-evidence:
+    name: Prepare release screenshot evidence
+    needs: classify-event
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out trusted master commit
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up changelog capture Python
+        id: capture_python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-changelog-capture.txt
+
+      - name: Restore historical capture cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            hub/changelog_assets/automatic/
+            .changelog-capture-vendor/
+          key: release-evidence-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: release-evidence-${{ runner.os }}-
+
+      - name: Generate release changelog manifest
+        id: changelog_manifest
+        run: python -m hub.release_changelog --version next --revision "$GITHUB_SHA"
+
+      - name: Restore Chromium cache
+        id: browser_cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: capture-browser-${{ runner.os }}-${{ hashFiles('requirements-changelog-capture.txt') }}
+
+      - name: Install isolated changelog capture tools
+        id: capture_tools
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          python -m venv "$RUNNER_TEMP/changelog-capture"
+          "$RUNNER_TEMP/changelog-capture/bin/python" -m pip install --require-hashes -r requirements-changelog-capture.txt
+          "$RUNNER_TEMP/changelog-capture/bin/python" -m pip check
+          "$RUNNER_TEMP/changelog-capture/bin/python" -m playwright install --with-deps chromium
+          echo "$RUNNER_TEMP/changelog-capture/bin" >> "$GITHUB_PATH"
+
+      - name: Capture release changelog screenshots
+        if: steps.changelog_manifest.outcome == 'success'
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          CAPTURE_SETUP_OUTCOME: ${{ steps.capture_tools.outcome }}
+        run: |
+          export CAPTURE_FAILURE_REASON="Capture did not complete; retry automatic capture or add evidence in Management."
+          if [ "$CAPTURE_SETUP_OUTCOME" = "success" ]; then
+            if python scripts/capture_release_changelog.py --prepare-assets; then
+              if ! timeout 8m python scripts/capture_release_changelog.py; then
+                echo "::warning::Some changelog screenshots could not be captured; deployment continues."
+              fi
+            else
+              export CAPTURE_FAILURE_REASON="Offline screenshot assets could not be prepared; retry capture."
+            fi
+          else
+            export CAPTURE_FAILURE_REASON="Screenshot capture tools could not be installed; retry capture."
+          fi
+          python - <<'PY'
+          import json
+          import os
+          from hub.release_changelog import MANIFEST_PATH, missing_comparisons, validate_manifest
+
+          manifest = validate_manifest(json.loads(MANIFEST_PATH.read_text(encoding="utf-8")))
+          missing = [item for item in manifest["commits"] if missing_comparisons([item], require_all=True)]
+          for item in missing:
+              if not item.get("capture_error"):
+                  item["capture_error"] = os.environ["CAPTURE_FAILURE_REASON"]
+          temporary = MANIFEST_PATH.with_suffix(".json.tmp")
+          temporary.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          temporary.replace(MANIFEST_PATH)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"## Changelog screenshots\n{len(manifest['commits']) - len(missing)} complete; {len(missing)} need evidence.\n")
+              summary.write("Missing evidence holds publication only; deployment continues.\n")
+              for item in missing:
+                  summary.write(f"- `{item['sha'][:12]}`: {item['capture_error']}\n")
+          raise SystemExit(1 if missing else 0)
+          PY
+
+      - name: Run historical capture regression tests
+        if: steps.capture_tools.outcome == 'success'
+        run: |
+          python scripts/capture_release_changelog.py --prepare-assets
+          python -m unittest discover -s scripts -p test_capture_release_changelog.py
+
+      - name: Package exact-run screenshot evidence
+        if: ${{ !cancelled() && steps.changelog_manifest.outcome == 'success' }}
+        run: |
+          python scripts/release_evidence.py export --bundle "$RUNNER_TEMP/release-evidence" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT"
+          mkdir -p hub/changelog_assets/automatic
+          cp hub/release_changelog_manifest.json hub/changelog_assets/automatic/manifest.json
+
+      - name: Retain changelog capture evidence
+        if: ${{ !cancelled() && steps.changelog_manifest.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: changelog-evidence-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-evidence/
+          if-no-files-found: error
+          retention-days: 30
+
   django-validation:
     name: Django Validation
     needs: classify-event
@@ -131,7 +269,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install -r requirements.lock -r requirements-ci.txt
+          python -m pip install --require-hashes -r requirements.lock -r requirements-ci.txt
           python -m pip check
 
       - name: Check Django configuration
@@ -152,13 +290,15 @@ jobs:
         run: |
           python -m unittest discover -s scripts -p test_analyze_actions_runs.py
           python -m unittest discover -s scripts -p test_changelog_capture_workflow.py
+          python -m unittest discover -s scripts -p test_release_evidence.py
+          python -m unittest discover -s scripts -p test_container_smoke.py
           node --test scripts_check/test_notification_toasts.cjs
           bash scripts/test-deploy-production.sh
           bash scripts/test-ci-routing.sh
           bash scripts/test-release-preflight.sh
 
-      # Test-only settings use a fast password hasher; the checks above run against
-      # the real settings. Tests run in parallel across the runner's CPUs.
+      # Keep tests serial until the earlier parallel-run failures are understood.
+      # The fast test-only password hasher does not affect deployment checks.
       - name: Run application tests
         run: >-
           python manage.py test
@@ -182,13 +322,15 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: requirements.lock
+          cache-dependency-path: requirements-tooling.txt
 
       - name: Install audit tooling
-        run: python -m pip install --upgrade pip pip-audit
+        run: |
+          python -m pip install --require-hashes -r requirements-tooling.txt
+          python -m pip check
 
       - name: Audit locked dependencies
-        run: pip-audit -r requirements.lock
+        run: pip-audit --require-hashes -r requirements.lock
 
   image-scan:
     name: Build, scan, and publish SBOM
@@ -231,6 +373,9 @@ jobs:
             VCS_REF=${{ steps.meta.outputs.revision }}
             BUILD_DATE=${{ steps.meta.outputs.created }}
             APK_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Smoke-test built container
+        run: bash scripts/smoke-container.sh "$IMAGE_NAME:$GITHUB_SHA" "$GITHUB_SHA"
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
