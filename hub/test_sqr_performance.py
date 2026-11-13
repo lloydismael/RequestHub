@@ -19,12 +19,12 @@ TODAY = date(2026, 9, 28)
 FETCHED_AT = datetime(2026, 9, 27, 16, 30, tzinfo=dt_timezone.utc)
 PROJECT_KEYS = {
     "pk", "reference_code", "project_name", "customer_name", "pm_id", "pm_name",
-    "pm_fallback", "sse_name", "status_key", "status_label", "health_key", "health_label",
+    "pm_fallback", "approver_id", "sse_name", "status_key", "status_label", "health_key", "health_label",
     "progress", "start_date", "target_date", "actual_finish_date", "completion_signed_date",
     "updates_risks", "active_delivery", "delivery_candidate", "needs_attention", "overdue",
     "due_soon", "days_to_target", "missing_data", "inconsistencies", "reasons", "priority",
     "search_text",
-    "portfolio_status", "indicators", "overall_rating",
+    "portfolio_status", "indicators", "overall_rating", "missing_assessment",
 }
 
 
@@ -35,7 +35,7 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
         pm = User(pk=2, username="reviewer", first_name="Review", last_name="Owner")
         values = {
             "pk": 1, "reference_code": "SQR-001", "customer_name": "Customer",
-            "project_title": "Project", "pm_esg_reviewer": pm,
+            "status": "reviewed", "project_title": "Project", "pm_esg_reviewer": pm,
             "assigned_pm": None, "assigned_sse": None,
         }
         values.update(changes)
@@ -48,6 +48,7 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
         values = {
             "assigned_pm": User(pk=3, username="assigned"),
             "overall_status": "in_progress", "delivery_health": "on_track",
+            "schedule_performance": "on_track", "budget_effort_performance": "within_budget", "quality_performance": "met",
             "delivery_progress": 40, "delivery_start_date": TODAY - timedelta(days=30),
             "delivery_target_finish_date": TODAY + timedelta(days=40),
         }
@@ -81,60 +82,71 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
             with self.subTest(changes=changes):
                 self.assertEqual(self.project(**changes)["portfolio_status"], expected)
 
-    def test_schedule_delay_boundaries_are_date_based_not_recorded_health(self):
-        for days, expected in ((-1, "good"), (0, "good"), (1, "warning"), (14, "warning"), (15, "danger")):
-            with self.subTest(days=days):
-                project = self.project(
-                    overall_status="in_progress", delivery_health="on_track",
-                    delivery_target_finish_date=TODAY - timedelta(days=days),
-                )
-                self.assertEqual(project["indicators"]["schedule"]["state"], expected)
-                self.assertEqual(project["health_key"], "on_track")
-                self.assertEqual(project["overall_rating"], expected)
-
-    def test_schedule_uses_actual_finish_for_closed_projects(self):
-        project = self.project(
-            overall_status="completed", delivery_target_finish_date=TODAY - timedelta(days=60),
-            delivery_actual_finish_date=TODAY - timedelta(days=70),
-        )
-        self.assertEqual(project["indicators"]["schedule"]["state"], "good")
-        for changes in (
-            {"overall_status": "completed"},
-            {"overall_status": "planning"},
-            {"overall_status": "cancelled"},
-            {"delivery_start_date": TODAY + timedelta(days=1)},
-            {"delivery_start_date": TODAY, "delivery_target_finish_date": TODAY - timedelta(days=1)},
+    def test_recorded_indicators_drive_rating_with_partial_coverage(self):
+        for schedule, budget, quality, expected in (
+            ("on_track", "within_budget", "met", "good"),
+            ("on_track", "within_budget", "", "unknown"),
+            ("at_risk", "", "", "warning"),
+            ("delayed", "at_risk", "", "danger"),
+            ("", "", "", "unknown"),
         ):
-            self.assertEqual(self.project(**changes)["indicators"]["schedule"]["state"], "unknown")
+            with self.subTest(values=(schedule, budget, quality)):
+                project = self.project(proposal_status="closed_won", overall_status="in_progress",
+                                       schedule_performance=schedule, budget_effort_performance=budget, quality_performance=quality)
+                self.assertEqual(project["overall_rating"], expected)
+                self.assertEqual(set(project["indicators"]), {"schedule", "budget_effort", "quality"})
+                self.assertEqual(project["indicators"]["schedule"]["value"], schedule)
+                self.assertEqual(project["indicators"]["budget_effort"]["value"], budget)
+                self.assertEqual(project["indicators"]["quality"]["value"], quality)
+                if not quality:
+                    self.assertEqual(project["indicators"]["quality"]["label"], "N/R")
+        green = normalize_sqr_project(self.clean(delivery_health="off_track"), today=TODAY)
+        self.assertEqual(green["overall_rating"], "good")
+        self.assertFalse(green["needs_attention"])
+
+    def test_closed_red_outcome_and_legacy_terminal_evidence_are_preserved(self):
+        for terminal in ({"overall_status": "completed"}, {"delivery_health": "completed"},
+                         {"delivery_actual_finish_date": TODAY}, {"delivery_completion_signed_date": TODAY},
+                         {"delivery_actual_finish_date": "invalid historical date"}):
+            with self.subTest(terminal=terminal):
+                project = self.project(proposal_status="closed_won", schedule_performance="delayed",
+                                       budget_effort_performance="within_budget", quality_performance="met", **terminal)
+                self.assertEqual(project["portfolio_status"], "closed")
+                self.assertEqual(project["overall_rating"], "danger")
+                self.assertEqual(project["indicators"]["schedule"]["label"], "Delayed")
+        conflict = self.project(overall_status="in_progress", delivery_health="completed", schedule_performance="delayed")
+        self.assertEqual(conflict["portfolio_status"], "closed")
+        self.assertTrue(conflict["inconsistencies"])
+        removed = self.project(overall_status="in_progress", delivery_health="cancelled", schedule_performance="delayed")
+        self.assertEqual(removed["portfolio_status"], "removed")
+        self.assertEqual(removed["overall_rating"], "unknown")
+        pipeline = normalize_sqr_project(self.clean(overall_status="planning"), today=TODAY)
+        self.assertEqual(pipeline["overall_rating"], "unknown")
 
     def test_unavailable_indicators_and_notes_never_invent_ratings(self):
-        project = self.project(key_updates_risks="No issue. Scope change. Blocked resources.")
+        project = self.project(key_updates_risks="No issue. Scope change. Blocked resources.", quotation_total_price=1000000)
         self.assertEqual(project["overall_rating"], "unknown")
-        self.assertEqual(set(project["indicators"]), {"schedule", "scope", "resources", "customer", "risks"})
+        self.assertEqual(set(project["indicators"]), {"schedule", "budget_effort", "quality"})
         for indicator in project["indicators"].values():
-            self.assertEqual(indicator, {"state": "unknown", "label": "N/R"})
+            self.assertEqual(indicator, {"value": "", "state": "unknown", "label": "N/R"})
 
-    def test_closed_project_does_not_inherit_open_on_hold_warning(self):
-        project = self.project(
-            overall_status="on_hold", delivery_health="completed",
-            delivery_start_date=TODAY - timedelta(days=30),
-            delivery_target_finish_date=TODAY - timedelta(days=5),
-            delivery_actual_finish_date=TODAY - timedelta(days=10),
-        )
-        self.assertEqual(project["portfolio_status"], "closed")
-        self.assertEqual(project["indicators"]["schedule"]["state"], "good")
+    def test_on_hold_attention_does_not_rewrite_recorded_rating(self):
+        project = normalize_sqr_project(self.clean(overall_status="on_hold"), today=TODAY)
         self.assertEqual(project["overall_rating"], "good")
-        self.assertIn("Terminal delivery conflicts with open status or health", project["inconsistencies"])
+        self.assertTrue(project["needs_attention"])
+        self.assertIn("on_hold", [reason["key"] for reason in project["reasons"]])
+        self.assertEqual(project["status_key"], "on_hold")
+        self.assertTrue(all(value["state"] == "good" for value in project["indicators"].values()))
 
-    def test_recorded_health_contributes_separately_to_overall_rating(self):
-        for health, expected in (("on_track", "good"), ("at_risk", "warning"), ("off_track", "danger"), ("future", "unknown")):
-            project = self.project(overall_status="in_progress", delivery_health=health)
-            self.assertEqual(project["overall_rating"], expected)
-            self.assertEqual(project["indicators"]["risks"]["state"], "unknown")
-        project = self.project(overall_status="planning", delivery_health="off_track")
-        self.assertEqual(project["overall_rating"], "unknown")
-        project = self.project(overall_status="on_hold", delivery_health="on_track")
-        self.assertEqual(project["overall_rating"], "warning")
+    def test_target_dates_no_longer_create_deadline_kpis(self):
+        project = normalize_sqr_project(self.clean(delivery_target_finish_date=TODAY - timedelta(days=100)), today=TODAY)
+        self.assertIsNone(project["target_date"])
+        self.assertIsNone(project["days_to_target"])
+        self.assertFalse(project["overdue"])
+        self.assertFalse(project["due_soon"])
+        self.assertNotIn("Target date", project["missing_data"])
+        self.assertEqual(project["overall_rating"], "good")
+        self.assertEqual(project["reasons"], [])
 
     def test_plain_proposal_is_not_deficient_delivery(self):
         project = self.project(key_updates_risks="Blocked!", assigned_pm=User(pk=4, username="pm"))
@@ -164,9 +176,9 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
     def test_operational_evidence_including_zero(self):
         for changes in (
             {"overall_status": "planning"}, {"overall_status": "in_progress"},
-            {"overall_status": "on_hold"}, {"delivery_health": "on_track"},
+            {"overall_status": "on_hold"}, {"schedule_performance": "on_track"},
+            {"budget_effort_performance": "within_budget"}, {"quality_performance": "met"},
             {"delivery_progress": 0}, {"delivery_start_date": TODAY},
-            {"delivery_target_finish_date": TODAY},
         ):
             with self.subTest(changes=changes):
                 self.assertTrue(self.project(**changes)["active_delivery"])
@@ -196,17 +208,19 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
                 self.assertEqual(project["progress"], expected)
                 self.assertEqual("Progress" in project["missing_data"], expected is None)
 
-    def test_dates_inclusive_boundaries_and_no_target(self):
+    def test_legacy_target_dates_are_inert(self):
         for delta in (-1, 0, 14, 15, 30, 31, None):
             with self.subTest(delta=delta):
                 project = self.project(delivery_target_finish_date=TODAY + timedelta(days=delta) if delta is not None else None)
-                self.assertEqual(project["days_to_target"], delta)
-                self.assertEqual(project["overdue"], delta == -1)
-                self.assertEqual(project["due_soon"], delta in (0, 14))
+                self.assertIsNone(project["days_to_target"])
+                self.assertFalse(project["overdue"])
+                self.assertFalse(project["due_soon"])
+                self.assertFalse(project["active_delivery"])
 
-    def test_open_100_stays_overdue_and_recorded_health_unchanged(self):
+    def test_open_100_does_not_complete_delivery_or_create_deadlines(self):
         project = self.project(delivery_health="on_track", delivery_progress=100, delivery_target_finish_date=TODAY - timedelta(days=1))
-        self.assertTrue(project["overdue"])
+        self.assertFalse(project["overdue"])
+        self.assertEqual(project["portfolio_status"], "ongoing")
         self.assertEqual(project["health_key"], "on_track")
         self.assertEqual(project["health_label"], "On Track")
         self.assertIn("Open delivery has progress at 100%", project["inconsistencies"])
@@ -219,7 +233,7 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
     def test_reviewer_fallback_does_not_hide_missing_assigned_pm(self):
         project = self.project(proposal_status="closed_won")
         self.assertEqual((project["pm_id"], project["pm_name"], project["pm_fallback"]), ("2", "Review Owner", True))
-        self.assertEqual(project["missing_data"], ["Assigned PM", "Delivery health", "Progress", "Start date", "Target date"])
+        self.assertEqual(project["missing_data"], ["Assigned PM", "Progress", "Start date", "Schedule Performance", "Budget/Effort Performance", "Quality Performance"])
 
     def test_completed_under_100_and_unknown_progress(self):
         for terminal in ({"overall_status": "completed"}, {"delivery_health": "completed"}, {"delivery_actual_finish_date": TODAY}, {"delivery_completion_signed_date": TODAY}):
@@ -239,7 +253,7 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
     def test_terminal_vs_open_signals(self):
         for changes in (
             {"overall_status": "in_progress", "delivery_actual_finish_date": TODAY},
-            {"delivery_health": "on_track", "overall_status": "completed"},
+            {"delivery_health": "completed", "overall_status": "on_hold"},
             {"overall_status": "planning", "delivery_health": "cancelled"},
         ):
             with self.subTest(changes=changes):
@@ -247,11 +261,11 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
 
     def test_date_order_and_malformed_dates(self):
         project = self.project(delivery_start_date=TODAY, delivery_target_finish_date=TODAY - timedelta(days=1), delivery_actual_finish_date=TODAY - timedelta(days=2))
-        self.assertIn("Start date is after target date", project["inconsistencies"])
+        self.assertNotIn("Start date is after target date", project["inconsistencies"])
         self.assertIn("Actual finish date is before start date", project["inconsistencies"])
+        self.assertEqual(self.project(delivery_target_finish_date="invalid")["inconsistencies"], [])
         for field, result_key, label in (
             ("delivery_start_date", "start_date", "start date"),
-            ("delivery_target_finish_date", "target_date", "target date"),
             ("delivery_actual_finish_date", "actual_finish_date", "actual finish date"),
             ("delivery_completion_signed_date", "completion_signed_date", "completion signed date"),
         ):
@@ -263,35 +277,35 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
     def test_date_serialization(self):
         project = self.project(delivery_start_date=TODAY, delivery_target_finish_date="2026-10-01", delivery_actual_finish_date=TODAY, delivery_completion_signed_date=TODAY)
         self.assertEqual(project["start_date"], "2026-09-28")
-        self.assertEqual(project["target_date"], "2026-10-01")
+        self.assertIsNone(project["target_date"])
         self.assertEqual(project["actual_finish_date"], "2026-09-28")
         self.assertEqual(project["completion_signed_date"], "2026-09-28")
 
-    def test_rank_and_stable_target_pk_order(self):
+    def test_rank_and_stable_attention_pk_order(self):
         rows = [
             self.clean(pk=7),
             self.clean(pk=6, delivery_progress=None),
-            self.clean(pk=5, delivery_target_finish_date=TODAY),
-            self.clean(pk=4, overall_status="on_hold"),
-            self.clean(pk=3, delivery_health="at_risk"),
-            self.clean(pk=2, delivery_target_finish_date=TODAY - timedelta(days=1)),
-            self.clean(pk=1, delivery_health="off_track"),
+            self.clean(pk=5, delivery_start_date=TODAY, delivery_actual_finish_date=TODAY - timedelta(days=1), delivery_progress=100),
+            self.clean(pk=4, status="submitted"),
+            self.clean(pk=3, overall_status="on_hold"),
+            self.clean(pk=2, schedule_performance="at_risk"),
+            self.clean(pk=1, quality_performance="unmet"),
         ]
         projects = build_sqr_performance_snapshot(rows, today=TODAY, fetched_at=FETCHED_AT)["projects"]
         self.assertEqual([p["priority"] for p in projects], list(range(7)))
         self.assertEqual([p["pk"] for p in projects], list(range(1, 8)))
-        rows = [self.clean(pk=pk, delivery_health="off_track", delivery_target_finish_date=target) for pk, target in (
+        rows = [self.clean(pk=pk, quality_performance="unmet", delivery_target_finish_date=target) for pk, target in (
             (4, None), (3, TODAY), (2, TODAY - timedelta(days=1)), (1, TODAY),
         )]
         projects = build_sqr_performance_snapshot(rows, today=TODAY, fetched_at=FETCHED_AT)["projects"]
-        self.assertEqual([p["pk"] for p in projects], [2, 1, 3, 4])
+        self.assertEqual([p["pk"] for p in projects], [1, 2, 3, 4])
 
     def test_multiple_reasons_do_not_duplicate_project(self):
-        row = self.row(overall_status="on_hold", delivery_health="off_track", delivery_progress=100, delivery_target_finish_date=TODAY - timedelta(days=1))
+        row = self.row(overall_status="on_hold", schedule_performance="delayed", budget_effort_performance="at_risk", delivery_progress=100)
         projects = build_sqr_performance_snapshot([row], today=TODAY, fetched_at=FETCHED_AT)["projects"]
         self.assertEqual(len(projects), 1)
         keys = [reason["key"] for reason in projects[0]["reasons"]]
-        self.assertEqual(keys, ["off_track", "overdue", "on_hold", "missing_data", "inconsistent_data"])
+        self.assertEqual(keys, ["schedule_performance", "budget_effort_performance", "on_hold", "inconsistent_data", "missing_data"])
         self.assertEqual(len(keys), len(set(keys)))
 
     def test_no_mutation_and_text_is_data_not_markup(self):

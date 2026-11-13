@@ -11,7 +11,7 @@ from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_
 from django.urls import reverse
 
 from accounts.models import User
-from hub.models import SqrSubmission, SqrSubmissionHistory
+from hub.models import SqrProjectPerformance, SqrSubmission, SqrSubmissionHistory
 from hub.test_sqr_prototype import make
 
 
@@ -314,3 +314,43 @@ class SqrDeliveryProgressEditTests(TestCase):
         self.assertEqual(self.row.managed_support_start_date, date(2027, 1, 1))
         self.assertIsNone(self.row.managed_support_end_date)
         self.assertFalse(self.row.history_entries.exists())
+
+    def test_current_export_ignores_legacy_ok_defaults(self):
+        import io
+        from openpyxl import load_workbook
+
+        for field, value in (("schedule_performance", "on_track"),
+                             ("budget_effort_performance", "over_budget"), ("quality_performance", "")):
+            self.assertEqual(self.post_field(field, value, self.admin).status_code, 200)
+        SqrProjectPerformance.objects.create(submission=self.row)
+        snapshot = self.client.get(reverse("hub:sqr-performance-data"))
+        self.assertEqual(snapshot.status_code, 200)
+        project = next(row for row in snapshot.json()["projects"] if row["pk"] == self.row.pk)
+        self.assertEqual([project["indicators"][key]["value"] for key in ("schedule", "budget_effort", "quality")],
+                         ["on_track", "over_budget", ""])
+        self.assertEqual(project["overall_rating"], "danger")
+        response = self.client.get(reverse("hub:sqr-export"), {"report": "performance"})
+        self.assertEqual(response.status_code, 200)
+        sheet = load_workbook(io.BytesIO(response.content), data_only=True).active
+        headers = [cell.value for cell in sheet[1]]
+        rows = [dict(zip(headers, values)) for values in sheet.iter_rows(min_row=2, values_only=True)]
+        result = next(row for row in rows if row["SQR ID"] == self.row.reference_code)
+        self.assertEqual(result["Schedule Performance"], "On Track")
+        self.assertEqual(result["Budget/Effort Performance"], "Over Budget")
+        self.assertEqual(result["Quality Performance"], "N/R")
+        self.assertEqual(result["Overall Performance"], "Red")
+
+    def test_sales_report_watchlist_uses_recorded_rating_once(self):
+        SqrSubmission.objects.filter(pk=self.row.pk).update(
+            schedule_performance="on_track", budget_effort_performance="over_budget", quality_performance="at_risk")
+        SqrSubmission.objects.filter(pk=self.sibling.pk).update(
+            schedule_performance="on_track", budget_effort_performance="within_budget", quality_performance="met",
+            delivery_health="off_track")
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("hub:sqr"), {"tab": "reports"})
+        self.assertEqual(response.status_code, 200)
+        summary = response.context["sqr_reports_summary"]
+        self.assertEqual(summary["off_track_count"], 1)
+        self.assertEqual(summary["at_risk_count"], 0)
+        self.assertEqual(summary["on_track_count"], 1)
+        self.assertEqual(response.context["sqr_reports_delivery_chart"], {"labels": ["On Track"], "totals": [2]})

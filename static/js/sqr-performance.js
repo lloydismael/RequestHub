@@ -28,10 +28,11 @@
     var requestState = '';
     var dateFormat = new Intl.DateTimeFormat(undefined, {year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'});
     var portfolioLabels = {closed: 'Closed', ongoing: 'Ongoing', pipeline: 'Pipeline', removed: 'Removed'};
-    var ratingLabels = {good: 'On target / no issue', warning: 'Action needed', danger: 'Delay >2 wks / Off Track', unknown: 'Not rated'};
+    var ratingLabels = {good: 'Green', warning: 'Amber', danger: 'Red', unknown: 'N/R'};
     var indicatorLabels = [
-        ['schedule', 'Schedule'], ['scope', 'Scope'], ['resources', 'Resources'],
-        ['customer', 'Customer / dependencies'], ['risks', 'Risks / issues']
+        ['schedule', 'Schedule Performance', {good: 'On Track', warning: 'At Risk', danger: 'Delayed', unknown: 'N/R'}],
+        ['budget_effort', 'Budget/Effort Performance', {good: 'Within Budget', warning: 'At Risk', danger: 'Over Budget', unknown: 'N/R'}],
+        ['quality', 'Quality Performance', {good: 'Met', warning: 'At Risk', danger: 'Unmet', unknown: 'N/R'}]
     ];
     function visible() { return !root.hidden; }
     function formatDate(value) {
@@ -65,7 +66,7 @@
         var identity = node('div');
         identity.append(node('h5', '', project.project_name));
         var detail = project.pm_name + ' · ' + (
-            performance ? project.indicators.schedule.label + ' · ' + project.health_label
+            performance ? indicatorLabels.map(function (entry) { return entry[1] + ': ' + project.indicators[entry[0]].label; }).join(' · ')
             : project.reasons.map(function (reason) { return reason.label; }).join(' · ')
         );
         identity.append(node('p', 'sqr-pm-row-meta', detail));
@@ -87,6 +88,7 @@
         });
         Object.keys(statusCounts).forEach(function (key) { counts[key] = statusCounts[key]; });
         Object.keys(ratingCounts).forEach(function (key) { counts['rating_' + key] = ratingCounts[key]; });
+        counts.missing_assessment = filtered.filter(function (project) { return project.missing_assessment; }).length;
         counts.closed_percent = filtered.length ? Math.round(statusCounts.closed / filtered.length * 100) + '%' : 'N/A';
         el('as-of').textContent = 'AS OF ' + formatDate(snapshot.as_of).toUpperCase();
         el('closed-coverage').textContent = statusCounts.closed + ' of ' + filtered.length + ' projects closed';
@@ -121,7 +123,7 @@
             var description = [];
             Object.keys(totals).forEach(function (state) {
                 var count = totals[state];
-                description.push((state === 'unknown' ? 'Not recorded' : ratingLabels[state]) + ': ' + count);
+                description.push(indicator[2][state] + ': ' + count);
                 if (!count) return;
                 var segment = node('span', 'sqr-pm-rating--' + state, count);
                 segment.style.width = count / filtered.length * 100 + '%';
@@ -139,14 +141,17 @@
         function titleCell(project) {
             var cell = node('th');
             cell.setAttribute('scope', 'row');
-            cell.append(node('span', 'sqr-pm-table-project', project.project_name), node('small', 'sqr-pm-row-meta', project.reference_code));
+            cell.append(node('span', 'sqr-pm-table-project', project.project_name), node('small', 'sqr-pm-row-meta',
+                (project.customer_name ? project.customer_name + ' · ' : '') + project.reference_code));
             return cell;
         }
         replaceList('status-rows', projects, function (project) {
             var row = node('tr');
             row.append(node('td', '', filtered.indexOf(project) + 1), titleCell(project), node('td', '', project.pm_name + (project.pm_fallback ? ' (reviewer)' : '')));
-            row.append(node('td', 'sqr-pm-table-status sqr-pm-state--' + project.portfolio_status, portfolioLabels[project.portfolio_status]));
-            row.append(node('td', '', formatDate(project.start_date) + ' – ' + formatDate(project.target_date)));
+            var status = node('td', 'sqr-pm-table-status');
+            status.append(node('span', '', project.status_label), node('small', 'sqr-pm-row-meta', 'Portfolio: ' + portfolioLabels[project.portfolio_status]));
+            row.append(status);
+            row.append(node('td', '', formatDate(project.start_date) + ' – ' + formatDate(project.actual_finish_date)));
             var progress = node('td');
             progress.append(progressBlock(project));
             row.append(progress, node('td', 'sqr-pm-table-notes', project.updates_risks || '—'));
@@ -159,7 +164,7 @@
                 var value = project.indicators[indicator[0]];
                 row.append(node('td', 'sqr-pm-indicator-cell sqr-pm-rating--' + value.state, value.label));
             });
-            row.append(node('td', '', project.health_label));
+            row.append(node('td', 'sqr-pm-indicator-cell sqr-pm-rating--' + project.overall_rating, ratingLabels[project.overall_rating]));
             return row;
         }, '');
     }
@@ -175,6 +180,8 @@
     function matchesReason(project, key) {
         if (!key) return true;
         if (key === 'attention') return project.needs_attention;
+        if (key === 'missing_assessment') return project.missing_assessment;
+        if (key === 'performance_risk') return indicatorLabels.some(function (entry) { return ['warning', 'danger'].includes(project.indicators[entry[0]].state); });
         var reasonKey = key === 'inconsistency' ? 'inconsistent_data' : key;
         return project.reasons.some(function (reason) { return reason.key === reasonKey; });
     }
@@ -185,9 +192,9 @@
         var counts = {total: 0, attention: 0};
         filtered = snapshot.projects.filter(function (project) {
             var matches = (controls.scope.value !== 'active' || project.active_delivery)
-                && (!controls.mine.checked || project.pm_id === root.dataset.currentUserId)
+                && (!controls.mine.checked || project.approver_id === root.dataset.currentUserId)
                 && (!controls.manager.value || project.pm_id === controls.manager.value)
-                && (!controls.health.value || project.health_key === controls.health.value)
+                && (!controls.health.value || (controls.health.value === 'not_recorded' ? !project.indicators.schedule.value : project.indicators.schedule.value === controls.health.value))
                 && (!controls.status.value || project.status_key === controls.status.value)
                 && (!controls.portfolio.value || project.portfolio_status === controls.portfolio.value)
                 && (!controls.rating.value || project.overall_rating === controls.rating.value)

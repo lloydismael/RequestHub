@@ -592,3 +592,55 @@ assert.equal(end.dataset.sqrApplicable, 'false');
         result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
                                 capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_new_assessment_invalidates_loaded_ppt_snapshot(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        handler = "function applyInlineUpdateResponse(" + template.split(
+            "    function applyInlineUpdateResponse(", 1
+        )[1].split("    var undoToastTimer", 1)[0]
+        controller = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-performance.js").read_text(encoding="utf-8")
+        script = r"""
+const assert = require('node:assert/strict'), vm = require('node:vm');
+class Element {
+    constructor(tag='div') { this.tagName=tag.toUpperCase(); this.children=[]; this.dataset={}; this.style={}; this.value=''; this.checked=false; this.hidden=false; this.listeners={}; this.classList={add(){},remove(){},toggle(){}}; }
+    set textContent(value) { this.text=String(value); this.children=[]; }
+    get textContent() { return (this.text||'')+this.children.map(n=>n.textContent).join(''); }
+    append(...items) { for(const n of items) { if(n.tagName==='FRAGMENT') this.children.push(...n.children); else this.children.push(typeof n==='string'?Object.assign(new Element(),{textContent:n}):n); } }
+    appendChild(n) { this.append(n); }
+    replaceChildren(...items) { this.text=''; this.children=[]; this.append(...items); }
+    add(n) { this.append(n); }
+    setAttribute() {} removeAttribute() {} querySelector() { return null; }
+    querySelectorAll() { return []; } closest() { return null; }
+    addEventListener(type,fn) { (this.listeners[type] ||= []).push(fn); }
+}
+const nodes=new Map(); const root=new Element(); root.dataset={endpoint:'/snapshot',currentUserId:'2',defaultMine:'0'};
+function lookup(id) { if(id==='sqr-performance-dashboard') return root; if(!nodes.has(id)) nodes.set(id,new Element()); return nodes.get(id); }
+lookup('sqr-pm-scope').value='all';
+const listeners={}; const document={hidden:false,getElementById:lookup,createElement:tag=>new Element(tag),createDocumentFragment:()=>new Element('fragment'),
+    addEventListener(type,fn){(listeners[type] ||= []).push(fn);},dispatchEvent(event){for(const fn of listeners[event.type]||[]) fn(event);}};
+const frames=[]; let quality='';
+function project() { return {pk:1,reference_code:'SQR-1',project_name:'Fictional project',customer_name:'Fictional account',pm_id:'2',pm_name:'PM',pm_fallback:false,approver_id:'2',sse_name:'SSE',
+    status_key:'in_progress',status_label:'In Progress',health_key:'not_set',health_label:'Not set',progress:50,start_date:'2026-11-01',actual_finish_date:null,completion_signed_date:null,target_date:null,
+    updates_risks:'',active_delivery:true,delivery_candidate:true,needs_attention:quality!=='met',overdue:false,due_soon:false,days_to_target:null,missing_data:quality?[]:['Quality Performance'],
+    inconsistencies:[],reasons:[],priority:5,portfolio_status:'ongoing',overall_rating:quality==='met'?'good':quality?'warning':'unknown',missing_assessment:!quality,search_text:'fictional project',
+    indicators:{schedule:{value:'on_track',label:'On Track',state:'good'},budget_effort:{value:'within_budget',label:'Within Budget',state:'good'},quality:{value:quality,label:quality==='met'?'Met':quality?'At Risk':'N/R',state:quality==='met'?'good':quality?'warning':'unknown'}}}; }
+const context={document,window:{},Intl,Map,Option:function(label,value){const n=new Element('option');n.textContent=label;n.value=value;return n;},AbortController,
+    CustomEvent:function(type,init){this.type=type;this.detail=init?.detail;},setTimeout(){return 1;},clearTimeout(){},requestAnimationFrame(fn){frames.push(fn);return frames.length;},cancelAnimationFrame(){},
+    fetch:async()=>({ok:true,redirected:false,json:async()=>({ok:true,as_of:'2026-11-13',fetched_at:'2026-11-13T00:00:00Z',projects:[project()]})}),
+    renderStructuredDisplay:(node,field,value)=>{node.textContent=value;},getDisplay:(field,value)=>value};
+vm.createContext(context);
+vm.runInContext(CONTROLLER,context); vm.runInContext(HANDLER,context);
+async function settle(){await new Promise(resolve=>setImmediate(resolve));while(frames.length) frames.shift()();await new Promise(resolve=>setImmediate(resolve));}
+(async()=>{
+    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('N/R'));
+    quality='met'; context.applyInlineUpdateResponse('1','quality_performance','met',new Element(),new Element(),{field_value:'met'});
+    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('Met'));
+    root.hidden=true; quality='at_risk'; context.applyInlineUpdateResponse('1','quality_performance','at_risk',new Element(),new Element(),{field_value:'at_risk'});
+    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('Met'));
+    root.hidden=false; document.dispatchEvent(new context.CustomEvent('sqr:performance-view',{detail:{view:'performance'}}));
+    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('At Risk'));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""".replace("CONTROLLER", json.dumps(controller)).replace("HANDLER", json.dumps(handler))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
+                                capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

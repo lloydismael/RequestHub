@@ -112,7 +112,7 @@ from .mixins import (
     EngineerRequiredMixin,
 )
 from .services import request_lifecycle
-from .services.sqr_performance import build_sqr_performance_snapshot
+from .services.sqr_performance import build_sqr_performance_snapshot, normalize_sqr_project
 from .services import sqr_prototype
 from .services import outlook_threads
 from .services.outlook_drafts import (
@@ -2661,7 +2661,22 @@ def _get_sqr_export_columns():
     ]
 
 
+def _sqr_export_project_reader():
+    today = timezone.localdate()
+    projects = {}
+
+    def project(submission):
+        key = (submission.pk, id(submission))
+        if key not in projects:
+            projects[key] = normalize_sqr_project(submission, today=today)
+        return projects[key]
+
+    return project
+
+
 def _get_sqr_esg_export_columns():
+    project = _sqr_export_project_reader()
+
     def _name(u):
         return (u.get_full_name() or u.username) if u else ""
 
@@ -2680,27 +2695,22 @@ def _get_sqr_esg_export_columns():
         return _name(s.assigned_sse) or _name(s.engineer)
 
     def _pm(s):
-        return _name(s.assigned_pm) or _name(s.pm_esg_reviewer)
+        return project(s)["pm_name"] + (" (reviewer)" if project(s)["pm_fallback"] else "")
 
     def _project_flag(s):
         return "Yes" if s.assigned_pm or s.pm_esg_reviewer or s.delivery_start_date else "No"
 
     def _status(s):
-        if s.overall_status == "on_hold":
-            return "ON HOLD"
-        if s.overall_status == "completed" or s.delivery_health == "completed":
-            return "COMPLETED"
-        if s.delivery_start_date or s.overall_status == "in_progress" or s.proposal_status == "closed_won":
-            return "ONGOING"
-        if s.status == "for_revision":
-            return "FOR REVISION"
-        return "NOT STARTED"
+        row = project(s)
+        labels = {"ongoing": "Ongoing", "closed": "Closed", "pipeline": "Pipeline", "removed": "Removed"}
+        return f"{row['status_label']} / {labels[row['portfolio_status']]}"
 
     def _start_finish_dates(s):
-        if not (s.delivery_start_date or s.delivery_target_finish_date or s.delivery_actual_finish_date):
+        row = project(s)
+        if not (row["start_date"] or row["actual_finish_date"]):
             return ""
-        start = _date_short(s.delivery_start_date) or "TBD"
-        finish = _date_short(s.delivery_actual_finish_date) or _date_short(s.delivery_target_finish_date) or "TBD"
+        start = _date_short(date.fromisoformat(row["start_date"])) if row["start_date"] else "TBD"
+        finish = _date_short(date.fromisoformat(row["actual_finish_date"])) if row["actual_finish_date"] else "TBD"
         return f"{start}-{finish}"
 
     def _money(value):
@@ -2726,14 +2736,14 @@ def _get_sqr_esg_export_columns():
         ("SSE3", lambda s: ""),
         ("Project?", _project_flag),
         ("PM", _pm),
-        ("Status", _status),
+        ("Delivery / Portfolio Status", _status),
         ("Start and Finish Dates", _start_finish_dates),
         ("% Complete", lambda s: s.delivery_progress if s.delivery_progress is not None else ""),
         ("Key Updates", lambda s: s.key_updates_risks or ""),
         ("Active Risks/Issues", lambda s: s.key_updates_risks or ""),
-        ("Scope Status", lambda s: s.project_details or ""),
-        ("Schedule Status", lambda s: _date_short(s.delivery_target_finish_date)),
-        ("Budget Status", lambda s: ""),
+        ("Quality Performance", lambda s: project(s)["indicators"]["quality"]["label"]),
+        ("Schedule Performance", lambda s: project(s)["indicators"]["schedule"]["label"]),
+        ("Budget/Effort Performance", lambda s: project(s)["indicators"]["budget_effort"]["label"]),
         ("Folder", lambda s: s.sqr_folder_link or ""),
         ("Quoted SSE hrs", lambda s: float(s.sse_manhrs) if s.sse_manhrs is not None else ""),
         ("Billed SSE hrs", lambda s: ""),
@@ -2753,46 +2763,26 @@ def _get_sqr_esg_export_columns():
 
 
 def _get_sqr_performance_export_columns():
-    def _date(d):
-        return d.strftime("%Y-%m-%d") if d else ""
-
-    def _name(u):
-        return (u.get_full_name() or u.username) if u else ""
-
-    def _perf(s):
-        return getattr(s, "performance", None)
-
-    def _status(s):
-        p = _perf(s)
-        if not p:
-            return ""
-        return dict(SqrProjectPerformance.ProjectStatus.choices).get(p.status, p.status or "")
-
-    def _health(value):
-        return dict(SqrProjectPerformance.Health.choices).get(value, value or "")
-
-    def _overall(s):
-        p = _perf(s)
-        if not p:
-            return ""
-        return dict(SqrProjectPerformance.OverallHealth.choices).get(p.overall_health, p.overall_health)
-
+    project = _sqr_export_project_reader()
+    ratings = {"good": "Green", "warning": "Amber", "danger": "Red", "unknown": "N/R"}
+    portfolio = {"ongoing": "Ongoing", "pipeline": "Pipeline", "closed": "Closed", "removed": "Removed"}
     return [
-        ("SQR ID", lambda s: s.reference_code or ""),
-        ("Description", lambda s: s.project_title or ""),
-        ("Project Manager", lambda s: _name(_perf(s).project_manager) if _perf(s) and _perf(s).project_manager else (_name(s.assigned_pm) or _name(s.pm_esg_reviewer))),
-        ("Start Date", lambda s: _date(_perf(s).start_date) if _perf(s) else ""),
-        ("Finish Date", lambda s: _date(_perf(s).finish_date) if _perf(s) else ""),
-        ("Status", _status),
-        ("% Complete", lambda s: _perf(s).percent_complete if _perf(s) and _perf(s).percent_complete is not None else ""),
-        ("Next Action / Remarks", lambda s: _perf(s).next_action_remarks if _perf(s) else ""),
-        ("Folder link", lambda s: (_perf(s).folder_link or s.sqr_folder_link or "") if _perf(s) else (s.sqr_folder_link or "")),
-        ("Schedule Health", lambda s: _health(_perf(s).schedule_health) if _perf(s) else ""),
-        ("Scope Health", lambda s: _health(_perf(s).scope_health) if _perf(s) else ""),
-        ("Budget Health", lambda s: _health(_perf(s).budget_health) if _perf(s) else ""),
-        ("Recovery Action / Remarks", lambda s: _perf(s).recovery_action_remarks if _perf(s) else ""),
-        ("Overall Health", _overall),
-        ("Last Updated Date", lambda s: _perf(s).updated_at.strftime("%Y-%m-%d %H:%M") if _perf(s) and _perf(s).updated_at else ""),
+        ("SQR ID", lambda s: project(s)["reference_code"]),
+        ("Account Name", lambda s: project(s)["customer_name"]),
+        ("Description", lambda s: project(s)["project_name"]),
+        ("Project Manager", lambda s: project(s)["pm_name"] + (" (reviewer)" if project(s)["pm_fallback"] else "")),
+        ("Start Date", lambda s: project(s)["start_date"] or ""),
+        ("Finish Date (Actual)", lambda s: project(s)["actual_finish_date"] or ""),
+        ("Delivery Status", lambda s: project(s)["status_label"]),
+        ("Portfolio Status", lambda s: portfolio[project(s)["portfolio_status"]]),
+        ("% Complete", lambda s: project(s)["progress"] if project(s)["progress"] is not None else ""),
+        ("Next Action / Remarks", lambda s: project(s)["updates_risks"]),
+        ("Folder link", lambda s: s.sqr_folder_link or ""),
+        ("Schedule Performance", lambda s: project(s)["indicators"]["schedule"]["label"]),
+        ("Budget/Effort Performance", lambda s: project(s)["indicators"]["budget_effort"]["label"]),
+        ("Quality Performance", lambda s: project(s)["indicators"]["quality"]["label"]),
+        ("Overall Performance", lambda s: ratings[project(s)["overall_rating"]]),
+        ("SQR Last Updated", lambda s: s.updated_at.strftime("%Y-%m-%d %H:%M") if s.updated_at else ""),
     ]
 
 
@@ -3032,9 +3022,9 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             if is_pm else []
         )
         delivery_health_counts = {}
-        for choice_val, choice_label in SqrSubmission.DeliveryHealth.choices:
+        for choice_val, choice_label in SqrSubmission.SchedulePerformance.choices:
             delivery_health_counts[choice_val] = sum(
-                1 for s in delivery_submissions if s.delivery_health == choice_val
+                1 for s in delivery_submissions if s.schedule_performance == choice_val
             )
 
         # ── Revenue & Report Stage ──────────────────────────────────────────
@@ -3101,17 +3091,16 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             for_billing_submissions = [
                 submission for submission in approved_submissions if not submission.revenue_date
             ]
+            today = timezone.localdate()
+            delivery_projects = {submission.pk: normalize_sqr_project(submission, today=today) for submission in delivery_submissions}
             at_risk_submissions = [
-                submission for submission in delivery_submissions
-                if submission.delivery_health == SqrSubmission.DeliveryHealth.AT_RISK
+                submission for submission in delivery_submissions if delivery_projects[submission.pk]["overall_rating"] == "warning"
             ]
             off_track_submissions = [
-                submission for submission in delivery_submissions
-                if submission.delivery_health == SqrSubmission.DeliveryHealth.OFF_TRACK
+                submission for submission in delivery_submissions if delivery_projects[submission.pk]["overall_rating"] == "danger"
             ]
             on_track_submissions = [
-                submission for submission in delivery_submissions
-                if submission.delivery_health == SqrSubmission.DeliveryHealth.ON_TRACK
+                submission for submission in delivery_submissions if delivery_projects[submission.pk]["overall_rating"] == "good"
             ]
             pending_approval_count = proposal_counts["processing"] + proposal_counts["for_revision"]
 
@@ -3139,8 +3128,8 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             }
 
             sqr_reports_delivery_chart = {
-                "labels": [label for value, label in SqrSubmission.DeliveryHealth.choices if delivery_health_counts.get(value)],
-                "totals": [delivery_health_counts.get(value, 0) for value, _ in SqrSubmission.DeliveryHealth.choices if delivery_health_counts.get(value)],
+                "labels": [label for value, label in SqrSubmission.SchedulePerformance.choices if delivery_health_counts.get(value)],
+                "totals": [delivery_health_counts.get(value, 0) for value, _ in SqrSubmission.SchedulePerformance.choices if delivery_health_counts.get(value)],
             }
 
             group_counter = Counter(
@@ -3235,7 +3224,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                     "customer_name": submission.customer_name,
                     "group_name": submission.customer_company or "—",
                     "discounted_price": submission_discounted_value(submission),
-                    "status": submission.get_delivery_health_display() if submission.delivery_health else "Awaiting delivery setup",
+                    "status": delivery_projects[submission.pk]["status_label"] + " / " + {"good": "Green", "warning": "Amber", "danger": "Red", "unknown": "N/R"}[delivery_projects[submission.pk]["overall_rating"]],
                 }
                 for submission in top_won
             ]
@@ -3273,16 +3262,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                 "total_submissions": proposal_counts["total"],
                 "approval_rate": approval_rate,
                 "win_rate": win_rate,
-                "active_delivery": len(
-                    [
-                        submission for submission in delivery_submissions
-                        if submission.delivery_health in {
-                            SqrSubmission.DeliveryHealth.ON_TRACK,
-                            SqrSubmission.DeliveryHealth.OFF_TRACK,
-                            SqrSubmission.DeliveryHealth.AT_RISK,
-                        }
-                    ]
-                ),
+                "active_delivery": sum(1 for project in delivery_projects.values() if project["active_delivery"]),
                 "won_discounted_total": won_discounted_total,
                 "won_discounted_total_label": compact_currency(won_discounted_total),
                 "lost_total_price": lost_total_price,
@@ -6077,7 +6057,6 @@ class SqrExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
         qs = SqrSubmission.objects.select_related(
             "engineer", "pm_esg_reviewer", "reviewed_by",
             "assigned_pm", "assigned_sse", "linked_request",
-            "performance", "performance__project_manager",
         ).order_by("-created_at", "-pk")
 
         report_type = request.GET.get("report", "sqr")

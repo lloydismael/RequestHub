@@ -2514,14 +2514,14 @@ class SqrExportTests(TestCase):
         "SSE3",
         "Project?",
         "PM",
-        "Status",
+        "Delivery / Portfolio Status",
         "Start and Finish Dates",
         "% Complete",
         "Key Updates",
         "Active Risks/Issues",
-        "Scope Status",
-        "Schedule Status",
-        "Budget Status",
+        "Quality Performance",
+        "Schedule Performance",
+        "Budget/Effort Performance",
         "Folder",
         "Quoted SSE hrs",
         "Billed SSE hrs",
@@ -2623,8 +2623,8 @@ class SqrExportTests(TestCase):
         self.client.force_login(self.pm)
 
     def test_all_workbook_reports_store_untrusted_text_as_literal_cells(self):
-        submission = self._create_submission()
-        SqrProjectPerformance.objects.create(submission=submission, percent_complete=25)
+        submission = self._create_submission(delivery_progress=25)
+        SqrProjectPerformance.objects.create(submission=submission, percent_complete=99)
         for report in ("sqr", "esg", "performance"):
             for payload in ("=1+1", "#DIV/0!", "\t=1+1"):
                 with self.subTest(report=report, payload=payload):
@@ -2658,6 +2658,7 @@ class SqrExportTests(TestCase):
             delivery_target_finish_date=date(2026, 7, 31),
             delivery_progress=75,
             overall_status=SqrSubmission.OverallStatus.IN_PROGRESS,
+            schedule_performance="on_track", budget_effort_performance="at_risk", quality_performance="met",
             key_updates_risks="Migration is on track.",
             sse_manhrs=Decimal("12"),
             pm_manhrs=Decimal("8"),
@@ -2690,14 +2691,14 @@ class SqrExportTests(TestCase):
             None,
             "Yes",
             "Assigned PM",
-            "ONGOING",
-            "7/1/26-7/31/26",
+            "In Progress / Ongoing",
+            "7/1/26-TBD",
             75,
             "Migration is on track.",
             "Migration is on track.",
-            "Deployment Only",
-            "7/31/26",
-            None,
+            "Met",
+            "On Track",
+            "At Risk",
             "https://example.com/folder",
             12,
             None,
