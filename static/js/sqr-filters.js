@@ -182,5 +182,15 @@
             setOptions: function (value) { options = value; render(); }, setCount: function (value) { count = value; live.textContent = value + ' matching SQRs'; },
             destroy: function () { if (searchTimer) clearTimeout(searchTimer); document.removeEventListener('click', outside); root.replaceChildren(); }};
     }
+    window.focusSqrTrackerProject = function (pk) {
+        var value = String(pk).trim();
+        if (!/^\d+$/.test(value)) return false;
+        value = value.replace(/^0+/, '');
+        if (!value || value.length > 19 || (value.length === 19 && value > '9223372036854775807')) return false;
+        var query = new URLSearchParams(window.location.search);
+        query.set('view', 'prototype'); query.set('focus', value); query.delete('page');
+        window.location.assign(window.location.pathname + '?' + query.toString());
+        return true;
+    };
     window.RequestHubSqrFilters = {read: read, toQuery: toQuery, fromPage: fromPage, write: write, mount: mount};
 })();

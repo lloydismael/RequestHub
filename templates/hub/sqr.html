@@ -9,6 +9,7 @@
 <script src="{% static 'js/sqr-filters.js' %}?v=1" defer></script>
 {% if active_sqr_tab != 'reports' %}
 <script src="{% static 'js/sqr-classic-filters.js' %}?v=1" defer></script>
+<script src="{% static 'js/sqr-tracker-settings.js' %}?v=1" defer></script>
 <link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=4">
 <script src="{% static 'js/sqr-tracker-prototype.js' %}?v=7" defer></script>
 {% endif %}
@@ -31,7 +32,7 @@
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     {% if is_pm %}
                         <div class="d-flex align-items-center gap-2">
-                            <a href="{% url 'hub:sqr' %}?view=tracker" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and request.GET.view != 'performance' %} aria-current="page"{% endif %}>
+                            <a href="{% url 'hub:sqr' %}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and request.GET.view != 'performance' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-table me-1" aria-hidden="true"></i>To SQR Tracker
                             </a>
                             <a href="{% url 'hub:sqr' %}?tab=reports" class="btn btn-sm sqr-toggle-btn lg-btn btn-outline-primary lg-btn--ghost"{% if active_sqr_tab == 'reports' %} aria-current="page"{% endif %}>
@@ -49,6 +50,13 @@
                         <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only data-sqr-legacy-filter>
                             <i class="bi bi-funnel-fill me-1"></i>Filter
                         </button>
+                        {% endif %}
+                        {% if is_admin and request.user.is_active %}
+                        <label class="d-flex align-items-center gap-2" for="sqr-show-classic">
+                            <input type="checkbox" id="sqr-show-classic" data-endpoint="{% url 'hub:sqr-tracker-visibility' %}" data-csrf="{{ csrf_token }}"{% if sqr_classic_visible != False %} checked{% endif %}>
+                            Show SQR Tracker (Classic)
+                        </label>
+                        <span id="sqr-visibility-status" role="status" aria-live="polite"></span>
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-outline-success lg-btn lg-btn--ghost" id="sqr-export-choice-btn">
                             <i class="bi bi-file-earmark-excel me-1"></i>Export Tracker / Reports
@@ -69,12 +77,14 @@
             {% if active_sqr_tab != 'reports' %}
             <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
                 <div class="sqr-view-toggle" role="group" aria-label="SQR table view selector">
-                    <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="tracker" aria-pressed="true">
-                        <i class="bi bi-table me-1"></i>SQR Tracker
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="prototype" aria-pressed="false">
+                    <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="prototype" aria-pressed="{% if sqr_active_view == 'prototype' or not sqr_active_view %}true{% else %}false{% endif %}">
                         <i class="bi bi-stars me-1"></i>SQR Tracker
                     </button>
+                    {% if sqr_classic_visible != False %}
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="tracker" aria-pressed="{% if sqr_active_view == 'tracker' %}true{% else %}false{% endif %}">
+                        <i class="bi bi-table me-1"></i>SQR Tracker (Classic)
+                    </button>
+                    {% endif %}
                 </div>
             </div>
             <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only data-sqr-legacy-filter>
@@ -567,7 +577,8 @@
         {# ── Main Tracker Table ────────────────────────────────────────────── #}
         {% comment %}No lg-enter here: animating/compositing a card that wraps
            the whole 43-column table stalls first paint.{% endcomment %}
-        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker">
+        {% if sqr_classic_visible != False %}
+        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker"{% if sqr_active_view != 'tracker' %} hidden{% endif %}>
             {% include "hub/partials/sqr_filters.html" with root_id="sqr-classic-filters" filter_label="Classic SQR filters" %}
             <div id="sqr-pm-tracker-focus" class="sqr-pm-focus-notice" hidden>
                 <span id="sqr-pm-tracker-focus-label" role="status"></span>
@@ -1003,6 +1014,7 @@
             </div>
             {% include 'hub/partials/pagination.html' with pagination_id='sqr-pagination' %}
         </div>
+        {% endif %}
         {% if is_pm %}
         {% include "hub/partials/sqr_performance.html" %}
         {% endif %}
@@ -3447,7 +3459,7 @@
         });
         trackerLinks.forEach(function (link) {
             var params = new URLSearchParams(window.location.search);
-            params.set('view', 'tracker');
+            params.set('view', 'prototype');
             link.setAttribute('href', window.location.pathname + '?' + params.toString() + window.location.hash);
         });
     }
@@ -3462,8 +3474,8 @@
         buttons.forEach(function (button) {
             if (button.disabled) available[button.dataset.sqrViewButton] = false;
         });
-        var activeView = available[viewName] ? viewName : 'tracker';
-        if (!available[activeView]) activeView = 'tracker';
+        var activeView = available[viewName] ? viewName : 'prototype';
+        if (!available[activeView]) activeView = 'prototype';
         if (header) header.hidden = activeView === 'performance';
         buttons.forEach(function (button) {
             var isActive = button.dataset.sqrViewButton === activeView;
@@ -3480,13 +3492,13 @@
         });
         prototypeControls.forEach(function (element) { element.hidden = activeView !== 'prototype'; });
         navLinks.forEach(function (link) {
-            var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'tracker');
+            var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'prototype');
             link.classList.toggle('active', isCurrent);
             if (isCurrent) link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         });
         trackerLinks.forEach(function (link) {
-            if (activeView === 'tracker') link.setAttribute('aria-current', 'page');
+            if (activeView !== 'performance') link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         });
         document.title = (activeView === 'performance' ? 'PPT' : 'SQR') + ' · Request Hub';
@@ -3510,11 +3522,11 @@
         });
     });
 
-    var savedView = 'tracker';
-    try { savedView = window.localStorage.getItem(storageKey) || 'tracker'; } catch (error) {}
-    if (savedView === 'performance') savedView = 'tracker';
+    var savedView = 'prototype';
+    try { savedView = window.localStorage.getItem(storageKey) || 'prototype'; } catch (error) {}
+    if (savedView === 'performance') savedView = 'prototype';
     var initialParams = new URLSearchParams(window.location.search);
-    var requestedView = initialParams.has('focus') ? 'tracker' : initialParams.get('view');
+    var requestedView = initialParams.has('focus') ? 'prototype' : initialParams.get('view');
     setView(requestedView || savedView);
 })();
 </script>

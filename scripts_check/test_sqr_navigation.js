@@ -23,11 +23,11 @@ function element(dataset = {}, hidden = false) {
     };
 }
 
-function load({query = '', saved = 'tracker', performance = true, blocked = false} = {}) {
-    const buttons = ['tracker', 'prototype'].map(name => element({sqrViewButton: name}));
-    const names = performance ? ['tracker', 'performance', 'prototype'] : ['tracker', 'prototype'];
+function load({query = '', saved = 'prototype', performance = true, blocked = false, classic = true} = {}) {
+    const buttons = (classic ? ['tracker', 'prototype'] : ['prototype']).map(name => element({sqrViewButton: name}));
+    const names = ['prototype'].concat(classic ? ['tracker'] : []).concat(performance ? ['performance'] : []);
     const panels = names.map(name => element({sqrViewPanel: name}));
-    const nav = ['performance', 'tracker'].map(name => element({sqrNavView: name}));
+    const nav = ['performance', 'prototype'].map(name => element({sqrNavView: name}));
     const header = element();
     const trackerLink = element();
     const trackerControls = [element(), element({}, true)];
@@ -65,7 +65,7 @@ function load({query = '', saved = 'tracker', performance = true, blocked = fals
     return {
         document, window, buttons, panels, nav, header, trackerLink, trackerControls, prototypeControls, events,
         panel(name) { return panels.find(panel => panel.dataset.sqrViewPanel === name); },
-        navItem(name) { return nav.find(link => link.dataset.sqrNavView === name); },
+        navItem(name) { return nav.find(link => link.dataset.sqrNavView === (name === 'tracker' ? 'prototype' : name)); },
         stored() { return saved; },
     };
 }
@@ -144,16 +144,16 @@ test('switching from PPT to the tracker restores the SQR header', () => {
 
 test('unavailable performance and focused tracker links safely select the tracker', () => {
     const restricted = load({query: '?view=performance', performance: false});
-    assert.equal(restricted.panel('tracker').hidden, false);
+    assert.equal(restricted.panel('prototype').hidden, false);
     assert.equal(restricted.header.hidden, false);
-    assert.equal(restricted.window.location.searchParams.get('view'), 'tracker');
+    assert.equal(restricted.window.location.searchParams.get('view'), 'prototype');
     assertCurrent(restricted, 'tracker');
 
     const focused = load({query: '?view=performance&focus=42'});
-    assert.equal(focused.panel('tracker').hidden, false);
+    assert.equal(focused.panel('prototype').hidden, false);
     assert.equal(focused.header.hidden, false);
     assert.equal(focused.window.location.searchParams.get('focus'), '42');
-    assert.equal(focused.window.location.searchParams.get('view'), 'tracker');
+    assert.equal(focused.window.location.searchParams.get('view'), 'prototype');
 });
 
 test('explicit navigation works when browser storage is blocked', () => {
@@ -165,13 +165,22 @@ test('explicit navigation works when browser storage is blocked', () => {
 
 test('old performance preference cannot hijack a plain SQR link', () => {
     const tracker = load({saved: 'performance'});
-    assert.equal(tracker.panel('tracker').hidden, false);
+    assert.equal(tracker.panel('prototype').hidden, false);
     const prototype = load({saved: 'prototype'});
     assert.equal(prototype.panel('prototype').hidden, false);
 });
 
+test('hidden classic URLs and stale preferences choose the primary tracker', () => {
+    for (const options of [{query: '?view=tracker&focus=42&q=keep', saved: 'tracker'}, {query: '', saved: 'tracker'}, {query: '?view=retired', saved: 'retired'}]) {
+        const app = load({...options, classic: false});
+        assert.equal(app.panel('prototype').hidden, false);
+        assert.equal(app.window.location.searchParams.get('view'), 'prototype');
+        if (options.query.includes('focus')) assert.equal(app.window.location.searchParams.get('focus'), '42');
+    }
+});
+
 test('focusing a project on another page returns to the tracker with filters intact', () => {
-    const classic = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-classic-filters.js'), 'utf8');
+    const classic = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-filters.js'), 'utf8');
     const start = classic.indexOf('    window.focusSqrTrackerProject = function (pk) {');
     const end = classic.indexOf('\n    };', start) + '\n    };'.length;
     assert.ok(start >= 0 && end > start, 'focused project controller exists');
@@ -182,7 +191,7 @@ test('focusing a project on another page returns to the tracker with filters int
     vm.runInNewContext(classic.slice(start, end), {window, document, URLSearchParams});
     assert.equal(window.focusSqrTrackerProject('42'), true);
     const url = new URL(destination, 'https://fixture.invalid');
-    assert.equal(url.searchParams.get('view'), 'tracker');
+    assert.equal(url.searchParams.get('view'), 'prototype');
     assert.equal(url.searchParams.get('focus'), '42');
     assert.equal(url.searchParams.get('q'), 'example');
     assert.equal(url.searchParams.has('page'), false);

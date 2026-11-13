@@ -48,6 +48,7 @@
         pipeline: $('pipeline'), body: $('body'), items: $('items'), more: $('more'),
         editor: $('editor'), search: $('search'), catalog: $('catalog'), list: $('list'),
         tableWrap: $('table-wrap'), tableRows: $('table-rows'), layoutList: $('layout-list'), layoutTable: $('layout-table'),
+        focus: $('focus'), focusLabel: $('focus-label'), focusDismiss: $('focus-dismiss'),
         toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
         approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
     };
@@ -1092,6 +1093,13 @@
         state.loadedAt = Date.now();
         el.search.value = state.filters.search;
         renderAll();
+        var focusedPk = new URLSearchParams(window.location.search).get('focus');
+        if (el.focus) {
+            el.focus.hidden = !focusedPk;
+            if (focusedPk && el.focusLabel) el.focusLabel.textContent = record(focusedPk)
+                ? 'Temporary focused SQR; your filters are retained.' : 'Focused SQR is unavailable in your authorized scope.';
+            if (focusedPk && record(focusedPk) && String(state.selectedPk) !== focusedPk) select(record(focusedPk).pk);
+        }
         if (state.selectedPk && record(state.selectedPk)) {
             var focused = el.editor.contains(document.activeElement);
             if (!focused) renderEditor();
@@ -1135,6 +1143,13 @@
 
     /* ── wiring ──────────────────────────────────────────────────── */
     applyLayout();
+    if (el.focusDismiss) el.focusDismiss.addEventListener('click', function () {
+        var params = new URLSearchParams(window.location.search); params.delete('focus');
+        window.history.replaceState(null, '', window.location.pathname + '?' + params.toString() + window.location.hash);
+        if (el.focus) el.focus.hidden = true;
+        document.dispatchEvent(new CustomEvent('sqr:catalog-changed', {detail: {}}));
+        load(false);
+    });
     el.layoutList.addEventListener('click', function () { setLayout('list'); });
     el.layoutTable.addEventListener('click', function () { setLayout('table'); });
     var searchTimer = 0;

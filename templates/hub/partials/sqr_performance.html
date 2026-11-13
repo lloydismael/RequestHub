@@ -1,5 +1,5 @@
 {# Read-only lazy shell: all project data is fetched on first visible entry. #}
-<section id="sqr-performance-dashboard" class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance" hidden
+<section id="sqr-performance-dashboard" class="sqr-pm sqr-view-panel" data-sqr-view-panel="performance"{% if sqr_active_view != 'performance' %} hidden{% endif %}
          data-endpoint="{% url 'hub:sqr-performance-data' %}" data-current-user-id="{{ sqr_current_user_id|default:'' }}"
          data-default-mine="{% if default_my_assigned_filter %}1{% else %}0{% endif %}" aria-labelledby="sqr-pm-title">
     <header class="sqr-pm-hero">

@@ -85,6 +85,78 @@ class RecoveryCenterTests(TransactionTestCase):
         self.assertEqual(downloaded.status_code, 200)
         return snapshot, json.loads(downloaded.content)
 
+    def test_old_backup_transitions_once_but_current_explicit_blanks_stay_blank(self):
+        from datetime import date
+        from accounts import recovery
+        from hub.models import SqrSubmission, SqrTrackerSettings, SqrSubmissionHistory
+        row = SqrSubmission.objects.create(engineer=self.user, pm_esg_reviewer=self.user, customer_name='Fictional old backup', project_title='Recovery fixture',
+                                           project_details='Deployment Only', delivery_health='off_track', managed_support_amount=0,
+                                           delivery_completion_signed_date=date(2026, 11, 1), managed_support_end_date=date(2027, 2, 9))
+        _, payload = self.create_backup()
+        payload['models'] = [label for label in payload['models'] if label != 'hub.sqrtrackersettings']
+        payload['data'] = [record for record in payload['data'] if record['model'] != 'hub.sqrtrackersettings']
+        for record in payload['data']:
+            if record['model'] == 'hub.sqrsubmission':
+                for field in ('schedule_performance', 'budget_effort_performance', 'quality_performance', 'delivery_transition_metadata'):
+                    record['fields'].pop(field)
+        payload['checksum'] = recovery.checksum(payload)
+        SqrTrackerSettings.objects.update_or_create(pk=1, defaults={'show_classic_sqr_tracker': False})
+        preview, _ = recovery.create_preview(self.user, payload)
+        recovery.restore_preview(self.user, preview.token)
+        row.refresh_from_db()
+        self.assertEqual(row.schedule_performance, 'delayed')
+        self.assertEqual(row.managed_support_start_date, date(2026, 12, 1))
+        self.assertEqual(row.managed_support_end_date, date(2027, 2, 9))
+        self.assertIsNone(row.delivery_actual_finish_date)
+        self.assertEqual(row.delivery_transition_metadata['version'], 1)
+        self.assertIn('raw_end_differs_from_displayed', row.delivery_transition_metadata['warnings'])
+        self.assertFalse(SqrSubmissionHistory.objects.exists())
+        from hub.services.sqr_settings import classic_tracker_visible
+        self.assertTrue(classic_tracker_visible())
+        SqrSubmission.objects.filter(pk=row.pk).update(schedule_performance='', budget_effort_performance='', quality_performance='',
+                                                       managed_support_start_date=None, managed_support_end_date=None, delivery_transition_metadata={})
+        _, current = self.create_backup()
+        SqrSubmission.objects.filter(pk=row.pk).update(schedule_performance='on_track', managed_support_start_date=date(2026, 12, 1))
+        preview, _ = recovery.create_preview(self.user, current)
+        recovery.restore_preview(self.user, preview.token)
+        row.refresh_from_db()
+        self.assertEqual(row.schedule_performance, '')
+        self.assertEqual(row.delivery_transition_metadata, {})
+        self.assertIsNone(row.managed_support_start_date)
+        self.assertIsNone(row.managed_support_end_date)
+
+    def test_visibility_and_assessments_round_trip_without_relaxing_schema_guard(self):
+        from accounts import recovery
+        from hub.models import SqrSubmission, SqrTrackerSettings
+        from hub.services.sqr_settings import classic_tracker_visible
+        row = SqrSubmission.objects.create(engineer=self.user, pm_esg_reviewer=self.user, customer_name='Fictional red backup', project_title='Recorded recovery',
+                                           schedule_performance='delayed', budget_effort_performance='over_budget', quality_performance='unmet')
+        SqrTrackerSettings.objects.update_or_create(pk=1, defaults={'show_classic_sqr_tracker': False})
+        _, payload = self.create_backup()
+        SqrSubmission.objects.filter(pk=row.pk).update(schedule_performance='on_track')
+        SqrTrackerSettings.objects.filter(pk=1).update(show_classic_sqr_tracker=True)
+        preview, _ = recovery.create_preview(self.user, payload)
+        recovery.restore_preview(self.user, preview.token)
+        row.refresh_from_db()
+        self.assertFalse(classic_tracker_visible())
+        self.assertEqual((row.schedule_performance, row.budget_effort_performance, row.quality_performance), ('delayed', 'over_budget', 'unmet'))
+        import copy
+        partial = copy.deepcopy(payload)
+        partial['models'].remove('hub.notification')
+        partial['checksum'] = recovery.checksum(partial)
+        with self.assertRaisesMessage(recovery.RecoveryError, 'Backup coverage does not match'):
+            recovery.validate_payload(partial)
+        malformed = copy.deepcopy(payload)
+        next(record for record in malformed['data'] if record['model'] == 'hub.sqrtrackersettings')['pk'] = 2
+        malformed['checksum'] = recovery.checksum(malformed)
+        with self.assertRaises(recovery.RecoveryError):
+            recovery.validate_payload(malformed)
+        missing = copy.deepcopy(payload)
+        next(record for record in missing['data'] if record['model'] == 'hub.sqrsubmission')['fields'].pop('quality_performance')
+        missing['checksum'] = recovery.checksum(missing)
+        with self.assertRaisesMessage(recovery.RecoveryError, 'Missing required fields'):
+            recovery.validate_payload(missing)
+
     def test_create_and_download_snapshot_history(self):
         Account.objects.create(name="Saved customer")
         snapshot, payload = self.create_backup()

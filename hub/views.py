@@ -2967,6 +2967,11 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         context["sqr_filter_options"] = sqr_filter_options(authorized)
         context["sqr_default_assigned"] = "mine" if user.role == User.Roles.PM_ESG else "all"
         context["sqr_focus_requested"] = bool(self.request.GET.get("focus"))
+        from hub.services.sqr_settings import classic_tracker_visible
+        context['sqr_classic_visible'] = classic_tracker_visible()
+        requested_view = (self.request.GET.get('view') or 'prototype').strip().lower()
+        allowed_views = {'prototype'} | ({'tracker'} if context['sqr_classic_visible'] else set()) | ({'performance'} if is_pm else set())
+        context['sqr_active_view'] = 'prototype' if context['sqr_focus_requested'] or requested_view not in allowed_views else requested_view
         if active_tab != "reports" and not kwargs.get("force_reports"):
             from hub.services.sqr_queries import tracker_page
             context.update(tracker_page(authorized, self.request.GET, user, timezone.localdate()))
@@ -3601,6 +3606,28 @@ class SqrPerformanceDataView(LoginRequiredMixin, View):
         snapshot["default_assigned"] = "mine" if request.user.role == User.Roles.PM_ESG else "all"
         snapshot["focus_requested"] = bool(request.GET.get("focus"))
         return JsonResponse(snapshot)
+
+
+class SqrTrackerVisibilityView(View):
+    http_method_names = ['post']
+
+    def dispatch(self, request, *args, **kwargs):
+        user = request.user
+        if not user.is_authenticated or not user.is_active or user.role != User.Roles.ADMIN:
+            return JsonResponse({'ok': False, 'error': 'Active administrator access is required.'}, status=403)
+        return super().dispatch(request, *args, **kwargs)
+
+    def post(self, request):
+        from hub.models import SqrTrackerSettings
+        try:
+            payload = json.loads(request.body.decode('utf-8'))
+        except (ValueError, UnicodeError):
+            return JsonResponse({'ok': False, 'error': 'Invalid tracker visibility settings.'}, status=400)
+        if type(payload) is not dict or set(payload) != {'show_classic_sqr_tracker'} or type(payload['show_classic_sqr_tracker']) is not bool:
+            return JsonResponse({'ok': False, 'error': 'Invalid tracker visibility settings.'}, status=400)
+        with transaction.atomic():
+            SqrTrackerSettings.objects.update_or_create(pk=1, defaults=payload)
+        return JsonResponse({'ok': True, 'show_classic_sqr_tracker': payload['show_classic_sqr_tracker'], 'default_view': 'prototype'})
 
 
 class SqrPrototypeDataView(LoginRequiredMixin, View):

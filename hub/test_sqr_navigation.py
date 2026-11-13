@@ -66,7 +66,7 @@ class SqrNavigationTests(SimpleTestCase):
                     index = labels.index("Dashboard")
                     self.assertEqual(labels[index:index + 3], ["Dashboard", "PPT", "SQR"])
                     self.assertEqual(parser.links[index + 1][1]["href"], reverse("hub:sqr") + "?view=performance")
-                    self.assertEqual(parser.links[index + 2][1]["href"], reverse("hub:sqr") + "?view=tracker")
+                    self.assertEqual(parser.links[index + 2][1]["href"], reverse("hub:sqr") + "?view=prototype")
                 else:
                     self.assertNotIn("PPT", labels)
                     self.assertEqual("SQR" in labels, role in (User.Roles.ENGINEER, User.Roles.ON_HOLD))

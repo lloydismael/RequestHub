@@ -1,5 +1,5 @@
 {# Records are fetched only when SQR Tracker is opened; both layouts share one editor. #}
-<section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
+<section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype"{% if sqr_active_view and sqr_active_view != 'prototype' %} hidden{% endif %}
          data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}" data-default-assigned="{{ sqr_default_assigned|default:'all' }}"
          aria-label="SQR Tracker">
     <div class="sqr-proto__layout-toolbar">
@@ -10,6 +10,10 @@
         </div>
     </div>
     {% include "hub/partials/sqr_filters.html" with root_id="sqr-proto-filters" filter_label="SQR Tracker filters" %}
+    <div id="sqr-proto-focus" class="sqr-pm-focus-notice"{% if not sqr_focus_requested %} hidden{% endif %}>
+        <span id="sqr-proto-focus-label" role="status">Temporary focused SQR; your filters are retained.</span>
+        <button type="button" id="sqr-proto-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
+    </div>
     <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list" data-layout="list">
         <div id="sqr-proto-catalog" class="sqr-proto__catalog">
         <aside id="sqr-proto-list" class="sqr-proto__list" aria-label="SQR list">

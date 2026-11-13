@@ -1274,6 +1274,14 @@ class SqrSubmissionHistory(models.Model):
         return self.restored_at is not None
 
 
+class SqrTrackerSettings(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    show_classic_sqr_tracker = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=models.Q(pk=1), name='sqr_tracker_settings_singleton')]
+
+
 class Notification(models.Model):
     class EventType(models.TextChoices):
         SYSTEM = "system", "System"

@@ -514,6 +514,85 @@ class TrackerLayoutScriptTests(TestCase):
         self.assertEqual(self.run_controller('readonly', data=locked)['writes'], [])
 
 
+class SqrTrackerVisibilityTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username='visibility-admin', role=User.Roles.ADMIN)
+        cls.pm = User.objects.create_user(username='visibility-pm', role=User.Roles.PM_ESG)
+        cls.engineer = User.objects.create_user(username='visibility-engineer', role=User.Roles.ENGINEER)
+        cls.other = User.objects.create_user(username='visibility-other', role=User.Roles.ENGINEER)
+        cls.record = SqrSubmission.objects.create(engineer=cls.engineer, pm_esg_reviewer=cls.pm,
+                                                  customer_name='Fictional visibility account', project_title='Visibility fixture')
+
+    def test_only_active_admin_can_persist_classic_visibility(self):
+        from hub.models import SqrTrackerSettings
+        from hub.services.sqr_settings import classic_tracker_visible
+        url = reverse('hub:sqr-tracker-visibility')
+        SqrTrackerSettings.objects.all().delete()
+        self.assertTrue(classic_tracker_visible())
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(reverse('hub:sqr')).status_code, 200)
+        self.assertFalse(SqrTrackerSettings.objects.exists(), 'GET must not seed the singleton')
+        self.assertEqual(self.client.get(url).status_code, 405)
+        for value in (False, True, False):
+            response = self.client.post(url, {'show_classic_sqr_tracker': value}, content_type='application/json')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {'ok': True, 'show_classic_sqr_tracker': value, 'default_view': 'prototype'})
+            self.assertEqual(classic_tracker_visible(), value)
+        for payload in ({'show_classic_sqr_tracker': 'false'}, {'show_classic_sqr_tracker': None},
+                        {'show_classic_sqr_tracker': False, 'unknown': True}, {}, []):
+            self.assertEqual(self.client.post(url, payload, content_type='application/json').status_code, 400)
+            self.assertFalse(classic_tracker_visible())
+        for user in (self.pm, self.engineer):
+            self.client.force_login(user)
+            self.assertEqual(self.client.post(url, {'show_classic_sqr_tracker': True}, content_type='application/json').status_code, 403)
+        from django.test import RequestFactory, Client
+        from hub.views import SqrTrackerVisibilityView
+        self.admin.is_active = False
+        request = RequestFactory().post(url, {'show_classic_sqr_tracker': True}, content_type='application/json')
+        request.user = self.admin
+        self.assertEqual(SqrTrackerVisibilityView.as_view()(request).status_code, 403)
+        self.admin.is_active = True
+        csrf = Client(enforce_csrf_checks=True)
+        csrf.force_login(self.admin)
+        self.assertEqual(csrf.post(url, {'show_classic_sqr_tracker': True}, content_type='application/json').status_code, 403)
+        self.assertFalse(classic_tracker_visible())
+
+    def test_hidden_classic_url_and_stale_preference_fall_back_with_safe_focus(self):
+        from hub.models import SqrTrackerSettings
+        SqrTrackerSettings.objects.update_or_create(pk=1, defaults={'show_classic_sqr_tracker': False})
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse('hub:sqr'), {'view': 'tracker', 'focus': self.record.pk, 'q': 'excluded by filter'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['sqr_active_view'], 'prototype')
+        self.assertNotContains(response, 'data-sqr-view-button="tracker"')
+        self.assertNotContains(response, 'data-sqr-view-panel="tracker"')
+        self.assertContains(response, 'data-sqr-view-panel="prototype"')
+        self.assertContains(response, 'id="sqr-proto-focus"')
+        self.assertEqual(response.context['request'].GET['q'], 'excluded by filter')
+        focused = self.client.get(reverse('hub:sqr-prototype-data'), {'focus': self.record.pk, 'q': 'excluded by filter', 'page': 40}).json()
+        self.assertEqual([row['pk'] for row in focused['records']], [self.record.pk])
+        self.client.force_login(self.other)
+        missing = self.client.get(reverse('hub:sqr-prototype-data'), {'focus': self.record.pk}).json()
+        self.assertEqual(missing['records'], [])
+
+    def test_main_sqr_navigation_is_independent_of_last_ppt_visit(self):
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse('hub:sqr'), {'view': 'performance'})
+        self.assertContains(response, 'href="/sqr/?view=prototype" data-sqr-nav-view="prototype"')
+        self.client.force_login(self.engineer)
+        response = self.client.get(reverse('hub:sqr'), {'view': 'performance'})
+        self.assertEqual(response.context['sqr_active_view'], 'prototype')
+        self.assertNotContains(response, 'data-sqr-nav-view="performance"')
+        self.assertNotContains(response, 'id="sqr-performance-dashboard"')
+
+    def test_visibility_singleton_is_guarded_in_database(self):
+        from django.db import IntegrityError, transaction
+        from hub.models import SqrTrackerSettings
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            SqrTrackerSettings.objects.create(pk=2, show_classic_sqr_tracker=False)
+
+
 class PrototypeTabRenderTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -532,7 +611,7 @@ class PrototypeTabRenderTests(TestCase):
                     ("table", "To SQR Tracker", "bi-table", "btn-primary lg-btn--accent"),
                     ("reports", "To Reports", "bi-bar-chart-line-fill", "btn-outline-primary lg-btn--ghost"),
                 ):
-                    href = "/sqr/?view=tracker" if destination == "table" else "/sqr/?tab=reports"
+                    href = "/sqr/?view=prototype" if destination == "table" else "/sqr/?tab=reports"
                     tracker_link = " data-sqr-tracker-link" if destination == "table" else ""
                     current = ' aria-current="page"' if tab == destination else ""
                     self.assertContains(

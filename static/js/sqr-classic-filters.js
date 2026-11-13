@@ -81,15 +81,5 @@
     }
     var dismiss = document.getElementById('sqr-pm-tracker-focus-dismiss');
     if (dismiss) dismiss.addEventListener('click', function () { params.delete('focus'); window.location.assign(window.location.pathname + '?' + params.toString()); });
-    window.focusSqrTrackerProject = function (pk) {
-        var value = String(pk).trim();
-        if (!/^\d+$/.test(value)) return false;
-        value = value.replace(/^0+/, '');
-        if (!value || value.length > 19 || (value.length === 19 && value > '9223372036854775807')) return false;
-        var query = new URLSearchParams(window.location.search);
-        query.set('view', 'tracker'); query.set('focus', value); query.delete('page');
-        window.location.assign(window.location.pathname + '?' + query.toString());
-        return true;
-    };
     if (!panel.hidden && filters.toQuery(state).toString() !== serverKey) filters.write(state, {resetPage: false, clearFocus: false});
 })();
