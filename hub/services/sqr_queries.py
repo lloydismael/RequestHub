@@ -75,7 +75,17 @@ def filter_options(authorized_queryset):
     for key in PERFORMANCE_CHOICES:
         options[key].append({'value': 'not_recorded', 'label': 'N/R — Not Recorded'})
     options['stage'] = [{'value': value, 'label': label} for value, label in (
-        ('opportunity', 'Opportunity'), ('delivery', 'Delivery'), ('billing', 'Billing'), ('closed', 'Closed'))]
+        ('opportunity', 'Opportunity'), ('delivery', 'Delivery'), ('billing', 'Billing'), ('closed', 'Closed'),
+        ('mine', 'My Assigned SQR (reviewer shortcut)'), ('attention', 'Needs action (workflow shortcut)'), ('on_hold', 'SQR On Hold (workflow shortcut)'))]
+    options['portfolio'] = [{'value': value, 'label': label} for value, label in (
+        ('ongoing', 'Ongoing'), ('pipeline', 'Pipeline'), ('closed', 'Closed'), ('removed', 'Removed'))]
+    options['rating'] = [{'value': value, 'label': label} for value, label in (
+        ('good', 'Green'), ('warning', 'Amber'), ('danger', 'Red'), ('unknown', 'N/R — Not Rated'))]
+    options['scope'] = [{'value': 'active', 'label': 'Active delivery (PPT only)'}]
+    options['attention'] = [{'value': value, 'label': label} for value, label in (
+        ('performance_risk', 'Recorded performance risk'), ('missing_data', 'Missing delivery data'),
+        ('inconsistency', 'Inconsistent delivery data'), ('on_hold', 'Delivery On Hold'),
+        ('revision', 'Revision requested'), ('awaiting', 'Awaiting SQR approval'))]
     options['revenue_source'] = [{'value': value, 'label': label} for value, label in SqrSubmission._meta.get_field('revenue_source').choices]
     fields = [prefix + suffix for prefix in ('assigned_pm', 'pm_esg_reviewer', 'assigned_sse')
               for suffix in ('_id', '__first_name', '__last_name', '__username')] + ['customer_company']
@@ -100,6 +110,16 @@ def filter_options(authorized_queryset):
 def filter_ppt_projects(projects, params):
     portfolios = multi_values(params, 'portfolio', allowed=('ongoing', 'pipeline', 'closed', 'removed'))
     ratings = multi_values(params, 'rating', allowed=('good', 'warning', 'danger', 'unknown'))
+    scopes = multi_values(params, 'scope', allowed=('all', 'active'))
+    attention = multi_values(params, 'attention', allowed=('attention', 'performance_risk', 'missing_assessment', 'missing_data', 'inconsistency', 'on_hold', 'revision', 'awaiting'))
+    def matches_attention(project, value):
+        if value == 'attention':
+            return project['needs_attention']
+        if value == 'missing_assessment':
+            return project['missing_assessment']
+        if value == 'performance_risk':
+            return any(indicator['state'] in ('warning', 'danger') for indicator in project['indicators'].values())
+        return any(reason['key'] == ('inconsistent_data' if value == 'inconsistency' else value) for reason in project['reasons'])
     for key in ('needs_attention', 'missing_assessment'):
         if params.get(key, '') not in ('', '0', '1'):
             raise ValidationError(FILTER_ERROR)
@@ -109,6 +129,8 @@ def filter_ppt_projects(projects, params):
     return [project for project in projects
             if (not portfolios or project['portfolio_status'] in portfolios)
             and (not ratings or project['overall_rating'] in ratings)
+            and (not scopes or 'all' in scopes or project['active_delivery'])
+            and (not attention or any(matches_attention(project, value) for value in attention))
             and (params.get('needs_attention') != '1' or project['needs_attention'])
             and (params.get('missing_assessment') != '1' or project['missing_assessment'])]
 

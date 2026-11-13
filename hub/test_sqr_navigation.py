@@ -71,6 +71,28 @@ class SqrNavigationTests(SimpleTestCase):
                     self.assertNotIn("PPT", labels)
                     self.assertEqual("SQR" in labels, role in (User.Roles.ENGINEER, User.Roles.ON_HOLD))
 
+    def test_shared_filters_have_unique_roots_and_safe_options(self):
+        class FilterParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.ids = []
+            def handle_starttag(self, tag, attrs):
+                value = dict(attrs).get("id")
+                if value:
+                    self.ids.append(value)
+        request = self.request_for(User.Roles.ADMIN)
+        with patch("hub.form_editor.get_definition", return_value=None):
+            html = render_to_string("hub/sqr.html", {"request": request, "is_pm": True,
+                "active_sqr_tab": "proposal", "sqr_default_assigned": "all",
+                "sqr_filter_options": {"overall_status": [{"value": "in_progress", "label": "<script>bad</script>"}]}})
+        parser = FilterParser()
+        parser.feed(html)
+        for root in ("sqr-classic-filters", "sqr-proto-filters", "sqr-ppt-filters"):
+            self.assertEqual(parser.ids.count(root), 1)
+            self.assertEqual(parser.ids.count(root + "-options"), 1)
+        self.assertNotIn("<script>bad</script>", html)
+        self.assertEqual(html.count('js/sqr-filters.js'), 1)
+
     def test_current_navigation_is_identified_on_initial_render(self):
         for query, role, active_tab, expected in (
             ({"view": "performance"}, User.Roles.PM_ESG, "proposal", "PPT"),

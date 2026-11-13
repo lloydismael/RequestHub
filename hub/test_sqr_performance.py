@@ -64,6 +64,15 @@ class SqrPerformanceNormalizationTests(SimpleTestCase):
         self.assertEqual(set(snapshot["projects"][0]), PROJECT_KEYS)
         self.assertEqual(json.loads(json.dumps(snapshot)), snapshot)
 
+    def test_ppt_scope_and_attention_filters_use_full_normalized_pool(self):
+        from django.http import QueryDict
+        from hub.services.sqr_queries import filter_ppt_projects
+        rows = [self.clean(pk=1, budget_effort_performance="at_risk"),
+                self.clean(pk=2, delivery_actual_finish_date=TODAY, delivery_progress=100), self.row(pk=3)]
+        projects = build_sqr_performance_snapshot(rows, today=TODAY, fetched_at=FETCHED_AT)["projects"]
+        filtered = filter_ppt_projects(projects, QueryDict("scope=active&attention=performance_risk"))
+        self.assertEqual([project["pk"] for project in filtered], [1])
+
     def test_empty_portfolio(self):
         self.assertEqual(build_sqr_performance_snapshot([], today=TODAY, fetched_at=FETCHED_AT)["projects"], [])
 

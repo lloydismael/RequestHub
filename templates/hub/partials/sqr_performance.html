@@ -12,7 +12,8 @@
         </div>
     </header>
 
-    <div class="sqr-pm-toolbar">
+    {% include "hub/partials/sqr_filters.html" with root_id="sqr-ppt-filters" filter_label="PPT portfolio filters" ppt_filters=True %}
+    <div class="sqr-pm-toolbar" hidden aria-hidden="true">
     <details class="sqr-pm-filter-disclosure">
     <summary><i class="bi bi-sliders me-2" aria-hidden="true"></i>Filters</summary>
     <section class="sqr-pm-surface sqr-pm-filters" aria-labelledby="sqr-pm-filters-title">

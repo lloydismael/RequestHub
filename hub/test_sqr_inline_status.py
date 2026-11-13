@@ -644,3 +644,166 @@ async function settle(){await new Promise(resolve=>setImmediate(resolve));while(
         result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
                                 capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def _run_shared_filter_script(self, assertions):
+        source = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-filters.js").read_text(encoding="utf-8")
+        harness = r"""
+const assert=require('node:assert/strict'),vm=require('node:vm');
+class Element {
+    constructor(tag='div'){this.tagName=tag.toUpperCase();this.nodeType=1;this.children=[];this.dataset={};this.attributes={};this.listeners={};this.value='';this.checked=false;this.open=false;this.classList={add(){},remove(){},toggle(){}};}
+    set textContent(value){this.text=String(value);this.children=[];}get textContent(){return(this.text||'')+this.children.map(n=>n.textContent).join('');}
+    append(...items){for(const n of items)this.children.push(typeof n==='string'?Object.assign(new Element(),{textContent:n}):n);}appendChild(n){this.append(n);}
+    replaceChildren(...items){this.text='';this.children=[];this.append(...items);}setAttribute(k,v){this.attributes[k]=String(v);if(k==='id')this.id=String(v);if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(v);}
+    getAttribute(k){return this.attributes[k]??null;}removeAttribute(k){delete this.attributes[k];}addEventListener(k,f){(this.listeners[k]||=[]).push(f);}removeEventListener(k,f){this.listeners[k]=(this.listeners[k]||[]).filter(n=>n!==f);}
+    emit(k,event={}){for(const f of this.listeners[k]||[])f({target:this,preventDefault(){},...event});}focus(){document.activeElement=this;}
+    walk(){return[this,...this.children.flatMap(n=>n.walk())];}
+    querySelectorAll(selector){return this.walk().slice(1).filter(n=>n.tagName==='DETAILS'&&(selector==='details'||n.getAttribute('data-sqr-filter-key')!==null));}
+    querySelector(selector){const match=selector.match(/^\[id="([^"]+)"\]$/);return match?this.walk().find(n=>n.id===match[1])||null:null;}
+    contains(n){return this.walk().includes(n);}
+}
+const document={createElement:tag=>new Element(tag),createTextNode:text=>Object.assign(new Element('#text'),{textContent:text}),activeElement:null,addEventListener(){},removeEventListener(){}};
+const context={document,window:{},URLSearchParams,CustomEvent:function(type,init){this.type=type;this.detail=init?.detail;}};
+vm.runInNewContext(SOURCE,context);const filters=context.window.RequestHubSqrFilters;
+const find=(root,predicate)=>root.walk().find(predicate);
+""".replace("SOURCE", json.dumps(source)) + assertions
+        result = subprocess.run([shutil.which("node"), "-"], input=harness, text=True,
+                                capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_multi_filter_url_round_trip_and_clear_all(self):
+        self._run_shared_filter_script(r"""
+const state=filters.read(new URLSearchParams('overall_status=in_progress&overall_status=on_hold&pm=1&pm=2&assigned=all&q=hello&linked=1&amount_min=10&layout=table&focus=7'));
+assert.deepEqual(Array.from(state.selected.overall_status),['in_progress','on_hold']);
+assert.deepEqual(filters.toQuery(state).getAll('pm'),['1','2']);
+assert.equal(filters.read(new URLSearchParams(),{defaultAssigned:'mine'}).assigned,'mine');
+assert.equal(filters.toQuery(state).get('assigned'),'all');
+assert.equal(filters.toQuery(state).get('layout'),null);assert.equal(filters.toQuery(state).get('focus'),null);
+const root=new Element();root.id='filters-test';const mounted=filters.mount(root,{state,options:{overall_status:[{value:'in_progress',label:'In Progress'},{value:'on_hold',label:'On Hold'}],pm:[{value:'1',label:'PM One'},{value:'2',label:'PM Two'}]},onChange(){}});
+find(root,n=>n.tagName==='BUTTON'&&n.textContent==='Clear all').emit('click');
+const cleared=mounted.getState();assert.equal(cleared.assigned,'all');assert.equal(cleared.q,'');
+assert.equal(filters.toQuery(cleared).get('linked'),null);assert.equal(filters.toQuery(cleared).get('amount_min'),null);
+assert.deepEqual(filters.toQuery(cleared).getAll('overall_status'),[]);mounted.destroy();
+""")
+
+    def test_filter_controls_expose_keyboard_selection_and_result_count(self):
+        self._run_shared_filter_script(r"""
+const root=new Element();root.id='keyboard-filters';let changed;
+const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{overall_status:[{value:'in_progress',label:'In Progress'},{value:'on_hold',label:'On Hold'}]},onChange(state){changed=state;}});
+let check=find(root,n=>n.tagName==='INPUT'&&n.value==='in_progress');assert.equal(check.getAttribute('type'),'checkbox');check.checked=true;check.emit('change');
+assert.deepEqual(Array.from(changed.selected.overall_status),['in_progress']);
+const details=find(root,n=>n.tagName==='DETAILS');const summary=find(details,n=>n.tagName==='SUMMARY');details.open=true;details.emit('toggle');
+assert.equal(summary.getAttribute('aria-expanded'),'true');details.emit('keydown',{key:'Escape'});assert.equal(details.open,false);assert.equal(document.activeElement,summary);
+const live=find(root,n=>n.getAttribute('data-sqr-filter-count')!==null);assert.equal(live.getAttribute('aria-live'),'polite');
+mounted.setCount(55);assert.ok(live.textContent.includes('55'));
+const remove=find(root,n=>n.tagName==='BUTTON'&&(n.getAttribute('aria-label')||'').startsWith('Remove Delivery Status:'));
+remove.emit('click');assert.deepEqual(Array.from(mounted.getState().selected.overall_status),[]);
+""")
+
+    def test_filter_dropdowns_close_other_category_panels(self):
+        self._run_shared_filter_script(r"""
+const root=new Element();root.id='overlapping-filters';
+root.querySelectorAll=()=>root.walk().filter(n=>n.tagName==='DETAILS'&&n.getAttribute('data-sqr-filter-key')!==null);
+filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{overall_status:[{value:'in_progress',label:'In Progress'}],pm:[{value:'1',label:'PM One'}]},onChange(){}});
+const first=find(root,n=>n.getAttribute('data-sqr-filter-key')==='overall_status');
+const second=find(root,n=>n.getAttribute('data-sqr-filter-key')==='pm');
+first.open=true;first.emit('toggle');second.open=true;second.emit('toggle');
+assert.equal(first.open,false,'Opening another category must close the older panel rather than cover chips after Escape');
+second.emit('keydown',{key:'Escape'});assert.equal(second.open,false);
+""")
+
+    def test_detached_filter_toggle_cannot_close_replacement_panel(self):
+        self._run_shared_filter_script(r"""
+const root=new Element();root.id='queued-toggle';
+const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{quality_performance:[{value:'met',label:'Met'}]},onChange(){}});
+const old=find(root,n=>n.getAttribute('data-sqr-filter-key')==='quality_performance');old.open=true;old.emit('toggle');
+mounted.setState(mounted.getState());
+const current=find(root,n=>n.getAttribute('data-sqr-filter-key')==='quality_performance');
+old.emit('toggle');
+assert.equal(current.open,true,'A queued toggle from detached markup must not close the current checkbox panel');
+""")
+
+    def test_filter_disclosure_focus_survives_latest_option_refresh(self):
+        self._run_shared_filter_script(r"""
+const root=new Element();root.id='refresh-focus';const options={quality_performance:[{value:'met',label:'Met'}]};
+const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options,onChange(){}});
+const details=find(root,n=>n.getAttribute('data-sqr-filter-key')==='quality_performance');
+details.open=true;details.emit('toggle');details.emit('keydown',{key:'Escape'});
+mounted.setOptions(options);
+assert.ok(root.contains(document.activeElement),'A late response must not remove the keyboard focus returned by Escape');
+assert.equal(document.activeElement.getAttribute('aria-expanded'),'false');
+""")
+
+    def test_more_filter_selection_preserves_open_panel_and_keyboard_focus(self):
+        self._run_shared_filter_script(r"""
+const root=new Element();root.id='more-focus';
+const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{},onChange(){}});
+let more=find(root,n=>n.tagName==='DETAILS'&&n.getAttribute('class')==='sqr-filter-more');more.open=true;
+const linked=find(more,n=>n.tagName==='INPUT'&&n.value==='linked');linked.focus();linked.checked=true;linked.emit('change');
+more=find(root,n=>n.tagName==='DETAILS'&&n.getAttribute('class')==='sqr-filter-more');
+assert.equal(more.open,true,'Editing an extra predicate must not close its panel');
+assert.ok(root.contains(document.activeElement),'Checkbox focus must survive applying its predicate');
+assert.equal(mounted.getState().flags.linked,true);
+more.emit('keydown',{key:'Escape'});assert.equal(more.open,false);
+assert.equal(document.activeElement.tagName,'SUMMARY');
+""")
+
+    def test_classic_saved_filters_are_canonicalized_before_server_reload(self):
+        controller = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-classic-filters.js").read_text(encoding="utf-8")
+        self._run_shared_filter_script(r"""
+const location=new URL('https://fixture.invalid/sqr/?view=tracker');
+location.assign=value=>{location.href=new URL(value,location).href;};
+context.window.location=location;context.window.history={replaceState(_a,_b,value){location.href=new URL(value,location).href;}};
+const saved={selected:{overall_status:['in_progress','on_hold']},q:'Multi-filter',assigned:'all',flags:{},ranges:{}};
+context.window.sessionStorage={getItem(key){return key==='requestHub.sqr.filters.v1'?JSON.stringify(saved):null;},setItem(){}};
+const root=new Element();root.id='sqr-classic-filters';root.dataset={defaultAssigned:'all',serverQuery:'view=tracker',initialCount:'56',optionsId:'filter-options'};
+root.closest=()=>({hidden:false,querySelector(){return null;}});
+const options=new Element();options.textContent='{}';
+document.getElementById=id=>id===root.id?root:id==='filter-options'?options:null;
+document.querySelectorAll=()=>[];const listeners={};
+document.addEventListener=(name,fn)=>{(listeners[name]||=[]).push(fn);};
+document.dispatchEvent=event=>{for(const fn of listeners[event.type]||[])fn(event);};
+context.fetch=()=>Promise.resolve({ok:true,json:async()=>({ok:true,pipeline:{all:{count:55}}})});
+vm.runInNewContext(CLASSIC,context);
+assert.equal(location.searchParams.get('q'),'Multi-filter','Saved predicates must enter the URL before reloading server-rendered rows');
+assert.deepEqual(location.searchParams.getAll('overall_status'),['in_progress','on_hold']);
+""".replace("CLASSIC", json.dumps(controller)))
+
+    def test_retired_filter_preference_is_not_silently_applied(self):
+        self._run_shared_filter_script(r"""
+const state=filters.read(new URLSearchParams('assigned=all&attention=overdue&overall_status=invalid'));
+assert.deepEqual(Array.from(state.selected.overall_status),['invalid']);
+assert.equal(filters.toQuery(state).get('attention'),'overdue');
+const root=new Element();root.id='invalid-filters';filters.mount(root,{state,options:{overall_status:[{value:'in_progress',label:'In Progress'}]},onChange(){}});
+assert.ok(/retired|unavailable/i.test(root.textContent));assert.ok(root.textContent.includes('Clear all'));
+""")
+
+    def test_stale_response_cannot_replace_newer_filter_results(self):
+        source = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-performance.js").read_text(encoding="utf-8")
+        refresh = "async function refresh(" + source.split("    async function refresh(", 1)[1]
+        refresh = refresh.split("    function invalidateSnapshot", 1)[0].split("    Object.keys(controls)", 1)[0]
+        if "    function invalidateSnapshot(" in source:
+            invalidator = "function invalidateSnapshot(" + source.split("    function invalidateSnapshot(", 1)[1].split("    Object.keys(controls)", 1)[0]
+        else:
+            invalidator = "function invalidateSnapshot() {" + source.split("document.addEventListener('sqr:performance-invalidated', function () {", 1)[1].split("    });", 1)[0] + "}"
+        script = r"""
+const assert=require('node:assert/strict'), vm=require('node:vm');
+const requests=[];
+const context={AbortController,setTimeout(){return 1;},clearTimeout(){},fetch:()=>new Promise(resolve=>requests.push(resolve))};
+vm.createContext(context);
+vm.runInContext(`var root={dataset:{endpoint:'/snapshot'},setAttribute(){}};
+var snapshot=null,revision=0,inFlight=null,activeController=null,sharedFilters=null,filterState=null,dirty=true;
+function visible(){return true;}function message(){}function updateManagers(){}function scheduleRender(){}
+function el(){return {replaceChildren(){},append(){},dataset:{}};}`,context);
+vm.runInContext(REFRESH+INVALIDATOR,context);
+function response(name){return{ok:true,redirected:false,json:async()=>({ok:true,as_of:'2026-11-13',fetched_at:'2026-11-13T00:00:00Z',projects:[{name}]})};}
+(async()=>{
+    context.refresh();context.invalidateSnapshot();
+    assert.equal(requests.length,2,'A new filter selection must start its own request, not wait for the superseded one');
+    requests[1](response('latest selection'));await new Promise(resolve=>setImmediate(resolve));
+    requests[0](response('superseded selection'));await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(vm.runInContext('snapshot.projects[0].name',context),'latest selection');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""".replace("REFRESH", json.dumps(refresh)).replace("INVALIDATOR", json.dumps(invalidator))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
+                                capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

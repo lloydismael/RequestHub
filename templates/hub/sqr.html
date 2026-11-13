@@ -5,7 +5,10 @@
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=23">
+<link rel="stylesheet" href="{% static 'css/sqr-filters.css' %}?v=1">
+<script src="{% static 'js/sqr-filters.js' %}?v=1" defer></script>
 {% if active_sqr_tab != 'reports' %}
+<script src="{% static 'js/sqr-classic-filters.js' %}?v=1" defer></script>
 <link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=4">
 <script src="{% static 'js/sqr-tracker-prototype.js' %}?v=7" defer></script>
 {% endif %}
@@ -36,14 +39,14 @@
                             </a>
                         </div>
                         {% if active_sqr_tab != 'reports' %}
-                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only>
+                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only data-sqr-legacy-filter>
                             <div class="mgmt-search-box sqr-toolbar-search-box" role="search" aria-label="Search SQR records">
                                 <i class="bi bi-search mgmt-search-icon"></i>
                                 <input type="text" id="sqr-header-search" class="mgmt-search-input" placeholder="Search SQR..." autocomplete="off" aria-label="Search SQR records">
                                 <span class="mgmt-result-badge" id="sqr-header-count-badge" role="status" aria-live="polite">0 total</span>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only>
+                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only data-sqr-legacy-filter>
                             <i class="bi bi-funnel-fill me-1"></i>Filter
                         </button>
                         {% endif %}
@@ -74,7 +77,7 @@
                     </button>
                 </div>
             </div>
-            <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only>
+            <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only data-sqr-legacy-filter>
                 <div class="sqr-filter-toolbar">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                         <div>
@@ -565,6 +568,7 @@
         {% comment %}No lg-enter here: animating/compositing a card that wraps
            the whole 43-column table stalls first paint.{% endcomment %}
         <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker">
+            {% include "hub/partials/sqr_filters.html" with root_id="sqr-classic-filters" filter_label="Classic SQR filters" %}
             <div id="sqr-pm-tracker-focus" class="sqr-pm-focus-notice" hidden>
                 <span id="sqr-pm-tracker-focus-label" role="status"></span>
                 <button type="button" id="sqr-pm-tracker-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
@@ -3413,6 +3417,20 @@
     });
     var prototypeControls = Array.from(document.querySelectorAll('[data-sqr-prototype-only]'));
 
+    function updateViewLinks() {
+        navLinks.forEach(function (link) {
+            var params = new URLSearchParams(window.location.search);
+            params.set('view', link.dataset.sqrNavView);
+            link.setAttribute('href', window.location.pathname + '?' + params.toString() + window.location.hash);
+        });
+        trackerLinks.forEach(function (link) {
+            var params = new URLSearchParams(window.location.search);
+            params.set('view', 'tracker');
+            link.setAttribute('href', window.location.pathname + '?' + params.toString() + window.location.hash);
+        });
+    }
+    document.addEventListener('sqr:filters-changed', updateViewLinks);
+
     function setView(viewName) {
         // Retired views ('esg') fall back to 'tracker'.
         var available = {};
@@ -3454,6 +3472,7 @@
             params.set('view', activeView);
             window.history.replaceState(window.history.state, '', window.location.pathname + '?' + params.toString() + window.location.hash);
         } catch (error) {}
+        updateViewLinks();
         document.dispatchEvent(new CustomEvent('sqr:performance-view', {detail: {view: activeView}}));
         try { window.localStorage.setItem(storageKey, activeView); } catch (error) {}
     }
@@ -3476,531 +3495,6 @@
     setView(requestedView || savedView);
 })();
 </script>
-
-<script>
-// ── Badge filter ──────────────────────────────────────────────────────────
-(function () {
-    var badgeRoot = document.getElementById('sqr-badge-filters');
-    var defaultMyAssigned = !!(badgeRoot && badgeRoot.dataset.defaultMyAssigned === '1');
-    var currentUserId = badgeRoot ? String(badgeRoot.dataset.currentUserId || '') : '';
-    var activeFilter = defaultMyAssigned ? 'my_assigned' : '';   // '' = show all
-    var toolbarSearchInput = document.getElementById('sqr-header-search');
-    var searchInput = document.getElementById('sqr-table-filter-search') || toolbarSearchInput;
-    var headerCountBadge = document.getElementById('sqr-header-count-badge');
-    var statusSelect = document.getElementById('sqr-table-filter-status');
-    var proposalStatusSelect = document.getElementById('sqr-table-filter-proposal-status');
-    var overallStatusSelect = document.getElementById('sqr-table-filter-overall-status');
-    var healthSelect = document.getElementById('sqr-table-filter-health');
-    var revenueSourceSelect = document.getElementById('sqr-table-filter-revenue-source');
-    var sqrDateFromInput = document.getElementById('sqr-table-filter-date-from');
-    var sqrDateToInput = document.getElementById('sqr-table-filter-date-to');
-    var groupInput = document.getElementById('sqr-table-filter-group');
-    var amountMinInput = document.getElementById('sqr-table-filter-amount-min');
-    var amountMaxInput = document.getElementById('sqr-table-filter-amount-max');
-    var linkedRequestCheckbox = document.getElementById('sqr-table-filter-linked-request');
-    var assignedSseCheckbox = document.getElementById('sqr-table-filter-assigned-sse');
-    var myAssignedCheckbox = document.getElementById('sqr-table-filter-my-assigned');
-    var billedOnlyCheckbox = document.getElementById('sqr-table-filter-billed-only');
-    var resetButton = document.getElementById('sqr-table-filter-reset');
-    var resultsMeta = document.getElementById('sqr-filter-results-meta');
-    var focusedProjectPk = '';
-    var focusNotice = document.getElementById('sqr-pm-tracker-focus');
-    var focusLabel = document.getElementById('sqr-pm-tracker-focus-label');
-    var focusDismiss = document.getElementById('sqr-pm-tracker-focus-dismiss');
-    var focusedRow = null;
-    var previousRowTabindex = null;
-
-    function rowProjectPk(row) {
-        var cell = row.querySelector('[data-sqr-pk]');
-        return String(row.dataset.sqrPk || (cell && cell.dataset.sqrPk) || '');
-    }
-
-    function clearFocusedRow() {
-        if (!focusedRow) return;
-        focusedRow.classList.remove('sqr-pm-focused-row');
-        if (previousRowTabindex === null) focusedRow.removeAttribute('tabindex');
-        else focusedRow.setAttribute('tabindex', previousRowTabindex);
-        focusedRow = null;
-    }
-
-    function normalizeText(value) {
-        return (value || '').toString().trim().toLowerCase();
-    }
-
-    function parseAmount(value) {
-        if (value === null || value === undefined || value === '') return null;
-        var normalized = String(value).replace(/,/g, '').trim();
-        if (!normalized) return null;
-        var amount = Number(normalized);
-        return Number.isFinite(amount) ? amount : null;
-    }
-
-    function isMyAssignedActive() {
-        return activeFilter === 'my_assigned' || !!(myAssignedCheckbox && myAssignedCheckbox.checked);
-    }
-
-    function setMyAssignedChecked(checked) {
-        if (myAssignedCheckbox) myAssignedCheckbox.checked = !!checked;
-    }
-
-    function countActiveFilters() {
-        var filters = [
-            searchInput && searchInput.value,
-            statusSelect && statusSelect.value,
-            proposalStatusSelect && proposalStatusSelect.value,
-            overallStatusSelect && overallStatusSelect.value,
-            healthSelect && healthSelect.value,
-            revenueSourceSelect && revenueSourceSelect.value,
-            sqrDateFromInput && sqrDateFromInput.value,
-            sqrDateToInput && sqrDateToInput.value,
-            groupInput && groupInput.value,
-            amountMinInput && amountMinInput.value,
-            amountMaxInput && amountMaxInput.value,
-            linkedRequestCheckbox && linkedRequestCheckbox.checked,
-            assignedSseCheckbox && assignedSseCheckbox.checked,
-            isMyAssignedActive(),
-            billedOnlyCheckbox && billedOnlyCheckbox.checked
-        ];
-
-        return filters.reduce(function (count, value) {
-            return value ? count + 1 : count;
-        }, 0);
-    }
-
-    function syncActiveBadgeFromControls() {
-        if (myAssignedCheckbox && myAssignedCheckbox.checked && !statusSelect.value && !proposalStatusSelect.value) {
-            activeFilter = 'my_assigned';
-            return;
-        }
-        if (statusSelect && statusSelect.value && (!proposalStatusSelect || !proposalStatusSelect.value)) {
-            activeFilter = 'status:' + statusSelect.value;
-        } else if (proposalStatusSelect && proposalStatusSelect.value && (!statusSelect || !statusSelect.value)) {
-            activeFilter = 'proposal_status:' + proposalStatusSelect.value;
-        } else if (activeFilter === 'my_assigned' && !(myAssignedCheckbox && myAssignedCheckbox.checked)) {
-            activeFilter = '';
-        } else if (activeFilter !== 'my_assigned') {
-            activeFilter = '';
-        }
-    }
-
-    function updateBadgeState() {
-        document.querySelectorAll('#sqr-badge-filters .sqr-badge-filter').forEach(function (badge) {
-            var badgeFilter = badge.dataset.sqrFilter || '';
-            var isActive = false;
-            if (badgeFilter === 'my_assigned') {
-                isActive = isMyAssignedActive();
-            } else {
-                isActive = badgeFilter === activeFilter;
-            }
-            badge.classList.toggle('is-active', !!isActive);
-            badge.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-            badge.style.outline = '';
-            badge.style.outlineOffset = '';
-        });
-    }
-
-    function syncPresetControls(filter) {
-        if (statusSelect) statusSelect.value = '';
-        if (proposalStatusSelect) proposalStatusSelect.value = '';
-        if (!filter) {
-            setMyAssignedChecked(false);
-            return;
-        }
-        if (filter === 'my_assigned') {
-            setMyAssignedChecked(true);
-            return;
-        }
-        setMyAssignedChecked(false);
-        var parts = filter.split(':');
-        if (parts[0] === 'status' && statusSelect) {
-            statusSelect.value = parts[1] || '';
-        } else if (parts[0] === 'proposal_status' && proposalStatusSelect) {
-            proposalStatusSelect.value = parts[1] || '';
-        }
-    }
-
-    function getActiveTableRows() {
-            // Prefer the visible panel only — hidden panels still in DOM but skip them
-        var activePanel = document.querySelector('[data-sqr-view-panel]:not([hidden])');
-        if (activePanel) {
-            return { panel: activePanel, rows: activePanel.querySelectorAll('tbody tr') };
-        }
-        return {
-            panel: document,
-            rows: document.querySelectorAll('.sqr-tracker tbody tr, .sqr-esg-table tbody tr')
-        };
-    }
-
-    var rowCache = typeof WeakMap === 'function' ? new WeakMap() : null;
-    var filterFrame = 0;
-
-    function getRowRecords(panel, rows) {
-        var cached = rowCache && rowCache.get(panel);
-        if (cached && cached.length === rows.length) return cached;
-        var records = Array.from(rows).map(function (row) {
-            return {
-                row: row,
-                searchText: null,
-                indexedText: normalizeText([
-                    row.dataset.sqrRef,
-                    row.dataset.sqrCustomer,
-                    row.dataset.sqrGroup,
-                    row.dataset.sqrAssignedPm,
-                    row.dataset.sqrAssignedSse,
-                    row.dataset.engineerName
-                ].join(' ')),
-                group: normalizeText(row.dataset.sqrGroup || ''),
-                totalPrice: parseAmount(row.dataset.sqrTotalPrice || '0') || 0
-            };
-        });
-        if (rowCache) rowCache.set(panel, records);
-        return records;
-    }
-
-    var serverControls = [
-        ['q', searchInput], ['status', statusSelect], ['proposal_status', proposalStatusSelect],
-        ['overall_status', overallStatusSelect], ['delivery_health', healthSelect], ['revenue_source', revenueSourceSelect],
-        ['date_from', sqrDateFromInput], ['date_to', sqrDateToInput], ['group', groupInput],
-        ['amount_min', amountMinInput], ['amount_max', amountMaxInput], ['linked', linkedRequestCheckbox],
-        ['sse', assignedSseCheckbox], ['billed', billedOnlyCheckbox]
-    ];
-    var initialParams = new URLSearchParams(window.location.search);
-    serverControls.forEach(function (entry) {
-        if (!entry[1] || !initialParams.has(entry[0])) return;
-        if (entry[1].type === 'checkbox') entry[1].checked = initialParams.get(entry[0]) === '1';
-        else entry[1].value = initialParams.get(entry[0]);
-    });
-    if (toolbarSearchInput && searchInput) toolbarSearchInput.value = searchInput.value;
-    function serverValues() {
-        var values = serverControls.map(function (entry) {
-            return [entry[0], !entry[1] ? '' : entry[1].type === 'checkbox' ? (entry[1].checked ? '1' : '') : entry[1].value.trim()];
-        });
-        values.push(['assigned', isMyAssignedActive() ? 'mine' : 'all']);
-        return values;
-    }
-    var filterSignature = null;
-    function applyFilter() {
-        var values = serverValues();
-        var signature = JSON.stringify(values);
-        if (document.getElementById('sqr-pagination') && !focusedProjectPk && filterSignature !== null && signature !== filterSignature) {
-            var params = new URLSearchParams(window.location.search);
-            params.delete('page');
-            params.delete('focus');
-            values.forEach(function (entry) { if (entry[1]) params.set(entry[0], entry[1]); else params.delete(entry[0]); });
-            var nextLocation = window.location.pathname + '?' + params.toString();
-            try { sessionStorage.setItem('sqr-filter-navigation', nextLocation); } catch (_) {}
-            var focused = document.activeElement;
-            if (focused && focused.id && (serverControls.some(function (entry) { return entry[1] === focused; }) || focused === toolbarSearchInput)) {
-                try { sessionStorage.setItem('sqr-filter-focus', JSON.stringify({id: focused.id, start: focused.selectionStart, end: focused.selectionEnd})); } catch (_) {}
-            }
-            window.location.assign(nextLocation);
-            return;
-        }
-        filterSignature = signature;
-        if (filterFrame) cancelAnimationFrame(filterFrame);
-        filterFrame = requestAnimationFrame(runFilter);
-    }
-
-    function runFilter() {
-        filterFrame = 0;
-        var activeRows = getActiveTableRows();
-        if (activeRows.panel.dataset && activeRows.panel.dataset.sqrViewPanel === 'performance') return;
-        var records = getRowRecords(activeRows.panel, activeRows.rows);
-        var query = normalizeText(searchInput && searchInput.value ? searchInput.value : '');
-        var statusValue = statusSelect ? statusSelect.value : '';
-        var proposalValue = proposalStatusSelect ? proposalStatusSelect.value : '';
-        var overallStatusValue = overallStatusSelect ? overallStatusSelect.value : '';
-        var healthValue = healthSelect ? healthSelect.value : '';
-        var revenueSourceValue = revenueSourceSelect ? revenueSourceSelect.value : '';
-        var groupValue = normalizeText(groupInput && groupInput.value ? groupInput.value : '');
-        var sqrDateFrom = sqrDateFromInput ? sqrDateFromInput.value : '';
-        var sqrDateTo = sqrDateToInput ? sqrDateToInput.value : '';
-        var amountMin = parseAmount(amountMinInput ? amountMinInput.value : '');
-        var amountMax = parseAmount(amountMaxInput ? amountMaxInput.value : '');
-        var linkedRequestOnly = !!(linkedRequestCheckbox && linkedRequestCheckbox.checked);
-        var assignedSseOnly = !!(assignedSseCheckbox && assignedSseCheckbox.checked);
-        var myAssignedOnly = isMyAssignedActive();
-        var billedOnly = !!(billedOnlyCheckbox && billedOnlyCheckbox.checked);
-        var visibleCount = 0;
-        records.forEach(function (record) {
-            var row = record.row;
-            var matchesStatus = !statusValue || (row.dataset.sqrStatus || '') === statusValue;
-            var matchesProposal = !proposalValue || (row.dataset.sqrProposalStatus || '') === proposalValue;
-            var matchesOverallStatus = !overallStatusValue || (row.dataset.sqrOverallStatus || '') === overallStatusValue;
-            var matchesHealth = !healthValue || (row.dataset.sqrHealth || '') === healthValue;
-            var matchesRevenueSource = !revenueSourceValue || (row.dataset.sqrRevenueSource || '') === revenueSourceValue;
-            var matchesGroup = !groupValue || record.group.indexOf(groupValue) !== -1;
-            var createdAt = row.dataset.sqrCreatedAt || '';
-            var matchesDateFrom = !sqrDateFrom || (createdAt && createdAt >= sqrDateFrom);
-            var matchesDateTo = !sqrDateTo || (createdAt && createdAt <= sqrDateTo);
-            var matchesAmountMin = amountMin === null || record.totalPrice >= amountMin;
-            var matchesAmountMax = amountMax === null || record.totalPrice <= amountMax;
-            var matchesLinkedRequest = !linkedRequestOnly || (row.dataset.sqrLinkedRequest || '') === 'yes';
-            var matchesAssignedSse = !assignedSseOnly || !!normalizeText(row.dataset.sqrAssignedSse || '');
-            var matchesMyAssigned = !myAssignedOnly || (
-                !!currentUserId && String(row.dataset.sqrApproverId || '') === currentUserId
-            );
-            var matchesBilled = !billedOnly || (row.dataset.sqrRevenueStatus || '') === 'billed';
-            var matchesQuery = true;
-            if (query) {
-                matchesQuery = record.indexedText.indexOf(query) !== -1;
-                if (!matchesQuery) {
-                    if (record.searchText === null) {
-                        record.searchText = normalizeText(row.textContent || '');
-                    }
-                    matchesQuery = record.searchText.indexOf(query) !== -1;
-                }
-            }
-            var isVisible = matchesStatus
-                && matchesProposal
-                && matchesOverallStatus
-                && matchesHealth
-                && matchesRevenueSource
-                && matchesGroup
-                && matchesDateFrom
-                && matchesDateTo
-                && matchesAmountMin
-                && matchesAmountMax
-                && matchesLinkedRequest
-                && matchesAssignedSse
-                && matchesMyAssigned
-                && matchesBilled
-                && matchesQuery;
-
-            if (document.getElementById('sqr-pagination') && !focusedProjectPk) isVisible = true;
-            // Temporary exact-PK override; all ordinary filter values stay intact.
-            if (focusedProjectPk) isVisible = rowProjectPk(row) === focusedProjectPk;
-
-            var nextDisplay = isVisible ? '' : 'none';
-            if (row.style.display !== nextDisplay) {
-                row.style.display = nextDisplay;
-            }
-            if (isVisible) visibleCount += 1;
-        });
-
-        if (resultsMeta) {
-            var activeFilterCount = countActiveFilters();
-            if (visibleCount === records.length && activeFilterCount === 0) {
-                resultsMeta.textContent = 'Showing all rows';
-            } else {
-                resultsMeta.textContent = 'Showing ' + visibleCount + ' of ' + records.length + ' rows' + (activeFilterCount ? ' • ' + activeFilterCount + ' active filter' + (activeFilterCount === 1 ? '' : 's') : '');
-            }
-        }
-        if (headerCountBadge) {
-            var total = document.getElementById('sqr-pagination') && !focusedProjectPk ? {{ page_obj.paginator.count|default:0 }} : visibleCount;
-            headerCountBadge.textContent = total + ' total';
-        }
-        if (resultsMeta && document.getElementById('sqr-pagination') && !focusedProjectPk) {
-            resultsMeta.textContent = 'Showing ' + visibleCount + ' of {{ page_obj.paginator.count|default:0 }} matching rows';
-        }
-        if (typeof window.invalidateRequestHubScrollGeometry === 'function') {
-            window.invalidateRequestHubScrollGeometry(activeRows.panel);
-        }
-    }
-    window.applySqrTableFilter = function () {
-        if (rowCache) rowCache = new WeakMap();
-        applyFilter();
-    };
-
-    window.focusSqrTrackerProject = function (pk) {
-        var exactPk = String(pk == null ? '' : pk);
-        if (!/^\d+$/.test(exactPk)) return false;
-        var tracker = document.querySelector('[data-sqr-view-panel="tracker"]');
-        if (!tracker) return false;
-        var target = Array.from(tracker.querySelectorAll('tbody tr')).find(function (row) {
-            return rowProjectPk(row) === exactPk;
-        });
-        if (!target) {
-            if (!document.getElementById('sqr-pagination')) return false;
-            var params = new URLSearchParams(window.location.search);
-            params.set('focus', exactPk);
-            params.set('view', 'tracker');
-            params.delete('page');
-            window.location.assign(window.location.pathname + '?' + params.toString());
-            return true;
-        }
-        clearFocusedRow();
-        focusedProjectPk = exactPk;
-        focusedRow = target;
-        previousRowTabindex = target.getAttribute('tabindex');
-        target.setAttribute('tabindex', '-1');
-        target.classList.add('sqr-pm-focused-row');
-        if (focusLabel) focusLabel.textContent = 'Focused project: ' + (target.dataset.sqrRef || 'SQR #' + exactPk) + '. Tracker filters are temporarily bypassed.';
-        if (focusNotice) focusNotice.hidden = false;
-        if (typeof window.setSqrView === 'function') window.setSqrView('tracker');
-        if (rowCache) rowCache.delete(tracker);
-        clearTimeout(searchDebounceTimer);
-        if (filterFrame) cancelAnimationFrame(filterFrame);
-        runFilter();
-        target.focus({preventScroll: true});
-        target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'start'});
-        return true;
-    };
-
-    if (focusDismiss) focusDismiss.addEventListener('click', function () {
-        if (initialParams.has('focus')) {
-            initialParams.delete('focus');
-            window.location.assign(window.location.pathname + '?' + initialParams.toString());
-            return;
-        }
-        focusedProjectPk = '';
-        clearFocusedRow();
-        if (focusNotice) focusNotice.hidden = true;
-        if (filterFrame) cancelAnimationFrame(filterFrame);
-        runFilter();
-        // Restore keyboard position outside a row that may now be filtered out.
-        var trackerButton = document.querySelector('[data-sqr-view-button="tracker"]');
-        if (trackerButton) trackerButton.focus({preventScroll: true});
-    });
-
-    document.addEventListener('sqr:performance-invalidated', function () {
-        rowCache = typeof WeakMap === 'function' ? new WeakMap() : null;
-        applyFilter();
-    });
-
-    document.addEventListener('sqr:panel-hydrated', function (event) {
-        if (rowCache) rowCache.delete(event.target);
-        applyFilter();
-    });
-
-    var searchDebounceTimer = null;
-    function scheduleSearchFilter() {
-        clearTimeout(searchDebounceTimer);
-        searchDebounceTimer = setTimeout(applyFilter, 180);
-    }
-    document.querySelectorAll('#sqr-badge-filters .sqr-badge-filter').forEach(function (badge) {
-        badge.addEventListener('click', function () {
-            var filter = badge.dataset.sqrFilter || '';
-            // Total badge always shows full list (clears My Assigned + status presets).
-            if (filter === '') {
-                activeFilter = '';
-                syncPresetControls('');
-                updateBadgeState();
-                applyFilter();
-                return;
-            }
-            if (activeFilter === filter) {
-                // clicking the same badge again clears the filter
-                activeFilter = '';
-            } else {
-                activeFilter = filter;
-            }
-            syncPresetControls(activeFilter);
-            updateBadgeState();
-            applyFilter();
-        });
-    });
-
-    if (toolbarSearchInput) {
-        toolbarSearchInput.addEventListener('input', function () {
-            if (searchInput && searchInput !== toolbarSearchInput && searchInput.value !== toolbarSearchInput.value) {
-                searchInput.value = toolbarSearchInput.value;
-            }
-            scheduleSearchFilter();
-        });
-    }
-    if (searchInput) {
-        searchInput.addEventListener('input', function () {
-            if (toolbarSearchInput && toolbarSearchInput !== searchInput && toolbarSearchInput.value !== searchInput.value) {
-                toolbarSearchInput.value = searchInput.value;
-            }
-            scheduleSearchFilter();
-        });
-    }
-    [overallStatusSelect, healthSelect, revenueSourceSelect].forEach(function (control) {
-        if (!control) return;
-        control.addEventListener('change', applyFilter);
-    });
-
-    [sqrDateFromInput, sqrDateToInput, groupInput, amountMinInput, amountMaxInput].forEach(function (control) {
-        if (!control) return;
-        control.addEventListener('input', scheduleSearchFilter);
-    });
-
-    [linkedRequestCheckbox, assignedSseCheckbox, billedOnlyCheckbox].forEach(function (control) {
-        if (!control) return;
-        control.addEventListener('change', function () {
-            applyFilter();
-        });
-    });
-
-    if (myAssignedCheckbox) {
-        myAssignedCheckbox.addEventListener('change', function () {
-            if (myAssignedCheckbox.checked) {
-                activeFilter = 'my_assigned';
-                if (statusSelect) statusSelect.value = '';
-                if (proposalStatusSelect) proposalStatusSelect.value = '';
-            } else if (activeFilter === 'my_assigned') {
-                activeFilter = '';
-            }
-            updateBadgeState();
-            applyFilter();
-        });
-    }
-
-    if (statusSelect) {
-        statusSelect.addEventListener('change', function () {
-            if (statusSelect.value) setMyAssignedChecked(false);
-            syncActiveBadgeFromControls();
-            updateBadgeState();
-            applyFilter();
-        });
-    }
-
-    if (proposalStatusSelect) {
-        proposalStatusSelect.addEventListener('change', function () {
-            if (proposalStatusSelect.value) setMyAssignedChecked(false);
-            syncActiveBadgeFromControls();
-            updateBadgeState();
-            applyFilter();
-        });
-    }
-
-    if (resetButton) {
-        resetButton.addEventListener('click', function () {
-            // Reset returns approvers to their default My Assigned view.
-            activeFilter = defaultMyAssigned ? 'my_assigned' : '';
-            if (searchInput) searchInput.value = '';
-            if (statusSelect) statusSelect.value = '';
-            if (proposalStatusSelect) proposalStatusSelect.value = '';
-            if (overallStatusSelect) overallStatusSelect.value = '';
-            if (healthSelect) healthSelect.value = '';
-            if (revenueSourceSelect) revenueSourceSelect.value = '';
-            if (sqrDateFromInput) sqrDateFromInput.value = '';
-            if (sqrDateToInput) sqrDateToInput.value = '';
-            if (groupInput) groupInput.value = '';
-            if (amountMinInput) amountMinInput.value = '';
-            if (amountMaxInput) amountMaxInput.value = '';
-            if (linkedRequestCheckbox) linkedRequestCheckbox.checked = false;
-            if (assignedSseCheckbox) assignedSseCheckbox.checked = false;
-            setMyAssignedChecked(defaultMyAssigned);
-            if (billedOnlyCheckbox) billedOnlyCheckbox.checked = false;
-            updateBadgeState();
-            applyFilter();
-        });
-    }
-
-    setMyAssignedChecked(initialParams.has('assigned') ? initialParams.get('assigned') === 'mine' : defaultMyAssigned);
-    syncActiveBadgeFromControls();
-    updateBadgeState();
-    applyFilter();
-    try {
-        if (sessionStorage.getItem('sqr-filter-navigation') === window.location.pathname + window.location.search) document.body.dataset.sqrFilterNavigation = '1';
-        sessionStorage.removeItem('sqr-filter-navigation');
-        var savedFocus = JSON.parse(sessionStorage.getItem('sqr-filter-focus') || 'null');
-        sessionStorage.removeItem('sqr-filter-focus');
-        if (savedFocus) {
-            var focusInput = document.getElementById(savedFocus.id);
-            if (focusInput) {
-                focusInput.focus({preventScroll: true});
-                if (typeof savedFocus.start === 'number' && focusInput.setSelectionRange) focusInput.setSelectionRange(savedFocus.start, savedFocus.end);
-            }
-        }
-    } catch (_) {}
-    if (initialParams.has('focus')) window.focusSqrTrackerProject(initialParams.get('focus'));
-})();
-</script>
-
 
 {# ── For Revision Comments Modal (PM/Admin inline edit) ───────────────── #}
 {% if is_pm %}

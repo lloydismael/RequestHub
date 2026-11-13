@@ -1,10 +1,11 @@
 {# Lazy shell for the SQR Tracker Prototype: records are fetched when the view is first opened. #}
 <section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
-         data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}"
+         data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}" data-default-assigned="{{ sqr_default_assigned|default:'all' }}"
          aria-label="SQR Tracker Prototype">
+    {% include "hub/partials/sqr_filters.html" with root_id="sqr-proto-filters" filter_label="SQR Tracker filters" %}
     <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list">
         <aside class="sqr-proto__list" aria-label="SQR list">
-            <div class="sqr-proto__tools">
+            <div class="sqr-proto__tools" hidden>
                 <label class="visually-hidden" for="sqr-proto-search">Search SQRs</label>
                 <div class="sqr-proto__search">
                     <i class="bi bi-search" aria-hidden="true"></i>

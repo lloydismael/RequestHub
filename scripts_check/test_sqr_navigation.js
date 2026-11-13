@@ -33,6 +33,7 @@ function load({query = '', saved = 'tracker', performance = true, blocked = fals
     const trackerControls = [element(), element({}, true)];
     const prototypeControls = [element()];
     const events = [];
+    const listeners = {};
     const location = new URL('https://fixture.invalid/sqr/' + query);
     const storage = {
         getItem() { if (blocked) throw new Error('blocked'); return saved; },
@@ -56,9 +57,10 @@ function load({query = '', saved = 'tracker', performance = true, blocked = fals
                 '[data-sqr-tracker-link]': [trackerLink],
             }[selector] || [];
         },
-        dispatchEvent(event) { events.push(event.detail.view); },
+        addEventListener(name, callback) { (listeners[name] ||= []).push(callback); },
+        dispatchEvent(event) { events.push(event.detail.view); for (const callback of listeners[event.type] || []) callback(event); },
     };
-    class CustomEvent { constructor(_name, options) { this.detail = options.detail; } }
+    class CustomEvent { constructor(name, options) { this.type = name; this.detail = options.detail; } }
     vm.runInNewContext(source, {document, window, CustomEvent, URLSearchParams});
     return {
         document, window, buttons, panels, nav, header, trackerLink, trackerControls, prototypeControls, events,
@@ -112,6 +114,21 @@ test('switching to the prototype updates navigation and keeps URL filters', () =
     assert.equal(app.document.title, 'SQR · Request Hub');
 });
 
+test('native sidebar links retain repeated filters after initial and changed state', () => {
+    const app = load({query: '?view=prototype&assigned=all&pm=1&pm=2&overall_status=in_progress&overall_status=on_hold&page=2&layout=list'});
+    let url = new URL(app.navItem('performance').attributes.href, app.window.location);
+    assert.deepEqual(url.searchParams.getAll('pm'), ['1', '2']);
+    assert.deepEqual(url.searchParams.getAll('overall_status'), ['in_progress', 'on_hold']);
+    assert.equal(url.searchParams.get('page'), '2');
+    assert.equal(url.searchParams.get('layout'), 'list');
+    assert.equal(url.searchParams.get('view'), 'performance');
+    app.window.history.replaceState(null, '', '/sqr/?view=prototype&assigned=all&pm=2&page=1');
+    app.document.dispatchEvent({type: 'sqr:filters-changed', detail: {}});
+    url = new URL(app.navItem('performance').attributes.href, app.window.location);
+    assert.deepEqual(url.searchParams.getAll('pm'), ['2']);
+    assert.equal(url.searchParams.get('page'), '1');
+});
+
 test('switching from PPT to the tracker restores the SQR header', () => {
     const app = load({query: '?view=performance'});
     assert.equal(app.header.hidden, true);
@@ -150,14 +167,15 @@ test('old performance preference cannot hijack a plain SQR link', () => {
 });
 
 test('focusing a project on another page returns to the tracker with filters intact', () => {
-    const start = template.indexOf('    window.focusSqrTrackerProject = function (pk) {');
-    const end = template.indexOf('\n    if (focusDismiss)', start);
+    const classic = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-classic-filters.js'), 'utf8');
+    const start = classic.indexOf('    window.focusSqrTrackerProject = function (pk) {');
+    const end = classic.indexOf('\n    };', start) + '\n    };'.length;
     assert.ok(start >= 0 && end > start, 'focused project controller exists');
     let destination = '';
     const window = {location: {pathname: '/sqr/', search: '?view=performance&page=3&q=example',
         assign(url) { destination = url; }}};
     const document = {querySelector: () => ({querySelectorAll: () => []}), getElementById: () => ({})};
-    vm.runInNewContext(template.slice(start, end), {window, document, URLSearchParams});
+    vm.runInNewContext(classic.slice(start, end), {window, document, URLSearchParams});
     assert.equal(window.focusSqrTrackerProject('42'), true);
     const url = new URL(destination, 'https://fixture.invalid');
     assert.equal(url.searchParams.get('view'), 'tracker');

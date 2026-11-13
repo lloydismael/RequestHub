@@ -31,7 +31,11 @@
         dirtyClassic: false, history: {}, pipeline: {}, pagination: null,
         filters: {stage: 'all', search: ''}
     };
-    loadPrefs();
+    var sharedFilters = window.RequestHubSqrFilters;
+    var filterState = sharedFilters ? sharedFilters.fromPage(root.dataset.defaultAssigned || 'all') : null;
+    var filterWidget = null;
+    if (filterState) { state.filters.search = filterState.q; state.filters.stage = filterState.selected.stage.length === 1 ? filterState.selected.stage[0] : 'all'; }
+    else loadPrefs();
     var inFlight = null;
     var loadController = null;
     var loadVersion = 0;
@@ -45,6 +49,24 @@
         toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
         approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
     };
+
+    if (sharedFilters) {
+        var filterRoot = document.getElementById('sqr-proto-filters');
+        var filterOptionsNode = filterRoot && document.getElementById(filterRoot.dataset.optionsId);
+        var initialFilterOptions = {};
+        try { initialFilterOptions = JSON.parse(filterOptionsNode ? filterOptionsNode.textContent : '{}') || {}; } catch (error) { /* invalid options retain an explicit notice */ }
+        if (filterRoot) {
+            filterWidget = sharedFilters.mount(filterRoot, {state: filterState, options: initialFilterOptions,
+                onChange: function (next) { sharedFilters.write(next); }});
+            filterWidget.setCount(Number(filterRoot.dataset.initialCount || 0));
+        }
+    }
+    function filterParams() {
+        var params = sharedFilters ? sharedFilters.toQuery(filterState) : new URLSearchParams({q: state.filters.search, stage: state.filters.stage});
+        var focus = new URLSearchParams(window.location.search).get('focus');
+        if (focus) params.set('focus', focus);
+        return params;
+    }
 
     /* ── helpers ─────────────────────────────────────────────────── */
     function h(tag, props, children) {
@@ -175,13 +197,13 @@
     function newestFirst(a, b) { return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.pk - a.pk; }
     function needsAttentionFirst(a, b) { return attentionScore(b) - attentionScore(a) || newestFirst(a, b); }
     function visibleRecords() {
-        return state.records.filter(function (rec) { return baseMatches(rec) && stageMatches(rec); }).sort(needsAttentionFirst);
+        return sharedFilters ? state.records.slice() : state.records.filter(function (rec) { return baseMatches(rec) && stageMatches(rec); }).sort(needsAttentionFirst);
     }
 
     /* ── pipeline strip ──────────────────────────────────────────── */
     var STAGE_TONES = {all: 'secondary', mine: 'primary', attention: 'danger', opportunity: 'primary', delivery: 'success', billing: 'warning', closed: 'secondary'};
     function renderPipeline() {
-        var pool = state.records.filter(baseMatches);
+        var pool = sharedFilters ? state.records : state.records.filter(baseMatches);
         var defs = [{key: 'all', label: 'All SQRs', test: function () { return true; }}];
         if (state.viewer.is_pm) defs.push({key: 'mine', label: 'My Assigned SQR', icon: 'bi-person-check-fill', test: isMine});
         defs.push({key: 'attention', label: 'Needs action', test: needsAction});
@@ -197,10 +219,20 @@
             return h('button', {
                 type: 'button', class: 'badge bg-' + tone + '-subtle text-' + tone + ' border border-' + tone + '-subtle sqr-badge-filter',
                 dataset: {stage: def.key}, title: compactPeso(total),
-                'aria-pressed': state.filters.stage === def.key ? 'true' : 'false',
+                'aria-pressed': (filterState ? (def.key === 'mine' ? filterState.assigned === 'mine' : def.key === 'all' ? !filterState.selected.stage.length && filterState.assigned === 'all' : filterState.selected.stage.indexOf(def.key) !== -1) : state.filters.stage === def.key) ? 'true' : 'false',
                 on: {click: function () {
-                    state.filters.stage = state.filters.stage === def.key ? 'all' : def.key;
-                    state.shown = PAGE_SIZE; savePrefs(); load(false);
+                    if (filterState) {
+                        if (def.key === 'all') { filterState.selected.stage = []; filterState.assigned = 'all'; }
+                        else if (def.key === 'mine') filterState.assigned = filterState.assigned === 'mine' ? 'all' : 'mine';
+                        else {
+                            var stages = filterState.selected.stage;
+                            filterState.selected.stage = stages.indexOf(def.key) === -1 ? stages.concat([def.key]) : stages.filter(function (key) { return key !== def.key; });
+                        }
+                        sharedFilters.write(filterState);
+                    } else {
+                        state.filters.stage = state.filters.stage === def.key ? 'all' : def.key;
+                        state.shown = PAGE_SIZE; savePrefs(); load(false);
+                    }
                 }}
             }, [def.icon ? icon(def.icon, 'me-1') : null, def.label + ': ' + (summary ? summary.count : matching.length)]);
         }));
@@ -957,12 +989,14 @@
         });
     }
     function refreshPipeline() {
-        var filterKey = JSON.stringify(state.filters);
-        var params = new URLSearchParams({page: '1', summary: '1', q: state.filters.search, stage: state.filters.stage});
+        var filterKey = filterParams().toString();
+        var params = filterParams();
+        params.set('page', '1'); params.set('summary', '1');
         return api(ENDPOINT + '?' + params.toString(), {cache: 'no-store'}).then(function (res) {
             if (!res.ok) throw new Error('Unable to refresh pipeline totals.');
-            if (filterKey !== JSON.stringify(state.filters)) return;
+            if (filterKey !== filterParams().toString()) return;
             state.pipeline = res.data.pipeline;
+            if (filterWidget && state.pipeline.all) filterWidget.setCount(state.pipeline.all.count);
             renderPipeline();
         });
     }
@@ -989,10 +1023,18 @@
             return true;
         });
         index(records);
-        if (selected && !record(selected.pk)) state.byPk[selected.pk] = selected;
+        if (selected && !record(selected.pk)) {
+            state.selectedPk = null; el.body.dataset.mode = 'list';
+            showToast('The selected SQR no longer matches these filters.');
+        }
+        if (filterWidget) {
+            if (data.filter_options) filterWidget.setOptions(data.filter_options);
+            filterWidget.setCount(data.pagination ? data.pagination.total : data.records.length);
+        }
         state.shown = records.length;
         state.history = {};
         state.loaded = true;
+        state.filterDirty = false;
         state.loadedAt = Date.now();
         el.search.value = state.filters.search;
         renderAll();
@@ -1009,11 +1051,10 @@
         if (loadController) loadController.abort();
         var version = ++loadVersion;
         loadController = new AbortController();
-        var params = new URLSearchParams();
-        params.set('page', append && state.pagination ? state.pagination.page + 1 : 1);
+        var params = filterParams();
+        var requestedPage = Number(new URLSearchParams(window.location.search).get('page')) || 1;
+        params.set('page', append && state.pagination ? state.pagination.page + 1 : requestedPage);
         params.set('page_size', PAGE_SIZE);
-        params.set('stage', state.filters.stage);
-        params.set('q', state.filters.search);
         if (!background && !state.loaded) el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: 'Loading\u2026'}));
         el.more.disabled = true;
         inFlight = api(ENDPOINT + '?' + params.toString(), {cache: 'no-store', signal: loadController.signal}).then(function (res) {
@@ -1052,17 +1093,30 @@
         var tag = (event.target.tagName || '').toLowerCase();
         if (tag === 'input' || tag === 'textarea' || tag === 'select' || event.target.isContentEditable) return;
         event.preventDefault();
-        el.search.focus();
+        var searchBox = filterWidget ? document.getElementById('sqr-proto-filters-q') : el.search;
+        if (searchBox) searchBox.focus();
+    });
+    document.addEventListener('sqr:filters-changed', function (event) {
+        if (!sharedFilters) return;
+        filterState = event.detail.state;
+        state.filters.search = filterState.q;
+        state.filters.stage = filterState.selected.stage.length === 1 ? filterState.selected.stage[0] : 'all';
+        state.filterDirty = true;
+        if (filterWidget) filterWidget.setState(filterState);
+        if (loadController) loadController.abort();
+        loadVersion++;
+        inFlight = null;
+        if (!root.hidden) load(false);
     });
 
     document.addEventListener('sqr:performance-view', function (event) {
         var view = event.detail && event.detail.view;
         if (view === 'prototype') {
-            if (!state.loaded) load();
+            if (!state.loaded || state.filterDirty) load();
             else if (Date.now() - state.loadedAt > STALE_MS) load(true);
             return;
         }
-        if (state.dirtyClassic) {
+        if (state.dirtyClassic && view === 'tracker') {
             // The classic tables are server-rendered; reload so they never show pre-edit values.
             try { localStorage.setItem(VIEW_KEY, view || 'tracker'); } catch (error) { /* ignore */ }
             window.location.reload();

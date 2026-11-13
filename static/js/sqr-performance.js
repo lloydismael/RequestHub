@@ -16,11 +16,23 @@
     ['scope', 'search', 'manager', 'health', 'status', 'portfolio', 'rating', 'attention', 'mine'].forEach(function (key) {
         controls[key] = el(key);
     });
+    var sharedFilters = window.RequestHubSqrFilters;
+    var filterState = sharedFilters ? sharedFilters.fromPage(root.dataset.defaultMine === '1' ? 'mine' : 'all') : null;
+    var filterWidget = null;
+    if (sharedFilters) {
+        var filterRoot = document.getElementById('sqr-ppt-filters');
+        var filterOptionsNode = filterRoot && document.getElementById(filterRoot.dataset.optionsId);
+        var initialOptions = {};
+        try { initialOptions = JSON.parse(filterOptionsNode ? filterOptionsNode.textContent : '{}') || {}; } catch (error) { /* invalid selections retain a notice */ }
+        if (filterRoot) filterWidget = sharedFilters.mount(filterRoot, {state: filterState, options: initialOptions,
+            onChange: function (next) { sharedFilters.write(next); }});
+    }
     var snapshot = null;
     var filtered = [];
     var pageNumber = 1;
     var pageSize = 24;
     var inFlight = null;
+    var activeController = null;
     var revision = 0;
     var dirty = true;
     var renderFrame = 0;
@@ -190,7 +202,7 @@
         if (!snapshot || !visible()) return;
         var query = controls.search.value.trim().toLowerCase();
         var counts = {total: 0, attention: 0};
-        filtered = snapshot.projects.filter(function (project) {
+        filtered = sharedFilters ? snapshot.projects.slice() : snapshot.projects.filter(function (project) {
             var matches = (controls.scope.value !== 'active' || project.active_delivery)
                 && (!controls.mine.checked || project.approver_id === root.dataset.currentUserId)
                 && (!controls.manager.value || project.pm_id === controls.manager.value)
@@ -205,6 +217,8 @@
             if (project.needs_attention) counts.attention++;
             return true;
         });
+        if (sharedFilters) { counts.total = filtered.length; counts.attention = filtered.filter(function (project) { return project.needs_attention; }).length; }
+        if (filterWidget) filterWidget.setCount(filtered.length);
         renderPortfolio(counts);
         root.querySelectorAll('[data-pm-metric]').forEach(function (metric) { metric.textContent = counts[metric.dataset.pmMetric]; });
         el('content').hidden = false;
@@ -243,12 +257,20 @@
         if (inFlight) return inFlight;
         var version = revision;
         var controller = new AbortController();
+        activeController = controller;
         var timeout = setTimeout(function () { controller.abort(); }, 20000);
         root.setAttribute('aria-busy', 'true');
         message('loading', snapshot ? 'Refreshing snapshot… Showing the previous snapshot until ready.' : 'Loading your project portfolio…');
         inFlight = (async function () {
             try {
-                var response = await fetch(root.dataset.endpoint, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: {Accept: 'application/json'}});
+                var url = root.dataset.endpoint;
+                if (sharedFilters) {
+                    var params = sharedFilters.toQuery(filterState);
+                    var focus = new URLSearchParams(window.location.search).get('focus');
+                    if (focus) params.set('focus', focus);
+                    url += '?' + params.toString();
+                }
+                var response = await fetch(url, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: {Accept: 'application/json'}});
                 if (!response.ok || response.redirected) throw new Error('Snapshot unavailable');
                 var data = await response.json();
                 if (!data.ok || !Array.isArray(data.projects) || !data.as_of || !data.fetched_at) throw new Error('Invalid snapshot');
@@ -258,20 +280,33 @@
                 dirty = false;
                 if (visible()) {
                     updateManagers();
+                    if (filterWidget && data.filter_options) filterWidget.setOptions(data.filter_options);
                     message('', '');
                     scheduleRender();
                 }
             } catch (error) {
-                dirty = true;
-                if (visible()) message(snapshot ? 'stale' : 'error', snapshot ? 'Refresh failed. Showing an older snapshot; figures may be out of date.' : 'Could not load the dashboard. Check your connection or sign-in, then retry.');
+                if (activeController === controller) {
+                    dirty = true;
+                    if (visible()) message(snapshot ? 'stale' : 'error', snapshot ? 'Refresh failed. Showing an older snapshot; figures may be out of date.' : 'Could not load the dashboard. Check your connection or sign-in, then retry.');
+                }
             } finally {
                 clearTimeout(timeout);
-                inFlight = null;
-                root.setAttribute('aria-busy', 'false');
-                if (version !== revision && visible()) refresh();
+                if (activeController === controller) {
+                    inFlight = null;
+                    activeController = null;
+                    root.setAttribute('aria-busy', 'false');
+                }
             }
         })();
         return inFlight;
+    }
+    function invalidateSnapshot() {
+        revision++;
+        dirty = true;
+        if (activeController) activeController.abort();
+        activeController = null;
+        inFlight = null;
+        if (visible()) refresh();
     }
     Object.keys(controls).forEach(function (key) {
         controls[key].addEventListener(key === 'search' ? 'input' : 'change', function () {
@@ -309,10 +344,13 @@
         if (snapshot) { updateManagers(); scheduleRender(); }
         refresh();
     });
-    document.addEventListener('sqr:performance-invalidated', function () {
-        revision++;
-        dirty = true;
-        if (visible()) refresh();
+    document.addEventListener('sqr:performance-invalidated', invalidateSnapshot);
+    document.addEventListener('sqr:filters-changed', function (event) {
+        if (!sharedFilters) return;
+        filterState = event.detail.state;
+        if (filterWidget) filterWidget.setState(filterState);
+        pageNumber = 1;
+        invalidateSnapshot();
     });
     document.addEventListener('visibilitychange', function () {
         // Recheck server-local date on return to this browser tab; no midnight timer or polling.
