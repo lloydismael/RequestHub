@@ -55,6 +55,16 @@ assert.equal(display.children[0].children[0].name, 'i');
 context.renderStructuredDisplay(display, 'delivery_progress', '50<img src=x onerror=alert(1)>');
 assert.equal(display.textContent, '50%');
 assert.equal(display.children[0].children[0].children[0].style.width, '50%');
+for (const [field, value, label, tone] of [
+    ['schedule_performance', '', 'N/R', 'text-muted'],
+    ['schedule_performance', 'delayed', 'Delayed', 'text-danger'],
+    ['budget_effort_performance', 'at_risk', 'At Risk', 'text-warning'],
+    ['quality_performance', 'met', 'Met', 'text-success']
+]) {
+    context.renderStructuredDisplay(display, field, value);
+    assert.equal(display.textContent, label);
+    assert.ok(display.children[0].className.includes(tone));
+}
 """.replace("SOURCE", json.dumps(source))
         result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -533,4 +543,52 @@ for (const field of ['customer_name', 'project_title', 'revenue_reference_no']) 
             [shutil.which("node"), "-"], input=script, text=True,
             capture_output=True, timeout=15, check=False,
         )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_manual_date_response_preserves_editor_wrappers_and_applicability(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        source = "function applyInlineUpdateResponse(" + template.split(
+            "    function applyInlineUpdateResponse(", 1
+        )[1].split("    var undoToastTimer", 1)[0]
+        script = r"""
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const classes = () => ({add() {}, remove() {}, toggle() {}});
+function dateCell(value) {
+    const display = {textContent: value, set innerHTML(value) { throw Error('Date display must be text'); }};
+    return {dataset: {}, classList: classes(), display, textContent: value,
+        set innerHTML(value) { throw Error('Do not replace the date editor wrapper'); },
+        querySelector: () => display, setAttribute() {}};
+}
+const warranty = dateCell('old warranty'), start = dateCell('old start'), end = dateCell('old end');
+warranty.querySelector = () => null;
+start.dataset.sqrField = 'managed_support_start_date';
+end.dataset.sqrField = 'managed_support_end_date';
+const row = {dataset: {}, querySelector(selector) {
+    if (selector.includes('post_svc_warranty_end_date')) return warranty;
+    if (selector.includes('support_start_date')) return start;
+    if (selector.includes('managed_support_end_date')) return end;
+    return null;
+}};
+const cell = {dataset: {}, classList: classes(), closest: () => row};
+const context = {window: {}, document: {dispatchEvent() {}}, CustomEvent: function () {},
+    setTimeout() {}, getDisplay: (field, value) => String(value)};
+vm.runInNewContext(SOURCE, context);
+context.applyInlineUpdateResponse('1', 'delivery_actual_finish_date', '2026-11-13', cell, {textContent: ''}, {
+    field_value: '2026-11-13', post_svc_warranty_end_date: 'Dec 13, 2026', support_start_date: '',
+    managed_support_end_date: 'Feb 09, 2027', warranty_eligible: true, maintenance_eligible: true
+});
+assert.equal(warranty.textContent, 'Dec 13, 2026');
+assert.equal(start.display.textContent, 'N/R');
+assert.equal(end.display.textContent, 'Feb 09, 2027');
+assert.equal(cell.dataset.sqrValue, '2026-11-13');
+context.applyInlineUpdateResponse('1', 'managed_support_amount', '', cell, {textContent: ''}, {
+    field_value: '', support_start_date: '', managed_support_end_date: '', maintenance_eligible: false
+});
+assert.equal(start.display.textContent, 'N/A');
+assert.equal(end.display.textContent, 'N/A');
+assert.equal(end.dataset.sqrApplicable, 'false');
+""".replace("SOURCE", json.dumps(source))
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
+                                capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

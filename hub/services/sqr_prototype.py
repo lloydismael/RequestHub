@@ -95,24 +95,28 @@ FIELD_SPECS = [
 
     _field("assigned_pm", "Assigned PM", "user", "delivery", "Team", options="pm_users"),
     _field("assigned_sse", "Assigned SSE", "user", "delivery", "Team", options="sse_users"),
-    _field("delivery_start_date", "Start date", "date", "delivery", "Schedule"),
-    _field("delivery_target_finish_date", "Target finish date", "date", "delivery", "Schedule"),
-    _field("delivery_actual_finish_date", "Actual finish date", "date", "delivery", "Schedule"),
-    _field("delivery_completion_signed_date", "Completion signed date", "date", "delivery", "Schedule"),
+    _field("delivery_start_date", "Start Date", "date", "delivery", "Schedule"),
+    _field("delivery_actual_finish_date", "Finish Date (Actual)", "date", "delivery", "Schedule"),
     _field("overall_status", "Overall status", "select", "delivery", "Progress",
            choices=_choices(Overall), allow_blank=True),
-    _field("delivery_health", "Health status", "select", "delivery", "Progress",
-           choices=_choices(Health), allow_blank=True),
+    _field("schedule_performance", "Schedule Performance", "select", "delivery", "Progress",
+           choices=_choices(SqrSubmission.SchedulePerformance), allow_blank=True,
+           choice_tones={"on_track": "success", "at_risk": "warning", "delayed": "danger"}),
+    _field("budget_effort_performance", "Budget/Effort Performance", "select", "delivery", "Progress",
+           choices=_choices(SqrSubmission.BudgetEffortPerformance), allow_blank=True,
+           choice_tones={"within_budget": "success", "at_risk": "warning", "over_budget": "danger"}),
+    _field("quality_performance", "Quality Performance", "select", "delivery", "Progress",
+           choices=_choices(SqrSubmission.QualityPerformance), allow_blank=True,
+           choice_tones={"met": "success", "at_risk": "warning", "unmet": "danger"}),
     _field("delivery_progress", "Overall progress", "number", "delivery", "Progress",
            unit="%", min=0, max=100),
     _field("key_updates_risks", "Key updates / risks / issues", "textarea", "delivery", "Progress"),
-    _field("post_svc_warranty_end_date", "Completion warranty end", "computed", "delivery",
-           "After delivery", format="text"),
-    _field("managed_support_start_date", "Maintenance start date", "date", "delivery", "After delivery"),
-    _field("support_start_date", "Effective maintenance start", "computed", "delivery",
-           "After delivery", format="text"),
-    _field("managed_support_end_date", "Maintenance end date", "computed", "delivery",
-           "After delivery", format="text"),
+    _field("post_svc_warranty_end_date", "Completion Warranty End", "computed", "delivery",
+           "MAINTENANCE", format="text", blank_label="N/R"),
+    _field("managed_support_start_date", "Maintenance Start Date", "date", "delivery", "MAINTENANCE",
+           blank_label="N/R"),
+    _field("managed_support_end_date", "Maintenance End Date", "date", "delivery", "MAINTENANCE",
+           blank_label="N/R"),
 
     _field("po_pnl_date", "PO / PNL date", "date", "billing", "Purchase order"),
     _field("revenue_remarks", "PO remarks", "textarea", "billing", "Purchase order"),
@@ -207,13 +211,16 @@ def derive_attention(submission: SqrSubmission, stage: str, today: date) -> list
             flags.append({"key": "validity", "label": label, "tone": "warning"})
 
     if stage == "delivery":
-        target = submission.delivery_target_finish_date
-        if target and target < today:
-            flags.append({"key": "overdue", "label": "Delivery overdue", "tone": "danger"})
-        if submission.delivery_health == Health.AT_RISK:
-            flags.append({"key": "health", "label": "At risk", "tone": "danger"})
-        elif submission.delivery_health == Health.OFF_TRACK:
-            flags.append({"key": "health", "label": "Off track", "tone": "warning"})
+        if submission.overall_status == Overall.ON_HOLD:
+            flags.append({"key": "delivery_hold", "label": "Delivery On Hold", "tone": "warning"})
+        for spec in FIELD_SPECS:
+            if "choice_tones" not in spec:
+                continue
+            value = getattr(submission, spec["key"])
+            tone = spec["choice_tones"].get(value)
+            if tone in {"warning", "danger"}:
+                label = dict(spec["choices"])[value]
+                flags.append({"key": spec["key"], "label": f"{spec['label']}: {label}", "tone": tone})
     if stage == "billing":
         flags.append({"key": "billing", "label": "Ready to bill", "tone": "info"})
     return flags
@@ -251,13 +258,13 @@ def derive_next_step(submission: SqrSubmission, stage: str, closed_reason: str, 
         return {"tone": "info", "title": "Follow up with the customer",
                 "hint": "Update Proposal Status when they respond.", "action": ""}
     if stage == "delivery":
-        if not (submission.delivery_start_date and submission.delivery_target_finish_date):
+        if not submission.delivery_start_date:
             return {"tone": "info", "title": "Plan the delivery",
-                    "hint": "Assign the PM and SSE and set the dates.", "action": ""}
+                    "hint": "Assign the PM and SSE and set the start date.", "action": ""}
         progress = submission.delivery_progress
         suffix = f" ({progress}% complete)" if progress is not None else ""
         return {"tone": "info", "title": "Delivery in progress",
-                "hint": f"Keep progress and health current{suffix}.", "action": ""}
+                "hint": f"Keep progress and the three recorded performance assessments current{suffix}.", "action": ""}
     if stage == "billing":
         return {"tone": "info", "title": "Ready for billing",
                 "hint": "Add the billing reference, then mark it Billed.", "action": ""}
@@ -271,7 +278,6 @@ def derive_next_step(submission: SqrSubmission, stage: str, closed_reason: str, 
 
 
 def _values(submission: SqrSubmission) -> dict:
-    support_start = submission.computed_support_start_date
     return {
         "customer_name": submission.customer_name,
         "project_title": submission.project_title,
@@ -299,17 +305,16 @@ def _values(submission: SqrSubmission) -> dict:
         "assigned_pm": str(submission.assigned_pm_id or submission.pm_esg_reviewer_id or ""),
         "assigned_sse": str(submission.assigned_sse_id or ""),
         "delivery_start_date": _iso(submission.delivery_start_date),
-        "delivery_target_finish_date": _iso(submission.delivery_target_finish_date),
         "delivery_actual_finish_date": _iso(submission.delivery_actual_finish_date),
-        "delivery_completion_signed_date": _iso(submission.delivery_completion_signed_date),
         "overall_status": submission.overall_status or "",
-        "delivery_health": submission.delivery_health or "",
+        "schedule_performance": submission.schedule_performance or "",
+        "budget_effort_performance": submission.budget_effort_performance or "",
+        "quality_performance": submission.quality_performance or "",
         "delivery_progress": "" if submission.delivery_progress is None else str(submission.delivery_progress),
         "key_updates_risks": submission.key_updates_risks or "",
         "post_svc_warranty_end_date": _date_text(submission.computed_post_svc_warranty_end_date),
         "managed_support_start_date": _iso(submission.managed_support_start_date),
-        "support_start_date": _date_text(support_start),
-        "managed_support_end_date": _date_text(submission.computed_managed_support_end_date),
+        "managed_support_end_date": _iso(submission.managed_support_end_date),
         "po_pnl_date": _iso(submission.po_pnl_date),
         "revenue_remarks": submission.revenue_remarks or "",
         "revenue_source": submission.revenue_source or "",
@@ -335,6 +340,8 @@ def serialize_record(
     locked = submission.proposal_status in (Proposal.CLOSED_LOST, Proposal.CLOSED_CANCELED)
     editable = sorted(
         key for key in (allowed_fields or ()) if key in EDIT_FIELD_KEYS and not (locked and key in locked_fields)
+        and not (key in {"managed_support_start_date", "managed_support_end_date"}
+                 and not submission.is_managed_support_start_eligible)
     )
     values = _values(submission)
     linked = submission.linked_request
@@ -358,6 +365,8 @@ def serialize_record(
         "delivery_health": submission.delivery_health or "",
         "revenue_status": values["revenue_status"],
         "progress": submission.delivery_progress,
+        "maintenance_eligible": submission.is_managed_support_start_eligible,
+        "warranty_eligible": submission.is_post_svc_warranty_eligible,
         "total": values["total_price"],
         "stage": stage,
         "closed_reason": closed_reason,

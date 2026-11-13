@@ -131,6 +131,9 @@ body.dark-mode .sqr-proto .btn-primary { color: #0b1220; }
 .sqr-proto__badge[data-tone="info"] { background: var(--sp-info-bg); color: var(--sp-info); }
 .sqr-proto__badge[data-tone="muted"] { background: var(--sp-muted-bg); color: var(--sp-muted); }
 .sqr-proto__badge[data-tone="primary"] { background: var(--sp-accent-soft); color: var(--sp-accent); }
+.sqr-proto select[data-tone="success"] { background: var(--sp-good-bg); color: var(--sp-good); border-color: var(--sp-good); }
+.sqr-proto select[data-tone="warning"] { background: var(--sp-warn-bg); color: var(--sp-warn); border-color: var(--sp-warn); }
+.sqr-proto select[data-tone="danger"] { background: var(--sp-bad-bg); color: var(--sp-bad); border-color: var(--sp-bad); }
 .sqr-proto__badge { cursor: default; }
 .sqr-proto__ext { font-size: .75em; opacity: .7; }
 

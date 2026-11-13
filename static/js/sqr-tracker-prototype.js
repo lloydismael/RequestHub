@@ -85,8 +85,10 @@
         return map && map[value] !== undefined ? map[value] : value;
     }
     function badge(key, value, text) {
-        if (!value) return null;
-        return h('span', {class: 'sqr-proto__badge', dataset: {tone: (BADGES[key] || {})[value] || 'muted'}, text: text || choiceLabel(key, value)});
+        var spec = state.specs[key];
+        var tones = spec && spec.choice_tones;
+        if (!value && !tones) return null;
+        return h('span', {class: 'sqr-proto__badge', dataset: {tone: (tones || BADGES[key] || {})[value] || 'muted'}, text: text || (value ? choiceLabel(key, value) : 'N/R')});
     }
     function api(url, options) {
         var init = Object.assign({credentials: 'same-origin', headers: {Accept: 'application/json'}}, options || {});
@@ -333,6 +335,7 @@
     var EDIT_TYPES = {text: 1, textarea: 1, number: 1, date: 1, select: 1, user: 1, request: 1};
     function isInput(spec) { return !!EDIT_TYPES[spec.type]; }
     function lockReason(rec, spec) {
+        if (spec.section === 'MAINTENANCE' && !rec.maintenance_eligible) return 'Not applicable to this SQR';
         if (!rec.editable.length) return 'Read-only for your role';
         if (rec.locked && spec.tab !== 'opportunity') return 'Locked: proposal is closed';
         return 'Admin only';
@@ -350,7 +353,7 @@
                 spec.key === 'linked_request' && rec.linked_request ? rec.linked_request.code : current;
             list.unshift({value: current, label: label || current});
         }
-        if (blank) list.unshift({value: '', label: '\u2014 Not set \u2014'});
+        if (blank) list.unshift({value: '', label: spec.choice_tones ? 'N/R — Not Recorded' : '\u2014 Not set \u2014'});
         return list;
     }
     function displayText(rec, spec) {
@@ -379,10 +382,16 @@
             node.dataset.empty = 'false';
             return;
         }
+        if (spec.choice_tones) {
+            node.append(badge(spec.key, value));
+            node.dataset.empty = value ? 'false' : 'true';
+            return;
+        }
         var text = displayText(rec, spec);
         node.dataset.empty = text ? 'false' : 'true';
         if (spec.multiline) { node.style.whiteSpace = 'pre-wrap'; node.style.overflowWrap = 'anywhere'; }
-        node.textContent = text || '\u2014';
+        var eligible = spec.key === 'post_svc_warranty_end_date' ? rec.warranty_eligible : rec.maintenance_eligible;
+        node.textContent = spec.section === 'MAINTENANCE' && !eligible ? 'N/A' : (text || spec.blank_label || '\u2014');
     }
     function setControl(control, rec, spec) {
         var value = rec.values[spec.key] || '';
@@ -390,6 +399,7 @@
             control.append(h('option', {value: value, text: displayText(rec, spec) || value}));
         }
         control.value = value;
+        if (spec.choice_tones) control.dataset.tone = spec.choice_tones[value] || 'muted';
     }
     function setFieldState(wrap, stateName, message) {
         wrap.dataset.state = stateName;
@@ -575,15 +585,16 @@
             if (!v.proposal_status) add('proposal_status', 'Set the Proposal Status', 'Record where the customer stands: pending, negotiation, won, lost or canceled.');
             if (!rec.total) add('sse_manhrs', 'Add pricing', 'There is no total price yet. Enter the man-hours or maintenance amount.');
         } else if (rec.stage === 'delivery') {
-            if (flag('overdue')) add('delivery_target_finish_date', 'Delivery is overdue', 'Update the target finish date or the progress.', 'danger');
             if (!v.assigned_sse) add('assigned_sse', 'Assign an SSE', 'Choose who will deliver the work.');
             if (!v.delivery_start_date) add('delivery_start_date', 'Set the delivery start date', 'Needed to plan the delivery.');
-            if (!v.delivery_target_finish_date) add('delivery_target_finish_date', 'Set the target finish date', 'Needed to track overdue work.');
             if (!v.overall_status) add('overall_status', 'Set the overall status', 'Planning, in progress, on hold, completed or cancelled.');
-            if (!v.delivery_health) add('delivery_health', 'Set the health status', 'On track, off track or at risk.');
+            ['schedule_performance', 'budget_effort_performance', 'quality_performance'].forEach(function (key) {
+                var spec = state.specs[key];
+                if (!v[key]) add(key, 'Record ' + spec.label, 'Choose a recorded assessment; blank remains N/R.');
+                else if (flag(key)) add(key, flag(key).label, 'Review the recorded assessment and update the risks.', flag(key).tone);
+            });
             if (!v.delivery_progress) add('delivery_progress', 'Update the progress', 'Enter the % complete.', 'info');
         } else if (rec.stage === 'billing') {
-            if (!v.delivery_completion_signed_date) add('delivery_completion_signed_date', 'Record the completion sign-off date', 'Add it once the customer signs off the delivery.');
             if (!v.po_pnl_date) add('po_pnl_date', 'Add the PO / PNL date', 'Required before billing.');
             if (!v.revenue_reference_no) add('revenue_reference_no', 'Add the billing reference', 'Invoice or internal billing reference number.');
             add('revenue_status', 'Mark as Billed', 'Do this once billing is done.', 'info');
@@ -664,8 +675,8 @@
         var v = rec.values;
         var timeline = [
             ['SQR submitted', fmtDate(rec.created_at)], ['Approved', v.reviewed_at], ['Validity due', v.validity_due_date],
-            ['Delivery start', fmtDate(v.delivery_start_date), 'delivery_start_date'], ['Target finish', fmtDate(v.delivery_target_finish_date), 'delivery_target_finish_date'],
-            ['Actual finish', fmtDate(v.delivery_actual_finish_date), 'delivery_actual_finish_date'], ['Completion signed', fmtDate(v.delivery_completion_signed_date), 'delivery_completion_signed_date'],
+            ['Delivery start', fmtDate(v.delivery_start_date), 'delivery_start_date'],
+            ['Finish Date (Actual)', fmtDate(v.delivery_actual_finish_date), 'delivery_actual_finish_date'],
             ['PO / PNL', fmtDate(v.po_pnl_date), 'po_pnl_date'], ['Billed', fmtDate(v.revenue_date), 'revenue_date']
         ];
         return [
@@ -677,7 +688,9 @@
                     fact('SQR status', badge('status', rec.status)),
                     fact('Proposal', badge('proposal_status', rec.proposal_status), rec, 'proposal_status'),
                     fact('Delivery', badge('overall_status', rec.overall_status), rec, 'overall_status'),
-                    fact('Health', badge('delivery_health', rec.delivery_health), rec, 'delivery_health'),
+                    fact('Schedule Performance', badge('schedule_performance', v.schedule_performance), rec, 'schedule_performance'),
+                    fact('Budget/Effort Performance', badge('budget_effort_performance', v.budget_effort_performance), rec, 'budget_effort_performance'),
+                    fact('Quality Performance', badge('quality_performance', v.quality_performance), rec, 'quality_performance'),
                     fact('Progress', rec.progress === null || rec.progress === undefined ? '' : rec.progress + '%', rec, 'delivery_progress'),
                     fact('Billing', rec.stage === 'opportunity' || (rec.stage === 'closed' && rec.closed_reason !== 'billed') ? '' : badge('revenue_status', rec.revenue_status)),
                     fact('Requester', rec.requester), fact('Approver', rec.approver),

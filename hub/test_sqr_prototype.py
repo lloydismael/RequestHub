@@ -62,10 +62,14 @@ class AttentionTests(SimpleTestCase):
         self.assertNotIn("validity", self.flags("delivery", validity_due_date=TODAY - timedelta(days=30)))
 
     def test_delivery_and_billing_flags(self):
-        flags = self.flags("delivery", delivery_target_finish_date=TODAY - timedelta(days=2), delivery_health="at_risk")
-        self.assertEqual(flags["overdue"]["tone"], "danger")
-        self.assertEqual(flags["health"]["label"], "At risk")
-        self.assertEqual(self.flags("delivery", delivery_health="off_track")["health"]["label"], "Off track")
+        flags = self.flags("delivery", delivery_target_finish_date=TODAY - timedelta(days=2),
+                           delivery_health="off_track", schedule_performance="at_risk",
+                           budget_effort_performance="over_budget", quality_performance="met")
+        self.assertEqual(flags["schedule_performance"]["tone"], "warning")
+        self.assertEqual(flags["budget_effort_performance"]["tone"], "danger")
+        self.assertNotIn("overdue", flags)
+        self.assertNotIn("health", flags)
+        self.assertNotIn("quality_performance", flags)
         self.assertIn("billing", self.flags("billing"))
         self.assertNotIn("overdue", self.flags("billing", delivery_target_finish_date=TODAY - timedelta(days=2)))
 
@@ -83,7 +87,7 @@ class NextStepTests(SimpleTestCase):
         self.assertEqual(self.step()["title"], "Follow up with the customer")
         self.assertEqual(self.step(proposal_status="negotiation_review")["title"], "Negotiation in progress")
         self.assertEqual(self.step("delivery")["title"], "Plan the delivery")
-        planned = self.step("delivery", delivery_start_date=TODAY, delivery_target_finish_date=TODAY, delivery_progress=40)
+        planned = self.step("delivery", delivery_start_date=TODAY, delivery_progress=40)
         self.assertEqual(planned["title"], "Delivery in progress")
         self.assertIn("40%", planned["hint"])
         self.assertEqual(self.step("billing")["title"], "Ready for billing")

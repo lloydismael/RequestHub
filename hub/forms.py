@@ -1221,13 +1221,12 @@ class SqrDeliveryForm(forms.ModelForm):
             "assigned_sse",
             "delivery_start_date",
             "overall_status",
-            "delivery_health",
+            "schedule_performance",
+            "budget_effort_performance",
+            "quality_performance",
             "delivery_progress",
             "key_updates_risks",
-            "delivery_target_finish_date",
             "delivery_actual_finish_date",
-            "delivery_completion_signed_date",
-            "warranty_end_date",
             "managed_support_start_date",
             "managed_support_end_date",
         ]
@@ -1237,15 +1236,14 @@ class SqrDeliveryForm(forms.ModelForm):
             "assigned_sse": "Assigned SSE",
             "delivery_start_date": "Start Date (Execution)",
             "overall_status": "Overall Status",
-            "delivery_health": "Health Status",
+            "schedule_performance": "Schedule Performance",
+            "budget_effort_performance": "Budget/Effort Performance",
+            "quality_performance": "Quality Performance",
             "delivery_progress": "Overall Progress (%)",
             "key_updates_risks": "Key Updates / Risks / Issues",
-            "delivery_target_finish_date": "Target Finish Date (Execution)",
-            "delivery_actual_finish_date": "Actual Finish Date (Execution)",
-            "delivery_completion_signed_date": "Completion Signed Date",
-            "warranty_end_date": "Post-service Warranty End Date",
-            "managed_support_start_date": "Managed Support Start Date",
-            "managed_support_end_date": "Managed Support End Date",
+            "delivery_actual_finish_date": "Finish Date (Actual)",
+            "managed_support_start_date": "Maintenance Start Date",
+            "managed_support_end_date": "Maintenance End Date",
         }
         widgets = {
             "po_pnl_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
@@ -1253,15 +1251,14 @@ class SqrDeliveryForm(forms.ModelForm):
             "assigned_sse": forms.Select(attrs={"class": "form-select"}),
             "delivery_start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "overall_status": forms.Select(attrs={"class": "form-select"}),
-            "delivery_health": forms.Select(attrs={"class": "form-select"}),
+            "schedule_performance": forms.Select(attrs={"class": "form-select"}),
+            "budget_effort_performance": forms.Select(attrs={"class": "form-select"}),
+            "quality_performance": forms.Select(attrs={"class": "form-select"}),
             "delivery_progress": forms.NumberInput(
                 attrs={"class": "form-control", "min": "0", "max": "100", "placeholder": "0\u2013100"}
             ),
             "key_updates_risks": forms.Textarea(attrs={"class": "form-control", "rows": "3"}),
-            "delivery_target_finish_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "delivery_actual_finish_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "delivery_completion_signed_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "warranty_end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "managed_support_start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "managed_support_end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
         }
@@ -1271,13 +1268,35 @@ class SqrDeliveryForm(forms.ModelForm):
         self.fields["overall_status"].choices = [("", "\u2014 Not set \u2014")] + list(
             SqrSubmission.OverallStatus.choices
         )
-        self.fields["delivery_health"].choices = [("", "\u2014 Not set \u2014")] + list(
-            SqrSubmission.DeliveryHealth.choices
-        )
+        for key, choices in (("schedule_performance", SqrSubmission.SchedulePerformance),
+                             ("budget_effort_performance", SqrSubmission.BudgetEffortPerformance),
+                             ("quality_performance", SqrSubmission.QualityPerformance)):
+            self.fields[key].choices = [("", "N/R — Not Recorded")] + list(choices.choices)
+            self.fields[key].widget.attrs["data-form-section"] = "Progress"
+            if self.is_bound and self.add_prefix(key) not in self.data:
+                self.fields[key].disabled = True
+        for key in ("delivery_start_date", "delivery_actual_finish_date"):
+            self.fields[key].widget.attrs["data-form-section"] = "Schedule"
+        for key in ("managed_support_start_date", "managed_support_end_date"):
+            self.fields[key].widget.attrs["data-form-section"] = "MAINTENANCE"
+            self.fields[key].disabled = not self.instance.is_managed_support_start_eligible
         self.fields["assigned_pm"].queryset = User.objects.filter(role="pm_esg").order_by("first_name", "last_name")
         self.fields["assigned_sse"].queryset = User.objects.filter(role__in=["engineer", "on_hold"]).order_by("first_name", "last_name")
         for f in self.fields.values():
             f.required = False
+
+    @staticmethod
+    def validate_dates(start, end):
+        if start and end and end < start:
+            raise forms.ValidationError({
+                "managed_support_end_date": "Maintenance End Date cannot be before Maintenance Start Date."
+            })
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.is_managed_support_start_eligible:
+            self.validate_dates(cleaned.get("managed_support_start_date"), cleaned.get("managed_support_end_date"))
+        return cleaned
 
     def clean_delivery_progress(self):
         value = self.cleaned_data.get("delivery_progress")
@@ -1287,7 +1306,7 @@ class SqrDeliveryForm(forms.ModelForm):
 
 
 class SqrPerformanceForm(forms.ModelForm):
-    """PM fills this to track Project Performance (Status + Health) per SQR."""
+    """Compatibility editor for legacy metadata, not authoritative SQR assessments."""
 
     class Meta:
         model = SqrProjectPerformance

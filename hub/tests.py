@@ -2722,6 +2722,12 @@ class SqrExportTests(TestCase):
             remarks="Primary proposal",
             status=SqrSubmission.Status.ON_HOLD,
             hold_reason="Awaiting customer confirmation",
+            schedule_performance="delayed",
+            budget_effort_performance="over_budget",
+            quality_performance="",
+            managed_support_amount=None,
+            managed_support_start_date=date(2026, 12, 1),
+            managed_support_end_date=date(2027, 2, 9),
         )
 
         response = self.client.get(f"{reverse('hub:sqr-export')}?report=sqr")
@@ -2731,11 +2737,21 @@ class SqrExportTests(TestCase):
         sheet = workbook.active
         assert sheet is not None
         self.assertEqual(sheet.title, "SQR")
-        self.assertEqual([cell.value for cell in sheet[1]], self.SQR_HEADERS)
-        row = dict(zip(self.SQR_HEADERS, [cell.value for cell in sheet[2]]))
+        expected_headers = [header for header in self.SQR_HEADERS
+                            if header not in {"Target Finish Date", "Health Status", "Completion Signed Date"}]
+        offset = expected_headers.index("Overall Status") + 1
+        expected_headers[offset:offset] = ["Schedule Performance", "Budget/Effort Performance", "Quality Performance"]
+        expected_headers[expected_headers.index("Actual Finish Date")] = "Finish Date (Actual)"
+        self.assertEqual([cell.value for cell in sheet[1]], expected_headers)
+        row = dict(zip(expected_headers, [cell.value for cell in sheet[2]]))
         self.assertEqual(row["Remarks"], "Primary proposal")
         self.assertEqual(row["SQR Status"], "On Hold")
         self.assertEqual(row["Hold Reason"], "Awaiting customer confirmation")
+        self.assertEqual(row["Schedule Performance"], "Delayed")
+        self.assertEqual(row["Budget/Effort Performance"], "Over Budget")
+        self.assertIsNone(row["Quality Performance"])
+        self.assertEqual(row["Maintenance Start Date"], "2026-12-01")
+        self.assertEqual(row["Maintenance End Date"], "2027-02-09")
 
     def _create_submission(self, **overrides):
         data = {

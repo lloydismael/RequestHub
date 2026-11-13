@@ -31,6 +31,10 @@ PERSON_FIELDS = {
 }
 VALUE_FIELDS = {"sqr_submission": {"customer_contact"}}
 SECURITY_FIELDS = frozenset({"username", "email", "role", "department", "password", "password1", "password2", "current_password", "new_password1", "new_password2"})
+RETIRED_SQR_DELIVERY_FIELDS = frozenset({
+    "delivery_health", "delivery_target_finish_date", "delivery_completion_signed_date",
+    "warranty_end_date", "support_start_date",
+})
 
 
 class RevisionConflict(ValidationError):
@@ -149,7 +153,7 @@ def baseline_schema(form_key):
             "placeholder": force_str(field.widget.attrs.get("placeholder", "")),
             "required": bool(field.required),
             "hidden": bool(field.widget.is_hidden),
-            "section": "",
+            "section": field.widget.attrs.get("data-form-section", ""),
             "width": "full",
         })
     return {"fields": fields, "title": get_registry()[form_key]["label"], "description": ""}

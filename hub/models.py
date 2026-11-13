@@ -990,8 +990,12 @@ class SqrSubmission(models.Model):
     ])
 
     @property
+    def is_post_svc_warranty_eligible(self):
+        return self.project_details in self._IMPL_SCOPES
+
+    @property
     def computed_post_svc_warranty_end_date(self):
-        if self.project_details in self._IMPL_SCOPES and self.delivery_actual_finish_date:
+        if self.is_post_svc_warranty_eligible and self.delivery_actual_finish_date:
             return self.delivery_actual_finish_date + timedelta(days=30)
         return None
 

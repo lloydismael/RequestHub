@@ -2627,16 +2627,16 @@ def _get_sqr_export_columns():
         ("Assigned PM", lambda s: _name(s.assigned_pm) or _name(s.pm_esg_reviewer)),
         ("Assigned SSE", lambda s: _name(s.assigned_sse)),
         ("Start Date", lambda s: _date(s.delivery_start_date)),
-        ("Target Finish Date", lambda s: _date(s.delivery_target_finish_date)),
         ("Overall Status", lambda s: s.overall_status or ""),
-        ("Health Status", lambda s: s.delivery_health or ""),
+        ("Schedule Performance", lambda s: s.get_schedule_performance_display() if s.schedule_performance else ""),
+        ("Budget/Effort Performance", lambda s: s.get_budget_effort_performance_display() if s.budget_effort_performance else ""),
+        ("Quality Performance", lambda s: s.get_quality_performance_display() if s.quality_performance else ""),
         ("Overall Progress %", lambda s: s.delivery_progress if s.delivery_progress is not None else ""),
         ("Key Updates / Risks", lambda s: s.key_updates_risks or ""),
-        ("Actual Finish Date", lambda s: _date(s.delivery_actual_finish_date)),
-        ("Completion Signed Date", lambda s: _date(s.delivery_completion_signed_date)),
+        ("Finish Date (Actual)", lambda s: _date(s.delivery_actual_finish_date)),
         ("Completion Warranty End Date", lambda s: _date(s.computed_post_svc_warranty_end_date)),
-        ("Maintenance Start Date", lambda s: _date(s.computed_support_start_date)),
-        ("Maintenance End Date", lambda s: _date(s.computed_managed_support_end_date)),
+        ("Maintenance Start Date", lambda s: _date(s.managed_support_start_date)),
+        ("Maintenance End Date", lambda s: _date(s.managed_support_end_date)),
         ("PO / PNL Date", lambda s: _date(s.po_pnl_date)),
         ("PO Remarks", lambda s: s.revenue_remarks or ""),
         (
@@ -3961,26 +3961,30 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         "customer_name", "customer_company", "customer_contact",
         "project_title", "project_details", "sse_manhrs",
         "pm_manhrs", "discount_rate", "status", "hold_reason", "remarks", "proposal_status",
-        "po_pnl_date", "delivery_start_date", "overall_status", "delivery_health",
-        "delivery_progress", "key_updates_risks", "delivery_target_finish_date",
-        "delivery_actual_finish_date", "delivery_completion_signed_date",
-        "warranty_end_date", "revenue_date", "revenue_source", "revenue_reference_no",
+        "po_pnl_date", "delivery_start_date", "overall_status",
+        "schedule_performance", "budget_effort_performance", "quality_performance",
+        "delivery_progress", "key_updates_risks", "delivery_actual_finish_date",
+        "managed_support_start_date", "managed_support_end_date",
+        "revenue_date", "revenue_source", "revenue_reference_no",
         "revenue_status", "revenue_remarks", "revenue_overview", "revenue_declaration",
         "managed_support_amount", "assigned_pm", "assigned_sse", "linked_request",
     ])
     _PM_ESG_ALLOWED = frozenset([
         "project_details", "sse_manhrs", "pm_manhrs", "discount_rate", "status", "hold_reason", "proposal_status",
-        "po_pnl_date", "delivery_start_date", "overall_status", "delivery_health",
-        "delivery_progress", "key_updates_risks", "delivery_target_finish_date",
-        "delivery_actual_finish_date", "delivery_completion_signed_date",
-        "warranty_end_date", "managed_support_start_date", "revenue_date", "revenue_source",
+        "po_pnl_date", "delivery_start_date", "overall_status",
+        "schedule_performance", "budget_effort_performance", "quality_performance",
+        "delivery_progress", "key_updates_risks", "delivery_actual_finish_date",
+        "managed_support_start_date", "managed_support_end_date", "revenue_date", "revenue_source",
         "revenue_reference_no", "revenue_status", "revenue_remarks", "revenue_overview",
         "revenue_declaration", "managed_support_amount", "assigned_pm", "assigned_sse", "linked_request",
     ])
     _DATE_FIELDS = frozenset([
         "po_pnl_date", "delivery_start_date", "delivery_target_finish_date",
         "delivery_actual_finish_date", "delivery_completion_signed_date", "warranty_end_date",
-        "managed_support_start_date", "revenue_date",
+        "managed_support_start_date", "managed_support_end_date", "revenue_date",
+    ])
+    _LEGACY_RESTORE_FIELDS = frozenset([
+        "delivery_health", "delivery_target_finish_date", "delivery_completion_signed_date", "warranty_end_date",
     ])
     _INT_FIELDS = frozenset(["discount_rate", "delivery_progress"])
     _DECIMAL_FIELDS = frozenset(["sse_manhrs", "pm_manhrs", "managed_support_amount"])
@@ -3989,7 +3993,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         "po_pnl_date", "assigned_pm", "assigned_sse", "delivery_start_date",
         "delivery_target_finish_date", "overall_status", "delivery_health",
         "delivery_progress", "key_updates_risks", "delivery_actual_finish_date",
-        "delivery_completion_signed_date", "managed_support_start_date",
+        "delivery_completion_signed_date", "warranty_end_date", "managed_support_start_date", "managed_support_end_date",
+        "schedule_performance", "budget_effort_performance", "quality_performance",
         "revenue_date", "revenue_source", "revenue_reference_no", "revenue_status",
         "revenue_remarks", "revenue_overview", "revenue_declaration",
     ])
@@ -4004,6 +4009,13 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         if user.role == User.Roles.PM_ESG:
             return cls._PM_ESG_ALLOWED
         return None
+
+    @classmethod
+    def _validate_delivery_change(cls, submission, fields):
+        if set(fields).intersection({"managed_support_start_date", "managed_support_end_date"}):
+            if not submission.is_managed_support_start_eligible:
+                raise ValidationError("Maintenance dates are not applicable to this SQR.")
+            SqrDeliveryForm.validate_dates(submission.managed_support_start_date, submission.managed_support_end_date)
 
     @classmethod
     def _tracked_fields_for_change(cls, field, save_fields=None):
@@ -4125,13 +4137,14 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             response_data["rq_pk"] = req.pk if req else ""
             response_data["rq_code"] = req.reference_code if req else ""
 
-        if field == "delivery_completion_signed_date" or "delivery_completion_signed_date" in save_fields:
+        date_sources = {"delivery_actual_finish_date", "project_details", "customer_company",
+                        "managed_support_start_date", "managed_support_end_date", "managed_support_amount"}
+        if field in date_sources or save_fields.intersection(date_sources):
             response_data["post_svc_warranty_end_date"] = cls._fmt_date_display(submission.computed_post_svc_warranty_end_date)
             response_data["support_start_date"] = cls._fmt_date_display(submission.computed_support_start_date)
             response_data["managed_support_end_date"] = cls._fmt_date_display(submission.computed_managed_support_end_date)
-        if field in ("project_details", "customer_company", "managed_support_start_date", "managed_support_amount") or save_fields.intersection({"project_details", "customer_company", "managed_support_start_date", "managed_support_amount"}):
-            response_data["support_start_date"] = cls._fmt_date_display(submission.computed_support_start_date)
-            response_data["managed_support_end_date"] = cls._fmt_date_display(submission.computed_managed_support_end_date)
+            response_data["maintenance_eligible"] = submission.is_managed_support_start_eligible
+            response_data["warranty_eligible"] = submission.is_post_svc_warranty_eligible
         return response_data
 
     def post(self, request, pk):
@@ -4289,9 +4302,24 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         except ValidationError:
             return JsonResponse({"ok": False, "error": f"Invalid value for {field}"}, status=400)
 
+        try:
+            self._validate_delivery_change(submission, save_fields)
+        except ValidationError as exc:
+            return JsonResponse({"ok": False, "error": exc.messages[0]}, status=400)
         tracked_fields = self._tracked_fields_for_change(field, save_fields)
         old_values = self._snapshot_values(original_submission, tracked_fields)
         with transaction.atomic():
+            if set(save_fields).intersection({"managed_support_start_date", "managed_support_end_date"}):
+                latest = SqrSubmission.objects.select_for_update().get(pk=pk)
+                for date_field in ("managed_support_start_date", "managed_support_end_date"):
+                    if date_field not in save_fields:
+                        setattr(submission, date_field, getattr(latest, date_field))
+                submission.project_details = latest.project_details
+                submission.managed_support_amount = latest.managed_support_amount
+                try:
+                    self._validate_delivery_change(submission, save_fields)
+                except ValidationError as exc:
+                    return JsonResponse({"ok": False, "error": exc.messages[0]}, status=400)
             submission.save(update_fields=save_fields)
             new_values = self._snapshot_values(submission, tracked_fields)
             change = SqrSubmissionChange.objects.create(
@@ -4362,7 +4390,7 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
                 pk=change_id,
                 submission_id=pk,
             )
-            if change.field not in allowed:
+            if change.field not in allowed | self._LEGACY_RESTORE_FIELDS:
                 return JsonResponse({"ok": False, "error": "Field not allowed"}, status=400)
             if change.is_undone:
                 return JsonResponse({"ok": False, "error": "This change was already undone."}, status=400)
@@ -4399,6 +4427,10 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
             restore_fields = list(change.old_values.keys())
             for restore_field, restore_value in change.old_values.items():
                 self._apply_serialized_field_value(submission, restore_field, restore_value)
+            try:
+                self._validate_delivery_change(submission, restore_fields)
+            except ValidationError as exc:
+                return JsonResponse({"ok": False, "error": exc.messages[0]}, status=400)
             update_values = {}
             for restore_field in restore_fields:
                 if restore_field in self._SERIALIZED_FK_FIELDS:
@@ -4480,7 +4512,7 @@ class SqrHistoryRestoreView(LoginRequiredMixin, View):
         if request.user.role not in ADMIN_PANEL_ROLES:
             return JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
 
-        allowed = SqrInlineFieldUpdateView._allowed_fields_for_user(request.user) or frozenset()
+        allowed = (SqrInlineFieldUpdateView._allowed_fields_for_user(request.user) or frozenset()) | SqrInlineFieldUpdateView._LEGACY_RESTORE_FIELDS
         with transaction.atomic():
             history = get_object_or_404(
                 SqrSubmissionHistory.objects.select_for_update().select_related("submission"),
@@ -4505,8 +4537,16 @@ class SqrHistoryRestoreView(LoginRequiredMixin, View):
                     status=409,
                 )
 
+            if submission.proposal_status in {"closed_lost", "closed_canceled"} and any(
+                field in SqrInlineFieldUpdateView._CLOSED_LOST_LOCKED_FIELDS for field in restore_fields
+            ):
+                return JsonResponse({"ok": False, "error": "Delivery and billing fields are locked when Proposal Status is Closed-Lost or Closed-Canceled"}, status=400)
             for restore_field, restore_value in history.old_values.items():
                 SqrInlineFieldUpdateView._apply_serialized_field_value(submission, restore_field, restore_value)
+            try:
+                SqrInlineFieldUpdateView._validate_delivery_change(submission, restore_fields)
+            except ValidationError as exc:
+                return JsonResponse({"ok": False, "error": exc.messages[0]}, status=400)
             update_values = {}
             for restore_field in restore_fields:
                 if restore_field in SqrInlineFieldUpdateView._SERIALIZED_FK_FIELDS:
@@ -4678,9 +4718,18 @@ class SqrDeliveryUpdateView(LoginRequiredMixin, View):
             pk=pk,
         )
 
+        if submission.proposal_status in {"closed_lost", "closed_canceled"}:
+            messages.error(request, "Delivery fields are locked when Proposal Status is Closed-Lost or Closed-Canceled.")
+            return redirect("hub:sqr")
+        tracked = [field for field in SqrDeliveryForm._meta.fields]
+        old_values = SqrInlineFieldUpdateView._snapshot_values(submission, tracked)
         form = SqrDeliveryForm(request.POST, instance=submission)
         if form.is_valid():
-            form.save()
+            with transaction.atomic():
+                form.save()
+                new_values = SqrInlineFieldUpdateView._snapshot_values(submission, tracked)
+                record_sqr_history(submission, request.user, field="", old_values=old_values,
+                                   new_values=new_values, source="delivery_form")
             messages.success(request, f"Service delivery updated for {submission.reference_code}.")
         else:
             for field, errors in form.errors.items():
@@ -6120,6 +6169,17 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
     """Import SQR data from Excel and overwrite the current SQR table."""
 
     EXPECTED_HEADERS = [label for label, _ in _get_sqr_export_columns()]
+    PREVIOUS_HEADERS = [
+        "SQR Date", "SQR ID", "Account Name", "Service Description", "Scope of Services", "RQ ID",
+        "Group Name", "Account Manager", "Requester Name", "Approver Name", "SQR Doc. Ref. Link",
+        "SSE Man-hrs", "SSE Amount", "PM Man-hrs", "PM Amount", "Maintenance Amt.", "Discount Rate (%)",
+        "Discount Amount", "Total Price", "Remarks", "SQR Status", "Hold Reason", "Approval Date",
+        "Validity Due Date", "Proposal Status", "Assigned PM", "Assigned SSE", "Start Date",
+        "Target Finish Date", "Overall Status", "Health Status", "Overall Progress %", "Key Updates / Risks",
+        "Actual Finish Date", "Completion Signed Date", "Completion Warranty End Date", "Maintenance Start Date",
+        "Maintenance End Date", "PO / PNL Date", "PO Remarks", "Billing Type", "Billed Date",
+        "Billing Reference", "Billing Status", "Billing Remarks",
+    ]
     STATUS_MAP = _build_choice_import_map(SqrSubmission.Status.choices)
     PROPOSAL_STATUS_MAP = _build_choice_import_map(SqrSubmission.ProposalStatus.choices)
     OVERALL_STATUS_MAP = _build_choice_import_map(SqrSubmission.OverallStatus.choices)
@@ -6350,13 +6410,13 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
         engineer_lookup = self._build_user_lookup(engineer_users)
 
         start_row = self._detect_data_start_row(worksheet)
-        legacy_headers = [header for header in self.EXPECTED_HEADERS if header not in {"Remarks", "Hold Reason"}]
+        legacy_headers = [header for header in self.PREVIOUS_HEADERS if header not in {"Remarks", "Hold Reason"}]
         if start_row == 2:
-            canonical_headers = {_normalize_import_text(header): header for header in self.EXPECTED_HEADERS}
+            canonical_headers = {_normalize_import_text(header): header for header in self.PREVIOUS_HEADERS + self.EXPECTED_HEADERS}
             header_values = next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True), [])
             headers = [canonical_headers.get(_normalize_import_text(value), self._stringify(value)) for value in header_values]
         else:
-            headers = legacy_headers if worksheet.max_column <= len(legacy_headers) else self.EXPECTED_HEADERS
+            headers = legacy_headers if worksheet.max_column <= len(legacy_headers) else self.PREVIOUS_HEADERS
         candidate_rows = list(
             worksheet.iter_rows(
                 min_row=start_row,
@@ -6590,6 +6650,13 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
         proposal_status = self._parse_choice_lenient(row_data.get("Proposal Status"), self.PROPOSAL_STATUS_MAP)
         overall_status = self._parse_choice_lenient(row_data.get("Overall Status"), self.OVERALL_STATUS_MAP)
         delivery_health = self._parse_choice_lenient(row_data.get("Health Status"), self.DELIVERY_HEALTH_MAP)
+        assessments = {}
+        for header, field, choices in (("Schedule Performance", "schedule_performance", SqrSubmission.SchedulePerformance),
+                                       ("Budget/Effort Performance", "budget_effort_performance", SqrSubmission.BudgetEffortPerformance),
+                                       ("Quality Performance", "quality_performance", SqrSubmission.QualityPerformance)):
+            assessments[field] = self._parse_choice(row_data.get(header), _build_choice_import_map(choices.choices), header)
+        if "Schedule Performance" not in row_data:
+            assessments["schedule_performance"] = {"on_track": "on_track", "at_risk": "at_risk", "off_track": "delayed"}.get(delivery_health, "")
         revenue_declaration = self._parse_choice_lenient(row_data.get("Revenue Declaration"), self.REVENUE_DECLARATION_MAP)
 
         customer_name = self._stringify(row_data.get("Account Name"))
@@ -6633,10 +6700,15 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
             "delivery_target_finish_date": self._parse_date_lenient(row_data.get("Target Finish Date"), "Target Finish Date"),
             "overall_status": overall_status,
             "delivery_health": delivery_health,
+            **assessments,
             "delivery_progress": delivery_progress,
             "key_updates_risks": self._stringify(row_data.get("Key Updates / Risks")),
-            "delivery_actual_finish_date": self._parse_date_lenient(row_data.get("Actual Finish Date"), "Actual Finish Date"),
+            "delivery_actual_finish_date": self._parse_date_lenient(
+                row_data.get("Finish Date (Actual)", row_data.get("Actual Finish Date")), "Finish Date (Actual)"),
             "delivery_completion_signed_date": self._parse_date_lenient(row_data.get("Completion Signed Date"), "Completion Signed Date"),
+            "warranty_end_date": self._parse_date_lenient(row_data.get("Completion Warranty End Date"), "Completion Warranty End Date"),
+            "managed_support_start_date": self._parse_date_lenient(row_data.get("Maintenance Start Date"), "Maintenance Start Date"),
+            "managed_support_end_date": self._parse_date_lenient(row_data.get("Maintenance End Date"), "Maintenance End Date"),
             "revenue_date": self._parse_date_lenient(
                 row_data.get("Billed Date")
                 or row_data.get("Date")
@@ -6680,9 +6752,20 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
 
         scope = data["project_details"]
         group = data["customer_company"]
-        data["managed_support_amount"] = (
-            Decimal("149000.00") if group == "ESS" else Decimal("192000.00")
-        ) if scope in self.MANAGED_SCOPES else None
+        data["managed_support_amount"] = self._parse_decimal_lenient(row_data.get("Maintenance Amt."), "Maintenance Amt.") if "Maintenance Amt." in row_data else (
+            (Decimal("149000.00") if group == "ESS" else Decimal("192000.00")) if scope in self.MANAGED_SCOPES else None
+        )
+        if not any(header in row_data for header in ("Schedule Performance", "Budget/Effort Performance", "Quality Performance")):
+            from hub.services.sqr_delivery_transition import plan_delivery_transition
+            legacy = SqrSubmission(**data)
+            planned = plan_delivery_transition(legacy)
+            data.update(planned["updates"])
+            data["delivery_transition_metadata"] = planned["provenance"]
+        else:
+            try:
+                SqrDeliveryForm.validate_dates(data["managed_support_start_date"], data["managed_support_end_date"])
+            except ValidationError as exc:
+                raise ValueError(exc.messages[0]) from exc
 
         if created_date:
             data["created_at"] = self._to_datetime(created_date)

@@ -132,6 +132,21 @@ def configure_form(form, schema=None, *, definition=None, answers=None):
             pin_error = "This form has expired or changed. Reload the page and submit again."
     if schema is None:
         schema = deepcopy(version.schema) if version else form_editor.baseline_schema(key)
+    retired_condition_values = {}
+    if key == "sqr_delivery":
+        instance = getattr(form, "instance", None)
+        retired_condition_values = {name: getattr(instance, name, None)
+                                    for name in form_editor.RETIRED_SQR_DELIVERY_FIELDS}
+        schema = deepcopy(schema)
+        schema["fields"] = [spec for spec in schema.get("fields", [])
+                            if spec["key"] not in form_editor.RETIRED_SQR_DELIVERY_FIELDS]
+        for spec in schema["fields"]:
+            if spec.get("section") == "After delivery":
+                spec["section"] = "MAINTENANCE"
+            field = form.fields.get(spec["key"])
+            if field and field.widget.attrs.get("data-form-section"):
+                spec["label"] = str(field.label)
+                spec["section"] = field.widget.attrs["data-form-section"]
     form.editor_enabled = True
     form.editor_key = key
     form.editor_version = version
@@ -176,12 +191,17 @@ def configure_form(form, schema=None, *, definition=None, answers=None):
             visible = not spec.get("hidden", False) and not spec.get("archived", False)
             condition = spec.get("condition")
             if condition:
-                field.widget.attrs["data-form-condition"] = json.dumps(condition)
+                if condition["field"] in retired_condition_values:
+                    field.widget.attrs.pop("data-form-condition", None)
+                else:
+                    field.widget.attrs["data-form-condition"] = json.dumps(condition)
                 dependency = form.add_prefix(condition["field"])
                 dependency_field = ordered.get(condition["field"]) or form.fields.get(condition["field"])
                 dependency_spec = next((item for item in schema["fields"] if item["key"] == condition["field"]), {})
                 multiple = isinstance(dependency_field, forms.MultipleChoiceField) or dependency_spec.get("type") in ("multiselect", "multiple_choice")
-                if form.is_bound:
+                if condition["field"] in retired_condition_values:
+                    value = retired_condition_values[condition["field"]]
+                elif form.is_bound:
                     value = form.data.getlist(dependency) if multiple and hasattr(form.data, "getlist") else form.data.get(dependency)
                     if isinstance(dependency_field, forms.BooleanField) or dependency_spec.get("type") in ("checkbox", "boolean"):
                         value = forms.BooleanField(required=False).to_python(value)

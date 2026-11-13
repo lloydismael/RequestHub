@@ -369,7 +369,21 @@
                         {% endwith %}
                     </div>
                     <div class="col-md-6">
-                        {% with field=delivery_form.delivery_health %}
+                        {% with field=delivery_form.schedule_performance %}
+                        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
+                        {% endwith %}
+                    </div>
+                    <div class="col-md-6">
+                        {% with field=delivery_form.budget_effort_performance %}
+                        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                        {{ field }}
+                        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
+                        {% endwith %}
+                    </div>
+                    <div class="col-md-6">
+                        {% with field=delivery_form.quality_performance %}
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
@@ -391,44 +405,28 @@
                         {% endwith %}
                     </div>
                     <div class="col-md-6">
-                        {% with field=delivery_form.delivery_target_finish_date %}
-                        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
-                        {% endwith %}
-                    </div>
-                    <div class="col-md-6">
                         {% with field=delivery_form.delivery_actual_finish_date %}
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
                         {{ field }}
                         {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
                         {% endwith %}
                     </div>
+                    <div class="col-12"><h4 class="h6">MAINTENANCE</h4></div>
                     <div class="col-md-6">
-                        {% with field=delivery_form.delivery_completion_signed_date %}
-                        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
-                        {% endwith %}
-                    </div>
-                    <div class="col-md-6">
-                        {% with field=delivery_form.warranty_end_date %}
-                        <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
-                        {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
-                        {% endwith %}
+                        <span class="form-label fw-semibold">Completion Warranty End</span>
+                        <p>{% if not object.is_post_svc_warranty_eligible %}N/A{% elif object.computed_post_svc_warranty_end_date %}{{ object.computed_post_svc_warranty_end_date|date:"M d, Y" }}{% else %}N/R{% endif %}</p>
                     </div>
                     <div class="col-md-6">
                         {% with field=delivery_form.managed_support_start_date %}
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
+                        {% if object.is_managed_support_start_eligible %}{{ field }}{% else %}<p class="text-muted">N/A</p>{{ field.as_hidden }}{% endif %}
                         {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
                         {% endwith %}
                     </div>
                     <div class="col-md-6">
                         {% with field=delivery_form.managed_support_end_date %}
                         <label class="form-label fw-semibold" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                        {{ field }}
+                        {% if object.is_managed_support_start_eligible %}{{ field }}{% else %}<p class="text-muted">N/A</p>{{ field.as_hidden }}{% endif %}
                         {% if field.errors %}<div class="invalid-feedback d-block">{{ field.errors|join:" " }}</div>{% endif %}
                         {% endwith %}
                     </div>

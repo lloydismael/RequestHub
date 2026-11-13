@@ -1,0 +1,3 @@
+<td class="small{% if is_pm %} sqr-inline-cell{% endif %}" data-sqr-computed="{{ computed }}" {% if is_pm %}data-sqr-pk="{{ item.pk }}" data-sqr-field="{{ field }}" data-sqr-type="date" data-sqr-value="{{ value|date:'Y-m-d'|default:'' }}" data-sqr-applicable="{{ item.is_managed_support_start_eligible|yesno:'true,false' }}" aria-disabled="{{ item.is_managed_support_start_eligible|yesno:'false,true' }}"{% endif %}>
+    <span class="sqr-display">{% if not item.is_managed_support_start_eligible %}<span class="text-muted fst-italic">N/A</span>{% elif value %}{{ value|date:"M d, Y" }}{% else %}<span class="text-muted">N/R</span>{% endif %}</span>
+</td>
