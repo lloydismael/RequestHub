@@ -707,6 +707,21 @@ class SqrSubmission(models.Model):
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 
+    class SchedulePerformance(models.TextChoices):
+        ON_TRACK = "on_track", "On Track"
+        AT_RISK = "at_risk", "At Risk"
+        DELAYED = "delayed", "Delayed"
+
+    class BudgetEffortPerformance(models.TextChoices):
+        WITHIN_BUDGET = "within_budget", "Within Budget"
+        AT_RISK = "at_risk", "At Risk"
+        OVER_BUDGET = "over_budget", "Over Budget"
+
+    class QualityPerformance(models.TextChoices):
+        MET = "met", "Met"
+        AT_RISK = "at_risk", "At Risk"
+        UNMET = "unmet", "Unmet"
+
     class OverallStatus(models.TextChoices):
         ON_HOLD = "on_hold", "On Hold"
         PLANNING = "planning", "Planning"
@@ -803,6 +818,16 @@ class SqrSubmission(models.Model):
     delivery_health = models.CharField(
         max_length=20, choices=DeliveryHealth.choices, blank=True, default=""
     )
+    schedule_performance = models.CharField(
+        max_length=20, choices=SchedulePerformance.choices, blank=True, default=""
+    )
+    budget_effort_performance = models.CharField(
+        max_length=20, choices=BudgetEffortPerformance.choices, blank=True, default=""
+    )
+    quality_performance = models.CharField(
+        max_length=20, choices=QualityPerformance.choices, blank=True, default=""
+    )
+    delivery_transition_metadata = models.JSONField(default=dict, blank=True, editable=False)
     delivery_progress = models.PositiveSmallIntegerField(blank=True, null=True)
     delivery_start_date = models.DateField(blank=True, null=True)
     delivery_target_finish_date = models.DateField(blank=True, null=True)
@@ -966,16 +991,14 @@ class SqrSubmission(models.Model):
 
     @property
     def computed_post_svc_warranty_end_date(self):
-        """Completion Signed Date + 30 days — only for Implementation / Impl+PM scopes."""
-        if self.project_details in self._IMPL_SCOPES and self.delivery_completion_signed_date:
-            return self.delivery_completion_signed_date + timedelta(days=30)
+        if self.project_details in self._IMPL_SCOPES and self.delivery_actual_finish_date:
+            return self.delivery_actual_finish_date + timedelta(days=30)
         return None
 
     @property
     def computed_warranty_end_date(self):
-        """Completion Signed Date + 30 days — for all warranty scopes (Impl / Impl+PM / Managed Support)."""
-        if self.project_details in self._WARRANTY_SCOPES and self.delivery_completion_signed_date:
-            return self.delivery_completion_signed_date + timedelta(days=30)
+        if self.project_details in self._WARRANTY_SCOPES and self.delivery_actual_finish_date:
+            return self.delivery_actual_finish_date + timedelta(days=30)
         return None
 
     @property
@@ -985,21 +1008,11 @@ class SqrSubmission(models.Model):
 
     @property
     def computed_support_start_date(self):
-        """Support Start Date (Col AJ) honoring eligibility and fallback rules."""
-        if not self.is_managed_support_start_eligible:
-            return None
-        return self.managed_support_start_date or self.computed_warranty_end_date
+        return self.managed_support_start_date if self.is_managed_support_start_eligible else None
 
     @property
     def computed_managed_support_end_date(self):
-        """Support End Date (Col AK) = AJ date + 365 days.
-
-        AJ is shown only when the support-start eligibility rules pass.
-        """
-        support_start_date = self.computed_support_start_date
-        if support_start_date:
-            return support_start_date + timedelta(days=365)
-        return None
+        return self.managed_support_end_date if self.is_managed_support_start_eligible else None
 
     @property
     def revenue_stage_key(self) -> str:

@@ -110,11 +110,12 @@ Mobile regressions live in [hub/test_mobile_ui.py](hub/test_mobile_ui.py). Templ
 - Approved flow supports two user options:
       - automatically copy the formatted email (tables and logo) and open a local Outlook draft with recipients and subject only; click the blank message body and press Ctrl+V to paste
       - download a formatted `.eml` file with the branded quotation layout
-- Managed support date behavior:
-      - `AI` = Post-service warranty end date
-      - `AJ` = Support start date (manual value or computed fallback)
-      - `AK` = Support end date (`AJ + 365 days`)
-      - `AJ` and `AK` show `NA` when column `P` has no managed support value
+- Delivery data contract: Schedule Performance, Budget/Effort Performance and Quality Performance are separate recorded assessments. Missing values remain N/R, never default green. Legacy health values remain archived; the one-time transition maps On Track / At Risk / Off Track to On Track / At Risk / Delayed without inventing budget or quality assessments.
+- Maintenance date behavior:
+      - Post-service warranty end = **Finish Date (Actual) + 30 calendar days**, for the existing deployment/legacy implementation scopes. Blank Actual Finish means N/R; Completion Signed Date is not a fallback.
+      - Maintenance start/end are independent manual dates. No continuing warranty-start fallback or automatic `start + 365 days` end. Existing support scope/amount eligibility is unchanged: recorded zero is eligible; no amount is not. Ineligible dates remain stored but display N/A.
+      - Migration `0061_sqr_delivery_transition` carries old displayed dates into blank raw fields once, preserving raw conflicts and recording system-only per-row provenance. It never copies sign-off into Actual Finish or fabricates a human history actor. Cleared dates remain blank afterward.
+      - On a verified backup/disposable copy, apply schema migration `0060`, run `python manage.py preview_sqr_delivery_transition --output <local-json-path>`, review counts/conflicts, then apply `0061`. The report contains IDs and dates, not customer/person names. Reverse data migration intentionally does nothing; business-data rollback requires a verified pre-transition backup.
 
 ### ?? User & Profile Management
 - Profile photos stored in the database (no external media bucket required)
