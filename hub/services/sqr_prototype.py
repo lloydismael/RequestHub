@@ -171,6 +171,7 @@ def delivery_finished(submission: SqrSubmission) -> bool:
         submission.overall_status == Overall.COMPLETED
         or submission.delivery_health == Health.COMPLETED
         or submission.delivery_actual_finish_date
+        or submission.delivery_completion_signed_date
     )
 
 
@@ -181,14 +182,14 @@ def derive_stage(submission: SqrSubmission) -> tuple[str, str]:
         return "closed", "lost"
     if proposal == Proposal.CLOSED_CANCELED:
         return "closed", "canceled"
+    if submission.overall_status == Overall.CANCELLED or submission.delivery_health == Health.CANCELLED:
+        return "closed", "canceled"
+    if delivery_finished(submission):
+        return ("closed", "billed") if revenue_state(submission) == Billing.BILLED else ("billing", "")
     if proposal != Proposal.CLOSED_WON:
         return "opportunity", ""
-    if submission.overall_status == Overall.CANCELLED:
-        return "closed", "canceled"
     if revenue_state(submission) == Billing.BILLED:
         return "closed", "billed"
-    if delivery_finished(submission):
-        return "billing", ""
     return "delivery", ""
 
 
@@ -302,7 +303,7 @@ def _values(submission: SqrSubmission) -> dict:
         "reviewed_at": _date_text(submission.reviewed_at),
         "validity_due_date": _date_text(submission.validity_due_date),
         "proposal_status": submission.proposal_status or "",
-        "assigned_pm": str(submission.assigned_pm_id or submission.pm_esg_reviewer_id or ""),
+        "assigned_pm": str(submission.assigned_pm_id or ""),
         "assigned_sse": str(submission.assigned_sse_id or ""),
         "delivery_start_date": _iso(submission.delivery_start_date),
         "delivery_actual_finish_date": _iso(submission.delivery_actual_finish_date),
@@ -358,6 +359,7 @@ def serialize_record(
         "approver": values["approver"],
         "approver_id": submission.pm_esg_reviewer_id,
         "assigned_pm_name": _user_name(submission.assigned_pm or submission.pm_esg_reviewer),
+        "assigned_pm_fallback": submission.assigned_pm_id is None,
         "assigned_sse_name": _user_name(submission.assigned_sse),
         "status": submission.status,
         "proposal_status": submission.proposal_status or "",

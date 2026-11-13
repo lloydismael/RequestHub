@@ -113,6 +113,8 @@ from .mixins import (
 )
 from .services import request_lifecycle
 from .services.sqr_performance import build_sqr_performance_snapshot, normalize_sqr_project
+from .services.sqr_queries import (FILTER_ERROR as SQR_FILTER_ERROR, annotate_tracker, filter_tracker,
+                                  filter_options as sqr_filter_options, filter_ppt_projects, positive_id)
 from .services import sqr_prototype
 from .services import outlook_threads
 from .services.outlook_drafts import (
@@ -2961,9 +2963,13 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             )
             _refresh_sqr_request_account_map(form)
 
+        authorized = self.get_queryset()
+        context["sqr_filter_options"] = sqr_filter_options(authorized)
+        context["sqr_default_assigned"] = "mine" if user.role == User.Roles.PM_ESG else "all"
+        context["sqr_focus_requested"] = bool(self.request.GET.get("focus"))
         if active_tab != "reports" and not kwargs.get("force_reports"):
             from hub.services.sqr_queries import tracker_page
-            context.update(tracker_page(self.get_queryset(), self.request.GET, user, timezone.localdate()))
+            context.update(tracker_page(authorized, self.request.GET, user, timezone.localdate()))
             context.update({
                 "can_create_sqr": can_create, "can_review_sqr": can_review, "is_pm": is_pm,
                 "is_admin": is_admin, "is_pm_esg": user.role == PM_ESG_ROLE,
@@ -2985,7 +2991,13 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                     json_script(context["sqr_rq_options"], "sgr-rq-options"))
             return context
 
-        all_submissions = list(self.get_queryset())
+        try:
+            report_queryset = filter_tracker(annotate_tracker(authorized, timezone.localdate()), self.request.GET, user)
+            context["sqr_filter_error"] = ""
+        except ValidationError:
+            report_queryset = authorized.none()
+            context["sqr_filter_error"] = SQR_FILTER_ERROR
+        all_submissions = list(report_queryset)
 
         # ── Proposal Stage ──────────────────────────────────────────────────
         proposal_counts = {
@@ -3577,11 +3589,18 @@ class SqrPerformanceDataView(LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         fetched_at = timezone.now()
-        return JsonResponse(build_sqr_performance_snapshot(
-            _sqr_queryset_for_user(request.user),
-            today=timezone.localdate(fetched_at),
-            fetched_at=fetched_at,
-        ))
+        today = timezone.localdate(fetched_at)
+        authorized = _sqr_queryset_for_user(request.user)
+        try:
+            queryset = filter_tracker(annotate_tracker(authorized, today), request.GET, request.user)
+            snapshot = build_sqr_performance_snapshot(queryset, today=today, fetched_at=fetched_at)
+            snapshot["projects"] = filter_ppt_projects(snapshot["projects"], request.GET)
+        except ValidationError:
+            return JsonResponse({"ok": False, "error": SQR_FILTER_ERROR}, status=400)
+        snapshot["filter_options"] = sqr_filter_options(authorized)
+        snapshot["default_assigned"] = "mine" if request.user.role == User.Roles.PM_ESG else "all"
+        snapshot["focus_requested"] = bool(request.GET.get("focus"))
+        return JsonResponse(snapshot)
 
 
 class SqrPrototypeDataView(LoginRequiredMixin, View):
@@ -3600,12 +3619,14 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         user = request.user
         is_pm = user.role in ADMIN_PANEL_ROLES
-        queryset = _sqr_queryset_for_user(user)
+        authorized = _sqr_queryset_for_user(user)
+        queryset = authorized
         raw_pk = request.GET.get("pk")
         if raw_pk is not None:
-            if not raw_pk.isdigit():
+            pk = positive_id(raw_pk)
+            if pk is None:
                 return JsonResponse({"ok": False, "error": "Invalid record"}, status=400)
-            queryset = queryset.filter(pk=int(raw_pk))
+            queryset = queryset.filter(pk=pk)
 
         serialize = partial(
             sqr_prototype.serialize_record,
@@ -3619,12 +3640,18 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
         )
         page = None
         pipeline = None
-        if raw_pk is None and "page" in request.GET:
-            from hub.services.sqr_queries import prototype_page
-            page, pipeline = prototype_page(queryset, request.GET, user, timezone.localdate())
-            if request.GET.get("summary") == "1":
-                return JsonResponse({"ok": True, "pipeline": pipeline})
-            queryset = page.object_list
+        if raw_pk is None:
+            try:
+                if "page" in request.GET:
+                    from hub.services.sqr_queries import prototype_page
+                    page, pipeline = prototype_page(queryset, request.GET, user, timezone.localdate())
+                    if request.GET.get("summary") == "1":
+                        return JsonResponse({"ok": True, "pipeline": pipeline})
+                    queryset = page.object_list
+                else:
+                    queryset = filter_tracker(annotate_tracker(queryset, timezone.localdate()), request.GET, user, prototype=True)
+            except ValidationError:
+                return JsonResponse({"ok": False, "error": SQR_FILTER_ERROR}, status=400)
         records = [serialize(submission) for submission in queryset]
         if raw_pk is not None:
             if not records:
@@ -3640,7 +3667,10 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
         ) if is_pm else {"pm_users": [], "sse_users": [], "rq_options": []}
         return JsonResponse({
             "ok": True,
-            "viewer": {"pk": user.pk, "is_pm": is_pm, "is_admin": user.role == User.Roles.ADMIN},
+            "viewer": {"pk": user.pk, "is_pm": is_pm, "is_admin": user.role == User.Roles.ADMIN,
+                       "default_assigned": "mine" if user.role == User.Roles.PM_ESG else "all"},
+            "filter_options": sqr_filter_options(authorized),
+            "focus_requested": bool(request.GET.get("focus")),
             "schema": {
                 "fields": sqr_prototype.FIELD_SPECS,
                 "stages": sqr_prototype.STAGES,
@@ -4107,8 +4137,9 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             response_data["validity_due_date"] = vdd.strftime("%b %d, %Y") if vdd else ""
         if "assigned_pm" in save_fields:
             pm = submission.assigned_pm
+            display_pm = pm or submission.pm_esg_reviewer
             response_data["assigned_pm_pk"] = pm.pk if pm else ""
-            response_data["assigned_pm_name"] = (pm.get_full_name() or pm.username) if pm else ""
+            response_data["assigned_pm_name"] = ((display_pm.get_full_name() or display_pm.username) + (" (reviewer fallback)" if pm is None else "")) if display_pm else ""
         if field == "assigned_sse" or "assigned_sse" in save_fields:
             sse = submission.assigned_sse
             response_data["assigned_sse_name"] = (sse.get_full_name() or sse.username) if sse else ""
@@ -6054,14 +6085,19 @@ class SqrExportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
 
-        qs = SqrSubmission.objects.select_related(
-            "engineer", "pm_esg_reviewer", "reviewed_by",
-            "assigned_pm", "assigned_sse", "linked_request",
-        ).order_by("-created_at", "-pk")
-
         report_type = request.GET.get("report", "sqr")
         if report_type not in {"sqr", "esg", "performance"}:
             report_type = "sqr"
+        today = timezone.localdate()
+        try:
+            qs = filter_tracker(annotate_tracker(_sqr_queryset_for_user(request.user), today), request.GET, request.user)
+            if report_type in {"esg", "performance"}:
+                submissions = list(qs)
+                projects = build_sqr_performance_snapshot(submissions, today=today, fetched_at=timezone.now())["projects"]
+                selected = {project["pk"] for project in filter_ppt_projects(projects, request.GET)}
+                qs = [submission for submission in submissions if submission.pk in selected]
+        except ValidationError:
+            return JsonResponse({"ok": False, "error": SQR_FILTER_ERROR}, status=400)
 
         report_config = {
             "sqr": {

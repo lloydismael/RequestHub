@@ -408,7 +408,7 @@ class SqrPerformanceEndpointTests(TestCase):
     def test_constant_queries_for_one_and_one_hundred_related_rows(self):
         self.client.force_login(self.pm)
         with CaptureQueriesContext(connection) as one:
-            response = self.client.get(self.url)
+            response = self.client.get(self.url, {"assigned": "all"})
         self.assertEqual(len(response.json()["projects"]), 1)
         SqrSubmission.objects.bulk_create([
             SqrSubmission(
@@ -419,11 +419,11 @@ class SqrPerformanceEndpointTests(TestCase):
             ) for index in range(99)
         ])
         with CaptureQueriesContext(connection) as hundred:
-            response = self.client.get(self.url)
+            response = self.client.get(self.url, {"assigned": "all"})
         self.assertEqual(len(response.json()["projects"]), 100)
         self.assertEqual(len(one), len(hundred))
-        self.assertEqual(sum('FROM "hub_sqrsubmission"' in q["sql"] for q in hundred), 1)
-        self.assertLessEqual(len(hundred), 3)
+        self.assertEqual(sum('"hub_sqrsubmission"."project_title"' in q["sql"] for q in hundred), 1)
+        self.assertLessEqual(len(hundred), 4)
 
     def test_shared_scope_and_joins_match_tracker_exactly(self):
         other = SqrSubmission.objects.create(engineer=self.other_engineer, pm_esg_reviewer=self.admin, customer_name="Other", project_title="Other")

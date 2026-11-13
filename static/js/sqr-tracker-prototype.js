@@ -353,11 +353,13 @@
                 spec.key === 'linked_request' && rec.linked_request ? rec.linked_request.code : current;
             list.unshift({value: current, label: label || current});
         }
-        if (blank) list.unshift({value: '', label: spec.choice_tones ? 'N/R — Not Recorded' : '\u2014 Not set \u2014'});
+        if (blank) list.unshift({value: '', label: spec.key === 'assigned_pm' ? 'No Assigned PM — reviewer fallback' : spec.choice_tones ? 'N/R — Not Recorded' : '\u2014 Not set \u2014'});
         return list;
     }
+    function pmText(rec) { return rec.assigned_pm_name + (rec.assigned_pm_fallback ? ' (reviewer fallback)' : ''); }
     function displayText(rec, spec) {
         var value = rec.values[spec.key];
+        if (spec.key === 'assigned_pm') return pmText(rec);
         if (value === '' || value === null || value === undefined) return '';
         if (spec.type === 'select') return choiceLabel(spec.key, value);
         if (spec.type === 'user') return spec.key === 'assigned_pm' ? rec.assigned_pm_name : rec.assigned_sse_name;
@@ -694,7 +696,7 @@
                     fact('Progress', rec.progress === null || rec.progress === undefined ? '' : rec.progress + '%', rec, 'delivery_progress'),
                     fact('Billing', rec.stage === 'opportunity' || (rec.stage === 'closed' && rec.closed_reason !== 'billed') ? '' : badge('revenue_status', rec.revenue_status)),
                     fact('Requester', rec.requester), fact('Approver', rec.approver),
-                    fact('Assigned PM', rec.assigned_pm_name, rec, 'assigned_pm'), fact('Assigned SSE', rec.assigned_sse_name, rec, 'assigned_sse'),
+                    fact('Assigned PM', pmText(rec), rec, 'assigned_pm'), fact('Assigned SSE', rec.assigned_sse_name, rec, 'assigned_sse'),
                     fact('Scope', rec.scope), fact('Group', rec.group),
                     fact('Remarks (SSE filing identifier)', h('span', {style: 'white-space:pre-wrap;overflow-wrap:anywhere', text: v.remarks || '\u2014'})),
                     fact('Hold reason (retained)', h('span', {style: 'white-space:pre-wrap;overflow-wrap:anywhere', text: v.hold_reason || '\u2014'}))

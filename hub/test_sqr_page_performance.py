@@ -47,7 +47,7 @@ class SqrPagePerformanceTests(TestCase):
         SqrSubmission.objects.filter(reference_code='SQR-PERF-000').update(pm_esg_reviewer=self.admin)
         context = self.context(user=self.pm)
         self.assertEqual(context['page_obj'].paginator.count, 150)
-        self.assertEqual(context['proposal_counts']['total'], 151)
+        self.assertEqual(context['proposal_counts']['total'], 150)
         self.assertEqual(self.context({'assigned': 'all'}, self.pm)['page_obj'].paginator.count, 151)
 
     def test_invalid_focus_parameters_do_not_reach_database_as_invalid_ids(self):
@@ -68,7 +68,7 @@ class SqrPagePerformanceTests(TestCase):
         from datetime import date
         import json
         row = SqrSubmission.objects.get(reference_code='SQR-PERF-000')
-        for health, signed, stage in [('completed', None, 'billing'), ('', date(2026, 11, 1), 'delivery')]:
+        for health, signed, stage in [('completed', None, 'billing'), ('', date(2026, 11, 1), 'billing')]:
             SqrSubmission.objects.filter(pk=row.pk).update(proposal_status='closed_won', status='reviewed',
                 delivery_health=health, delivery_completion_signed_date=signed, delivery_actual_finish_date=None)
             request = RequestFactory().get('/sqr/prototype-data/', {'page': '1', 'stage': stage})

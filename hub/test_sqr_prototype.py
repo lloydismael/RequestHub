@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from django.http import QueryDict
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
@@ -25,6 +26,9 @@ class StageDerivationTests(SimpleTestCase):
             ({"proposal_status": "closed_lost"}, ("closed", "lost")),
             ({"proposal_status": "closed_canceled"}, ("closed", "canceled")),
             ({"proposal_status": "closed_won"}, ("delivery", "")),
+            ({"delivery_health": "completed"}, ("billing", "")),
+            ({"delivery_health": "cancelled"}, ("closed", "canceled")),
+            ({"delivery_completion_signed_date": TODAY}, ("billing", "")),
             ({"proposal_status": "closed_won", "overall_status": "completed"}, ("billing", "")),
             ({"proposal_status": "closed_won", "delivery_health": "completed"}, ("billing", "")),
             ({"proposal_status": "closed_won", "delivery_actual_finish_date": TODAY}, ("billing", "")),
@@ -229,6 +233,165 @@ class PrototypeEndpointTests(TestCase):
         with CaptureQueriesContext(connection) as context:
             self.client.get(self.url)
         return len(context)
+
+    def _active(self, **values):
+        defaults = {"engineer": self.engineer, "pm_esg_reviewer": self.pm,
+                    "customer_name": "Filter fixture", "project_title": "Filter project", "status": "reviewed",
+                    "proposal_status": "closed_won", "overall_status": "in_progress"}
+        defaults.update(values)
+        return SqrSubmission.objects.create(**defaults)
+
+    def _multi_fixture(self):
+        second = User.objects.create_user(username="filter-second-pm", role="pm_esg")
+        third = User.objects.create_user(username="filter-third-pm", role="pm_esg")
+        rows = SqrSubmission.objects.bulk_create([
+            SqrSubmission(engineer=self.engineer, pm_esg_reviewer=self.pm,
+                          assigned_pm=second if index % 3 == 0 else None,
+                          year=2026, sequence_number=1000 + index, reference_code=f"FILTER-{index}",
+                          customer_name="Filter fixture", project_title="Filter project", customer_company="ESS Delivery",
+                          status="reviewed", proposal_status="closed_won", schedule_performance="at_risk",
+                          overall_status="in_progress" if index % 2 == 0 else "on_hold")
+            for index in range(55)
+        ])
+        self._active(engineer=self.other, assigned_pm=third, schedule_performance="at_risk")
+        self._active(overall_status="planning", schedule_performance="at_risk")
+        self._active(schedule_performance="on_track")
+        params = QueryDict(f"overall_status=in_progress&overall_status=on_hold&pm={self.pm.pk}&pm={second.pk}&pm={self.pm.pk}&schedule_performance=at_risk&assigned=all", mutable=True)
+        return {row.pk for row in rows}, params
+
+    def test_two_statuses_and_two_effective_pms_use_or_within_and_across(self):
+        from hub.services.sqr_queries import annotate_tracker, filter_tracker, multi_values
+        from hub.views import _sqr_queryset_for_user
+
+        expected, params = self._multi_fixture()
+        self.assertEqual(multi_values(params, "overall_status", allowed=SqrSubmission.OverallStatus.values), ("in_progress", "on_hold"))
+        scoped = annotate_tracker(_sqr_queryset_for_user(self.admin), TODAY)
+        self.assertEqual(set(filter_tracker(scoped, params, self.admin, prototype=True).values_list("pk", flat=True)), expected)
+        self.client.force_login(self.admin)
+        params["page"] = "2"
+        response = self.client.get(self.url, params)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["pagination"]["total"], 55)
+        self.assertEqual(len(response.json()["records"]), 5)
+        self.assertLessEqual({row["pk"] for row in response.json()["records"]}, expected)
+
+    def test_common_filters_match_classic_prototype_and_ppt_full_scope(self):
+        expected, params = self._multi_fixture()
+        self.client.force_login(self.admin)
+        found = set()
+        for page in (1, 2):
+            params["page"] = str(page)
+            classic = self.client.get(reverse("hub:sqr"), params)
+            self.assertEqual(classic.status_code, 200)
+            self.assertEqual(classic.context["proposal_counts"]["total"], 55)
+            found.update(row.pk for row in classic.context["proposal_submissions"])
+        self.assertEqual(found, expected)
+        params["page"] = "1"
+        prototype = self.client.get(self.url, params).json()
+        self.assertEqual(prototype["pipeline"]["all"]["count"], 55)
+        ppt = self.client.get(reverse("hub:sqr-performance-data"), params)
+        self.assertEqual(ppt.status_code, 200)
+        self.assertEqual({row["pk"] for row in ppt.json()["projects"]}, expected)
+
+    def test_invalid_or_out_of_scope_option_does_not_broaden(self):
+        outside = User.objects.create_user(username="filter-outside", role="pm_esg")
+        self.client.force_login(self.admin)
+        for query in ("pm=not_a_number", f"pm={outside.pk}", "overall_status=in_progress&overall_status=invalid"):
+            params = QueryDict(query + "&assigned=all")
+            for url in (self.url, reverse("hub:sqr-performance-data")):
+                response = self.client.get(url, params)
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+            classic = self.client.get(reverse("hub:sqr"), params)
+            self.assertEqual(classic.status_code, 200)
+            self.assertTrue(classic.context["sqr_filter_error"])
+            self.assertEqual(classic.context["page_obj"].paginator.count, 0)
+
+    def test_my_assigned_stays_reviewer_based_and_clear_all_keeps_authorization(self):
+        other_pm = User.objects.create_user(username="assignment-other-pm", role="pm_esg")
+        reviewed_by_me = self._active(assigned_pm=other_pm)
+        assigned_to_me = self._active(engineer=self.other, pm_esg_reviewer=other_pm, assigned_pm=self.pm)
+        self.client.force_login(self.pm)
+        for url, key in ((self.url, "records"), (reverse("hub:sqr-performance-data"), "projects")):
+            response = self.client.get(url, {"overall_status": "in_progress"})
+            self.assertEqual({row["pk"] for row in response.json()[key]}, {reviewed_by_me.pk})
+            response = self.client.get(url, {"overall_status": "in_progress", "assigned": "all"})
+            self.assertEqual({row["pk"] for row in response.json()[key]}, {reviewed_by_me.pk, assigned_to_me.pk})
+        self.client.force_login(self.engineer)
+        response = self.client.get(self.url, {"overall_status": "in_progress", "assigned": "all"})
+        self.assertEqual({row["pk"] for row in response.json()["records"]}, {reviewed_by_me.pk})
+
+    def test_not_recorded_group_and_ppt_missing_assessment_filters(self):
+        missing = self._active(schedule_performance="", budget_effort_performance="over_budget", quality_performance="met", customer_company="ESS Delivery")
+        risk = self._active(schedule_performance="at_risk", budget_effort_performance="within_budget", quality_performance="met", customer_company="ESS Delivery")
+        self._active(schedule_performance="on_track", customer_company="Different group")
+        self.client.force_login(self.admin)
+        params = QueryDict("overall_status=in_progress&schedule_performance=not_recorded&schedule_performance=at_risk&group=ES&assigned=all")
+        response = self.client.get(self.url, params)
+        self.assertEqual({row["pk"] for row in response.json()["records"]}, {missing.pk, risk.pk})
+        response = self.client.get(reverse("hub:sqr-performance-data"), {"overall_status": "in_progress", "rating": "danger", "missing_assessment": "1", "assigned": "all"})
+        self.assertEqual({row["pk"] for row in response.json()["projects"]}, {missing.pk})
+
+    def test_legacy_schedule_alias_and_unassigned_pm_keep_distinct_meanings(self):
+        delayed = self._active(schedule_performance="delayed", delivery_health="off_track")
+        green = self._active(schedule_performance="on_track", delivery_health="off_track", assigned_pm=self.pm)
+        terminal = self._active(delivery_health="completed")
+        self.client.force_login(self.admin)
+        base = {"overall_status": "in_progress", "assigned": "all"}
+        response = self.client.get(self.url, {**base, "delivery_health": "off_track"})
+        self.assertEqual({row["pk"] for row in response.json()["records"]}, {delayed.pk})
+        response = self.client.get(self.url, {**base, "delivery_health": "off_track", "schedule_performance": "on_track"})
+        self.assertEqual({row["pk"] for row in response.json()["records"]}, {green.pk})
+        response = self.client.get(self.url, {**base, "delivery_health": "completed"})
+        self.assertEqual({row["pk"] for row in response.json()["records"]}, {terminal.pk})
+        response = self.client.get(self.url, {**base, "pm": "unassigned"})
+        self.assertEqual({row["pk"] for row in response.json()["records"]}, {delayed.pk, terminal.pk})
+        for row in response.json()["records"]:
+            self.assertEqual(row["values"]["assigned_pm"], "")
+            self.assertTrue(row["assigned_pm_fallback"])
+
+    def test_focus_bypasses_user_filters_and_page_but_never_authorization(self):
+        expected, params = self._multi_fixture()
+        focus = min(expected)
+        params["overall_status"] = "planning"
+        params["page"] = "99"
+        params["focus"] = str(focus)
+        self.client.force_login(self.admin)
+        response = self.client.get(self.url, params)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["pk"] for row in response.json()["records"]], [focus])
+        hidden = self._active(engineer=self.other)
+        params["focus"] = str(hidden.pk)
+        self.client.force_login(self.engineer)
+        response = self.client.get(self.url, params)
+        self.assertEqual(response.json()["records"], [])
+        for bad in ("²", "999999999999999999999999999999"):
+            params["focus"] = bad
+            response = self.client.get(self.url, params)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["records"], [])
+
+    def test_sql_stage_matches_python_terminal_and_performance_attention(self):
+        from hub.services.sqr_queries import annotate_tracker
+
+        for fields, stage, attention in (
+            ({"delivery_health": "completed"}, "billing", False),
+            ({"delivery_health": "cancelled"}, "closed", False),
+            ({"delivery_completion_signed_date": TODAY}, "billing", False),
+            ({"schedule_performance": "delayed"}, "delivery", True),
+            ({"budget_effort_performance": "at_risk"}, "delivery", True),
+            ({"quality_performance": "unmet", "status": "on_hold"}, "delivery", False),
+            ({"delivery_health": "off_track", "delivery_target_finish_date": TODAY - timedelta(days=1),
+              "schedule_performance": "on_track", "budget_effort_performance": "within_budget", "quality_performance": "met"}, "delivery", False),
+        ):
+            with self.subTest(fields=fields):
+                row = self._active(**fields)
+                annotated = annotate_tracker(SqrSubmission.objects.filter(pk=row.pk), TODAY).values("_pipeline", "_attention").get()
+                self.assertEqual(annotated["_pipeline"], stage)
+                self.assertEqual(proto.derive_stage(row)[0], stage)
+                self.assertEqual(annotated["_attention"], attention)
+                flags = proto.derive_attention(row, stage, TODAY)
+                self.assertEqual(any(flag["tone"] in {"warning", "danger"} for flag in flags), attention)
 
 
 @override_settings(

@@ -17,6 +17,7 @@
 {% block content %}
 <div class="row g-4">
     <div class="col-12">
+        {% if sqr_filter_error %}<div class="alert alert-warning" role="alert">{{ sqr_filter_error }}</div>{% endif %}
 
         {# ── Header card ──────────────────────────────────────────────────── #}
         <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme" data-sqr-header{% if is_pm and active_sqr_tab != 'reports' and request.GET.view == 'performance' and 'focus' not in request.GET %} hidden{% endif %}>
@@ -793,7 +794,7 @@
                             {# Delivery stage starts with Assigned PM (PO/PNL Date moved to Billing) #}
                             {% if is_pm %}
                             {# Y: Assigned PM — defaults to col J (pm_esg_reviewer) on Approval; editable #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_pm" data-sqr-type="select" data-sqr-value="{{ item.assigned_pm_id|default:item.pm_esg_reviewer_id|default:'' }}"><span class="sqr-display">{% if item.assigned_pm %}{{ item.assigned_pm.get_full_name|default:item.assigned_pm.username }}{% elif item.pm_esg_reviewer %}{{ item.pm_esg_reviewer.get_full_name|default:item.pm_esg_reviewer.username }}{% else %}&ndash;{% endif %}</span></td>
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_pm" data-sqr-type="select" data-sqr-value="{{ item.assigned_pm_id|default:'' }}"><span class="sqr-display">{% if item.assigned_pm %}{{ item.assigned_pm.get_full_name|default:item.assigned_pm.username }}{% elif item.pm_esg_reviewer %}{{ item.pm_esg_reviewer.get_full_name|default:item.pm_esg_reviewer.username }} (reviewer fallback){% else %}&ndash;{% endif %}</span></td>
                             {# Z: Assigned SSE — inline-editable by PM/Admin #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_sse" data-sqr-type="select" data-sqr-value="{{ item.assigned_sse_id|default:'' }}"><span class="sqr-display">{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username }}{% else %}&ndash;{% endif %}</span></td>
                             {# AA: Start Date #}
@@ -2891,7 +2892,7 @@
                 var pmName = data.assigned_pm_name || '\u2013';
                 assignedPmCell.dataset.sqrValue = pmPk;
                 var assignedPmDisp = assignedPmCell.querySelector('.sqr-display');
-                if (assignedPmDisp) assignedPmDisp.innerHTML = pmName;
+                if (assignedPmDisp) assignedPmDisp.textContent = pmName;
             }
         }
         if ('assigned_sse_name' in data && row) {
