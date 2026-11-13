@@ -1,10 +1,18 @@
-{# Lazy shell for the SQR Tracker Prototype: records are fetched when the view is first opened. #}
+{# Records are fetched only when SQR Tracker is opened; both layouts share one editor. #}
 <section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
          data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}" data-default-assigned="{{ sqr_default_assigned|default:'all' }}"
-         aria-label="SQR Tracker Prototype">
+         aria-label="SQR Tracker">
+    <div class="sqr-proto__layout-toolbar">
+        <h3 class="h5">SQR Tracker</h3>
+        <div role="group" aria-label="SQR Tracker layout">
+            <button type="button" id="sqr-proto-layout-list" class="btn btn-sm btn-primary" aria-pressed="true"><i class="bi bi-list-ul me-1" aria-hidden="true"></i>List</button>
+            <button type="button" id="sqr-proto-layout-table" class="btn btn-sm btn-outline-primary" aria-pressed="false"><i class="bi bi-table me-1" aria-hidden="true"></i>Table</button>
+        </div>
+    </div>
     {% include "hub/partials/sqr_filters.html" with root_id="sqr-proto-filters" filter_label="SQR Tracker filters" %}
-    <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list">
-        <aside class="sqr-proto__list" aria-label="SQR list">
+    <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list" data-layout="list">
+        <div id="sqr-proto-catalog" class="sqr-proto__catalog">
+        <aside id="sqr-proto-list" class="sqr-proto__list" aria-label="SQR list">
             <div class="sqr-proto__tools" hidden>
                 <label class="visually-hidden" for="sqr-proto-search">Search SQRs</label>
                 <div class="sqr-proto__search">
@@ -13,8 +21,20 @@
                 </div>
             </div>
             <ul class="sqr-proto__items" id="sqr-proto-items"></ul>
-            <button type="button" class="btn btn-outline-primary sqr-proto__more" id="sqr-proto-more" hidden>Show more</button>
         </aside>
+        <div id="sqr-proto-table-wrap" class="sqr-proto__table-wrap" role="region" aria-label="Scrollable SQR project table" tabindex="0" hidden>
+            <table class="sqr-proto__table">
+                <caption class="visually-hidden">SQR projects — same filters, records and editor as List</caption>
+                <thead><tr>
+                    <th scope="col">SQR ID</th><th scope="col">Account / Project</th><th scope="col">PM</th><th scope="col">SSE</th>
+                    <th scope="col">Delivery Status</th><th scope="col">Overall Progress</th><th scope="col">Schedule Performance</th>
+                    <th scope="col">Budget/Effort Performance</th><th scope="col">Quality Performance</th><th scope="col">Start / Finish Date</th><th scope="col">Open</th>
+                </tr></thead>
+                <tbody id="sqr-proto-table-rows"></tbody>
+            </table>
+        </div>
+        <button type="button" class="btn btn-outline-primary sqr-proto__more" id="sqr-proto-more" hidden>Show more</button>
+        </div>
 
         <section class="sqr-proto__editor" id="sqr-proto-editor" aria-label="SQR record">
             <div class="sqr-proto__empty">

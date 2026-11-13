@@ -768,6 +768,38 @@ assert.equal(location.searchParams.get('q'),'Multi-filter','Saved predicates mus
 assert.deepEqual(location.searchParams.getAll('overall_status'),['in_progress','on_hold']);
 """.replace("CLASSIC", json.dumps(controller)))
 
+    def test_classic_mutation_reloads_filtered_page_without_losing_undo(self):
+        controller = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-classic-filters.js").read_text(encoding="utf-8")
+        self._run_shared_filter_script(r"""
+const location=new URL('https://fixture.invalid/sqr/?view=tracker&assigned=all&overall_status=in_progress&pm=1&pm=2&page=2');
+location.assign=value=>{location.href=new URL(value,location).href;};
+context.window.location=location;context.window.history={replaceState(){}};
+const saved=new Map();context.window.sessionStorage={getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
+const undo={pk:51,field:'overall_status',undo_url:'/sqr/51/inline-update/1/undo/',expires_at:Date.now()+10000};
+context.window.getSqrPendingUndo=()=>undo;
+const root=new Element();root.id='sqr-classic-filters';root.dataset={defaultAssigned:'all',serverQuery:location.search.slice(1),initialCount:'51',optionsId:'filter-options',summaryEndpoint:'/sqr/prototype-data/'};
+root.closest=()=>({hidden:false,querySelector(){return null;}});const options=new Element();options.textContent='{}';
+document.getElementById=id=>id===root.id?root:id==='filter-options'?options:null;document.querySelectorAll=()=>[];
+const listeners={};document.addEventListener=(name,fn)=>{(listeners[name]||=[]).push(fn);};document.dispatchEvent=event=>{for(const fn of listeners[event.type]||[])fn(event);};
+const requests=[];context.AbortController=AbortController;
+context.fetch=async url=>{requests.push(url);return{ok:true,json:async()=>({ok:true,records:[],pagination:{page:1,total:50},pipeline:{all:{count:50}}})};};
+vm.runInNewContext(CLASSIC,context);
+(async()=>{
+    await context.window.applySqrTableFilter({type:'sqr:performance-invalidated'});
+    const query=new URL(requests[0],location).searchParams;
+    assert.equal(query.get('page'),'2');assert.equal(query.get('summary'),null);
+    assert.deepEqual(query.getAll('pm'),['1','2']);assert.equal(query.get('overall_status'),'in_progress');
+    assert.equal(location.searchParams.get('page'),'1','Mutation must clamp and reload the same filtered server page');
+    const stored=Array.from(saved.values()).map(value=>JSON.parse(value));
+    assert.ok(stored.some(value=>value.undo_url===undo.undo_url),'The existing undo action must survive the membership reload');
+    location.searchParams.set('page','2');
+    context.window.sessionStorage.setItem=()=>{throw new Error('Storage blocked');};
+    await context.window.applySqrTableFilter({type:'sqr:performance-invalidated'});
+    assert.equal(location.searchParams.get('page'),'2','Blocked storage must not silently destroy an available Undo action');
+    assert.ok(root.textContent.includes('Undo')&&root.textContent.includes('reload'));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+""".replace("CLASSIC", json.dumps(controller)))
+
     def test_retired_filter_preference_is_not_silently_applied(self):
         self._run_shared_filter_script(r"""
 const state=filters.read(new URLSearchParams('assigned=all&attention=overdue&overall_status=invalid'));

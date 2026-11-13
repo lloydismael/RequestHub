@@ -11,17 +11,42 @@
     var widget = filters.mount(root, {state: state, options: options, onChange: function (next) { filters.write(next); }});
     widget.setCount(Number(root.dataset.initialCount || 0));
     var serverKey = filters.toQuery(filters.read(new URLSearchParams(root.dataset.serverQuery || ''), {defaultAssigned: defaults})).toString();
-    var refreshPromise = null;
-    window.applySqrTableFilter = function () {
-        if (panel.hidden || refreshPromise) return refreshPromise;
-        var params = filters.toQuery(widget.getState());
-        var focus = new URLSearchParams(window.location.search).get('focus');
+    var refreshPromise = null, refreshController = null, refreshVersion = 0;
+    window.applySqrTableFilter = function (event) {
+        if (panel.hidden) return refreshPromise;
+        if (refreshController) refreshController.abort();
+        refreshController = new AbortController();
+        var version = ++refreshVersion;
+        var mutation = event && event.type === 'sqr:performance-invalidated';
+        var params = filters.toQuery(widget.getState()), key = params.toString();
+        var query = new URLSearchParams(window.location.search), focus = query.get('focus');
         if (focus) params.set('focus', focus);
-        params.set('page', '1'); params.set('summary', '1');
-        refreshPromise = fetch(root.dataset.summaryEndpoint + '?' + params.toString(), {credentials: 'same-origin', cache: 'no-store'})
+        params.set('page', query.get('page') || '1'); params.set('page_size', '50');
+        refreshPromise = fetch(root.dataset.summaryEndpoint + '?' + params.toString(), {credentials: 'same-origin', cache: 'no-store', signal: refreshController.signal})
             .then(function (response) { if (!response.ok) throw new Error('Unable to refresh filter counts.'); return response.json(); })
-            .then(function (data) { if (data.ok && data.pipeline && data.pipeline.all) widget.setCount(data.pipeline.all.count); })
-            .catch(function () {}).then(function () { refreshPromise = null; });
+            .then(function (data) {
+                if (version !== refreshVersion || key !== filters.toQuery(widget.getState()).toString()) return;
+                if (!data.ok || !data.pagination) throw new Error('Unable to refresh the filtered tracker page.');
+                widget.setCount(data.pagination.total);
+                if (mutation && !panel.hidden) {
+                    var undo = typeof window.getSqrPendingUndo === 'function' ? window.getSqrPendingUndo() : null;
+                    var retained = true;
+                    try { if (undo) window.sessionStorage.setItem('sqr_tracker_pending_undo_v1', JSON.stringify(undo)); } catch (error) { retained = false; }
+                    query.set('page', data.pagination.page);
+                    if (!retained) {
+                        var warning = document.createElement('p'); warning.className = 'sqr-filter-notice'; warning.setAttribute('role', 'alert');
+                        warning.textContent = 'The change is saved. Browser storage is unavailable: use Undo, then reload to refresh the filtered rows. ';
+                        var reload = document.createElement('button'); reload.type = 'button'; reload.textContent = 'Reload results';
+                        reload.addEventListener('click', function () { window.location.assign(window.location.pathname + '?' + query.toString()); });
+                        warning.append(reload); root.append(warning); return;
+                    }
+                    window.location.assign(window.location.pathname + '?' + query.toString());
+                }
+            }).catch(function (error) {
+                if (version !== refreshVersion || error.name === 'AbortError') return;
+                var notice = document.createElement('p'); notice.className = 'sqr-filter-notice'; notice.setAttribute('role', 'alert');
+                notice.textContent = error.message + ' Showing the last loaded rows. Reload to retry.'; root.append(notice);
+            }).then(function () { if (version === refreshVersion) { refreshPromise = null; refreshController = null; } });
         return refreshPromise;
     };
     document.addEventListener('sqr:filters-changed', function (event) {

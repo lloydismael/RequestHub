@@ -1,5 +1,12 @@
 from datetime import date, timedelta
+import json
+from pathlib import Path
+import shutil
+import subprocess
+from unittest import skipUnless
+from urllib.parse import parse_qs, urlencode, urlparse
 
+from django.conf import settings
 from django.http import QueryDict
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -401,6 +408,112 @@ class PrototypeEndpointTests(TestCase):
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     },
 )
+@skipUnless(shutil.which('node'), 'Node.js is required for tracker controller tests')
+class TrackerLayoutScriptTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(username='layout-admin', role=User.Roles.ADMIN)
+        cls.pm = User.objects.create_user(username='layout-pm', role=User.Roles.PM_ESG)
+        cls.other_pm = User.objects.create_user(username='layout-other-pm', role=User.Roles.PM_ESG)
+        cls.engineer = User.objects.create_user(username='layout-engineer', role=User.Roles.ENGINEER)
+        SqrSubmission.objects.bulk_create([
+            SqrSubmission(reference_code=f'LAYOUT-{i}', year=2026, sequence_number=2000+i,
+                          engineer=cls.engineer, pm_esg_reviewer=cls.pm,
+                          assigned_pm=cls.other_pm if i % 2 else None,
+                          customer_name=f'Fictional layout account {i}', project_title='Layout fixture',
+                          project_details='Deployment Only', status='reviewed', proposal_status='closed_won',
+                          overall_status='on_hold' if i % 2 else 'in_progress',
+                          schedule_performance='on_track', budget_effort_performance='within_budget')
+            for i in range(51)
+        ])
+        cls.params = [('assigned', 'all'), ('overall_status', 'in_progress'), ('overall_status', 'on_hold'),
+                      ('pm', str(cls.pm.pk)), ('pm', str(cls.other_pm.pk)), ('page', '2')]
+        cls.url = reverse('hub:sqr-prototype-data')
+
+    def data(self, user=None):
+        self.client.force_login(user or self.admin)
+        response = self.client.get(self.url + '?' + urlencode(self.params))
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    def run_controller(self, scenario, data=None, **extra):
+        payload = {'scenario': scenario, 'data': data or self.data(),
+                   'query': '?view=prototype&' + urlencode(self.params), **extra}
+        runner = Path(settings.BASE_DIR) / 'scripts_check' / 'test_sqr_prototype_layout.js'
+        result = subprocess.run([shutil.which('node'), str(runner)], input=json.dumps(payload),
+                                text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
+    def test_list_table_switch_retains_filters_page_and_in_scope_selection(self):
+        result = self.run_controller('switch', savedLayout='table',
+                                     query='?view=prototype&layout=list&' + urlencode(self.params))
+        self.assertEqual(result['initial_layout'], 'list')
+        self.assertEqual(result['table_pks'], result['list_pks'])
+        self.assertEqual(result['list_after'], result['list_pks'])
+        self.assertEqual(result['selected_after'], result['selected_before'])
+        self.assertTrue(result['count_preserved'])
+        query = parse_qs(result['query'].lstrip('?'))
+        self.assertEqual(query['pm'], [str(self.pm.pk), str(self.other_pm.pk)])
+        self.assertEqual(query['overall_status'], ['in_progress', 'on_hold'])
+        self.assertEqual(query['page'], ['2'])
+        self.assertEqual(result['saved_layout'], 'list')
+        self.assertEqual(result['writes'], [])
+
+    def test_table_open_uses_existing_editor_and_save_path(self):
+        before = self.data()
+        record = before['records'][0]
+        inline = record['urls']['inline']
+        self.assertEqual(self.client.post(inline, data=json.dumps({'field': 'quality_performance', 'value': 'met'}),
+                                         content_type='application/json').status_code, 200)
+        after = self.data()
+        result = self.run_controller('save', data=before, after=after, value='met')
+        self.assertEqual(result['writes'], [{'url': inline, 'body': {'field': 'quality_performance', 'value': 'met'}}])
+        self.assertEqual(result['after_list_pks'], result['after_table_pks'])
+        self.assertEqual(result['selected_after_save'], record['pk'])
+        performance = self.client.get(reverse('hub:sqr-performance-data') + '?assigned=all').json()
+        project = next(row for row in performance['projects'] if row['pk'] == record['pk'])
+        self.assertEqual(project['indicators']['quality']['value'], 'met')
+
+    def test_invalid_layout_preference_defaults_to_list(self):
+        for query, saved, expected in [('?view=prototype&layout=broken&', 'table', 'list'),
+                                       ('?view=prototype&', '{corrupt', 'list'),
+                                       ('?view=prototype&', 'table', 'table')]:
+            with self.subTest(query=query, saved=saved):
+                result = self.run_controller('invalid', query=query + urlencode(self.params), savedLayout=saved)
+                self.assertEqual(result['initial_layout'], expected)
+
+    def test_saved_filter_change_refreshes_counts_and_removes_nonmatching_row(self):
+        before = self.data()
+        record = before['records'][0]
+        inline = record['urls']['inline']
+        self.assertEqual(self.client.post(inline, data=json.dumps({'field': 'overall_status', 'value': 'completed'}),
+                                         content_type='application/json').status_code, 200)
+        after = self.data()
+        self.assertEqual(after['pagination']['page'], 1)
+        result = self.run_controller('membership', data=before, after=after, value='completed')
+        self.assertIsNone(result['selected_after_save'])
+        self.assertNotIn(record['pk'], result['after_table_pks'])
+        self.assertEqual(result['total_after'], 50)
+        self.assertEqual(result['page_after'], 1)
+        self.assertIn('no longer matches', result['toast'])
+        requests = [parse_qs(urlparse(url).query)
+                    for url in result['requests'] if 'prototype-data' in url]
+        self.assertEqual(requests[-1]['overall_status'], ['in_progress', 'on_hold'])
+        self.assertEqual(requests[-1]['pm'], [str(self.pm.pk), str(self.other_pm.pk)])
+        self.assertNotIn('pk', requests[-1])
+
+    def test_table_open_preserves_readonly_and_locked_records(self):
+        readonly = self.data(self.engineer)
+        self.assertEqual(self.run_controller('readonly', data=readonly)['writes'], [])
+        self.client.force_login(self.admin)
+        pk = readonly['records'][0]['pk']
+        SqrSubmission.objects.filter(pk=pk).update(proposal_status='closed_lost')
+        locked = self.data()
+        self.assertTrue(locked['records'][0]['locked'])
+        self.assertEqual(self.run_controller('readonly', data=locked)['writes'], [])
+
+
 class PrototypeTabRenderTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -442,6 +555,6 @@ class PrototypeTabRenderTests(TestCase):
                 response = self.client.get(reverse("hub:sqr"))
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, 'data-sqr-view-button="prototype"')
-                self.assertContains(response, "SQR Tracker Prototype")
+                self.assertContains(response, 'aria-label="SQR Tracker layout"')
                 self.assertContains(response, 'data-sqr-view-panel="prototype"')
                 self.assertContains(response, reverse("hub:sqr-prototype-data"))

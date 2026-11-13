@@ -127,6 +127,10 @@ test('native sidebar links retain repeated filters after initial and changed sta
     url = new URL(app.navItem('performance').attributes.href, app.window.location);
     assert.deepEqual(url.searchParams.getAll('pm'), ['2']);
     assert.equal(url.searchParams.get('page'), '1');
+    app.window.history.replaceState(null, '', '/sqr/?view=prototype&assigned=all&pm=2&page=1&layout=table');
+    app.document.dispatchEvent({type: 'sqr:catalog-changed', detail: {}});
+    url = new URL(app.navItem('performance').attributes.href, app.window.location);
+    assert.equal(url.searchParams.get('layout'), 'table');
 });
 
 test('switching from PPT to the tracker restores the SQR header', () => {

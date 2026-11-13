@@ -1,4 +1,4 @@
-/* SQR Tracker Prototype: pipeline list + record editor.
+/* SQR Tracker: one filtered List/Table catalog and record editor.
  * Reads /sqr/prototype-data/ and writes through the existing inline-update, undo and history endpoints,
  * so validation, permissions, locks and audit history stay authoritative on the server. */
 (function () {
@@ -12,6 +12,7 @@
     var CSRF = root.dataset.csrf;
     var STORE_KEY = 'requestHub.sqr.prototype';
     var VIEW_KEY = 'requestHub.sqr.tableView';
+    var LAYOUT_KEY = 'sqr_tracker_layout_v1';
     var PAGE_SIZE = 50;
     var STALE_MS = 60000;
 
@@ -29,7 +30,7 @@
         loaded: false, loadedAt: 0, viewer: null, schema: null, options: {}, records: [], byPk: {},
         specs: {}, sections: {}, labels: {}, selectedPk: null, tab: 'summary', shown: PAGE_SIZE,
         dirtyClassic: false, history: {}, pipeline: {}, pagination: null,
-        filters: {stage: 'all', search: ''}
+        filters: {stage: 'all', search: ''}, layout: readLayout()
     };
     var sharedFilters = window.RequestHubSqrFilters;
     var filterState = sharedFilters ? sharedFilters.fromPage(root.dataset.defaultAssigned || 'all') : null;
@@ -45,7 +46,8 @@
     function $(id) { return document.getElementById('sqr-proto-' + id); }
     var el = {
         pipeline: $('pipeline'), body: $('body'), items: $('items'), more: $('more'),
-        editor: $('editor'), search: $('search'),
+        editor: $('editor'), search: $('search'), catalog: $('catalog'), list: $('list'),
+        tableWrap: $('table-wrap'), tableRows: $('table-rows'), layoutList: $('layout-list'), layoutTable: $('layout-table'),
         toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
         approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
     };
@@ -66,6 +68,32 @@
         var focus = new URLSearchParams(window.location.search).get('focus');
         if (focus) params.set('focus', focus);
         return params;
+    }
+
+    function readLayout() {
+        var params = new URLSearchParams(window.location.search);
+        var value = params.get('layout');
+        if (!params.has('layout')) {
+            try { value = window.localStorage.getItem(LAYOUT_KEY); } catch (error) { /* storage unavailable */ }
+        }
+        return value === 'table' ? 'table' : 'list';
+    }
+    function applyLayout() {
+        root.dataset.layout = state.layout; el.body.dataset.layout = state.layout;
+        el.list.hidden = state.layout !== 'list'; el.tableWrap.hidden = state.layout !== 'table';
+        [[el.layoutList, 'list'], [el.layoutTable, 'table']].forEach(function (entry) {
+            var active = state.layout === entry[1];
+            entry[0].setAttribute('aria-pressed', active ? 'true' : 'false');
+            entry[0].classList.toggle('btn-primary', active); entry[0].classList.toggle('btn-outline-primary', !active);
+        });
+    }
+    function setLayout(value) {
+        state.layout = value === 'table' ? 'table' : 'list';
+        var params = new URLSearchParams(window.location.search); params.set('layout', state.layout);
+        window.history.replaceState(null, '', window.location.pathname + '?' + params.toString() + window.location.hash);
+        try { window.localStorage.setItem(LAYOUT_KEY, state.layout); } catch (error) { /* storage unavailable */ }
+        applyLayout(); renderAll();
+        document.dispatchEvent(new CustomEvent('sqr:catalog-changed', {detail: {layout: state.layout}}));
     }
 
     /* ── helpers ─────────────────────────────────────────────────── */
@@ -275,10 +303,37 @@
             if (again) again.focus({preventScroll: true});
         }
     }
+    function renderTable() {
+        var rows = visibleRecords().slice(0, state.shown).map(function (rec) {
+            var values = rec.values;
+            var identity = h('td', null, [h('strong', {text: rec.account}), h('div', {class: 'sqr-proto__meta', text: rec.service})]);
+            var manager = h('td', null, [h('span', {text: rec.assigned_pm_name || 'No Assigned PM'}),
+                rec.assigned_pm_fallback ? h('div', {class: 'sqr-proto__meta', text: 'Reviewer fallback'}) : null]);
+            var dates = h('td', null, [h('div', {text: 'Start: ' + (fmtDate(values.delivery_start_date) || 'N/R')}),
+                h('div', {text: 'Finish: ' + (fmtDate(values.delivery_actual_finish_date) || 'N/R')})]);
+            var open = h('button', {type: 'button', class: 'btn btn-sm btn-outline-primary', 'aria-label': 'Open ' + rec.ref,
+                on: {click: function () { select(rec.pk); }}}, 'Open');
+            return h('tr', {dataset: {pk: rec.pk, selected: state.selectedPk === rec.pk ? 'true' : 'false'},
+                on: {click: function (event) { if (!event.target.closest('button, a')) select(rec.pk); }}}, [
+                h('td', {text: rec.ref}), identity, manager, h('td', {text: rec.assigned_sse_name || 'No Assigned SSE'}),
+                h('td', null, badge('overall_status', rec.overall_status) || h('span', {text: 'N/R'})),
+                h('td', {text: rec.progress === null || rec.progress === undefined ? 'N/R' : rec.progress + '%'}),
+                h('td', null, badge('schedule_performance', values.schedule_performance)),
+                h('td', null, badge('budget_effort_performance', values.budget_effort_performance)),
+                h('td', null, badge('quality_performance', values.quality_performance)), dates, h('td', null, open)
+            ]);
+        });
+        if (!rows.length) rows.push(h('tr', null, h('td', {colspan: '11', class: 'sqr-proto__count', text: 'No matching SQRs.'})));
+        el.tableRows.replaceChildren.apply(el.tableRows, rows);
+    }
+    function catalogMessage(text, retry) {
+        function content() { return [h('span', {text: text}), retry ? h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again') : null]; }
+        el.items.replaceChildren(h('li', {class: 'sqr-proto__count'}, content()));
+        el.tableRows.replaceChildren(h('tr', null, h('td', {colspan: '11', class: 'sqr-proto__count'}, content())));
+    }
     function renderAll() {
         if (!state.loaded) return;
-        renderPipeline();
-        renderList();
+        renderPipeline(); renderList(); renderTable();
     }
 
     /* ── selection ───────────────────────────────────────────────── */
@@ -289,10 +344,10 @@
         state.selectedPk = pk;
         if (changed) state.tab = 'summary';
         el.body.dataset.mode = 'detail';
-        renderList();
+        renderList(); renderTable();
         renderEditor();
         // On narrow screens the list is hidden, so move the reader to the record.
-        if (changed && window.matchMedia('(max-width: 1199.98px)').matches) {
+        if (changed && (state.layout === 'table' || window.matchMedia('(max-width: 1199.98px)').matches)) {
             var heading = el.editor.querySelector('.sqr-proto__ed-title');
             if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
             el.editor.scrollIntoView({block: 'start'});
@@ -300,7 +355,7 @@
     }
     function backToList() {
         el.body.dataset.mode = 'list';
-        var card = el.items.querySelector('[aria-current="true"]');
+        var card = state.layout === 'table' ? el.tableRows.querySelector('tr[data-selected="true"] button') : el.items.querySelector('[aria-current="true"]');
         if (card) card.focus();
     }
 
@@ -890,7 +945,8 @@
             delete state.history[pk];
             var message = 'Saved ' + label + '.';
             if (res.data.workflow_side_effect_warning && res.data.workflow_side_effect_message) message += ' ' + res.data.workflow_side_effect_message;
-            return refreshRecord(pk, key === 'status' ? res.data : null).then(function () {
+            return refreshRecord(pk, key === 'status' ? res.data : null).then(function (result) {
+                if (result.removed) message += ' The SQR no longer matches these filters.';
                 var fresh = state.selectedPk === pk ? el.editor.querySelector('[data-field-key="' + key + '"]') : null;
                 if (fresh) setFieldState(fresh, 'saved');
                 showToast(message, res.data.undo_url ? {undo: {url: res.data.undo_url, pk: pk}} : null);
@@ -974,18 +1030,13 @@
         });
     }
     function refreshRecord(pk, workflowResponse) {
-        return api(ENDPOINT + '?pk=' + encodeURIComponent(pk), {cache: 'no-store'}).then(function (res) {
-            if (!res.ok) throw new Error(res.data.error || 'Unable to refresh this SQR.');
-            var previous = record(pk);
-            var fresh = res.data.record;
-            if (workflowResponse && Object.prototype.hasOwnProperty.call(workflowResponse, 'hold_reason')) {
-                fresh.values.hold_reason = workflowResponse.hold_reason;
-            }
-            state.records = state.records.map(function (rec) { return rec.pk === pk ? fresh : rec; });
-            state.byPk[pk] = fresh;
-            renderAll();
-            if (state.selectedPk === pk && previous) syncEditor(fresh, previous);
-            return refreshPipeline();
+        var previous = record(pk);
+        return load(false).then(function (data) {
+            if (!data) throw new Error('The change was saved, but tracker refresh failed. Reload to see the updated results.');
+            var fresh = record(pk);
+            if (fresh && workflowResponse && Object.prototype.hasOwnProperty.call(workflowResponse, 'hold_reason')) fresh.values.hold_reason = workflowResponse.hold_reason;
+            if (fresh && state.selectedPk === pk && previous) syncEditor(fresh, previous);
+            return {removed: !fresh};
         });
     }
     function refreshPipeline() {
@@ -1024,8 +1075,11 @@
         });
         index(records);
         if (selected && !record(selected.pk)) {
+            var editorFocused = el.editor.contains(document.activeElement);
             state.selectedPk = null; el.body.dataset.mode = 'list';
+            el.editor.replaceChildren(h('div', {class: 'sqr-proto__empty'}, h('h3', {text: 'Select an SQR'})));
             showToast('The selected SQR no longer matches these filters.');
+            if (editorFocused) { var search = document.getElementById('sqr-proto-filters-q'); if (search) search.focus(); }
         }
         if (filterWidget) {
             if (data.filter_options) filterWidget.setOptions(data.filter_options);
@@ -1055,24 +1109,34 @@
         var requestedPage = Number(new URLSearchParams(window.location.search).get('page')) || 1;
         params.set('page', append && state.pagination ? state.pagination.page + 1 : requestedPage);
         params.set('page_size', PAGE_SIZE);
-        if (!background && !state.loaded) el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: 'Loading\u2026'}));
+        if (!background && !state.loaded) catalogMessage('Loading\u2026', false);
+        el.catalog.setAttribute('aria-busy', 'true');
         el.more.disabled = true;
         inFlight = api(ENDPOINT + '?' + params.toString(), {cache: 'no-store', signal: loadController.signal}).then(function (res) {
             if (version !== loadVersion) return;
             if (!res.ok) throw new Error(res.data.error || 'Unable to load SQR data.');
             apply(res.data, append);
+            if (!append && res.data.pagination) {
+                var query = new URLSearchParams(window.location.search); query.set('page', res.data.pagination.page);
+                window.history.replaceState(null, '', window.location.pathname + '?' + query.toString() + window.location.hash);
+                document.dispatchEvent(new CustomEvent('sqr:catalog-changed', {detail: {page: res.data.pagination.page}}));
+            }
+            return res.data;
         }).catch(function (error) {
             if (version !== loadVersion || error.name === 'AbortError') return;
-            if (!state.loaded) {
-                el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: error.message}), h('li', null, h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again')));
-            } else showToast(error.message, {tone: 'error'});
-        }).then(function () {
-            if (version === loadVersion) { inFlight = null; el.more.disabled = false; }
+            if (!state.loaded) catalogMessage(error.message, true);
+            else showToast(error.message, {tone: 'error'});
+        }).then(function (data) {
+            if (version === loadVersion) { inFlight = null; el.more.disabled = false; el.catalog.setAttribute('aria-busy', 'false'); }
+            return data;
         });
         return inFlight;
     }
 
     /* ── wiring ──────────────────────────────────────────────────── */
+    applyLayout();
+    el.layoutList.addEventListener('click', function () { setLayout('list'); });
+    el.layoutTable.addEventListener('click', function () { setLayout('table'); });
     var searchTimer = 0;
     el.search.addEventListener('input', function () {
         clearTimeout(searchTimer);

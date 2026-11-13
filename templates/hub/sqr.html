@@ -73,7 +73,7 @@
                         <i class="bi bi-table me-1"></i>SQR Tracker
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="prototype" aria-pressed="false">
-                        <i class="bi bi-stars me-1"></i>SQR Tracker Prototype
+                        <i class="bi bi-stars me-1"></i>SQR Tracker
                     </button>
                 </div>
             </div>
@@ -2940,9 +2940,13 @@
     }
 
     var undoToastTimer = null;
+    var activeUndoContext = null;
     function showUndoToast(context) {
         var toast = document.getElementById('sqr-undo-toast');
         if (!toast || !context || !context.data || !context.data.undo_url) return;
+        var expiresAt = context.expires_at || Date.now() + 10000;
+        if (expiresAt <= Date.now()) return;
+        activeUndoContext = {pk: context.pk, field: context.field, undo_url: context.data.undo_url, expires_at: expiresAt};
         var message = toast.querySelector('[data-sqr-undo-message]');
         var warning = toast.querySelector('[data-sqr-undo-warning]');
         var undoBtn = toast.querySelector('[data-sqr-undo-action]');
@@ -2955,7 +2959,7 @@
         function hideToast() {
             toast.classList.add('d-none');
             if (undoToastTimer) window.clearTimeout(undoToastTimer);
-            undoToastTimer = null;
+            undoToastTimer = null; activeUndoContext = null;
         }
         if (closeBtn) closeBtn.onclick = hideToast;
         if (undoBtn) {
@@ -2972,7 +2976,9 @@
                 .then(function(r) { return r.json().then(function(data) { return {ok: r.ok, data: data}; }); })
                 .then(function(result) {
                     if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Unable to undo this change.');
-                    applyInlineUpdateResponse(context.pk, context.field, result.data.field_value, context.cell, context.displayEl, result.data, {});
+                    activeUndoContext = null;
+                    if (context.cell && context.displayEl) applyInlineUpdateResponse(context.pk, context.field, result.data.field_value, context.cell, context.displayEl, result.data, {});
+                    else document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
                     if (message) message.textContent = 'Change undone.';
                     if (warning) {
                         warning.textContent = result.data.workflow_side_effect_message || '';
@@ -2992,8 +2998,24 @@
         }
         toast.classList.remove('d-none');
         if (undoToastTimer) window.clearTimeout(undoToastTimer);
-        undoToastTimer = window.setTimeout(hideToast, 10000);
+        undoToastTimer = window.setTimeout(hideToast, Math.max(0, expiresAt - Date.now()));
     }
+    window.getSqrPendingUndo = function () { return activeUndoContext && activeUndoContext.expires_at > Date.now() ? Object.assign({}, activeUndoContext) : null; };
+    try {
+        var savedUndo = window.sessionStorage.getItem('sqr_tracker_pending_undo_v1');
+        window.sessionStorage.removeItem('sqr_tracker_pending_undo_v1');
+        if (savedUndo) {
+            var resume = JSON.parse(savedUndo), now = Date.now(), resumePk = String(resume.pk);
+            if (/^[1-9][0-9]*$/.test(resumePk) && /^[a-z_]+$/.test(resume.field) &&
+                Number.isFinite(resume.expires_at) && resume.expires_at > now && resume.expires_at <= now + 10000 &&
+                new RegExp('^/sqr/' + resumePk + '/inline-update/[1-9][0-9]*/undo/$').test(resume.undo_url)) {
+                var resumeCell = document.querySelector('[data-sqr-pk="' + resumePk + '"][data-sqr-field="' + resume.field + '"]');
+                showUndoToast({pk: resumePk, field: resume.field, cell: resumeCell,
+                    displayEl: resumeCell ? resumeCell.querySelector('.sqr-display') : null,
+                    data: {undo_url: resume.undo_url}, expires_at: resume.expires_at});
+            }
+        }
+    } catch (error) { /* unavailable storage or invalid/expired undo context */ }
 
     function saveField(pk, field, value, cell, displayEl, reviewNotes, options) {
         var url = '/sqr/' + pk + '/inline-update/';
@@ -3430,6 +3452,7 @@
         });
     }
     document.addEventListener('sqr:filters-changed', updateViewLinks);
+    document.addEventListener('sqr:catalog-changed', updateViewLinks);
 
     function setView(viewName) {
         // Retired views ('esg') fall back to 'tracker'.
@@ -3562,7 +3585,7 @@
     <div class="sqr-approval-choice-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sqr-new-version-title" aria-describedby="sqr-new-version-desc" style="width: min(100%, 460px);">
         <span class="sqr-approval-choice-modal__eyebrow"><i class="bi bi-stars"></i> What's new</span>
         <h3 class="h4 mt-3 mb-2" id="sqr-new-version-title">A new version of SQR Tracker is available</h3>
-        <p class="text-muted mb-3" id="sqr-new-version-desc">Would you like to see it? Selecting OK takes you to the SQR Tracker Prototype tab.</p>
+        <p class="text-muted mb-3" id="sqr-new-version-desc">Would you like to see it? Selecting OK takes you to SQR Tracker, with List and Table layouts.</p>
         <div class="form-check">
             <input class="form-check-input" type="checkbox" id="sqr-new-version-dismiss">
             <label class="form-check-label" for="sqr-new-version-dismiss">Don't show this message again</label>
