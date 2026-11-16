@@ -3,10 +3,6 @@
 from django.db import migrations, models
 
 
-def seed_settings(apps, schema_editor):
-    apps.get_model('hub', 'SqrTrackerSettings').objects.using(schema_editor.connection.alias).get_or_create(pk=1)
-
-
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -24,5 +20,4 @@ class Migration(migrations.Migration):
                 'constraints': [models.CheckConstraint(condition=models.Q(('pk', 1)), name='sqr_tracker_settings_singleton')],
             },
         ),
-        migrations.RunPython(seed_settings, migrations.RunPython.noop),
     ]

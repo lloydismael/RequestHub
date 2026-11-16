@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import patch
 
 from django import forms
@@ -6,8 +7,8 @@ from types import SimpleNamespace
 
 from accounts.models import User
 from . import form_editor as editor
-from .forms import RequestForm, SqrSubmissionForm
-from .models import Account, Request
+from .forms import RequestForm, SqrSubmissionForm, SqrDeliveryForm, SqrTrackerEditForm
+from .models import Account, Request, FormDefinition, FormVersion, SqrSubmission
 
 from .form_editor_runtime import TOKEN_FIELD, condition_matches, configure_form, editable_form
 
@@ -89,6 +90,40 @@ class FormEditorRuntimeTests(SimpleTestCase):
     def test_skip_flag_avoids_runtime_for_baseline(self):
         form = RuntimeExampleForm(_form_editor_skip=True)
         self.assertFalse(hasattr(form, "editor_enabled"))
+
+class SqrPublishedDeliveryRuntimeTests(TestCase):
+    def test_old_published_and_pinned_layouts_keep_current_delivery_contract(self):
+        retired = {"delivery_target_finish_date", "delivery_completion_signed_date", "delivery_health", "warranty_end_date"}
+        for key, form_class in (("sqr_delivery", SqrDeliveryForm), ("sqr_tracker_edit", SqrTrackerEditForm)):
+            with self.subTest(form=key):
+                old_schema = {"fields": [{"key": name, "label": "Legacy control"} for name in sorted(retired)] + [
+                    {"key": "schedule_performance", "label": "Health Status", "section": "Progress"},
+                ]}
+                definition = FormDefinition.objects.create(key=key, draft=old_schema)
+                old_version = FormVersion.objects.create(definition=definition, number=1, schema=old_schema)
+                definition.published_version = old_version
+                definition.save()
+                row = SqrSubmission(project_details="Implementation", managed_support_amount=0,
+                                    managed_support_end_date=date(2028, 2, 6))
+                rendered = form_class(instance=row)
+                token = rendered.initial[TOKEN_FIELD]
+                new_version = FormVersion.objects.create(definition=definition, number=2, schema={"fields": []})
+                definition.published_version = new_version
+                definition.save()
+                pinned = form_class({TOKEN_FIELD: token}, instance=row)
+                self.assertEqual(pinned.editor_version.pk, old_version.pk)
+                for form in (rendered, pinned):
+                    self.assertIn("Maintenance Start Date is required when an End Date is set.", form.as_p())
+                    self.assertFalse(retired.intersection(form.fields))
+                    self.assertEqual(form.fields["schedule_performance"].label, "Schedule Performance")
+                    self.assertEqual(form.fields["schedule_performance"].widget.attrs["data-form-section"], "Progress")
+                    for name in ("quality_performance", "budget_effort_performance", "delivery_actual_finish_date",
+                                 "managed_support_start_date", "managed_support_end_date"):
+                        self.assertIn(name, form.fields)
+                    self.assertEqual(form.fields["schedule_performance"].clean("delayed"), "delayed")
+                    with self.assertRaises(forms.ValidationError):
+                        form.fields["schedule_performance"].clean("off_track")
+
 
 class PersonSelectionRuntimeTests(TestCase):
     @classmethod

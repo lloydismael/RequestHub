@@ -1,13 +1,13 @@
-<td class="{% if is_pm %}sqr-inline-cell{% endif %}" {% if is_pm %}data-sqr-pk="{{ item.pk }}" data-sqr-field="{{ field }}" data-sqr-type="select" data-sqr-value="{{ value|default:'' }}"{% endif %}>
+<td class="small{% if editable %} sqr-inline-cell{% endif %}"{% if editable %} data-sqr-pk="{{ item.pk }}" data-sqr-field="{{ field }}" data-sqr-type="select" data-sqr-value="{{ value|default:'' }}"{% endif %}>
     <span class="sqr-display">
-        {% if value == 'on_track' or value == 'within_budget' or value == 'met' %}
-            <span class="badge bg-success-subtle text-success border border-success-subtle">{{ label }}</span>
+        {% if value == green %}
+            <span class="badge bg-success-subtle text-success border border-success-subtle">{{ green_label }}</span>
         {% elif value == 'at_risk' %}
-            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">{{ label }}</span>
-        {% elif value == 'delayed' or value == 'over_budget' or value == 'unmet' %}
-            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ label }}</span>
+            <span class="badge bg-warning-subtle text-warning border border-warning-subtle">At Risk</span>
+        {% elif value == red %}
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">{{ red_label }}</span>
         {% else %}
-            <span class="text-muted small">N/R</span>
+            <span class="text-muted small"{% if value %} title="Invalid recorded assessment; review in Delivery Progress."{% endif %}>Not assessed{% if value %} (review required){% endif %}</span>
         {% endif %}
     </span>
 </td>

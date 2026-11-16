@@ -1012,9 +1012,7 @@ body.dark-mode.sqr-page .sqr-esg-table .text-secondary {
 
 /* Inline edit */
 body.sqr-page .sqr-inline-cell { cursor: cell; position: relative; }
-body.sqr-page .sqr-inline-cell[data-sqr-applicable="false"] { cursor: default; }
-body.sqr-page .sqr-inline-cell[data-sqr-applicable="false"]:hover { background: inherit; }
-body.sqr-page .sqr-inline-cell:not(.sqr-editing):not([data-sqr-applicable="false"]):hover {
+body.sqr-page .sqr-inline-cell:not(.sqr-editing):hover {
     outline: 1px solid color-mix(in srgb, var(--lg-accent) 55%, transparent);
     outline-offset: -1px;
 }

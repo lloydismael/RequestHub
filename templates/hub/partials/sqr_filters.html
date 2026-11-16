@@ -1,5 +1,0 @@
-<section id="{{ root_id }}" class="sqr-filters" aria-label="{{ filter_label|default:'SQR filters' }}" data-ppt="{% if ppt_filters %}true{% else %}false{% endif %}" data-can-mine="{% if is_pm %}true{% else %}false{% endif %}" data-default-assigned="{{ sqr_default_assigned|default:'all' }}" data-options-id="{{ root_id }}-options" data-initial-count="{{ proposal_counts.total|default:0 }}" data-server-query="{{ request.GET.urlencode }}" data-summary-endpoint="{% url 'hub:sqr-prototype-data' %}">
-    <p class="text-muted">Loading filter controls…</p>
-    <noscript><p>Filter URLs support repeated selections; JavaScript enables the checkbox controls.</p></noscript>
-</section>
-{% with options_id=root_id|add:'-options' %}{{ sqr_filter_options|default_if_none:None|json_script:options_id }}{% endwith %}

@@ -5,26 +5,24 @@
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=23">
-<link rel="stylesheet" href="{% static 'css/sqr-filters.css' %}?v=1">
-<script src="{% static 'js/sqr-filters.js' %}?v=1" defer></script>
 {% if active_sqr_tab != 'reports' %}
-<script src="{% static 'js/sqr-classic-filters.js' %}?v=1" defer></script>
-<script src="{% static 'js/sqr-tracker-settings.js' %}?v=1" defer></script>
-<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=4">
-<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=7" defer></script>
+<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'css/sqr-filter-controls.css' %}?v=1">
+<script src="{% static 'js/sqr-filter-core.js' %}?v=3" defer></script>
+<script src="{% static 'js/sqr-filter-controls.js' %}?v=1" defer></script>
+<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=12" defer></script>
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
-<script src="{% static 'js/sqr-performance.js' %}?v=5" defer></script>
+<script src="{% static 'js/sqr-performance.js' %}?v=6" defer></script>
 {% endif %}
 {% endblock %}
 
 {% block content %}
 <div class="row g-4">
     <div class="col-12">
-        {% if sqr_filter_error %}<div class="alert alert-warning" role="alert">{{ sqr_filter_error }}</div>{% endif %}
 
         {# ── Header card ──────────────────────────────────────────────────── #}
-        <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme" data-sqr-header{% if is_pm and active_sqr_tab != 'reports' and request.GET.view == 'performance' and 'focus' not in request.GET %} hidden{% endif %}>
+        <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme" data-sqr-header data-sqr-initial-view="{{ active_sqr_view }}"{% if active_sqr_view == 'performance' and active_sqr_tab != 'reports' %} hidden{% endif %}>
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
                     <h2 class="h5 mb-0"><i class="bi bi-clipboard-data-fill me-2 text-primary"></i>Service Quotation Request</h2>
@@ -32,31 +30,24 @@
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     {% if is_pm %}
                         <div class="d-flex align-items-center gap-2">
-                            <a href="{% url 'hub:sqr' %}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and request.GET.view != 'performance' %} aria-current="page"{% endif %}>
+                            <a href="{% url 'hub:sqr' %}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and active_sqr_view != 'performance' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-table me-1" aria-hidden="true"></i>To SQR Tracker
                             </a>
                             <a href="{% url 'hub:sqr' %}?tab=reports" class="btn btn-sm sqr-toggle-btn lg-btn btn-outline-primary lg-btn--ghost"{% if active_sqr_tab == 'reports' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-bar-chart-line-fill me-1" aria-hidden="true"></i>To Reports
                             </a>
                         </div>
-                        {% if active_sqr_tab != 'reports' %}
-                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only data-sqr-legacy-filter>
+                        {% if active_sqr_tab != 'reports' and show_classic_sqr_tracker %}
+                        <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only>
                             <div class="mgmt-search-box sqr-toolbar-search-box" role="search" aria-label="Search SQR records">
                                 <i class="bi bi-search mgmt-search-icon"></i>
                                 <input type="text" id="sqr-header-search" class="mgmt-search-input" placeholder="Search SQR..." autocomplete="off" aria-label="Search SQR records">
                                 <span class="mgmt-result-badge" id="sqr-header-count-badge" role="status" aria-live="polite">0 total</span>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only data-sqr-legacy-filter>
+                        <button type="button" class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost" data-bs-toggle="collapse" data-bs-target="#sqr-table-filter-panel" aria-expanded="false" aria-controls="sqr-table-filter-panel" id="sqr-table-filter-toggle" data-sqr-tracker-only>
                             <i class="bi bi-funnel-fill me-1"></i>Filter
                         </button>
-                        {% endif %}
-                        {% if is_admin and request.user.is_active %}
-                        <label class="d-flex align-items-center gap-2" for="sqr-show-classic">
-                            <input type="checkbox" id="sqr-show-classic" data-endpoint="{% url 'hub:sqr-tracker-visibility' %}" data-csrf="{{ csrf_token }}"{% if sqr_classic_visible != False %} checked{% endif %}>
-                            Show SQR Tracker (Classic)
-                        </label>
-                        <span id="sqr-visibility-status" role="status" aria-live="polite"></span>
                         {% endif %}
                         <button type="button" class="btn btn-sm btn-outline-success lg-btn lg-btn--ghost" id="sqr-export-choice-btn">
                             <i class="bi bi-file-earmark-excel me-1"></i>Export Tracker / Reports
@@ -74,20 +65,22 @@
                     {% endif %}
                 </div>
             </div>
+            {% if sqr_view_notice %}<p class="alert alert-info mt-3 mb-0" role="status">{{ sqr_view_notice }}</p>{% endif %}
             {% if active_sqr_tab != 'reports' %}
             <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-                <div class="sqr-view-toggle" role="group" aria-label="SQR table view selector">
-                    <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="prototype" aria-pressed="{% if sqr_active_view == 'prototype' or not sqr_active_view %}true{% else %}false{% endif %}">
-                        <i class="bi bi-stars me-1"></i>SQR Tracker
+                <div class="sqr-view-toggle" role="group" aria-label="SQR tracker selector">
+                    <button type="button" class="btn btn-sm{% if active_sqr_view == 'prototype' %} btn-primary{% else %} btn-outline-primary{% endif %}" data-sqr-view-button="prototype" aria-pressed="{% if active_sqr_view == 'prototype' %}true{% else %}false{% endif %}">
+                        <i class="bi bi-stars me-1" aria-hidden="true"></i>SQR Tracker
                     </button>
-                    {% if sqr_classic_visible != False %}
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="tracker" aria-pressed="{% if sqr_active_view == 'tracker' %}true{% else %}false{% endif %}">
-                        <i class="bi bi-table me-1"></i>SQR Tracker (Classic)
+                    {% if show_classic_sqr_tracker %}
+                    <button type="button" class="btn btn-sm{% if active_sqr_view == 'tracker' %} btn-primary{% else %} btn-outline-primary{% endif %}" data-sqr-view-button="tracker" aria-pressed="{% if active_sqr_view == 'tracker' %}true{% else %}false{% endif %}">
+                        <i class="bi bi-table me-1" aria-hidden="true"></i>SQR Tracker (Classic)
                     </button>
                     {% endif %}
                 </div>
             </div>
-            <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only data-sqr-legacy-filter>
+            {% if show_classic_sqr_tracker %}
+            <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only>
                 <div class="sqr-filter-toolbar">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
                         <div>
@@ -205,7 +198,6 @@
                     </div>
                 </div>
             </div>
-            {% endif %}
             {# Summary badges — clickable filters #}
             <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-badge-filters" data-sqr-tracker-only
                  data-default-my-assigned="{% if default_my_assigned_filter %}1{% else %}0{% endif %}"
@@ -252,7 +244,9 @@
                 </button>
                 {% endif %}
             </div>
-            {# SQR Tracker Prototype stage filters: rendered by sqr-tracker-prototype.js #}
+            {% endif %}
+            {% endif %}
+            {# SQR Tracker stage filters: rendered by sqr-tracker-prototype.js #}
             <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-proto-pipeline" role="group" aria-label="Filter by pipeline stage" data-sqr-prototype-only hidden></div>
         </div>
 
@@ -574,12 +568,11 @@
                 })();
             </script>
         {% else %}
+        {% if show_classic_sqr_tracker %}
         {# ── Main Tracker Table ────────────────────────────────────────────── #}
         {% comment %}No lg-enter here: animating/compositing a card that wraps
            the whole 43-column table stalls first paint.{% endcomment %}
-        {% if sqr_classic_visible != False %}
-        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker"{% if sqr_active_view != 'tracker' %} hidden{% endif %}>
-            {% include "hub/partials/sqr_filters.html" with root_id="sqr-classic-filters" filter_label="Classic SQR filters" %}
+        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker"{% if active_sqr_view != 'tracker' %} hidden{% endif %}>
             <div id="sqr-pm-tracker-focus" class="sqr-pm-focus-notice" hidden>
                 <span id="sqr-pm-tracker-focus-label" role="status"></span>
                 <button type="button" id="sqr-pm-tracker-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
@@ -639,13 +632,13 @@
                             <th class="sqr-stage-delivery">Assigned PM</th>
                             <th class="sqr-stage-delivery">Assigned SSE</th>
                             <th class="sqr-stage-delivery">Start Date</th>
+                            <th class="sqr-stage-delivery">Finish Date</th>
                             <th class="sqr-stage-delivery">Overall Status</th>
                             <th class="sqr-stage-delivery">Schedule Performance</th>
                             <th class="sqr-stage-delivery">Budget/Effort Performance</th>
                             <th class="sqr-stage-delivery">Quality Performance</th>
                             <th class="sqr-stage-delivery">Overall Progress %</th>
                             <th class="sqr-stage-delivery">Key Updates / Risks / Issues</th>
-                            <th class="sqr-stage-delivery">Finish Date (Actual)</th>
                             <th class="sqr-stage-delivery">Completion Warranty End Date</th>
                             <th class="sqr-stage-delivery">Maintenance Start Date</th>
                             <th class="sqr-stage-delivery">Maintenance End Date</th>
@@ -809,11 +802,12 @@
                             {# Delivery stage starts with Assigned PM (PO/PNL Date moved to Billing) #}
                             {% if is_pm %}
                             {# Y: Assigned PM — defaults to col J (pm_esg_reviewer) on Approval; editable #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_pm" data-sqr-type="select" data-sqr-value="{{ item.assigned_pm_id|default:'' }}"><span class="sqr-display">{% if item.assigned_pm %}{{ item.assigned_pm.get_full_name|default:item.assigned_pm.username }}{% elif item.pm_esg_reviewer %}{{ item.pm_esg_reviewer.get_full_name|default:item.pm_esg_reviewer.username }} (reviewer fallback){% else %}&ndash;{% endif %}</span></td>
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_pm" data-sqr-type="select" data-sqr-value="{{ item.assigned_pm_id|default:item.pm_esg_reviewer_id|default:'' }}"><span class="sqr-display">{% if item.assigned_pm %}{{ item.assigned_pm.get_full_name|default:item.assigned_pm.username }}{% elif item.pm_esg_reviewer %}{{ item.pm_esg_reviewer.get_full_name|default:item.pm_esg_reviewer.username }}{% else %}&ndash;{% endif %}</span></td>
                             {# Z: Assigned SSE — inline-editable by PM/Admin #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_sse" data-sqr-type="select" data-sqr-value="{{ item.assigned_sse_id|default:'' }}"><span class="sqr-display">{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username }}{% else %}&ndash;{% endif %}</span></td>
                             {# AA: Start Date #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_start_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_start_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_start_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_actual_finish_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_actual_finish_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_actual_finish_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
                             {# AB: Overall Status #}
                             <td class="sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="overall_status" data-sqr-type="select" data-sqr-value="{{ item.overall_status|default:'' }}">
                                 <span class="sqr-display">
@@ -832,9 +826,9 @@
                                 {% endif %}
                                 </span>
                             </td>
-                            {% include "hub/partials/sqr_assessment_cell.html" with field="schedule_performance" value=item.schedule_performance label=item.get_schedule_performance_display %}
-                            {% include "hub/partials/sqr_assessment_cell.html" with field="budget_effort_performance" value=item.budget_effort_performance label=item.get_budget_effort_performance_display %}
-                            {% include "hub/partials/sqr_assessment_cell.html" with field="quality_performance" value=item.quality_performance label=item.get_quality_performance_display %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='schedule_performance' value=item.schedule_performance green='on_track' green_label='On Track' red='delayed' red_label='Delayed' editable=True %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='budget_effort_performance' value=item.budget_effort_performance green='within_budget' green_label='Within Budget' red='over_budget' red_label='Over Budget' editable=True %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='quality_performance' value=item.quality_performance green='met' green_label='Met' red='unmet' red_label='Unmet' editable=True %}
                             {# AD: Overall Progress % #}
                             <td class="sqr-inline-cell" style="min-width:120px;" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_progress" data-sqr-type="number" data-sqr-value="{{ item.delivery_progress|default:'' }}">
                                 <span class="sqr-display">
@@ -856,15 +850,17 @@
                             </td>
                             {# AE: Key Updates/Risks/Issues #}
                             <td class="cell-wrap small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="key_updates_risks" data-sqr-type="text" data-sqr-value="{{ item.key_updates_risks|default:''|escapejs }}"><span class="sqr-display">{{ item.key_updates_risks|truncatechars:80|default:"&ndash;" }}</span></td>
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_actual_finish_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_actual_finish_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_actual_finish_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
-                            {# Warranty derives from Actual Finish only; manual maintenance dates are independent. #}
+                            {# Warranty uses Finish Date + 30 days for independently eligible scopes. #}
                             <td class="small" data-sqr-computed="post_svc_warranty_end_date">
-                                {% if not item.is_post_svc_warranty_eligible %}<span class="text-muted fst-italic">N/A</span>
-                                {% elif item.computed_post_svc_warranty_end_date %}{{ item.computed_post_svc_warranty_end_date|date:"M d, Y" }}
-                                {% else %}<span class="text-muted">N/R</span>{% endif %}
+                                {% if item.computed_post_svc_warranty_end_date %}
+                                    {{ item.computed_post_svc_warranty_end_date|date:"M d, Y" }}
+                                {% else %}
+                                    <span class="text-muted fst-italic">NA</span>
+                                {% endif %}
                             </td>
-                            {% include "hub/partials/sqr_maintenance_cell.html" with field="managed_support_start_date" value=item.managed_support_start_date computed="support_start_date" %}
-                            {% include "hub/partials/sqr_maintenance_cell.html" with field="managed_support_end_date" value=item.managed_support_end_date computed="managed_support_end_date" %}
+                            {# AJ: Maintenance Start Date — scope + managed support amount required #}
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="managed_support_start_date" data-sqr-type="date" data-sqr-value="{{ item.managed_support_start_date|date:'Y-m-d'|default:'' }}" data-sqr-computed="support_start_date"><span class="sqr-display">{% if item.computed_support_start_date %}{{ item.computed_support_start_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</span></td>
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="managed_support_end_date" data-sqr-type="date" data-sqr-value="{{ item.managed_support_end_date|date:'Y-m-d'|default:'' }}" data-sqr-computed="managed_support_end_date"><span class="sqr-display">{% if item.computed_managed_support_end_date %}{{ item.computed_managed_support_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</span><div class="text-body-secondary" data-sqr-maintenance-notice role="status"{% if not item.maintenance_notice %} hidden{% endif %}>{{ item.maintenance_notice }}</div></td>
                             {# AK: PO/PNL Date — first billing-stage column #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="po_pnl_date" data-sqr-type="date" data-sqr-value="{{ item.po_pnl_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.po_pnl_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
                             {# AL: PO Remarks — multi-line text #}
@@ -897,6 +893,7 @@
                             <td class="small">{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username }}{% else %}&ndash;{% endif %}</td>
                             {# AA: Start Date #}
                             <td class="small">{{ item.delivery_start_date|date:"M d, Y"|default:"&ndash;" }}</td>
+                            <td class="small">{{ item.delivery_actual_finish_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# AB: Overall Status #}
                             <td>
                                 {% if item.overall_status == 'on_hold' %}<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">On Hold</span>
@@ -906,9 +903,9 @@
                                 {% elif item.overall_status == 'cancelled' %}<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Cancelled</span>
                                 {% else %}<span class="text-muted small">&ndash;</span>{% endif %}
                             </td>
-                            {% include "hub/partials/sqr_assessment_cell.html" with field="schedule_performance" value=item.schedule_performance label=item.get_schedule_performance_display %}
-                            {% include "hub/partials/sqr_assessment_cell.html" with field="budget_effort_performance" value=item.budget_effort_performance label=item.get_budget_effort_performance_display %}
-                            {% include "hub/partials/sqr_assessment_cell.html" with field="quality_performance" value=item.quality_performance label=item.get_quality_performance_display %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='schedule_performance' value=item.schedule_performance green='on_track' green_label='On Track' red='delayed' red_label='Delayed' editable=False %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='budget_effort_performance' value=item.budget_effort_performance green='within_budget' green_label='Within Budget' red='over_budget' red_label='Over Budget' editable=False %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='quality_performance' value=item.quality_performance green='met' green_label='Met' red='unmet' red_label='Unmet' editable=False %}
                             {# AD: Overall Progress % #}
                             <td style="min-width:120px;">
                                 {% if item.delivery_progress is not None %}
@@ -924,11 +921,12 @@
                             </td>
                             {# AE: Key Updates #}
                             <td class="cell-wrap small">{{ item.key_updates_risks|truncatechars:80|default:"&ndash;" }}</td>
-                            <td class="small">{{ item.delivery_actual_finish_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# AI: Completion Warranty End Date #}
-                            <td class="small">{% if not item.is_post_svc_warranty_eligible %}<span class="text-muted fst-italic">N/A</span>{% elif item.computed_post_svc_warranty_end_date %}{{ item.computed_post_svc_warranty_end_date|date:"M d, Y" }}{% else %}<span class="text-muted">N/R</span>{% endif %}</td>
-                            {% include "hub/partials/sqr_maintenance_cell.html" with field="managed_support_start_date" value=item.managed_support_start_date computed="support_start_date" %}
-                            {% include "hub/partials/sqr_maintenance_cell.html" with field="managed_support_end_date" value=item.managed_support_end_date computed="managed_support_end_date" %}
+                            <td class="small">{% if item.computed_post_svc_warranty_end_date %}{{ item.computed_post_svc_warranty_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</td>
+                            {# AJ: Maintenance Start Date #}
+                            <td class="small">{% if item.computed_support_start_date %}{{ item.computed_support_start_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</td>
+                            {# AJ: Maintenance End Date #}
+                            <td class="small">{% if item.computed_managed_support_end_date %}{{ item.computed_managed_support_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}<div class="text-body-secondary" data-sqr-maintenance-notice role="status"{% if not item.maintenance_notice %} hidden{% endif %}>{{ item.maintenance_notice }}</div></td>
                             {# AK: PO/PNL Date #}
                             <td class="small">{{ item.po_pnl_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# AL: PO Remarks #}
@@ -1080,8 +1078,8 @@
             <button type="button" class="btn sqr-approval-option sqr-approval-option--draft" id="sqr-export-tracker-btn">
                 <span class="sqr-approval-option__icon"><i class="bi bi-clipboard-data"></i></span>
                 <span>
-                    <span class="sqr-approval-option__label">SQR Tracker</span>
-                    <span class="sqr-approval-option__hint">Download the standard SQR tracker Excel file.</span>
+                    <span class="sqr-approval-option__label">SQR Tracker — All records</span>
+                    <span class="sqr-approval-option__hint">Download all authorized SQR records. Screen filters do not limit this Excel export.</span>
                 </span>
                 <span class="sqr-approval-option__arrow"><i class="bi bi-download"></i></span>
             </button>
@@ -2170,10 +2168,9 @@
     var pendingApprovalChange = null;
     var CLOSED_LOST_LOCKED_FIELDS = new Set([
         'po_pnl_date', 'assigned_pm', 'assigned_sse', 'delivery_start_date',
-        'delivery_target_finish_date', 'overall_status', 'delivery_health',
+        'overall_status', 'schedule_performance', 'budget_effort_performance', 'quality_performance',
         'delivery_progress', 'key_updates_risks', 'delivery_actual_finish_date',
-        'delivery_completion_signed_date', 'managed_support_start_date', 'managed_support_end_date',
-        'schedule_performance', 'budget_effort_performance', 'quality_performance',
+        'managed_support_start_date', 'managed_support_end_date',
         'revenue_date', 'revenue_source', 'revenue_reference_no', 'revenue_status',
         'revenue_remarks', 'revenue_overview', 'revenue_declaration'
     ]);
@@ -2330,9 +2327,9 @@
         status: [['','— Select Status —'],['submitted','For Processing'],['for_revision','For Revision'],['reviewed','Approved'],['on_hold','On Hold']],
         proposal_status: [['','—'],['submitted_pending','Submitted'],['negotiation_review','On Review'],['closed_won','Closed-Won'],['closed_lost','Closed-Lost'],['closed_canceled','Closed-Canceled']],
         overall_status: [['','—'],['on_hold','On Hold'],['planning','Planning'],['in_progress','In Progress'],['completed','Completed'],['cancelled','Cancelled']],
-        schedule_performance: [['','N/R — Not Recorded'],['on_track','On Track'],['at_risk','At Risk'],['delayed','Delayed']],
-        budget_effort_performance: [['','N/R — Not Recorded'],['within_budget','Within Budget'],['at_risk','At Risk'],['over_budget','Over Budget']],
-        quality_performance: [['','N/R — Not Recorded'],['met','Met'],['at_risk','At Risk'],['unmet','Unmet']],
+        schedule_performance: [['','Not assessed'],['on_track','On Track'],['at_risk','At Risk'],['delayed','Delayed']],
+        budget_effort_performance: [['','Not assessed'],['within_budget','Within Budget'],['at_risk','At Risk'],['over_budget','Over Budget']],
+        quality_performance: [['','Not assessed'],['met','Met'],['at_risk','At Risk'],['unmet','Unmet']],
         project_details: [['','— Select Scope —'],['Deployment Only','Deployment Only'],['On-Call Services','On-Call Services'],['Maintenance','Maintenance'],['Project Management','Project Management'],['Deployment and Project Management','Deployment and Project Management']],
         customer_company: [['','— Select —'],['ESS','ESS'],['HP','HP'],['Dell','Dell'],['ENS','ENS'],['ESG','ESG'],['ISG','ISG'],['Other','Other']],
         revenue_source: [['','— Select —'],['internal','Internal'],['invoiced','Invoiced'],['unbilled','Unbilled']],
@@ -2358,10 +2355,12 @@
             sse_manhrs: 'SSE Man-hrs', pm_manhrs: 'PM Man-hrs', managed_support_amount: 'Maintenance Amt.',
             discount_rate: 'Discount', status: 'Status', proposal_status: 'Proposal Status',
             po_pnl_date: 'PO / PNL Date', assigned_pm: 'Assigned PM', assigned_sse: 'Assigned SSE',
-            delivery_start_date: 'Delivery Start', delivery_target_finish_date: 'Target Finish',
-            overall_status: 'Overall Status', delivery_health: 'Delivery Health', delivery_progress: 'Delivery Progress',
-            key_updates_risks: 'Updates/Risks', delivery_actual_finish_date: 'Actual Finish',
-            delivery_completion_signed_date: 'Completion Signed', managed_support_start_date: 'Maintenance Start',
+            delivery_start_date: 'Start Date',
+            overall_status: 'Overall Status', schedule_performance: 'Schedule Performance',
+            budget_effort_performance: 'Budget/Effort Performance', quality_performance: 'Quality Performance',
+            delivery_progress: 'Delivery Progress', key_updates_risks: 'Updates/Risks',
+            delivery_actual_finish_date: 'Finish Date', managed_support_start_date: 'Maintenance Start',
+            managed_support_end_date: 'Maintenance End',
             revenue_date: 'Billed Date', revenue_source: 'Billing Type', revenue_reference_no: 'Billing Reference',
             revenue_status: 'Billing Status', revenue_remarks: 'PO Remarks', revenue_overview: 'Billing Remarks',
             revenue_declaration: 'Revenue Declaration'
@@ -2507,7 +2506,9 @@
                 || !Object.prototype.hasOwnProperty.call(labels, value)) {
             var placeholder = document.createElement('span');
             placeholder.className = 'text-muted small';
-            placeholder.textContent = ['schedule_performance', 'budget_effort_performance', 'quality_performance'].indexOf(field) !== -1 ? 'N/R' : '\u2013';
+            var assessment = ['schedule_performance', 'budget_effort_performance', 'quality_performance'].indexOf(field) !== -1;
+            placeholder.textContent = assessment
+                ? (value ? 'Not assessed (review required)' : 'Not assessed') : '\u2013';
             container.appendChild(placeholder);
             return;
         }
@@ -2783,8 +2784,8 @@
             cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[normalizedValue] || normalizedValue) + '. Press Enter to edit.');
         } else if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].indexOf(field) !== -1) {
             renderMultilineText(displayEl, getDisplay(field, normalizedValue, cell));
-        } else if (['proposal_status', 'overall_status', 'schedule_performance', 'budget_effort_performance',
-                    'quality_performance', 'delivery_health', 'revenue_declaration', 'revenue_status', 'delivery_progress'].indexOf(field) !== -1) {
+        } else if (['proposal_status', 'overall_status', 'schedule_performance', 'budget_effort_performance', 'quality_performance', 'delivery_health', 'revenue_declaration',
+                    'revenue_status', 'delivery_progress'].indexOf(field) !== -1) {
             renderStructuredDisplay(displayEl, field, normalizedValue);
         } else {
             displayEl.textContent = getDisplay(field, normalizedValue, cell);
@@ -2792,6 +2793,13 @@
         cell.classList.add('sqr-saved');
         setTimeout(function() { cell.classList.remove('sqr-saved'); }, 1200);
         var row = cell.closest('tr');
+        if (row && 'maintenance_notice' in data) {
+            var maintenanceNotice = row.querySelector('[data-sqr-maintenance-notice]');
+            if (maintenanceNotice) {
+                maintenanceNotice.textContent = data.maintenance_notice || '';
+                maintenanceNotice.hidden = !data.maintenance_notice;
+            }
+        }
 
         if (field === 'proposal_status' && row) {
             row.classList.toggle(
@@ -2874,17 +2882,19 @@
             }
         }
         if (row) {
-            ['post_svc_warranty_end_date', 'support_start_date', 'managed_support_end_date'].forEach(function(name) {
-                if (!(name in data)) return;
-                var dateCell = row.querySelector('[data-sqr-computed="' + name + '"]');
+            [
+                ['post_svc_warranty_end_date', null],
+                ['support_start_date', 'maintenance_start_value'],
+                ['managed_support_end_date', 'maintenance_end_value']
+            ].forEach(function(keys) {
+                var displayKey = keys[0], rawKey = keys[1];
+                if (!(displayKey in data) && !(rawKey && rawKey in data)) return;
+                var dateCell = row.querySelector('[data-sqr-computed="' + displayKey + '"]');
                 if (!dateCell) return;
-                var dateDisplay = dateCell.querySelector('.sqr-display') || dateCell;
-                var applicable = name === 'post_svc_warranty_end_date' ? data.warranty_eligible !== false : data.maintenance_eligible !== false;
-                dateDisplay.textContent = applicable ? (data[name] || 'N/R') : 'N/A';
-                if (dateCell.dataset.sqrField) {
-                    dateCell.dataset.sqrApplicable = applicable ? 'true' : 'false';
-                    dateCell.setAttribute('aria-disabled', applicable ? 'false' : 'true');
-                    dateCell.tabIndex = applicable ? 0 : -1;
+                if (rawKey && rawKey in data) dateCell.dataset.sqrValue = data[rawKey] || '';
+                if (displayKey in data) {
+                    var dateDisplay = dateCell.querySelector('.sqr-display') || dateCell;
+                    dateDisplay.textContent = data[displayKey] || 'NA';
                 }
             });
         }
@@ -2908,7 +2918,7 @@
                 var pmName = data.assigned_pm_name || '\u2013';
                 assignedPmCell.dataset.sqrValue = pmPk;
                 var assignedPmDisp = assignedPmCell.querySelector('.sqr-display');
-                if (assignedPmDisp) assignedPmDisp.textContent = pmName;
+                if (assignedPmDisp) assignedPmDisp.innerHTML = pmName;
             }
         }
         if ('assigned_sse_name' in data && row) {
@@ -2952,13 +2962,9 @@
     }
 
     var undoToastTimer = null;
-    var activeUndoContext = null;
     function showUndoToast(context) {
         var toast = document.getElementById('sqr-undo-toast');
         if (!toast || !context || !context.data || !context.data.undo_url) return;
-        var expiresAt = context.expires_at || Date.now() + 10000;
-        if (expiresAt <= Date.now()) return;
-        activeUndoContext = {pk: context.pk, field: context.field, undo_url: context.data.undo_url, expires_at: expiresAt};
         var message = toast.querySelector('[data-sqr-undo-message]');
         var warning = toast.querySelector('[data-sqr-undo-warning]');
         var undoBtn = toast.querySelector('[data-sqr-undo-action]');
@@ -2971,7 +2977,7 @@
         function hideToast() {
             toast.classList.add('d-none');
             if (undoToastTimer) window.clearTimeout(undoToastTimer);
-            undoToastTimer = null; activeUndoContext = null;
+            undoToastTimer = null;
         }
         if (closeBtn) closeBtn.onclick = hideToast;
         if (undoBtn) {
@@ -2988,9 +2994,7 @@
                 .then(function(r) { return r.json().then(function(data) { return {ok: r.ok, data: data}; }); })
                 .then(function(result) {
                     if (!result.ok || !result.data.ok) throw new Error(result.data.error || 'Unable to undo this change.');
-                    activeUndoContext = null;
-                    if (context.cell && context.displayEl) applyInlineUpdateResponse(context.pk, context.field, result.data.field_value, context.cell, context.displayEl, result.data, {});
-                    else document.dispatchEvent(new CustomEvent('sqr:performance-invalidated'));
+                    applyInlineUpdateResponse(context.pk, context.field, result.data.field_value, context.cell, context.displayEl, result.data, {});
                     if (message) message.textContent = 'Change undone.';
                     if (warning) {
                         warning.textContent = result.data.workflow_side_effect_message || '';
@@ -3010,24 +3014,8 @@
         }
         toast.classList.remove('d-none');
         if (undoToastTimer) window.clearTimeout(undoToastTimer);
-        undoToastTimer = window.setTimeout(hideToast, Math.max(0, expiresAt - Date.now()));
+        undoToastTimer = window.setTimeout(hideToast, 10000);
     }
-    window.getSqrPendingUndo = function () { return activeUndoContext && activeUndoContext.expires_at > Date.now() ? Object.assign({}, activeUndoContext) : null; };
-    try {
-        var savedUndo = window.sessionStorage.getItem('sqr_tracker_pending_undo_v1');
-        window.sessionStorage.removeItem('sqr_tracker_pending_undo_v1');
-        if (savedUndo) {
-            var resume = JSON.parse(savedUndo), now = Date.now(), resumePk = String(resume.pk);
-            if (/^[1-9][0-9]*$/.test(resumePk) && /^[a-z_]+$/.test(resume.field) &&
-                Number.isFinite(resume.expires_at) && resume.expires_at > now && resume.expires_at <= now + 10000 &&
-                new RegExp('^/sqr/' + resumePk + '/inline-update/[1-9][0-9]*/undo/$').test(resume.undo_url)) {
-                var resumeCell = document.querySelector('[data-sqr-pk="' + resumePk + '"][data-sqr-field="' + resume.field + '"]');
-                showUndoToast({pk: resumePk, field: resume.field, cell: resumeCell,
-                    displayEl: resumeCell ? resumeCell.querySelector('.sqr-display') : null,
-                    data: {undo_url: resume.undo_url}, expires_at: resume.expires_at});
-            }
-        }
-    } catch (error) { /* unavailable storage or invalid/expired undo context */ }
 
     function saveField(pk, field, value, cell, displayEl, reviewNotes, options) {
         var url = '/sqr/' + pk + '/inline-update/';
@@ -3061,7 +3049,7 @@
 
     function activateCell(cell) {
         if (cell.classList.contains('sqr-editing')) return;
-        if (isClosedLostLockedCell(cell) || cell.dataset.sqrApplicable === 'false') return;
+        if (isClosedLostLockedCell(cell)) return;
         var field = cell.dataset.sqrField;
         var pk = cell.dataset.sqrPk;
         if (!field || !pk) return;
@@ -3300,13 +3288,9 @@
     }
 
     document.querySelectorAll('.sqr-inline-cell').forEach(function(cell) {
-        var keyboardFields = {status: 'SQR Status', schedule_performance: 'Schedule Performance',
-            budget_effort_performance: 'Budget/Effort Performance', quality_performance: 'Quality Performance',
-            managed_support_start_date: 'Maintenance Start Date', managed_support_end_date: 'Maintenance End Date'};
-        if (keyboardFields[cell.dataset.sqrField]) {
-            cell.tabIndex = cell.dataset.sqrApplicable === 'false' ? -1 : 0;
-            var currentLabel = (LABELS[cell.dataset.sqrField] || {})[cell.dataset.sqrValue] || cell.dataset.sqrValue || 'N/R';
-            cell.setAttribute('aria-label', keyboardFields[cell.dataset.sqrField] + ': ' + currentLabel + '. Press Enter to edit.');
+        if (cell.dataset.sqrField === 'status') {
+            cell.tabIndex = 0;
+            cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[cell.dataset.sqrValue] || cell.dataset.sqrValue) + '. Press Enter to edit.');
             cell.addEventListener('keydown', function(event) {
                 if (event.target === cell && (event.key === 'Enter' || event.key === ' ')) {
                     event.preventDefault();
@@ -3314,8 +3298,9 @@
                 }
             });
         }
-        cell.title = cell.dataset.sqrApplicable === 'false' ? 'Not applicable to this SQR'
-            : isClosedLostLockedCell(cell) ? 'Locked because Proposal Status is Closed Lost' : 'Click to edit';
+        cell.title = isClosedLostLockedCell(cell)
+            ? 'Locked because Proposal Status is Closed Lost'
+            : 'Click to edit';
         cell.addEventListener('click', function(e) {
             if (isClosedLostLockedCell(cell)) {
                 e.preventDefault();
@@ -3451,23 +3436,8 @@
     });
     var prototypeControls = Array.from(document.querySelectorAll('[data-sqr-prototype-only]'));
 
-    function updateViewLinks() {
-        navLinks.forEach(function (link) {
-            var params = new URLSearchParams(window.location.search);
-            params.set('view', link.dataset.sqrNavView);
-            link.setAttribute('href', window.location.pathname + '?' + params.toString() + window.location.hash);
-        });
-        trackerLinks.forEach(function (link) {
-            var params = new URLSearchParams(window.location.search);
-            params.set('view', 'prototype');
-            link.setAttribute('href', window.location.pathname + '?' + params.toString() + window.location.hash);
-        });
-    }
-    document.addEventListener('sqr:filters-changed', updateViewLinks);
-    document.addEventListener('sqr:catalog-changed', updateViewLinks);
-
     function setView(viewName) {
-        // Retired views ('esg') fall back to 'tracker'.
+        // Only panels rendered by the server can be activated.
         var available = {};
         panels.forEach(function (panel) { available[panel.dataset.sqrViewPanel] = true; });
         // A disabled view button (under maintenance) cannot be activated, even from a saved preference.
@@ -3475,7 +3445,6 @@
             if (button.disabled) available[button.dataset.sqrViewButton] = false;
         });
         var activeView = available[viewName] ? viewName : 'prototype';
-        if (!available[activeView]) activeView = 'prototype';
         if (header) header.hidden = activeView === 'performance';
         buttons.forEach(function (button) {
             var isActive = button.dataset.sqrViewButton === activeView;
@@ -3507,7 +3476,6 @@
             params.set('view', activeView);
             window.history.replaceState(window.history.state, '', window.location.pathname + '?' + params.toString() + window.location.hash);
         } catch (error) {}
-        updateViewLinks();
         document.dispatchEvent(new CustomEvent('sqr:performance-view', {detail: {view: activeView}}));
         try { window.localStorage.setItem(storageKey, activeView); } catch (error) {}
     }
@@ -3522,14 +3490,537 @@
         });
     });
 
-    var savedView = 'prototype';
-    try { savedView = window.localStorage.getItem(storageKey) || 'prototype'; } catch (error) {}
-    if (savedView === 'performance') savedView = 'prototype';
     var initialParams = new URLSearchParams(window.location.search);
-    var requestedView = initialParams.has('focus') ? 'prototype' : initialParams.get('view');
-    setView(requestedView || savedView);
+    var requestedView = initialParams.has('focus') ? 'tracker' : initialParams.get('view');
+    var initialView = header && header.dataset.sqrInitialView;
+    setView(initialView || requestedView || 'prototype');
 })();
 </script>
+
+<script>
+// ── Badge filter ──────────────────────────────────────────────────────────
+(function () {
+    var badgeRoot = document.getElementById('sqr-badge-filters');
+    var defaultMyAssigned = !!(badgeRoot && badgeRoot.dataset.defaultMyAssigned === '1');
+    var currentUserId = badgeRoot ? String(badgeRoot.dataset.currentUserId || '') : '';
+    var activeFilter = defaultMyAssigned ? 'my_assigned' : '';   // '' = show all
+    var toolbarSearchInput = document.getElementById('sqr-header-search');
+    var searchInput = document.getElementById('sqr-table-filter-search') || toolbarSearchInput;
+    var headerCountBadge = document.getElementById('sqr-header-count-badge');
+    var statusSelect = document.getElementById('sqr-table-filter-status');
+    var proposalStatusSelect = document.getElementById('sqr-table-filter-proposal-status');
+    var overallStatusSelect = document.getElementById('sqr-table-filter-overall-status');
+    var healthSelect = document.getElementById('sqr-table-filter-health');
+    var revenueSourceSelect = document.getElementById('sqr-table-filter-revenue-source');
+    var sqrDateFromInput = document.getElementById('sqr-table-filter-date-from');
+    var sqrDateToInput = document.getElementById('sqr-table-filter-date-to');
+    var groupInput = document.getElementById('sqr-table-filter-group');
+    var amountMinInput = document.getElementById('sqr-table-filter-amount-min');
+    var amountMaxInput = document.getElementById('sqr-table-filter-amount-max');
+    var linkedRequestCheckbox = document.getElementById('sqr-table-filter-linked-request');
+    var assignedSseCheckbox = document.getElementById('sqr-table-filter-assigned-sse');
+    var myAssignedCheckbox = document.getElementById('sqr-table-filter-my-assigned');
+    var billedOnlyCheckbox = document.getElementById('sqr-table-filter-billed-only');
+    var resetButton = document.getElementById('sqr-table-filter-reset');
+    var resultsMeta = document.getElementById('sqr-filter-results-meta');
+    var focusedProjectPk = '';
+    var focusNotice = document.getElementById('sqr-pm-tracker-focus');
+    var focusLabel = document.getElementById('sqr-pm-tracker-focus-label');
+    var focusDismiss = document.getElementById('sqr-pm-tracker-focus-dismiss');
+    var focusedRow = null;
+    var previousRowTabindex = null;
+
+    function rowProjectPk(row) {
+        var cell = row.querySelector('[data-sqr-pk]');
+        return String(row.dataset.sqrPk || (cell && cell.dataset.sqrPk) || '');
+    }
+
+    function clearFocusedRow() {
+        if (!focusedRow) return;
+        focusedRow.classList.remove('sqr-pm-focused-row');
+        if (previousRowTabindex === null) focusedRow.removeAttribute('tabindex');
+        else focusedRow.setAttribute('tabindex', previousRowTabindex);
+        focusedRow = null;
+    }
+
+    function normalizeText(value) {
+        return (value || '').toString().trim().toLowerCase();
+    }
+
+    function parseAmount(value) {
+        if (value === null || value === undefined || value === '') return null;
+        var normalized = String(value).replace(/,/g, '').trim();
+        if (!normalized) return null;
+        var amount = Number(normalized);
+        return Number.isFinite(amount) ? amount : null;
+    }
+
+    function isMyAssignedActive() {
+        return activeFilter === 'my_assigned' || !!(myAssignedCheckbox && myAssignedCheckbox.checked);
+    }
+
+    function setMyAssignedChecked(checked) {
+        if (myAssignedCheckbox) myAssignedCheckbox.checked = !!checked;
+    }
+
+    function countActiveFilters() {
+        var filters = [
+            searchInput && searchInput.value,
+            statusSelect && statusSelect.value,
+            proposalStatusSelect && proposalStatusSelect.value,
+            overallStatusSelect && overallStatusSelect.value,
+            healthSelect && healthSelect.value,
+            revenueSourceSelect && revenueSourceSelect.value,
+            sqrDateFromInput && sqrDateFromInput.value,
+            sqrDateToInput && sqrDateToInput.value,
+            groupInput && groupInput.value,
+            amountMinInput && amountMinInput.value,
+            amountMaxInput && amountMaxInput.value,
+            linkedRequestCheckbox && linkedRequestCheckbox.checked,
+            assignedSseCheckbox && assignedSseCheckbox.checked,
+            isMyAssignedActive(),
+            billedOnlyCheckbox && billedOnlyCheckbox.checked
+        ];
+
+        return filters.reduce(function (count, value) {
+            return value ? count + 1 : count;
+        }, 0);
+    }
+
+    function syncActiveBadgeFromControls() {
+        if (myAssignedCheckbox && myAssignedCheckbox.checked && !statusSelect.value && !proposalStatusSelect.value) {
+            activeFilter = 'my_assigned';
+            return;
+        }
+        if (statusSelect && statusSelect.value && (!proposalStatusSelect || !proposalStatusSelect.value)) {
+            activeFilter = 'status:' + statusSelect.value;
+        } else if (proposalStatusSelect && proposalStatusSelect.value && (!statusSelect || !statusSelect.value)) {
+            activeFilter = 'proposal_status:' + proposalStatusSelect.value;
+        } else if (activeFilter === 'my_assigned' && !(myAssignedCheckbox && myAssignedCheckbox.checked)) {
+            activeFilter = '';
+        } else if (activeFilter !== 'my_assigned') {
+            activeFilter = '';
+        }
+    }
+
+    function updateBadgeState() {
+        document.querySelectorAll('#sqr-badge-filters .sqr-badge-filter').forEach(function (badge) {
+            var badgeFilter = badge.dataset.sqrFilter || '';
+            var isActive = false;
+            if (badgeFilter === 'my_assigned') {
+                isActive = isMyAssignedActive();
+            } else {
+                isActive = badgeFilter === activeFilter;
+            }
+            badge.classList.toggle('is-active', !!isActive);
+            badge.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+            badge.style.outline = '';
+            badge.style.outlineOffset = '';
+        });
+    }
+
+    function syncPresetControls(filter) {
+        if (statusSelect) statusSelect.value = '';
+        if (proposalStatusSelect) proposalStatusSelect.value = '';
+        if (!filter) {
+            setMyAssignedChecked(false);
+            return;
+        }
+        if (filter === 'my_assigned') {
+            setMyAssignedChecked(true);
+            return;
+        }
+        setMyAssignedChecked(false);
+        var parts = filter.split(':');
+        if (parts[0] === 'status' && statusSelect) {
+            statusSelect.value = parts[1] || '';
+        } else if (parts[0] === 'proposal_status' && proposalStatusSelect) {
+            proposalStatusSelect.value = parts[1] || '';
+        }
+    }
+
+    function getActiveTableRows() {
+            // Prefer the visible panel only — hidden panels still in DOM but skip them
+        var activePanel = document.querySelector('[data-sqr-view-panel]:not([hidden])');
+        if (activePanel) {
+            return { panel: activePanel, rows: activePanel.querySelectorAll('tbody tr') };
+        }
+        return {
+            panel: document,
+            rows: document.querySelectorAll('.sqr-tracker tbody tr, .sqr-esg-table tbody tr')
+        };
+    }
+
+    var rowCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+    var filterFrame = 0;
+
+    function getRowRecords(panel, rows) {
+        var cached = rowCache && rowCache.get(panel);
+        if (cached && cached.length === rows.length) return cached;
+        var records = Array.from(rows).map(function (row) {
+            return {
+                row: row,
+                searchText: null,
+                indexedText: normalizeText([
+                    row.dataset.sqrRef,
+                    row.dataset.sqrCustomer,
+                    row.dataset.sqrGroup,
+                    row.dataset.sqrAssignedPm,
+                    row.dataset.sqrAssignedSse,
+                    row.dataset.engineerName
+                ].join(' ')),
+                group: normalizeText(row.dataset.sqrGroup || ''),
+                totalPrice: parseAmount(row.dataset.sqrTotalPrice || '0') || 0
+            };
+        });
+        if (rowCache) rowCache.set(panel, records);
+        return records;
+    }
+
+    var serverControls = [
+        ['q', searchInput], ['status', statusSelect], ['proposal_status', proposalStatusSelect],
+        ['overall_status', overallStatusSelect], ['delivery_health', healthSelect], ['revenue_source', revenueSourceSelect],
+        ['date_from', sqrDateFromInput], ['date_to', sqrDateToInput], ['group', groupInput],
+        ['amount_min', amountMinInput], ['amount_max', amountMaxInput], ['linked', linkedRequestCheckbox],
+        ['sse', assignedSseCheckbox], ['billed', billedOnlyCheckbox]
+    ];
+    var initialParams = new URLSearchParams(window.location.search);
+    serverControls.forEach(function (entry) {
+        if (!entry[1] || !initialParams.has(entry[0])) return;
+        if (entry[1].type === 'checkbox') entry[1].checked = initialParams.get(entry[0]) === '1';
+        else entry[1].value = initialParams.get(entry[0]);
+    });
+    if (toolbarSearchInput && searchInput) toolbarSearchInput.value = searchInput.value;
+    function serverValues() {
+        var values = serverControls.map(function (entry) {
+            return [entry[0], !entry[1] ? '' : entry[1].type === 'checkbox' ? (entry[1].checked ? '1' : '') : entry[1].value.trim()];
+        });
+        values.push(['assigned', isMyAssignedActive() ? 'mine' : 'all']);
+        return values;
+    }
+    var filterSignature = null;
+    function applyFilter() {
+        var values = serverValues();
+        var signature = JSON.stringify(values);
+        if (document.getElementById('sqr-pagination') && !focusedProjectPk && filterSignature !== null && signature !== filterSignature) {
+            var params = new URLSearchParams(window.location.search);
+            params.delete('page');
+            params.delete('focus');
+            values.forEach(function (entry) { if (entry[1]) params.set(entry[0], entry[1]); else params.delete(entry[0]); });
+            var nextLocation = window.location.pathname + '?' + params.toString();
+            try { sessionStorage.setItem('sqr-filter-navigation', nextLocation); } catch (_) {}
+            var focused = document.activeElement;
+            if (focused && focused.id && (serverControls.some(function (entry) { return entry[1] === focused; }) || focused === toolbarSearchInput)) {
+                try { sessionStorage.setItem('sqr-filter-focus', JSON.stringify({id: focused.id, start: focused.selectionStart, end: focused.selectionEnd})); } catch (_) {}
+            }
+            window.location.assign(nextLocation);
+            return;
+        }
+        filterSignature = signature;
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        filterFrame = requestAnimationFrame(runFilter);
+    }
+
+    function runFilter() {
+        filterFrame = 0;
+        var activeRows = getActiveTableRows();
+        if (activeRows.panel.dataset && activeRows.panel.dataset.sqrViewPanel === 'performance') return;
+        var records = getRowRecords(activeRows.panel, activeRows.rows);
+        var query = normalizeText(searchInput && searchInput.value ? searchInput.value : '');
+        var statusValue = statusSelect ? statusSelect.value : '';
+        var proposalValue = proposalStatusSelect ? proposalStatusSelect.value : '';
+        var overallStatusValue = overallStatusSelect ? overallStatusSelect.value : '';
+        var healthValue = healthSelect ? healthSelect.value : '';
+        var revenueSourceValue = revenueSourceSelect ? revenueSourceSelect.value : '';
+        var groupValue = normalizeText(groupInput && groupInput.value ? groupInput.value : '');
+        var sqrDateFrom = sqrDateFromInput ? sqrDateFromInput.value : '';
+        var sqrDateTo = sqrDateToInput ? sqrDateToInput.value : '';
+        var amountMin = parseAmount(amountMinInput ? amountMinInput.value : '');
+        var amountMax = parseAmount(amountMaxInput ? amountMaxInput.value : '');
+        var linkedRequestOnly = !!(linkedRequestCheckbox && linkedRequestCheckbox.checked);
+        var assignedSseOnly = !!(assignedSseCheckbox && assignedSseCheckbox.checked);
+        var myAssignedOnly = isMyAssignedActive();
+        var billedOnly = !!(billedOnlyCheckbox && billedOnlyCheckbox.checked);
+        var visibleCount = 0;
+        records.forEach(function (record) {
+            var row = record.row;
+            var matchesStatus = !statusValue || (row.dataset.sqrStatus || '') === statusValue;
+            var matchesProposal = !proposalValue || (row.dataset.sqrProposalStatus || '') === proposalValue;
+            var matchesOverallStatus = !overallStatusValue || (row.dataset.sqrOverallStatus || '') === overallStatusValue;
+            var matchesHealth = !healthValue || (row.dataset.sqrHealth || '') === healthValue;
+            var matchesRevenueSource = !revenueSourceValue || (row.dataset.sqrRevenueSource || '') === revenueSourceValue;
+            var matchesGroup = !groupValue || record.group.indexOf(groupValue) !== -1;
+            var createdAt = row.dataset.sqrCreatedAt || '';
+            var matchesDateFrom = !sqrDateFrom || (createdAt && createdAt >= sqrDateFrom);
+            var matchesDateTo = !sqrDateTo || (createdAt && createdAt <= sqrDateTo);
+            var matchesAmountMin = amountMin === null || record.totalPrice >= amountMin;
+            var matchesAmountMax = amountMax === null || record.totalPrice <= amountMax;
+            var matchesLinkedRequest = !linkedRequestOnly || (row.dataset.sqrLinkedRequest || '') === 'yes';
+            var matchesAssignedSse = !assignedSseOnly || !!normalizeText(row.dataset.sqrAssignedSse || '');
+            var matchesMyAssigned = !myAssignedOnly || (
+                !!currentUserId && String(row.dataset.sqrApproverId || '') === currentUserId
+            );
+            var matchesBilled = !billedOnly || (row.dataset.sqrRevenueStatus || '') === 'billed';
+            var matchesQuery = true;
+            if (query) {
+                matchesQuery = record.indexedText.indexOf(query) !== -1;
+                if (!matchesQuery) {
+                    if (record.searchText === null) {
+                        record.searchText = normalizeText(row.textContent || '');
+                    }
+                    matchesQuery = record.searchText.indexOf(query) !== -1;
+                }
+            }
+            var isVisible = matchesStatus
+                && matchesProposal
+                && matchesOverallStatus
+                && matchesHealth
+                && matchesRevenueSource
+                && matchesGroup
+                && matchesDateFrom
+                && matchesDateTo
+                && matchesAmountMin
+                && matchesAmountMax
+                && matchesLinkedRequest
+                && matchesAssignedSse
+                && matchesMyAssigned
+                && matchesBilled
+                && matchesQuery;
+
+            if (document.getElementById('sqr-pagination') && !focusedProjectPk) isVisible = true;
+            // Temporary exact-PK override; all ordinary filter values stay intact.
+            if (focusedProjectPk) isVisible = rowProjectPk(row) === focusedProjectPk;
+
+            var nextDisplay = isVisible ? '' : 'none';
+            if (row.style.display !== nextDisplay) {
+                row.style.display = nextDisplay;
+            }
+            if (isVisible) visibleCount += 1;
+        });
+
+        if (resultsMeta) {
+            var activeFilterCount = countActiveFilters();
+            if (visibleCount === records.length && activeFilterCount === 0) {
+                resultsMeta.textContent = 'Showing all rows';
+            } else {
+                resultsMeta.textContent = 'Showing ' + visibleCount + ' of ' + records.length + ' rows' + (activeFilterCount ? ' • ' + activeFilterCount + ' active filter' + (activeFilterCount === 1 ? '' : 's') : '');
+            }
+        }
+        if (headerCountBadge) {
+            var total = document.getElementById('sqr-pagination') && !focusedProjectPk ? {{ page_obj.paginator.count|default:0 }} : visibleCount;
+            headerCountBadge.textContent = total + ' total';
+        }
+        if (resultsMeta && document.getElementById('sqr-pagination') && !focusedProjectPk) {
+            resultsMeta.textContent = 'Showing ' + visibleCount + ' of {{ page_obj.paginator.count|default:0 }} matching rows';
+        }
+        if (typeof window.invalidateRequestHubScrollGeometry === 'function') {
+            window.invalidateRequestHubScrollGeometry(activeRows.panel);
+        }
+    }
+    window.applySqrTableFilter = function () {
+        if (rowCache) rowCache = new WeakMap();
+        applyFilter();
+    };
+
+    window.focusSqrTrackerProject = function (pk) {
+        var exactPk = String(pk == null ? '' : pk);
+        if (!/^\d+$/.test(exactPk)) return false;
+        var tracker = document.querySelector('[data-sqr-view-panel="tracker"]');
+        if (!tracker) return false;
+        var target = Array.from(tracker.querySelectorAll('tbody tr')).find(function (row) {
+            return rowProjectPk(row) === exactPk;
+        });
+        if (!target) {
+            if (!document.getElementById('sqr-pagination')) return false;
+            var params = new URLSearchParams(window.location.search);
+            params.set('focus', exactPk);
+            params.set('view', 'tracker');
+            params.delete('page');
+            window.location.assign(window.location.pathname + '?' + params.toString());
+            return true;
+        }
+        clearFocusedRow();
+        focusedProjectPk = exactPk;
+        focusedRow = target;
+        previousRowTabindex = target.getAttribute('tabindex');
+        target.setAttribute('tabindex', '-1');
+        target.classList.add('sqr-pm-focused-row');
+        if (focusLabel) focusLabel.textContent = 'Focused project: ' + (target.dataset.sqrRef || 'SQR #' + exactPk) + '. Tracker filters are temporarily bypassed.';
+        if (focusNotice) focusNotice.hidden = false;
+        if (typeof window.setSqrView === 'function') window.setSqrView('tracker');
+        if (rowCache) rowCache.delete(tracker);
+        clearTimeout(searchDebounceTimer);
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        runFilter();
+        target.focus({preventScroll: true});
+        target.scrollIntoView({behavior: 'instant', block: 'center', inline: 'start'});
+        return true;
+    };
+
+    if (focusDismiss) focusDismiss.addEventListener('click', function () {
+        if (initialParams.has('focus')) {
+            initialParams.delete('focus');
+            window.location.assign(window.location.pathname + '?' + initialParams.toString());
+            return;
+        }
+        focusedProjectPk = '';
+        clearFocusedRow();
+        if (focusNotice) focusNotice.hidden = true;
+        if (filterFrame) cancelAnimationFrame(filterFrame);
+        runFilter();
+        // Restore keyboard position outside a row that may now be filtered out.
+        var trackerButton = document.querySelector('[data-sqr-view-button="tracker"]');
+        if (trackerButton) trackerButton.focus({preventScroll: true});
+    });
+
+    document.addEventListener('sqr:performance-invalidated', function () {
+        rowCache = typeof WeakMap === 'function' ? new WeakMap() : null;
+        applyFilter();
+    });
+
+    document.addEventListener('sqr:panel-hydrated', function (event) {
+        if (rowCache) rowCache.delete(event.target);
+        applyFilter();
+    });
+
+    var searchDebounceTimer = null;
+    function scheduleSearchFilter() {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(applyFilter, 180);
+    }
+    document.querySelectorAll('#sqr-badge-filters .sqr-badge-filter').forEach(function (badge) {
+        badge.addEventListener('click', function () {
+            var filter = badge.dataset.sqrFilter || '';
+            // Total badge always shows full list (clears My Assigned + status presets).
+            if (filter === '') {
+                activeFilter = '';
+                syncPresetControls('');
+                updateBadgeState();
+                applyFilter();
+                return;
+            }
+            if (activeFilter === filter) {
+                // clicking the same badge again clears the filter
+                activeFilter = '';
+            } else {
+                activeFilter = filter;
+            }
+            syncPresetControls(activeFilter);
+            updateBadgeState();
+            applyFilter();
+        });
+    });
+
+    if (toolbarSearchInput) {
+        toolbarSearchInput.addEventListener('input', function () {
+            if (searchInput && searchInput !== toolbarSearchInput && searchInput.value !== toolbarSearchInput.value) {
+                searchInput.value = toolbarSearchInput.value;
+            }
+            scheduleSearchFilter();
+        });
+    }
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            if (toolbarSearchInput && toolbarSearchInput !== searchInput && toolbarSearchInput.value !== searchInput.value) {
+                toolbarSearchInput.value = searchInput.value;
+            }
+            scheduleSearchFilter();
+        });
+    }
+    [overallStatusSelect, healthSelect, revenueSourceSelect].forEach(function (control) {
+        if (!control) return;
+        control.addEventListener('change', applyFilter);
+    });
+
+    [sqrDateFromInput, sqrDateToInput, groupInput, amountMinInput, amountMaxInput].forEach(function (control) {
+        if (!control) return;
+        control.addEventListener('input', scheduleSearchFilter);
+    });
+
+    [linkedRequestCheckbox, assignedSseCheckbox, billedOnlyCheckbox].forEach(function (control) {
+        if (!control) return;
+        control.addEventListener('change', function () {
+            applyFilter();
+        });
+    });
+
+    if (myAssignedCheckbox) {
+        myAssignedCheckbox.addEventListener('change', function () {
+            if (myAssignedCheckbox.checked) {
+                activeFilter = 'my_assigned';
+                if (statusSelect) statusSelect.value = '';
+                if (proposalStatusSelect) proposalStatusSelect.value = '';
+            } else if (activeFilter === 'my_assigned') {
+                activeFilter = '';
+            }
+            updateBadgeState();
+            applyFilter();
+        });
+    }
+
+    if (statusSelect) {
+        statusSelect.addEventListener('change', function () {
+            if (statusSelect.value) setMyAssignedChecked(false);
+            syncActiveBadgeFromControls();
+            updateBadgeState();
+            applyFilter();
+        });
+    }
+
+    if (proposalStatusSelect) {
+        proposalStatusSelect.addEventListener('change', function () {
+            if (proposalStatusSelect.value) setMyAssignedChecked(false);
+            syncActiveBadgeFromControls();
+            updateBadgeState();
+            applyFilter();
+        });
+    }
+
+    if (resetButton) {
+        resetButton.addEventListener('click', function () {
+            // Reset returns approvers to their default My Assigned view.
+            activeFilter = defaultMyAssigned ? 'my_assigned' : '';
+            if (searchInput) searchInput.value = '';
+            if (statusSelect) statusSelect.value = '';
+            if (proposalStatusSelect) proposalStatusSelect.value = '';
+            if (overallStatusSelect) overallStatusSelect.value = '';
+            if (healthSelect) healthSelect.value = '';
+            if (revenueSourceSelect) revenueSourceSelect.value = '';
+            if (sqrDateFromInput) sqrDateFromInput.value = '';
+            if (sqrDateToInput) sqrDateToInput.value = '';
+            if (groupInput) groupInput.value = '';
+            if (amountMinInput) amountMinInput.value = '';
+            if (amountMaxInput) amountMaxInput.value = '';
+            if (linkedRequestCheckbox) linkedRequestCheckbox.checked = false;
+            if (assignedSseCheckbox) assignedSseCheckbox.checked = false;
+            setMyAssignedChecked(defaultMyAssigned);
+            if (billedOnlyCheckbox) billedOnlyCheckbox.checked = false;
+            updateBadgeState();
+            applyFilter();
+        });
+    }
+
+    setMyAssignedChecked(initialParams.has('assigned') ? initialParams.get('assigned') === 'mine' : defaultMyAssigned);
+    syncActiveBadgeFromControls();
+    updateBadgeState();
+    applyFilter();
+    try {
+        if (sessionStorage.getItem('sqr-filter-navigation') === window.location.pathname + window.location.search) document.body.dataset.sqrFilterNavigation = '1';
+        sessionStorage.removeItem('sqr-filter-navigation');
+        var savedFocus = JSON.parse(sessionStorage.getItem('sqr-filter-focus') || 'null');
+        sessionStorage.removeItem('sqr-filter-focus');
+        if (savedFocus) {
+            var focusInput = document.getElementById(savedFocus.id);
+            if (focusInput) {
+                focusInput.focus({preventScroll: true});
+                if (typeof savedFocus.start === 'number' && focusInput.setSelectionRange) focusInput.setSelectionRange(savedFocus.start, savedFocus.end);
+            }
+        }
+    } catch (_) {}
+    if (initialParams.has('focus')) window.focusSqrTrackerProject(initialParams.get('focus'));
+})();
+</script>
+
 
 {# ── For Revision Comments Modal (PM/Admin inline edit) ───────────────── #}
 {% if is_pm %}
@@ -3591,74 +4082,4 @@
 </div>
 {% endif %}
 
-{% if active_sqr_tab != 'reports' %}
-<div class="sqr-approval-choice-modal" id="sqr-new-version-modal" aria-hidden="true">
-    <div class="sqr-approval-choice-modal__backdrop" data-sqr-new-version-close="true"></div>
-    <div class="sqr-approval-choice-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sqr-new-version-title" aria-describedby="sqr-new-version-desc" style="width: min(100%, 460px);">
-        <span class="sqr-approval-choice-modal__eyebrow"><i class="bi bi-stars"></i> What's new</span>
-        <h3 class="h4 mt-3 mb-2" id="sqr-new-version-title">A new version of SQR Tracker is available</h3>
-        <p class="text-muted mb-3" id="sqr-new-version-desc">Would you like to see it? Selecting OK takes you to SQR Tracker, with List and Table layouts.</p>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="sqr-new-version-dismiss">
-            <label class="form-check-label" for="sqr-new-version-dismiss">Don't show this message again</label>
-        </div>
-        <div class="sqr-approval-choice-modal__footer gap-2">
-            <button type="button" class="btn btn-outline-secondary" id="sqr-new-version-cancel">Cancel</button>
-            <button type="button" class="btn btn-primary" id="sqr-new-version-ok">OK</button>
-        </div>
-    </div>
-</div>
-<script>
-(function () {
-    'use strict';
-    var storageKey = 'requestHub.sqr.hideNewVersionNotice';
-    var modal = document.getElementById('sqr-new-version-modal');
-    var okBtn = document.getElementById('sqr-new-version-ok');
-    var cancelBtn = document.getElementById('sqr-new-version-cancel');
-    var dismissBox = document.getElementById('sqr-new-version-dismiss');
-    var viewStorageKey = 'requestHub.sqr.tableView';
-    if (!modal || !okBtn || !cancelBtn || !dismissBox) return;
-
-    function readFlag(key) {
-        try { return window.localStorage.getItem(key); } catch (error) { return null; }
-    }
-
-    // Skip when opted out, or when the user already lands on the prototype tab.
-    if (document.body.dataset.sqrFilterNavigation === '1' || readFlag(storageKey) === '1' || readFlag(viewStorageKey) === 'prototype') return;
-    var performancePanel = document.querySelector('[data-sqr-view-panel="performance"]');
-    if (performancePanel && !performancePanel.hidden) return;
-
-    var previousFocus = null;
-
-    function setVisible(isVisible) {
-        modal.classList.toggle('is-visible', isVisible);
-        modal.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
-    }
-
-    function close() {
-        if (dismissBox.checked) {
-            try { window.localStorage.setItem(storageKey, '1'); } catch (error) {}
-        }
-        setVisible(false);
-        if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus({preventScroll: true});
-    }
-
-    okBtn.addEventListener('click', function () {
-        close();
-        if (typeof window.setSqrView === 'function') window.setSqrView('prototype');
-    });
-    cancelBtn.addEventListener('click', close);
-    modal.addEventListener('click', function (event) {
-        if (event.target && event.target.getAttribute('data-sqr-new-version-close') === 'true') close();
-    });
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && modal.classList.contains('is-visible')) close();
-    });
-
-    previousFocus = document.activeElement;
-    setVisible(true);
-    okBtn.focus({preventScroll: true});
-})();
-</script>
-{% endif %}
 {% endblock %}

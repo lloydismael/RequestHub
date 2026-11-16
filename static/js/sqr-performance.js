@@ -12,27 +12,21 @@
         if (text !== undefined) result.textContent = text;
         return result;
     }
-    var controls = {};
-    ['scope', 'search', 'manager', 'health', 'status', 'portfolio', 'rating', 'attention', 'mine'].forEach(function (key) {
-        controls[key] = el(key);
-    });
-    var sharedFilters = window.RequestHubSqrFilters;
-    var filterState = sharedFilters ? sharedFilters.fromPage(root.dataset.defaultMine === '1' ? 'mine' : 'all') : null;
-    var filterWidget = null;
-    if (sharedFilters) {
-        var filterRoot = document.getElementById('sqr-ppt-filters');
-        var filterOptionsNode = filterRoot && document.getElementById(filterRoot.dataset.optionsId);
-        var initialOptions = {};
-        try { initialOptions = JSON.parse(filterOptionsNode ? filterOptionsNode.textContent : '{}') || {}; } catch (error) { /* invalid selections retain a notice */ }
-        if (filterRoot) filterWidget = sharedFilters.mount(filterRoot, {state: filterState, options: initialOptions,
-            onChange: function (next) { sharedFilters.write(next); }});
-    }
+    var core = window.SqrFilterCore;
+    var filterLabels = {stage: 'Stage', status: 'SQR Status', proposal_status: 'Proposal Status', overall_status: 'Overall Status',
+        pm_id: 'Project Manager', sse_id: 'SSE', schedule_performance: 'Schedule Performance', budget_effort_performance: 'Budget/Effort Performance',
+        quality_performance: 'Quality Performance', scope: 'Scope', billing_type: 'Billing Type', billing_state: 'Billing Status',
+        linked_request_id: 'Linked Request', group: 'Group/Client', portfolio_status: 'Portfolio Status', overall_rating: 'Overall Rating'};
+    var filterKeys = Object.keys(filterLabels);
+    var storeKey = 'requestHub.sqr.ppt.filters.v1';
+    var filterControls = null;
+    var preferenceNotices = [];
+    var filters = core.normalizeFilters({mine: root.dataset.defaultMine === '1'}, filterKeys).state;
     var snapshot = null;
     var filtered = [];
     var pageNumber = 1;
     var pageSize = 24;
     var inFlight = null;
-    var activeController = null;
     var revision = 0;
     var dirty = true;
     var renderFrame = 0;
@@ -40,12 +34,90 @@
     var requestState = '';
     var dateFormat = new Intl.DateTimeFormat(undefined, {year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'});
     var portfolioLabels = {closed: 'Closed', ongoing: 'Ongoing', pipeline: 'Pipeline', removed: 'Removed'};
-    var ratingLabels = {good: 'Green', warning: 'Amber', danger: 'Red', unknown: 'N/R'};
-    var indicatorLabels = [
-        ['schedule', 'Schedule Performance', {good: 'On Track', warning: 'At Risk', danger: 'Delayed', unknown: 'N/R'}],
-        ['budget_effort', 'Budget/Effort Performance', {good: 'Within Budget', warning: 'At Risk', danger: 'Over Budget', unknown: 'N/R'}],
-        ['quality', 'Quality Performance', {good: 'Met', warning: 'At Risk', danger: 'Unmet', unknown: 'N/R'}]
-    ];
+    var ratingLabels = {good: 'Healthy', warning: 'At Risk', danger: 'Action needed', unknown: 'Incomplete / Not assessed'};
+    var indicatorLabels = [['schedule_performance', 'Schedule'], ['budget_effort_performance', 'Budget/Effort'], ['quality_performance', 'Quality']];
+    var assessmentLabels = {
+        schedule_performance: {on_track: 'On Track', at_risk: 'At Risk', delayed: 'Delayed', __not_assessed__: 'Not assessed'},
+        budget_effort_performance: {within_budget: 'Within Budget', at_risk: 'At Risk', over_budget: 'Over Budget', __not_assessed__: 'Not assessed'},
+        quality_performance: {met: 'Met', at_risk: 'At Risk', unmet: 'Unmet', __not_assessed__: 'Not assessed'}
+    };
+    function filterNotice(text) {
+        if (preferenceNotices.indexOf(text) < 0) preferenceNotices.push(text);
+        el('filter-notice').textContent = preferenceNotices.join(' ');
+        el('filter-notice').hidden = !preferenceNotices.length;
+    }
+    function loadPreferences() {
+        try {
+            var saved = sessionStorage.getItem(storeKey);
+            if (saved) {
+                var normalized = core.normalizeFilters(JSON.parse(saved), filterKeys);
+                filters = normalized.state;
+                normalized.notices.forEach(filterNotice);
+            }
+        } catch (error) { filterNotice('Filter preferences could not be restored; use the filters for this visit.'); }
+        var params = new URLSearchParams(window.location.search);
+        var queryKeys = filterKeys.concat(['manager', 'health', 'portfolio', 'rating', 'search', 'q', 'mine', 'attention',
+            'priceMin', 'priceMax', 'price_min', 'price_max']);
+        core.dateKeys.forEach(function (key) { queryKeys.push(key + '_from', key + '_to'); });
+        if (queryKeys.some(function (key) { return params.has(key); })) {
+            var query = core.fromQuery(params, filterKeys, 'ppt');
+            filters = query.state;
+            query.notices.forEach(filterNotice);
+        }
+        el('search').value = filters.search;
+    }
+    function savePreferences() {
+        try { sessionStorage.setItem(storeKey, JSON.stringify(filters)); }
+        catch (error) { filterNotice('Filter preferences could not be saved; your current filters still work.'); }
+    }
+    function optionValue(project, key) {
+        var value = project[key] == null ? '' : String(project[key]);
+        if (!value && ['pm_id', 'sse_id', 'linked_request_id'].includes(key)) return '__unassigned__';
+        if (!value && assessmentLabels[key]) return '__not_assessed__';
+        return value;
+    }
+    function optionLabel(project, key, value) {
+        if (value === '__unassigned__') return 'Unassigned';
+        if (assessmentLabels[key]) return assessmentLabels[key][value];
+        if (key === 'portfolio_status') return portfolioLabels[value];
+        if (key === 'overall_rating') return ratingLabels[value];
+        if (key === 'pm_id') return project.pm_name;
+        if (key === 'sse_id') return project.sse_name;
+        if (key === 'linked_request_id') return 'Request #' + value;
+        return value.replace(/_/g, ' ').replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+    }
+    function filterDimensions() {
+        var projects = snapshot ? snapshot.projects : [];
+        return filterKeys.map(function (key) {
+            var options = new Map();
+            var seeds = assessmentLabels[key] || (key === 'portfolio_status' ? portfolioLabels : key === 'overall_rating' ? ratingLabels : {});
+            Object.keys(seeds).forEach(function (value) { options.set(value, {value: value, label: seeds[value], count: 0}); });
+            var otherFilters = Object.assign({}, filters, {selections: Object.assign({}, filters.selections)});
+            otherFilters.selections[key] = [];
+            projects.forEach(function (project) {
+                var value = optionValue(project, key);
+                if (!value) return;
+                var option = options.get(value) || {value: value, label: optionLabel(project, key, value), count: 0};
+                if (core.matchesRecord(project, otherFilters, root.dataset.currentUserId)) option.count++;
+                options.set(value, option);
+            });
+            return {key: key, label: filterLabels[key], options: Array.from(options.values()).sort(function (a, b) { return a.label.localeCompare(b.label); })};
+        });
+    }
+    function renderFilters() {
+        if (filterControls) { filterControls.setState(filters); return; }
+        filterControls = window.SqrFilterControls.mount(el('filters'), {
+            state: filters, getDimensions: filterDimensions,
+            getResultCount: function () { return core.filterRecords(snapshot ? snapshot.projects : [], filters, root.dataset.currentUserId).length; },
+            onApply: function (next) {
+                var normalized = core.normalizeFilters(next, filterKeys);
+                filters = normalized.state; normalized.notices.forEach(filterNotice);
+                el('search').value = filters.search;
+                pageNumber = 1; savePreferences(); scheduleRender();
+            }
+        });
+    }
+    loadPreferences();
     function visible() { return !root.hidden; }
     function formatDate(value) {
         return value ? dateFormat.format(new Date(value + 'T00:00:00Z')) : 'Not reported';
@@ -78,12 +150,12 @@
         var identity = node('div');
         identity.append(node('h5', '', project.project_name));
         var detail = project.pm_name + ' · ' + (
-            performance ? indicatorLabels.map(function (entry) { return entry[1] + ': ' + project.indicators[entry[0]].label; }).join(' · ')
+            performance ? indicatorLabels.map(function (indicator) { return project.indicators[indicator[0]].label; }).join(' · ') + ' · ' + project.assessed_count + '/3 assessed'
             : project.reasons.map(function (reason) { return reason.label; }).join(' · ')
         );
         identity.append(node('p', 'sqr-pm-row-meta', detail));
         var badge = node('span', 'sqr-pm-tag ' + (performance ? 'sqr-pm-rating--' + rating : 'sqr-pm-state--' + project.portfolio_status),
-            performance ? ratingLabels[rating] : portfolioLabels[project.portfolio_status] + (project.progress === null ? '' : ' · ' + project.progress + '%'));
+            performance ? project.overall_label : portfolioLabels[project.portfolio_status] + (project.progress === null ? '' : ' · ' + project.progress + '%'));
         row.append(identity, badge);
         return row;
     }
@@ -100,11 +172,10 @@
         });
         Object.keys(statusCounts).forEach(function (key) { counts[key] = statusCounts[key]; });
         Object.keys(ratingCounts).forEach(function (key) { counts['rating_' + key] = ratingCounts[key]; });
-        counts.missing_assessment = filtered.filter(function (project) { return project.missing_assessment; }).length;
         counts.closed_percent = filtered.length ? Math.round(statusCounts.closed / filtered.length * 100) + '%' : 'N/A';
         el('as-of').textContent = 'AS OF ' + formatDate(snapshot.as_of).toUpperCase();
         el('closed-coverage').textContent = statusCounts.closed + ' of ' + filtered.length + ' projects closed';
-        el('rated-coverage').textContent = 'Of ' + (filtered.length - ratingCounts.unknown) + ' rated projects';
+        el('rated-coverage').textContent = filtered.filter(function (project) { return project.assessed_count === 3; }).length + ' of ' + filtered.length + ' projects fully assessed';
         var owners = Array.from(managers.values()).sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
         var maximum = owners.length ? owners[0].count : 0;
         replaceList('manager-chart', owners, function (manager) {
@@ -135,7 +206,7 @@
             var description = [];
             Object.keys(totals).forEach(function (state) {
                 var count = totals[state];
-                description.push(indicator[2][state] + ': ' + count);
+                description.push(Object.values(assessmentLabels[indicator[0]])[Object.keys(totals).indexOf(state)] + ': ' + count);
                 if (!count) return;
                 var segment = node('span', 'sqr-pm-rating--' + state, count);
                 segment.style.width = count / filtered.length * 100 + '%';
@@ -153,17 +224,14 @@
         function titleCell(project) {
             var cell = node('th');
             cell.setAttribute('scope', 'row');
-            cell.append(node('span', 'sqr-pm-table-project', project.project_name), node('small', 'sqr-pm-row-meta',
-                (project.customer_name ? project.customer_name + ' · ' : '') + project.reference_code));
+            cell.append(node('span', 'sqr-pm-table-project', project.project_name), node('small', 'sqr-pm-row-meta', project.reference_code + ' · ' + (project.customer_name || 'No customer')));
             return cell;
         }
         replaceList('status-rows', projects, function (project) {
             var row = node('tr');
             row.append(node('td', '', filtered.indexOf(project) + 1), titleCell(project), node('td', '', project.pm_name + (project.pm_fallback ? ' (reviewer)' : '')));
-            var status = node('td', 'sqr-pm-table-status');
-            status.append(node('span', '', project.status_label), node('small', 'sqr-pm-row-meta', 'Portfolio: ' + portfolioLabels[project.portfolio_status]));
-            row.append(status);
-            row.append(node('td', '', formatDate(project.start_date) + ' – ' + formatDate(project.actual_finish_date)));
+            row.append(node('td', 'sqr-pm-table-status sqr-pm-state--' + project.portfolio_status, portfolioLabels[project.portfolio_status]));
+            row.append(node('td', '', formatDate(project.delivery_start_date) + ' – ' + formatDate(project.delivery_actual_finish_date)));
             var progress = node('td');
             progress.append(progressBlock(project));
             row.append(progress, node('td', 'sqr-pm-table-notes', project.updates_risks || '—'));
@@ -176,7 +244,8 @@
                 var value = project.indicators[indicator[0]];
                 row.append(node('td', 'sqr-pm-indicator-cell sqr-pm-rating--' + value.state, value.label));
             });
-            row.append(node('td', 'sqr-pm-indicator-cell sqr-pm-rating--' + project.overall_rating, ratingLabels[project.overall_rating]));
+            row.append(node('td', 'sqr-pm-indicator-cell sqr-pm-rating--' + project.overall_rating, project.overall_label),
+                node('td', '', project.assessed_count + '/3'));
             return row;
         }, '');
     }
@@ -189,57 +258,22 @@
         el('prev').disabled = pageNumber <= 1;
         el('next').disabled = pageNumber >= pages;
     }
-    function matchesReason(project, key) {
-        if (!key) return true;
-        if (key === 'attention') return project.needs_attention;
-        if (key === 'missing_assessment') return project.missing_assessment;
-        if (key === 'performance_risk') return indicatorLabels.some(function (entry) { return ['warning', 'danger'].includes(project.indicators[entry[0]].state); });
-        var reasonKey = key === 'inconsistency' ? 'inconsistent_data' : key;
-        return project.reasons.some(function (reason) { return reason.key === reasonKey; });
-    }
     function render() {
         renderFrame = 0;
         if (!snapshot || !visible()) return;
-        var query = controls.search.value.trim().toLowerCase();
-        var counts = {total: 0, attention: 0};
-        filtered = sharedFilters ? snapshot.projects.slice() : snapshot.projects.filter(function (project) {
-            var matches = (controls.scope.value !== 'active' || project.active_delivery)
-                && (!controls.mine.checked || project.approver_id === root.dataset.currentUserId)
-                && (!controls.manager.value || project.pm_id === controls.manager.value)
-                && (!controls.health.value || (controls.health.value === 'not_recorded' ? !project.indicators.schedule.value : project.indicators.schedule.value === controls.health.value))
-                && (!controls.status.value || project.status_key === controls.status.value)
-                && (!controls.portfolio.value || project.portfolio_status === controls.portfolio.value)
-                && (!controls.rating.value || project.overall_rating === controls.rating.value)
-                && matchesReason(project, controls.attention.value)
-                && (!query || project.search_text.toLowerCase().includes(query));
-            if (!matches) return false;
-            counts.total++;
-            if (project.needs_attention) counts.attention++;
-            return true;
-        });
-        if (sharedFilters) { counts.total = filtered.length; counts.attention = filtered.filter(function (project) { return project.needs_attention; }).length; }
-        if (filterWidget) filterWidget.setCount(filtered.length);
+        filtered = core.filterRecords(snapshot.projects, filters, root.dataset.currentUserId);
+        var counts = {total: filtered.length, attention: filtered.filter(core.needsAttention).length};
+        renderFilters();
         renderPortfolio(counts);
         root.querySelectorAll('[data-pm-metric]').forEach(function (metric) { metric.textContent = counts[metric.dataset.pmMetric]; });
         el('content').hidden = false;
         el('empty').hidden = filtered.length > 0;
-        el('empty').textContent = !snapshot.projects.length ? 'No SQR records are available yet.' : 'No matching projects. Reset filters or choose All SQRs to widen your view.';
+        el('empty').textContent = !snapshot.projects.length ? 'No SQR records are available yet.' : 'No matching projects. Clear filters to widen your view.';
         renderPage();
         if (!requestState) el('message').textContent = '';
     }
     function scheduleRender() {
         if (visible() && !renderFrame) renderFrame = requestAnimationFrame(render);
-    }
-    function updateManagers() {
-        var selected = controls.manager.value;
-        var managers = new Map();
-        snapshot.projects.forEach(function (project) { if (project.pm_id) managers.set(project.pm_id, project.pm_name); });
-        controls.manager.replaceChildren(new Option('All managers', ''));
-        Array.from(managers).sort(function (a, b) { return a[1].localeCompare(b[1]); }).forEach(function (entry) {
-            controls.manager.add(new Option(entry[1], entry[0]));
-        });
-        if (selected && !managers.has(selected)) controls.manager.add(new Option('Previously selected manager (no projects)', selected));
-        controls.manager.value = selected;
     }
     function message(state, text) {
         requestState = state;
@@ -257,20 +291,12 @@
         if (inFlight) return inFlight;
         var version = revision;
         var controller = new AbortController();
-        activeController = controller;
         var timeout = setTimeout(function () { controller.abort(); }, 20000);
         root.setAttribute('aria-busy', 'true');
         message('loading', snapshot ? 'Refreshing snapshot… Showing the previous snapshot until ready.' : 'Loading your project portfolio…');
         inFlight = (async function () {
             try {
-                var url = root.dataset.endpoint;
-                if (sharedFilters) {
-                    var params = sharedFilters.toQuery(filterState);
-                    var focus = new URLSearchParams(window.location.search).get('focus');
-                    if (focus) params.set('focus', focus);
-                    url += '?' + params.toString();
-                }
-                var response = await fetch(url, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: {Accept: 'application/json'}});
+                var response = await fetch(root.dataset.endpoint, {credentials: 'same-origin', cache: 'no-store', signal: controller.signal, headers: {Accept: 'application/json'}});
                 if (!response.ok || response.redirected) throw new Error('Snapshot unavailable');
                 var data = await response.json();
                 if (!data.ok || !Array.isArray(data.projects) || !data.as_of || !data.fetched_at) throw new Error('Invalid snapshot');
@@ -279,48 +305,27 @@
                 snapshot = data;
                 dirty = false;
                 if (visible()) {
-                    updateManagers();
-                    if (filterWidget && data.filter_options) filterWidget.setOptions(data.filter_options);
                     message('', '');
                     scheduleRender();
                 }
             } catch (error) {
-                if (activeController === controller) {
-                    dirty = true;
-                    if (visible()) message(snapshot ? 'stale' : 'error', snapshot ? 'Refresh failed. Showing an older snapshot; figures may be out of date.' : 'Could not load the dashboard. Check your connection or sign-in, then retry.');
-                }
+                dirty = true;
+                if (visible()) message(snapshot ? 'stale' : 'error', snapshot ? 'Refresh failed. Showing an older snapshot; figures may be out of date.' : 'Could not load the dashboard. Check your connection or sign-in, then retry.');
             } finally {
                 clearTimeout(timeout);
-                if (activeController === controller) {
-                    inFlight = null;
-                    activeController = null;
-                    root.setAttribute('aria-busy', 'false');
-                }
+                inFlight = null;
+                root.setAttribute('aria-busy', 'false');
+                if (version !== revision && visible()) refresh();
             }
         })();
         return inFlight;
     }
-    function invalidateSnapshot() {
-        revision++;
-        dirty = true;
-        if (activeController) activeController.abort();
-        activeController = null;
-        inFlight = null;
-        if (visible()) refresh();
-    }
-    Object.keys(controls).forEach(function (key) {
-        controls[key].addEventListener(key === 'search' ? 'input' : 'change', function () {
-            pageNumber = 1;
-            clearTimeout(searchTimer);
-            if (key === 'search') searchTimer = setTimeout(scheduleRender, 120);
-            else scheduleRender();
-        });
-    });
-    el('reset').addEventListener('click', function () {
-        Object.keys(controls).forEach(function (key) { if (key !== 'mine') controls[key].value = key === 'scope' ? 'all' : ''; });
-        controls.mine.checked = root.dataset.defaultMine === '1';
+    el('search').addEventListener('input', function () {
+        filters.search = el('search').value.trim();
         pageNumber = 1;
-        scheduleRender();
+        clearTimeout(searchTimer);
+        savePreferences();
+        searchTimer = setTimeout(scheduleRender, 120);
     });
     root.addEventListener('click', function (event) {
         var button = event.target.closest('button');
@@ -341,16 +346,13 @@
             renderFrame = 0;
             return;
         }
-        if (snapshot) { updateManagers(); scheduleRender(); }
+        if (snapshot) scheduleRender();
         refresh();
     });
-    document.addEventListener('sqr:performance-invalidated', invalidateSnapshot);
-    document.addEventListener('sqr:filters-changed', function (event) {
-        if (!sharedFilters) return;
-        filterState = event.detail.state;
-        if (filterWidget) filterWidget.setState(filterState);
-        pageNumber = 1;
-        invalidateSnapshot();
+    document.addEventListener('sqr:performance-invalidated', function () {
+        revision++;
+        dirty = true;
+        if (visible()) refresh();
     });
     document.addEventListener('visibilitychange', function () {
         // Recheck server-local date on return to this browser tab; no midnight timer or polling.

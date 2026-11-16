@@ -1,7 +1,5 @@
 # SQR Tracker Prototype — Plan
 
-> Historical plan: the guided view is now **SQR Tracker**, with List and Table layouts and shared server-side multi-filters. Classic visibility is controlled by an active administrator. Current behavior and recovery guidance are documented in the README; this original plan describes the earlier prototype.
-
 A new view on the SQR page, **SQR Tracker Prototype**, that rebuilds the classic Tracker as a guided workspace instead of a 43-column spreadsheet. The classic Tracker stays untouched and remains the system of record for reference.
 
 ## 1. Why

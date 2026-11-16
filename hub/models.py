@@ -827,7 +827,8 @@ class SqrSubmission(models.Model):
     quality_performance = models.CharField(
         max_length=20, choices=QualityPerformance.choices, blank=True, default=""
     )
-    delivery_transition_metadata = models.JSONField(default=dict, blank=True, editable=False)
+    delivery_transition_metadata = models.JSONField(blank=True, default=dict, editable=False)
+    legacy_delivery_completed = models.BooleanField(default=False, editable=False)
     delivery_progress = models.PositiveSmallIntegerField(blank=True, null=True)
     delivery_start_date = models.DateField(blank=True, null=True)
     delivery_target_finish_date = models.DateField(blank=True, null=True)
@@ -990,12 +991,8 @@ class SqrSubmission(models.Model):
     ])
 
     @property
-    def is_post_svc_warranty_eligible(self):
-        return self.project_details in self._IMPL_SCOPES
-
-    @property
     def computed_post_svc_warranty_end_date(self):
-        if self.is_post_svc_warranty_eligible and self.delivery_actual_finish_date:
+        if self.project_details in self._IMPL_SCOPES and self.delivery_actual_finish_date:
             return self.delivery_actual_finish_date + timedelta(days=30)
         return None
 
@@ -1011,12 +1008,32 @@ class SqrSubmission(models.Model):
         return self.project_details in self._WARRANTY_SCOPES and self.managed_support_amount is not None
 
     @property
+    def maintenance_notice(self):
+        from .services.sqr_maintenance import validate_manual_maintenance_dates
+
+        start, end = self.managed_support_start_date, self.managed_support_end_date
+        if start is None and end is None:
+            return ""
+        notices = []
+        if not self.is_managed_support_start_eligible:
+            notices.append("Stored Maintenance dates are inactive: an eligible scope and Maintenance budget amount are required.")
+        try:
+            validate_manual_maintenance_dates(start, end)
+        except ValidationError as error:
+            notices.append("Maintenance dates need review: " + " ".join(error.messages))
+        return " ".join(notices)
+
+    @property
     def computed_support_start_date(self):
-        return self.managed_support_start_date if self.is_managed_support_start_eligible else None
+        if not self.is_managed_support_start_eligible:
+            return None
+        return self.managed_support_start_date
 
     @property
     def computed_managed_support_end_date(self):
-        return self.managed_support_end_date if self.is_managed_support_start_eligible else None
+        if not self.is_managed_support_start_eligible:
+            return None
+        return self.managed_support_end_date
 
     @property
     def revenue_stage_key(self) -> str:
@@ -1101,6 +1118,16 @@ class SqrSubmission(models.Model):
                 )
                 self.sequence_number = next_number
                 self.reference_code = reference_code
+
+
+class SqrTrackerSettings(models.Model):
+    id = models.PositiveSmallIntegerField(default=1, editable=False, primary_key=True)
+    show_classic_sqr_tracker = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(pk=1), name="sqr_tracker_settings_singleton"),
+        ]
 
 
 class SqrSubmissionChange(models.Model):
@@ -1272,14 +1299,6 @@ class SqrSubmissionHistory(models.Model):
     @property
     def is_restored(self) -> bool:
         return self.restored_at is not None
-
-
-class SqrTrackerSettings(models.Model):
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
-    show_classic_sqr_tracker = models.BooleanField(default=True)
-
-    class Meta:
-        constraints = [models.CheckConstraint(condition=models.Q(pk=1), name='sqr_tracker_settings_singleton')]
 
 
 class Notification(models.Model):

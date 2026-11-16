@@ -2514,14 +2514,14 @@ class SqrExportTests(TestCase):
         "SSE3",
         "Project?",
         "PM",
-        "Delivery / Portfolio Status",
+        "Status",
         "Start and Finish Dates",
         "% Complete",
         "Key Updates",
         "Active Risks/Issues",
-        "Quality Performance",
-        "Schedule Performance",
-        "Budget/Effort Performance",
+        "Scope Status",
+        "Schedule Status",
+        "Budget Status",
         "Folder",
         "Quoted SSE hrs",
         "Billed SSE hrs",
@@ -2568,13 +2568,17 @@ class SqrExportTests(TestCase):
         "Assigned PM",
         "Assigned SSE",
         "Start Date",
-        "Target Finish Date",
+        "Legacy Target Finish Date",
         "Overall Status",
-        "Health Status",
+        "Schedule Performance",
+        "Budget/Effort Performance",
+        "Quality Performance",
+        "Legacy Health Status",
         "Overall Progress %",
         "Key Updates / Risks",
-        "Actual Finish Date",
-        "Completion Signed Date",
+        "Finish Date",
+        "Legacy Completion Signed Date",
+        "Legacy Stored Warranty End Date",
         "Completion Warranty End Date",
         "Maintenance Start Date",
         "Maintenance End Date",
@@ -2622,9 +2626,56 @@ class SqrExportTests(TestCase):
         )
         self.client.force_login(self.pm)
 
+    def test_performance_export_uses_saved_sqr_not_legacy_performance(self):
+        submission = self._create_submission(
+            assigned_pm=self.assigned_pm, delivery_start_date=date(2026, 7, 1),
+            delivery_actual_finish_date=date(2026, 7, 31), delivery_progress=75,
+            overall_status="in_progress", key_updates_risks="Saved SQR update",
+            schedule_performance="on_track", budget_effort_performance="over_budget",
+            quality_performance="at_risk", sqr_folder_link="https://example.com/sqr",
+        )
+        legacy = SqrProjectPerformance.objects.create(
+            submission=submission, project_manager=self.pm, percent_complete=25,
+            status="planning", start_date=date(2025, 1, 1), next_action_remarks="Stale update",
+            folder_link="https://example.com/stale",
+        )
+        response = self.client.get(reverse("hub:sqr-export"), {"report": "performance"})
+        self.assertEqual(response.status_code, 200)
+        sheet = load_workbook(io.BytesIO(response.content), data_only=False).active
+        row = dict(zip([cell.value for cell in sheet[1]], [cell.value for cell in sheet[2]]))
+        self.assertEqual(row["Project Manager"], "Assigned PM")
+        self.assertEqual(row["Start Date"], "2026-07-01")
+        self.assertEqual(row["Finish Date"], "2026-07-31")
+        self.assertEqual(row["Status"], "In Progress")
+        self.assertEqual(row["% Complete"], 75)
+        self.assertEqual(row["Key Updates / Risks"], "Saved SQR update")
+        self.assertEqual(row["Folder link"], "https://example.com/sqr")
+        self.assertEqual(row["Schedule Performance"], "On Track")
+        self.assertEqual(row["Budget/Effort Performance"], "Over Budget")
+        self.assertEqual(row["Quality Performance"], "At Risk")
+        self.assertEqual(row["Overall Performance"], "Action needed")
+        self.assertEqual(row["Assessed Dimensions"], 3)
+        self.assertNotIn("Schedule Health", row)
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.percent_complete, 25)
+
+    def test_performance_export_without_duplicate_row_keeps_partial_assessments_neutral(self):
+        self._create_submission(delivery_progress=0, schedule_performance="on_track")
+        response = self.client.get(reverse("hub:sqr-export"), {"report": "performance"})
+        self.assertEqual(response.status_code, 200)
+        sheet = load_workbook(io.BytesIO(response.content), data_only=False).active
+        row = dict(zip([cell.value for cell in sheet[1]], [cell.value for cell in sheet[2]]))
+        self.assertEqual(row["% Complete"], 0)
+        self.assertEqual(row["Schedule Performance"], "On Track")
+        self.assertEqual(row["Budget/Effort Performance"], "Not assessed")
+        self.assertEqual(row["Quality Performance"], "Not assessed")
+        self.assertEqual(row["Overall Performance"], "Incomplete assessment")
+        self.assertEqual(row["Assessed Dimensions"], 1)
+        self.assertFalse(SqrProjectPerformance.objects.exists())
+
     def test_all_workbook_reports_store_untrusted_text_as_literal_cells(self):
         submission = self._create_submission(delivery_progress=25)
-        SqrProjectPerformance.objects.create(submission=submission, percent_complete=99)
+        SqrProjectPerformance.objects.create(submission=submission, percent_complete=75)
         for report in ("sqr", "esg", "performance"):
             for payload in ("=1+1", "#DIV/0!", "\t=1+1"):
                 with self.subTest(report=report, payload=payload):
@@ -2658,7 +2709,6 @@ class SqrExportTests(TestCase):
             delivery_target_finish_date=date(2026, 7, 31),
             delivery_progress=75,
             overall_status=SqrSubmission.OverallStatus.IN_PROGRESS,
-            schedule_performance="on_track", budget_effort_performance="at_risk", quality_performance="met",
             key_updates_risks="Migration is on track.",
             sse_manhrs=Decimal("12"),
             pm_manhrs=Decimal("8"),
@@ -2691,14 +2741,14 @@ class SqrExportTests(TestCase):
             None,
             "Yes",
             "Assigned PM",
-            "In Progress / Ongoing",
-            "7/1/26-TBD",
+            "ONGOING",
+            "7/1/26-7/31/26",
             75,
             "Migration is on track.",
             "Migration is on track.",
-            "Met",
-            "On Track",
-            "At Risk",
+            "Deployment Only",
+            "7/31/26",
+            None,
             "https://example.com/folder",
             12,
             None,
@@ -2723,12 +2773,6 @@ class SqrExportTests(TestCase):
             remarks="Primary proposal",
             status=SqrSubmission.Status.ON_HOLD,
             hold_reason="Awaiting customer confirmation",
-            schedule_performance="delayed",
-            budget_effort_performance="over_budget",
-            quality_performance="",
-            managed_support_amount=None,
-            managed_support_start_date=date(2026, 12, 1),
-            managed_support_end_date=date(2027, 2, 9),
         )
 
         response = self.client.get(f"{reverse('hub:sqr-export')}?report=sqr")
@@ -2738,21 +2782,11 @@ class SqrExportTests(TestCase):
         sheet = workbook.active
         assert sheet is not None
         self.assertEqual(sheet.title, "SQR")
-        expected_headers = [header for header in self.SQR_HEADERS
-                            if header not in {"Target Finish Date", "Health Status", "Completion Signed Date"}]
-        offset = expected_headers.index("Overall Status") + 1
-        expected_headers[offset:offset] = ["Schedule Performance", "Budget/Effort Performance", "Quality Performance"]
-        expected_headers[expected_headers.index("Actual Finish Date")] = "Finish Date (Actual)"
-        self.assertEqual([cell.value for cell in sheet[1]], expected_headers)
-        row = dict(zip(expected_headers, [cell.value for cell in sheet[2]]))
+        self.assertEqual([cell.value for cell in sheet[1]], self.SQR_HEADERS)
+        row = dict(zip(self.SQR_HEADERS, [cell.value for cell in sheet[2]]))
         self.assertEqual(row["Remarks"], "Primary proposal")
         self.assertEqual(row["SQR Status"], "On Hold")
         self.assertEqual(row["Hold Reason"], "Awaiting customer confirmation")
-        self.assertEqual(row["Schedule Performance"], "Delayed")
-        self.assertEqual(row["Budget/Effort Performance"], "Over Budget")
-        self.assertIsNone(row["Quality Performance"])
-        self.assertEqual(row["Maintenance Start Date"], "2026-12-01")
-        self.assertEqual(row["Maintenance End Date"], "2027-02-09")
 
     def _create_submission(self, **overrides):
         data = {
@@ -3233,25 +3267,29 @@ class SqrPerformanceTrackingTests(TestCase):
         perf.budget_health = SqrProjectPerformance.Health.OVER
         self.assertEqual(perf.overall_health, "red")
 
-    def test_update_view_seeds_actual_finish_and_folder(self):
+    def test_retired_performance_write_does_not_create_rows_or_history(self):
         self.client.force_login(self.pm)
+        before = SqrSubmissionHistory.objects.count()
         response = self.client.post(
             reverse("hub:sqr-performance-update", args=[self.submission.pk]),
-            {
-                "status": "ongoing",
-                "percent_complete": "40",
-                "schedule_health": "ok",
-                "scope_health": "at_risk",
-                "budget_health": "ok",
-                "next_action_remarks": "Kickoff done.",
-            },
+            {"status": "ongoing", "percent_complete": "40", "schedule_health": "ok"},
         )
+        self.assertEqual(response.status_code, 410)
+        self.assertEqual(response.json()["error"], "Project performance is maintained in SQR Delivery > Progress.")
+        self.assertFalse(SqrProjectPerformance.objects.exists())
+        self.assertEqual(SqrSubmissionHistory.objects.count(), before)
+        self.submission.refresh_from_db()
+        self.assertIsNone(self.submission.delivery_progress)
+
+    def test_retired_performance_write_keeps_existing_role_and_login_checks(self):
+        url = reverse("hub:sqr-performance-update", args=[self.submission.pk])
+        self.client.force_login(self.engineer)
+        self.assertEqual(self.client.post(url, {"percent_complete": "100"}).status_code, 302)
+        self.client.logout()
+        response = self.client.post(url, {})
         self.assertEqual(response.status_code, 302)
-        perf = SqrProjectPerformance.objects.get(submission=self.submission)
-        self.assertEqual(perf.status, "ongoing")
-        self.assertEqual(perf.percent_complete, 40)
-        self.assertEqual(perf.overall_health, "yellow")
-        self.assertEqual(str(perf.finish_date), "2026-09-30")
+        self.assertEqual(parse_qs(urlparse(response.url).query).get("next"), [url])
+        self.assertFalse(SqrProjectPerformance.objects.exists())
 
     def test_performance_shell_renders_for_pm_only(self):
         # PM receives a lazy shell, not a second server-rendered project list.
@@ -3267,7 +3305,8 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertIn('data-endpoint="' + reverse("hub:sqr-performance-data") + '"', content)
         self.assertIn('data-current-user-id="' + str(self.pm.pk) + '"', content)
         self.assertIn('data-default-mine="1"', content)
-        self.assertIn('id="sqr-pm-mine" class="form-check-input" checked', content)
+        self.assertIn('id="sqr-pm-filters"', content)
+        self.assertIn('js/sqr-filter-controls.js', content)
         self.assertIn('id="sqr-pm-content" hidden', content)
         self.assertIn('id="sqr-pm-empty" class="sqr-pm-empty" hidden', content)
         from django.templatetags.static import static
@@ -3303,7 +3342,7 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertNotIn('id="sqr-performance-dashboard"', eng_content)
         self.assertNotIn('js/sqr-performance.js', eng_content)
 
-    def test_performance_endpoint_preserves_status_health_progress(self):
+    def test_performance_endpoint_preserves_saved_assessments_status_and_progress(self):
         other_pm = User.objects.create_user(
             username="perf_pm_other", password="pass12345", role=User.Roles.PM_ESG,
             email="perf.other@example.com", first_name="Other", last_name="PM",
@@ -3311,6 +3350,8 @@ class SqrPerformanceTrackingTests(TestCase):
         self.submission.assigned_pm = self.pm
         self.submission.overall_status = SqrSubmission.OverallStatus.PLANNING
         self.submission.delivery_health = SqrSubmission.DeliveryHealth.OFF_TRACK
+        self.submission.schedule_performance = "on_track"
+        self.submission.quality_performance = "unmet"
         self.submission.delivery_progress = 25
         self.submission.delivery_target_finish_date = date(2026, 10, 31)
         self.submission.save()
@@ -3334,15 +3375,19 @@ class SqrPerformanceTrackingTests(TestCase):
         project = projects[self.submission.pk]
         self.assertEqual(project["status_key"], "planning")
         self.assertEqual(project["status_label"], "Planning")
-        self.assertEqual(project["health_key"], "off_track")
-        self.assertEqual(project["health_label"], "Off Track")
+        self.assertEqual(project["schedule_performance"], "on_track")
+        self.assertEqual(project["quality_performance"], "unmet")
+        self.assertEqual(project["overall_rating"], "danger")
+        self.assertEqual(project["assessed_count"], 2)
         self.assertEqual(project["progress"], 25)
-        self.assertEqual(project["target_date"], "2026-10-31")
+        self.assertNotIn("health_key", project)
+        self.assertNotIn("target_date", project)
         self.assertEqual(project["pm_id"], str(self.pm.pk))
         self.assertTrue(project["needs_attention"])
         other = projects[other_submission.pk]
         self.assertEqual(other["status_label"], "In Progress")
-        self.assertEqual(other["health_key"], "on_track")
+        self.assertEqual(other["schedule_performance"], "")
+        self.assertEqual(other["overall_label"], "Not assessed")
         self.assertEqual(other["progress"], 80)
         self.assertEqual(other["pm_id"], str(other_pm.pk))
 
@@ -3386,29 +3431,30 @@ class SqrPerformanceTrackingTests(TestCase):
         self.submission.refresh_from_db()
         self.assertEqual(_perf_sqr_mismatches(self.submission), [])
 
-    def test_performance_update_post(self):
+    def test_retired_performance_write_preserves_legacy_rows_and_history(self):
+        perf = SqrProjectPerformance.objects.create(
+            submission=self.submission, project_manager=self.pm, percent_complete=25,
+            next_action_remarks="Historical update", scope_health="at_risk",
+        )
+        history = SqrSubmissionHistory.objects.create(
+            submission=self.submission, actor=self.pm, action=SqrSubmissionHistory.Action.UPDATED,
+            field="performance", old_values={}, new_values={"percent_complete": 25},
+            summary="Historical performance update", source="sqr-performance-update",
+        )
+        before = SqrSubmissionHistory.objects.count()
         self.client.force_login(self.pm)
         response = self.client.post(
             reverse("hub:sqr-performance-update", args=[self.submission.pk]),
-            {
-                "project_manager": str(self.pm.pk),
-                "start_date": "2026-09-01",
-                "finish_date": "2026-10-31",
-                "status": "at_risk",
-                "percent_complete": "65",
-                "next_action_remarks": "Waiting on client.",
-                "folder_link": "https://example.com/f",
-                "schedule_health": "at_risk",
-                "scope_health": "ok",
-                "budget_health": "over",
-                "recovery_action_remarks": "Crash plan.",
-            },
+            {"status": "at_risk", "percent_complete": "65", "schedule_health": "at_risk"},
         )
-        self.assertEqual(response.status_code, 302)
-        perf = SqrProjectPerformance.objects.get(submission=self.submission)
-        self.assertEqual(perf.status, "at_risk")
-        self.assertEqual(perf.percent_complete, 65)
-        self.assertEqual(perf.overall_health, "red")
+        self.assertEqual(response.status_code, 410)
+        perf.refresh_from_db()
+        history.refresh_from_db()
+        self.assertEqual(perf.percent_complete, 25)
+        self.assertEqual(perf.next_action_remarks, "Historical update")
+        self.assertEqual(history.new_values, {"percent_complete": 25})
+        self.assertEqual(SqrProjectPerformance.objects.count(), 1)
+        self.assertEqual(SqrSubmissionHistory.objects.count(), before)
 
     def test_performance_endpoint_preserves_full_titles_without_initial_cards(self):
         long_title = "VeryLongProjectNameWithoutAnySpaces" * 4
@@ -3465,15 +3511,14 @@ class SqrPerformanceTrackingTests(TestCase):
         parser = ShellParser()
         parser.feed(content)
         for suffix in (
-            "scope", "search", "manager", "health", "status", "attention", "mine",
-            "reset", "message", "content", "empty",
+            "search", "filters", "filter-notice", "message", "content", "empty",
             "prev", "next", "page",
-            "portfolio", "rating", "as-of", "closed-coverage", "rated-coverage",
+            "as-of", "closed-coverage", "rated-coverage",
             "manager-chart", "status-queue", "rating-queue", "indicator-chart",
             "status-rows", "indicator-rows",
         ):
             self.assertEqual(len(parser.ids.get("sqr-pm-" + suffix, [])), 1, suffix)
-        for suffix in ("count", "refresh", "snapshot"):
+        for suffix in ("count", "refresh", "snapshot", "scope", "manager", "health", "status", "attention", "mine", "reset", "portfolio", "rating"):
             self.assertFalse(parser.ids.get("sqr-pm-" + suffix), suffix)
         self.assertIn("hidden", parser.ids["sqr-performance-dashboard"][0])
         self.assertEqual(parser.ids["sqr-pm-message"][0]["role"], "status")
@@ -3485,13 +3530,12 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertIsNotNone(parser.performance_link)
         self.assertEqual(parser.performance_link["href"], reverse("hub:sqr") + "?view=performance")
         self.assertEqual(parser.filters, set())
-        self.assertEqual(parser.options["sqr-pm-scope"], {"active", "all"})
-        self.assertEqual(parser.options["sqr-pm-manager"], {""})
-        self.assertEqual(parser.options["sqr-pm-health"], {"", "on_track", "at_risk", "off_track", "completed", "cancelled", "not_set"})
-        self.assertEqual(parser.options["sqr-pm-status"], {"", "planning", "in_progress", "on_hold", "completed", "cancelled", "not_set"})
-        self.assertEqual(parser.options["sqr-pm-portfolio"], {"", "closed", "ongoing", "pipeline", "removed"})
-        self.assertEqual(parser.options["sqr-pm-rating"], {"", "good", "warning", "danger", "unknown"})
-        self.assertEqual(parser.options["sqr-pm-attention"], {"", "attention", "overdue", "due_soon", "missing_data", "inconsistency", "off_track", "at_risk", "on_hold"})
+        self.assertIn("js/sqr-filter-controls.js", content)
+        self.assertLess(content.index("js/sqr-filter-core.js"), content.index("js/sqr-performance.js"))
+        self.assertIn("Schedule", content)
+        self.assertIn("Budget/Effort", content)
+        self.assertIn("Quality", content)
+        self.assertNotIn("Target / finish", content)
         self.assertIn("window.setSqrView = setView", content)
         self.assertIn("window.focusSqrTrackerProject", content)
         self.assertIn("sqr:performance-view", content)
@@ -3519,7 +3563,7 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertEqual(sheet.title, "Project Performance Tracking")
         self.assertEqual([cell.value for cell in sheet[1]], [
             "SQR ID", "Description", "Project Manager", "Start Date", "Finish Date",
-            "Status", "% Complete", "Next Action / Remarks", "Folder link",
-            "Schedule Health", "Scope Health", "Budget Health",
-            "Recovery Action / Remarks", "Overall Health", "Last Updated Date",
+            "Status", "% Complete", "Key Updates / Risks", "Folder link",
+            "Schedule Performance", "Budget/Effort Performance", "Quality Performance",
+            "Overall Performance", "Assessed Dimensions", "Last Updated Date",
         ])

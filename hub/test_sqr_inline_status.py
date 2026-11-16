@@ -47,24 +47,36 @@ const context = {document};
 vm.runInNewContext(SOURCE, context);
 const display = new Element('div');
 context.renderStructuredDisplay(display, 'proposal_status', '<img src=x onerror=alert(1)>');
-assert.equal(display.textContent, '–');
+assert.equal(display.textContent, '\u2013');
+for (const [field, value, label, tone] of [
+    ['schedule_performance', 'on_track', 'On Track', 'success'],
+    ['schedule_performance', 'at_risk', 'At Risk', 'warning'],
+    ['schedule_performance', 'delayed', 'Delayed', 'danger'],
+    ['budget_effort_performance', 'within_budget', 'Within Budget', 'success'],
+    ['budget_effort_performance', 'at_risk', 'At Risk', 'warning'],
+    ['budget_effort_performance', 'over_budget', 'Over Budget', 'danger'],
+    ['quality_performance', 'met', 'Met', 'success'],
+    ['quality_performance', 'at_risk', 'At Risk', 'warning'],
+    ['quality_performance', 'unmet', 'Unmet', 'danger']
+]) {
+    context.renderStructuredDisplay(display, field, value);
+    assert.equal(display.textContent, label);
+    assert.ok(display.children[0].className.includes('bg-' + tone + '-subtle'));
+}
 assert.equal(display.children[0].name, 'span');
+for (const field of ['schedule_performance', 'budget_effort_performance', 'quality_performance']) {
+    context.renderStructuredDisplay(display, field, '');
+    assert.equal(display.textContent, 'Not assessed');
+    context.renderStructuredDisplay(display, field, '<img src=x onerror=alert(1)>');
+    assert.equal(display.textContent, 'Not assessed (review required)');
+    assert.equal(display.children[0].name, 'span');
+}
 context.renderStructuredDisplay(display, 'proposal_status', 'closed_won');
 assert.equal(display.textContent, 'Closed-Won');
 assert.equal(display.children[0].children[0].name, 'i');
 context.renderStructuredDisplay(display, 'delivery_progress', '50<img src=x onerror=alert(1)>');
 assert.equal(display.textContent, '50%');
 assert.equal(display.children[0].children[0].children[0].style.width, '50%');
-for (const [field, value, label, tone] of [
-    ['schedule_performance', '', 'N/R', 'text-muted'],
-    ['schedule_performance', 'delayed', 'Delayed', 'text-danger'],
-    ['budget_effort_performance', 'at_risk', 'At Risk', 'text-warning'],
-    ['quality_performance', 'met', 'Met', 'text-success']
-]) {
-    context.renderStructuredDisplay(display, field, value);
-    assert.equal(display.textContent, label);
-    assert.ok(display.children[0].className.includes(tone));
-}
 """.replace("SOURCE", json.dumps(source))
         result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -528,6 +540,41 @@ for (const [field, value, label] of [
         if (field === 'proposal_status') assert.equal(row.dataset.sqrProposalStatus, value);
     }
 }
+for (const field of ['delivery_actual_finish_date', 'managed_support_start_date', 'managed_support_end_date', 'project_details', 'managed_support_amount']) {
+    for (const undone of [false, true]) {
+        const startDisplay = createNode('span');
+        const endDisplay = createNode('span');
+        const warranty = createNode('td');
+        warranty.querySelector = () => null;
+        const start = {dataset: {sqrValue: 'stale'}, querySelector: () => startDisplay,
+            set innerHTML(value) { assert.fail('Maintenance Start editor was replaced'); }};
+        const end = {dataset: {sqrValue: 'stale'}, querySelector: () => endDisplay,
+            set innerHTML(value) { assert.fail('Maintenance End editor was replaced'); }};
+        const notice = {hidden: true, textContent: '',
+            set innerHTML(value) { assert.fail('Maintenance notice must be text-safe'); }};
+        const noticeText = undone ? '' : 'Stored Maintenance dates are inactive <img src=x onerror=alert(1)>';
+        const row = {querySelector(selector) {
+            if (selector === '[data-sqr-maintenance-notice]') return notice;
+            if (selector === '[data-sqr-computed="support_start_date"]') return start;
+            if (selector === '[data-sqr-computed="managed_support_end_date"]') return end;
+            if (selector === '[data-sqr-computed="post_svc_warranty_end_date"]') return warranty;
+            return null;
+        }};
+        const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => row};
+        applyInlineUpdateResponse('225', field, '', cell, createNode('div'), {
+            undone, maintenance_notice: noticeText,
+            maintenance_start_value: '2028-02-01', maintenance_end_value: '2028-02-08',
+            support_start_date: '', managed_support_end_date: '', post_svc_warranty_end_date: 'Mar 02, 2028'
+        });
+        assert.equal(notice.textContent, noticeText);
+        assert.equal(notice.hidden, !noticeText);
+        assert.equal(start.dataset.sqrValue, '2028-02-01');
+        assert.equal(end.dataset.sqrValue, '2028-02-08');
+        assert.equal(startDisplay.textContent, 'NA');
+        assert.equal(endDisplay.textContent, 'NA');
+        assert.equal(warranty.textContent, 'Mar 02, 2028');
+    }
+}
 for (const field of ['customer_name', 'project_title', 'revenue_reference_no']) {
     const value = '<img src=x onerror=alert(1)>';
     const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => null};
@@ -543,299 +590,4 @@ for (const field of ['customer_name', 'project_title', 'revenue_reference_no']) 
             [shutil.which("node"), "-"], input=script, text=True,
             capture_output=True, timeout=15, check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_manual_date_response_preserves_editor_wrappers_and_applicability(self):
-        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
-        source = "function applyInlineUpdateResponse(" + template.split(
-            "    function applyInlineUpdateResponse(", 1
-        )[1].split("    var undoToastTimer", 1)[0]
-        script = r"""
-const assert = require('node:assert/strict');
-const vm = require('node:vm');
-const classes = () => ({add() {}, remove() {}, toggle() {}});
-function dateCell(value) {
-    const display = {textContent: value, set innerHTML(value) { throw Error('Date display must be text'); }};
-    return {dataset: {}, classList: classes(), display, textContent: value,
-        set innerHTML(value) { throw Error('Do not replace the date editor wrapper'); },
-        querySelector: () => display, setAttribute() {}};
-}
-const warranty = dateCell('old warranty'), start = dateCell('old start'), end = dateCell('old end');
-warranty.querySelector = () => null;
-start.dataset.sqrField = 'managed_support_start_date';
-end.dataset.sqrField = 'managed_support_end_date';
-const row = {dataset: {}, querySelector(selector) {
-    if (selector.includes('post_svc_warranty_end_date')) return warranty;
-    if (selector.includes('support_start_date')) return start;
-    if (selector.includes('managed_support_end_date')) return end;
-    return null;
-}};
-const cell = {dataset: {}, classList: classes(), closest: () => row};
-const context = {window: {}, document: {dispatchEvent() {}}, CustomEvent: function () {},
-    setTimeout() {}, getDisplay: (field, value) => String(value)};
-vm.runInNewContext(SOURCE, context);
-context.applyInlineUpdateResponse('1', 'delivery_actual_finish_date', '2026-11-13', cell, {textContent: ''}, {
-    field_value: '2026-11-13', post_svc_warranty_end_date: 'Dec 13, 2026', support_start_date: '',
-    managed_support_end_date: 'Feb 09, 2027', warranty_eligible: true, maintenance_eligible: true
-});
-assert.equal(warranty.textContent, 'Dec 13, 2026');
-assert.equal(start.display.textContent, 'N/R');
-assert.equal(end.display.textContent, 'Feb 09, 2027');
-assert.equal(cell.dataset.sqrValue, '2026-11-13');
-context.applyInlineUpdateResponse('1', 'managed_support_amount', '', cell, {textContent: ''}, {
-    field_value: '', support_start_date: '', managed_support_end_date: '', maintenance_eligible: false
-});
-assert.equal(start.display.textContent, 'N/A');
-assert.equal(end.display.textContent, 'N/A');
-assert.equal(end.dataset.sqrApplicable, 'false');
-""".replace("SOURCE", json.dumps(source))
-        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
-                                capture_output=True, timeout=15, check=False)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_new_assessment_invalidates_loaded_ppt_snapshot(self):
-        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
-        handler = "function applyInlineUpdateResponse(" + template.split(
-            "    function applyInlineUpdateResponse(", 1
-        )[1].split("    var undoToastTimer", 1)[0]
-        controller = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-performance.js").read_text(encoding="utf-8")
-        script = r"""
-const assert = require('node:assert/strict'), vm = require('node:vm');
-class Element {
-    constructor(tag='div') { this.tagName=tag.toUpperCase(); this.children=[]; this.dataset={}; this.style={}; this.value=''; this.checked=false; this.hidden=false; this.listeners={}; this.classList={add(){},remove(){},toggle(){}}; }
-    set textContent(value) { this.text=String(value); this.children=[]; }
-    get textContent() { return (this.text||'')+this.children.map(n=>n.textContent).join(''); }
-    append(...items) { for(const n of items) { if(n.tagName==='FRAGMENT') this.children.push(...n.children); else this.children.push(typeof n==='string'?Object.assign(new Element(),{textContent:n}):n); } }
-    appendChild(n) { this.append(n); }
-    replaceChildren(...items) { this.text=''; this.children=[]; this.append(...items); }
-    add(n) { this.append(n); }
-    setAttribute() {} removeAttribute() {} querySelector() { return null; }
-    querySelectorAll() { return []; } closest() { return null; }
-    addEventListener(type,fn) { (this.listeners[type] ||= []).push(fn); }
-}
-const nodes=new Map(); const root=new Element(); root.dataset={endpoint:'/snapshot',currentUserId:'2',defaultMine:'0'};
-function lookup(id) { if(id==='sqr-performance-dashboard') return root; if(!nodes.has(id)) nodes.set(id,new Element()); return nodes.get(id); }
-lookup('sqr-pm-scope').value='all';
-const listeners={}; const document={hidden:false,getElementById:lookup,createElement:tag=>new Element(tag),createDocumentFragment:()=>new Element('fragment'),
-    addEventListener(type,fn){(listeners[type] ||= []).push(fn);},dispatchEvent(event){for(const fn of listeners[event.type]||[]) fn(event);}};
-const frames=[]; let quality='';
-function project() { return {pk:1,reference_code:'SQR-1',project_name:'Fictional project',customer_name:'Fictional account',pm_id:'2',pm_name:'PM',pm_fallback:false,approver_id:'2',sse_name:'SSE',
-    status_key:'in_progress',status_label:'In Progress',health_key:'not_set',health_label:'Not set',progress:50,start_date:'2026-11-01',actual_finish_date:null,completion_signed_date:null,target_date:null,
-    updates_risks:'',active_delivery:true,delivery_candidate:true,needs_attention:quality!=='met',overdue:false,due_soon:false,days_to_target:null,missing_data:quality?[]:['Quality Performance'],
-    inconsistencies:[],reasons:[],priority:5,portfolio_status:'ongoing',overall_rating:quality==='met'?'good':quality?'warning':'unknown',missing_assessment:!quality,search_text:'fictional project',
-    indicators:{schedule:{value:'on_track',label:'On Track',state:'good'},budget_effort:{value:'within_budget',label:'Within Budget',state:'good'},quality:{value:quality,label:quality==='met'?'Met':quality?'At Risk':'N/R',state:quality==='met'?'good':quality?'warning':'unknown'}}}; }
-const context={document,window:{},Intl,Map,Option:function(label,value){const n=new Element('option');n.textContent=label;n.value=value;return n;},AbortController,
-    CustomEvent:function(type,init){this.type=type;this.detail=init?.detail;},setTimeout(){return 1;},clearTimeout(){},requestAnimationFrame(fn){frames.push(fn);return frames.length;},cancelAnimationFrame(){},
-    fetch:async()=>({ok:true,redirected:false,json:async()=>({ok:true,as_of:'2026-11-13',fetched_at:'2026-11-13T00:00:00Z',projects:[project()]})}),
-    renderStructuredDisplay:(node,field,value)=>{node.textContent=value;},getDisplay:(field,value)=>value};
-vm.createContext(context);
-vm.runInContext(CONTROLLER,context); vm.runInContext(HANDLER,context);
-async function settle(){await new Promise(resolve=>setImmediate(resolve));while(frames.length) frames.shift()();await new Promise(resolve=>setImmediate(resolve));}
-(async()=>{
-    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('N/R'));
-    quality='met'; context.applyInlineUpdateResponse('1','quality_performance','met',new Element(),new Element(),{field_value:'met'});
-    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('Met'));
-    root.hidden=true; quality='at_risk'; context.applyInlineUpdateResponse('1','quality_performance','at_risk',new Element(),new Element(),{field_value:'at_risk'});
-    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('Met'));
-    root.hidden=false; document.dispatchEvent(new context.CustomEvent('sqr:performance-view',{detail:{view:'performance'}}));
-    await settle(); assert.ok(lookup('sqr-pm-indicator-rows').textContent.includes('At Risk'));
-})().catch(error=>{console.error(error);process.exitCode=1;});
-""".replace("CONTROLLER", json.dumps(controller)).replace("HANDLER", json.dumps(handler))
-        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
-                                capture_output=True, timeout=15, check=False)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def _run_shared_filter_script(self, assertions):
-        source = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-filters.js").read_text(encoding="utf-8")
-        harness = r"""
-const assert=require('node:assert/strict'),vm=require('node:vm');
-class Element {
-    constructor(tag='div'){this.tagName=tag.toUpperCase();this.nodeType=1;this.children=[];this.dataset={};this.attributes={};this.listeners={};this.value='';this.checked=false;this.open=false;this.classList={add(){},remove(){},toggle(){}};}
-    set textContent(value){this.text=String(value);this.children=[];}get textContent(){return(this.text||'')+this.children.map(n=>n.textContent).join('');}
-    append(...items){for(const n of items)this.children.push(typeof n==='string'?Object.assign(new Element(),{textContent:n}):n);}appendChild(n){this.append(n);}
-    replaceChildren(...items){this.text='';this.children=[];this.append(...items);}setAttribute(k,v){this.attributes[k]=String(v);if(k==='id')this.id=String(v);if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(v);}
-    getAttribute(k){return this.attributes[k]??null;}removeAttribute(k){delete this.attributes[k];}addEventListener(k,f){(this.listeners[k]||=[]).push(f);}removeEventListener(k,f){this.listeners[k]=(this.listeners[k]||[]).filter(n=>n!==f);}
-    emit(k,event={}){for(const f of this.listeners[k]||[])f({target:this,preventDefault(){},...event});}focus(){document.activeElement=this;}
-    walk(){return[this,...this.children.flatMap(n=>n.walk())];}
-    querySelectorAll(selector){return this.walk().slice(1).filter(n=>n.tagName==='DETAILS'&&(selector==='details'||n.getAttribute('data-sqr-filter-key')!==null));}
-    querySelector(selector){const match=selector.match(/^\[id="([^"]+)"\]$/);return match?this.walk().find(n=>n.id===match[1])||null:null;}
-    contains(n){return this.walk().includes(n);}
-}
-const document={createElement:tag=>new Element(tag),createTextNode:text=>Object.assign(new Element('#text'),{textContent:text}),activeElement:null,addEventListener(){},removeEventListener(){}};
-const context={document,window:{},URLSearchParams,CustomEvent:function(type,init){this.type=type;this.detail=init?.detail;}};
-vm.runInNewContext(SOURCE,context);const filters=context.window.RequestHubSqrFilters;
-const find=(root,predicate)=>root.walk().find(predicate);
-""".replace("SOURCE", json.dumps(source)) + assertions
-        result = subprocess.run([shutil.which("node"), "-"], input=harness, text=True,
-                                capture_output=True, timeout=15, check=False)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-
-    def test_multi_filter_url_round_trip_and_clear_all(self):
-        self._run_shared_filter_script(r"""
-const state=filters.read(new URLSearchParams('overall_status=in_progress&overall_status=on_hold&pm=1&pm=2&assigned=all&q=hello&linked=1&amount_min=10&layout=table&focus=7'));
-assert.deepEqual(Array.from(state.selected.overall_status),['in_progress','on_hold']);
-assert.deepEqual(filters.toQuery(state).getAll('pm'),['1','2']);
-assert.equal(filters.read(new URLSearchParams(),{defaultAssigned:'mine'}).assigned,'mine');
-assert.equal(filters.toQuery(state).get('assigned'),'all');
-assert.equal(filters.toQuery(state).get('layout'),null);assert.equal(filters.toQuery(state).get('focus'),null);
-const root=new Element();root.id='filters-test';const mounted=filters.mount(root,{state,options:{overall_status:[{value:'in_progress',label:'In Progress'},{value:'on_hold',label:'On Hold'}],pm:[{value:'1',label:'PM One'},{value:'2',label:'PM Two'}]},onChange(){}});
-find(root,n=>n.tagName==='BUTTON'&&n.textContent==='Clear all').emit('click');
-const cleared=mounted.getState();assert.equal(cleared.assigned,'all');assert.equal(cleared.q,'');
-assert.equal(filters.toQuery(cleared).get('linked'),null);assert.equal(filters.toQuery(cleared).get('amount_min'),null);
-assert.deepEqual(filters.toQuery(cleared).getAll('overall_status'),[]);mounted.destroy();
-""")
-
-    def test_filter_controls_expose_keyboard_selection_and_result_count(self):
-        self._run_shared_filter_script(r"""
-const root=new Element();root.id='keyboard-filters';let changed;
-const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{overall_status:[{value:'in_progress',label:'In Progress'},{value:'on_hold',label:'On Hold'}]},onChange(state){changed=state;}});
-let check=find(root,n=>n.tagName==='INPUT'&&n.value==='in_progress');assert.equal(check.getAttribute('type'),'checkbox');check.checked=true;check.emit('change');
-assert.deepEqual(Array.from(changed.selected.overall_status),['in_progress']);
-const details=find(root,n=>n.tagName==='DETAILS');const summary=find(details,n=>n.tagName==='SUMMARY');details.open=true;details.emit('toggle');
-assert.equal(summary.getAttribute('aria-expanded'),'true');details.emit('keydown',{key:'Escape'});assert.equal(details.open,false);assert.equal(document.activeElement,summary);
-const live=find(root,n=>n.getAttribute('data-sqr-filter-count')!==null);assert.equal(live.getAttribute('aria-live'),'polite');
-mounted.setCount(55);assert.ok(live.textContent.includes('55'));
-const remove=find(root,n=>n.tagName==='BUTTON'&&(n.getAttribute('aria-label')||'').startsWith('Remove Delivery Status:'));
-remove.emit('click');assert.deepEqual(Array.from(mounted.getState().selected.overall_status),[]);
-""")
-
-    def test_filter_dropdowns_close_other_category_panels(self):
-        self._run_shared_filter_script(r"""
-const root=new Element();root.id='overlapping-filters';
-root.querySelectorAll=()=>root.walk().filter(n=>n.tagName==='DETAILS'&&n.getAttribute('data-sqr-filter-key')!==null);
-filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{overall_status:[{value:'in_progress',label:'In Progress'}],pm:[{value:'1',label:'PM One'}]},onChange(){}});
-const first=find(root,n=>n.getAttribute('data-sqr-filter-key')==='overall_status');
-const second=find(root,n=>n.getAttribute('data-sqr-filter-key')==='pm');
-first.open=true;first.emit('toggle');second.open=true;second.emit('toggle');
-assert.equal(first.open,false,'Opening another category must close the older panel rather than cover chips after Escape');
-second.emit('keydown',{key:'Escape'});assert.equal(second.open,false);
-""")
-
-    def test_detached_filter_toggle_cannot_close_replacement_panel(self):
-        self._run_shared_filter_script(r"""
-const root=new Element();root.id='queued-toggle';
-const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{quality_performance:[{value:'met',label:'Met'}]},onChange(){}});
-const old=find(root,n=>n.getAttribute('data-sqr-filter-key')==='quality_performance');old.open=true;old.emit('toggle');
-mounted.setState(mounted.getState());
-const current=find(root,n=>n.getAttribute('data-sqr-filter-key')==='quality_performance');
-old.emit('toggle');
-assert.equal(current.open,true,'A queued toggle from detached markup must not close the current checkbox panel');
-""")
-
-    def test_filter_disclosure_focus_survives_latest_option_refresh(self):
-        self._run_shared_filter_script(r"""
-const root=new Element();root.id='refresh-focus';const options={quality_performance:[{value:'met',label:'Met'}]};
-const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options,onChange(){}});
-const details=find(root,n=>n.getAttribute('data-sqr-filter-key')==='quality_performance');
-details.open=true;details.emit('toggle');details.emit('keydown',{key:'Escape'});
-mounted.setOptions(options);
-assert.ok(root.contains(document.activeElement),'A late response must not remove the keyboard focus returned by Escape');
-assert.equal(document.activeElement.getAttribute('aria-expanded'),'false');
-""")
-
-    def test_more_filter_selection_preserves_open_panel_and_keyboard_focus(self):
-        self._run_shared_filter_script(r"""
-const root=new Element();root.id='more-focus';
-const mounted=filters.mount(root,{state:filters.read(new URLSearchParams('assigned=all')),options:{},onChange(){}});
-let more=find(root,n=>n.tagName==='DETAILS'&&n.getAttribute('class')==='sqr-filter-more');more.open=true;
-const linked=find(more,n=>n.tagName==='INPUT'&&n.value==='linked');linked.focus();linked.checked=true;linked.emit('change');
-more=find(root,n=>n.tagName==='DETAILS'&&n.getAttribute('class')==='sqr-filter-more');
-assert.equal(more.open,true,'Editing an extra predicate must not close its panel');
-assert.ok(root.contains(document.activeElement),'Checkbox focus must survive applying its predicate');
-assert.equal(mounted.getState().flags.linked,true);
-more.emit('keydown',{key:'Escape'});assert.equal(more.open,false);
-assert.equal(document.activeElement.tagName,'SUMMARY');
-""")
-
-    def test_classic_saved_filters_are_canonicalized_before_server_reload(self):
-        controller = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-classic-filters.js").read_text(encoding="utf-8")
-        self._run_shared_filter_script(r"""
-const location=new URL('https://fixture.invalid/sqr/?view=tracker');
-location.assign=value=>{location.href=new URL(value,location).href;};
-context.window.location=location;context.window.history={replaceState(_a,_b,value){location.href=new URL(value,location).href;}};
-const saved={selected:{overall_status:['in_progress','on_hold']},q:'Multi-filter',assigned:'all',flags:{},ranges:{}};
-context.window.sessionStorage={getItem(key){return key==='requestHub.sqr.filters.v1'?JSON.stringify(saved):null;},setItem(){}};
-const root=new Element();root.id='sqr-classic-filters';root.dataset={defaultAssigned:'all',serverQuery:'view=tracker',initialCount:'56',optionsId:'filter-options'};
-root.closest=()=>({hidden:false,querySelector(){return null;}});
-const options=new Element();options.textContent='{}';
-document.getElementById=id=>id===root.id?root:id==='filter-options'?options:null;
-document.querySelectorAll=()=>[];const listeners={};
-document.addEventListener=(name,fn)=>{(listeners[name]||=[]).push(fn);};
-document.dispatchEvent=event=>{for(const fn of listeners[event.type]||[])fn(event);};
-context.fetch=()=>Promise.resolve({ok:true,json:async()=>({ok:true,pipeline:{all:{count:55}}})});
-vm.runInNewContext(CLASSIC,context);
-assert.equal(location.searchParams.get('q'),'Multi-filter','Saved predicates must enter the URL before reloading server-rendered rows');
-assert.deepEqual(location.searchParams.getAll('overall_status'),['in_progress','on_hold']);
-""".replace("CLASSIC", json.dumps(controller)))
-
-    def test_classic_mutation_reloads_filtered_page_without_losing_undo(self):
-        controller = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-classic-filters.js").read_text(encoding="utf-8")
-        self._run_shared_filter_script(r"""
-const location=new URL('https://fixture.invalid/sqr/?view=tracker&assigned=all&overall_status=in_progress&pm=1&pm=2&page=2');
-location.assign=value=>{location.href=new URL(value,location).href;};
-context.window.location=location;context.window.history={replaceState(){}};
-const saved=new Map();context.window.sessionStorage={getItem:key=>saved.get(key)||null,setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
-const undo={pk:51,field:'overall_status',undo_url:'/sqr/51/inline-update/1/undo/',expires_at:Date.now()+10000};
-context.window.getSqrPendingUndo=()=>undo;
-const root=new Element();root.id='sqr-classic-filters';root.dataset={defaultAssigned:'all',serverQuery:location.search.slice(1),initialCount:'51',optionsId:'filter-options',summaryEndpoint:'/sqr/prototype-data/'};
-root.closest=()=>({hidden:false,querySelector(){return null;}});const options=new Element();options.textContent='{}';
-document.getElementById=id=>id===root.id?root:id==='filter-options'?options:null;document.querySelectorAll=()=>[];
-const listeners={};document.addEventListener=(name,fn)=>{(listeners[name]||=[]).push(fn);};document.dispatchEvent=event=>{for(const fn of listeners[event.type]||[])fn(event);};
-const requests=[];context.AbortController=AbortController;
-context.fetch=async url=>{requests.push(url);return{ok:true,json:async()=>({ok:true,records:[],pagination:{page:1,total:50},pipeline:{all:{count:50}}})};};
-vm.runInNewContext(CLASSIC,context);
-(async()=>{
-    await context.window.applySqrTableFilter({type:'sqr:performance-invalidated'});
-    const query=new URL(requests[0],location).searchParams;
-    assert.equal(query.get('page'),'2');assert.equal(query.get('summary'),null);
-    assert.deepEqual(query.getAll('pm'),['1','2']);assert.equal(query.get('overall_status'),'in_progress');
-    assert.equal(location.searchParams.get('page'),'1','Mutation must clamp and reload the same filtered server page');
-    const stored=Array.from(saved.values()).map(value=>JSON.parse(value));
-    assert.ok(stored.some(value=>value.undo_url===undo.undo_url),'The existing undo action must survive the membership reload');
-    location.searchParams.set('page','2');
-    context.window.sessionStorage.setItem=()=>{throw new Error('Storage blocked');};
-    await context.window.applySqrTableFilter({type:'sqr:performance-invalidated'});
-    assert.equal(location.searchParams.get('page'),'2','Blocked storage must not silently destroy an available Undo action');
-    assert.ok(root.textContent.includes('Undo')&&root.textContent.includes('reload'));
-})().catch(error=>{console.error(error);process.exitCode=1;});
-""".replace("CLASSIC", json.dumps(controller)))
-
-    def test_retired_filter_preference_is_not_silently_applied(self):
-        self._run_shared_filter_script(r"""
-const state=filters.read(new URLSearchParams('assigned=all&attention=overdue&overall_status=invalid'));
-assert.deepEqual(Array.from(state.selected.overall_status),['invalid']);
-assert.equal(filters.toQuery(state).get('attention'),'overdue');
-const root=new Element();root.id='invalid-filters';filters.mount(root,{state,options:{overall_status:[{value:'in_progress',label:'In Progress'}]},onChange(){}});
-assert.ok(/retired|unavailable/i.test(root.textContent));assert.ok(root.textContent.includes('Clear all'));
-""")
-
-    def test_stale_response_cannot_replace_newer_filter_results(self):
-        source = (Path(settings.BASE_DIR) / "static" / "js" / "sqr-performance.js").read_text(encoding="utf-8")
-        refresh = "async function refresh(" + source.split("    async function refresh(", 1)[1]
-        refresh = refresh.split("    function invalidateSnapshot", 1)[0].split("    Object.keys(controls)", 1)[0]
-        if "    function invalidateSnapshot(" in source:
-            invalidator = "function invalidateSnapshot(" + source.split("    function invalidateSnapshot(", 1)[1].split("    Object.keys(controls)", 1)[0]
-        else:
-            invalidator = "function invalidateSnapshot() {" + source.split("document.addEventListener('sqr:performance-invalidated', function () {", 1)[1].split("    });", 1)[0] + "}"
-        script = r"""
-const assert=require('node:assert/strict'), vm=require('node:vm');
-const requests=[];
-const context={AbortController,setTimeout(){return 1;},clearTimeout(){},fetch:()=>new Promise(resolve=>requests.push(resolve))};
-vm.createContext(context);
-vm.runInContext(`var root={dataset:{endpoint:'/snapshot'},setAttribute(){}};
-var snapshot=null,revision=0,inFlight=null,activeController=null,sharedFilters=null,filterState=null,dirty=true;
-function visible(){return true;}function message(){}function updateManagers(){}function scheduleRender(){}
-function el(){return {replaceChildren(){},append(){},dataset:{}};}`,context);
-vm.runInContext(REFRESH+INVALIDATOR,context);
-function response(name){return{ok:true,redirected:false,json:async()=>({ok:true,as_of:'2026-11-13',fetched_at:'2026-11-13T00:00:00Z',projects:[{name}]})};}
-(async()=>{
-    context.refresh();context.invalidateSnapshot();
-    assert.equal(requests.length,2,'A new filter selection must start its own request, not wait for the superseded one');
-    requests[1](response('latest selection'));await new Promise(resolve=>setImmediate(resolve));
-    requests[0](response('superseded selection'));await new Promise(resolve=>setImmediate(resolve));
-    assert.equal(vm.runInContext('snapshot.projects[0].name',context),'latest selection');
-})().catch(error=>{console.error(error);process.exitCode=1;});
-""".replace("REFRESH", json.dumps(refresh)).replace("INVALIDATOR", json.dumps(invalidator))
-        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True,
-                                capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

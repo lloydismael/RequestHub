@@ -1,23 +1,19 @@
-{# Records are fetched only when SQR Tracker is opened; both layouts share one editor. #}
-<section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype"{% if sqr_active_view and sqr_active_view != 'prototype' %} hidden{% endif %}
-         data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}" data-default-assigned="{{ sqr_default_assigned|default:'all' }}"
+{# Lazy SQR Tracker shell: records are fetched when the view is first opened. #}
+<section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
+         data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}"
          aria-label="SQR Tracker">
-    <div class="sqr-proto__layout-toolbar">
-        <h3 class="h5">SQR Tracker</h3>
-        <div role="group" aria-label="SQR Tracker layout">
-            <button type="button" id="sqr-proto-layout-list" class="btn btn-sm btn-primary" aria-pressed="true"><i class="bi bi-list-ul me-1" aria-hidden="true"></i>List</button>
-            <button type="button" id="sqr-proto-layout-table" class="btn btn-sm btn-outline-primary" aria-pressed="false"><i class="bi bi-table me-1" aria-hidden="true"></i>Table</button>
-        </div>
+    <div id="sqr-proto-filters" aria-label="Filter SQRs"></div>
+    <p id="sqr-proto-filter-notice" class="small text-secondary mb-2" role="status" hidden></p>
+    <p id="sqr-proto-result-notice" class="small mb-2" role="status" hidden></p>
+    <div class="sqr-proto__presentation" role="group" aria-label="Tracker presentation">
+        <button type="button" id="sqr-proto-list-view" class="btn btn-outline-primary" aria-pressed="true">List</button>
+        <button type="button" id="sqr-proto-table-view" class="btn btn-outline-primary" aria-pressed="false">Table</button>
+        <span id="sqr-proto-sort"></span>
     </div>
-    {% include "hub/partials/sqr_filters.html" with root_id="sqr-proto-filters" filter_label="SQR Tracker filters" %}
-    <div id="sqr-proto-focus" class="sqr-pm-focus-notice"{% if not sqr_focus_requested %} hidden{% endif %}>
-        <span id="sqr-proto-focus-label" role="status">Temporary focused SQR; your filters are retained.</span>
-        <button type="button" id="sqr-proto-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
-    </div>
-    <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list" data-layout="list">
-        <div id="sqr-proto-catalog" class="sqr-proto__catalog">
-        <aside id="sqr-proto-list" class="sqr-proto__list" aria-label="SQR list">
-            <div class="sqr-proto__tools" hidden>
+    <fieldset id="sqr-proto-date-columns" class="sqr-proto__date-columns" hidden><legend>Optional date columns</legend></fieldset>
+    <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list" data-presentation="list">
+        <aside class="sqr-proto__list" aria-label="SQR list">
+            <div class="sqr-proto__tools">
                 <label class="visually-hidden" for="sqr-proto-search">Search SQRs</label>
                 <div class="sqr-proto__search">
                     <i class="bi bi-search" aria-hidden="true"></i>
@@ -25,20 +21,9 @@
                 </div>
             </div>
             <ul class="sqr-proto__items" id="sqr-proto-items"></ul>
+            <div id="sqr-proto-table" class="sqr-proto__table-scroll" role="region" aria-label="SQR results table; scroll horizontally for more columns" tabindex="0" hidden></div>
+            <button type="button" class="btn btn-outline-primary sqr-proto__more" id="sqr-proto-more" hidden>Show more</button>
         </aside>
-        <div id="sqr-proto-table-wrap" class="sqr-proto__table-wrap" role="region" aria-label="Scrollable SQR project table" tabindex="0" hidden>
-            <table class="sqr-proto__table">
-                <caption class="visually-hidden">SQR projects — same filters, records and editor as List</caption>
-                <thead><tr>
-                    <th scope="col">SQR ID</th><th scope="col">Account / Project</th><th scope="col">PM</th><th scope="col">SSE</th>
-                    <th scope="col">Delivery Status</th><th scope="col">Overall Progress</th><th scope="col">Schedule Performance</th>
-                    <th scope="col">Budget/Effort Performance</th><th scope="col">Quality Performance</th><th scope="col">Start / Finish Date</th><th scope="col">Open</th>
-                </tr></thead>
-                <tbody id="sqr-proto-table-rows"></tbody>
-            </table>
-        </div>
-        <button type="button" class="btn btn-outline-primary sqr-proto__more" id="sqr-proto-more" hidden>Show more</button>
-        </div>
 
         <section class="sqr-proto__editor" id="sqr-proto-editor" aria-label="SQR record">
             <div class="sqr-proto__empty">
