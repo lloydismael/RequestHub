@@ -130,7 +130,7 @@ jobs:
             requirements-changelog-capture.txt
 
       - name: Restore historical capture cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             hub/changelog_assets/automatic/
@@ -144,7 +144,7 @@ jobs:
 
       - name: Restore Chromium cache
         id: browser_cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: capture-browser-${{ runner.os }}-${{ hashFiles('requirements-changelog-capture.txt') }}
