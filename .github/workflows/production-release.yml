@@ -203,7 +203,7 @@ jobs:
 
       - name: Download exact upstream screenshot evidence
         continue-on-error: true
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
