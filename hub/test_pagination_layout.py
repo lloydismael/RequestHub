@@ -33,7 +33,9 @@ class PaginationLayoutTests(SimpleTestCase):
         self.assertGreater(html.index('id="dashboard-live-pagination"'), table_end)
 
     def test_sqr_pagination_follows_tracker_table(self):
-        html = render_to_string('hub/sqr.html', self.context())
+        context = self.context()
+        context.update(show_classic_sqr_tracker=True, active_sqr_view='tracker')
+        html = render_to_string('hub/sqr.html', context)
         table_end = html.index('</table>', html.index('class="sqr-tracker table-hover"'))
         self.assertGreater(html.index('id="sqr-pagination"'), table_end)
 
