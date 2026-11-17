@@ -1,0 +1,17 @@
+.sqr-filter-controls { margin: 0 0 1rem; color: var(--bs-body-color, #172234); }
+.sqr-fc-toolbar, .sqr-fc-chips { display: flex; flex-wrap: wrap; gap: .5rem; }
+.sqr-fc-button { border: 1px solid var(--bs-border-color, #c6ccd5); border-radius: .5rem; background: var(--bs-body-bg, #fff); color: inherit; padding: .5rem .75rem; font: inherit; font-size: .82rem; cursor: pointer; overflow-wrap: anywhere; }
+.sqr-fc-button:hover, .sqr-fc-button[aria-expanded="true"], .sqr-fc-button[aria-pressed="true"] { border-color: var(--bs-primary, #315da8); background: var(--bs-primary-bg-subtle, #e7effa); }
+.sqr-filter-controls :is(button, input):focus-visible { outline: 3px solid var(--bs-primary, #315da8); outline-offset: 2px; }
+.sqr-fc-panel { margin: .75rem 0; padding: 1rem; border: 1px solid var(--bs-border-color, #c6ccd5); border-radius: .65rem; background: var(--bs-body-bg, #fff); max-width: 48rem; }
+.sqr-fc-panel[hidden], .sqr-fc-option[hidden] { display: none !important; }
+.sqr-fc-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: .25rem .75rem; max-height: 18rem; overflow-y: auto; padding: .3rem; margin: .5rem 0; }
+.sqr-fc-option { display: flex; align-items: flex-start; gap: .5rem; padding: .5rem; cursor: pointer; overflow-wrap: anywhere; }
+.sqr-fc-option input { flex-shrink: 0; margin-top: .2rem; }
+.sqr-fc-field { display: inline-flex; flex-direction: column; gap: .25rem; width: min(100%, 18rem); padding: .25rem; font-size: .85rem; }
+.sqr-fc-field input { width: 100%; padding: .5rem; color: inherit; background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #c6ccd5); border-radius: .4rem; }
+.sqr-fc-chips { margin-top: .5rem; }
+.sqr-fc-chips .sqr-fc-button { font-size: .75rem; background: var(--bs-tertiary-bg, #f2f4f7); }
+.sqr-fc-count { font-size: .8rem; margin: .5rem 0; }
+.sqr-fc-error { color: var(--bs-danger-text-emphasis, #932525); }
+@media (max-width: 575px) { .sqr-fc-field { width: 100%; } .sqr-fc-panel { padding: .75rem; } }

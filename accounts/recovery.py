@@ -28,7 +28,7 @@ MODEL_LABELS = (
 )
 EXCLUDED_MODEL_LABELS = (
     "hub.outlookconnection", "hub.outlookoauthattempt", "hub.outlooksqrdraft",
-    "hub.assistantusagelimit",
+    "hub.assistantusagelimit", "hub.sqrtrackersettings",
 )
 EXCLUSIONS = [
     "Users, credentials, permissions and sessions",
@@ -38,6 +38,10 @@ EXCLUSIONS = [
     "Transient assistant quotas, leases and session-generation state",
 ]
 CONFIRMATION_PHRASE = "RESTORE"
+SQR_TRANSITION_FIELDS = frozenset({
+    "schedule_performance", "budget_effort_performance", "quality_performance",
+    "delivery_transition_metadata", "legacy_delivery_completed",
+})
 
 
 class RecoveryError(ValueError):
@@ -213,9 +217,11 @@ def validate_payload(payload):
         values = row["fields"]
         if not isinstance(values, dict) or set(values) - set(fields):
             raise RecoveryError("Unknown fields in " + label)
-        # Legacy snapshots predate some fields; only explicitly defaulted/nullable additions are safe.
+        # Version 2 remains strict except for the explicitly additive SQR transition fields.
         missing = set(fields) - set(values)
-        if missing and (not legacy or any(not fields[n].has_default() and not fields[n].null for n in missing)):
+        permitted_additions = SQR_TRANSITION_FIELDS if label == "hub.sqrsubmission" else frozenset()
+        if missing and ((not legacy and not missing <= permitted_additions) or
+                        any(not fields[n].has_default() and not fields[n].null for n in missing)):
             raise RecoveryError("Missing required fields in " + label)
         for name, value in values.items():
             field = fields[name]
@@ -312,16 +318,37 @@ def _check_external_dependents():
                     raise RecoveryError("Restore would affect excluded dependent records: " + relation.related_model._meta.label_lower)
 
 
+def _restoration_records(payload):
+    records = []
+    for row in payload["data"]:
+        if row["model"] != "hub.sqrsubmission":
+            records.append(row)
+            continue
+        values = dict(row["fields"])
+        missing = SQR_TRANSITION_FIELDS - values.keys()
+        for name in missing:
+            values[name] = apps.get_model("hub.sqrsubmission")._meta.get_field(name).get_default()
+        if "legacy_delivery_completed" in missing:
+            values["legacy_delivery_completed"] = bool(
+                values.get("delivery_completion_signed_date") and not values.get("delivery_actual_finish_date")
+            )
+        if "schedule_performance" in missing and values.get("delivery_health") in ("on_track", "at_risk"):
+            values["schedule_performance"] = values["delivery_health"]
+        records.append({**row, "fields": values})
+    return records
+
+
 def _replace(payload):
     """Raw SQL avoids domain save hooks, notifications and immutable-record managers."""
     _check_external_dependents()
+    records = _restoration_records(payload)
     quote = connection.ops.quote_name
     with connection.cursor() as cursor:
         if connection.vendor == "postgresql":
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
         for model in reversed(hub_models()):
             cursor.execute("DELETE FROM " + quote(model._meta.db_table))
-        for item in serializers.deserialize("python", payload["data"]):
+        for item in serializers.deserialize("python", records):
             obj = item.object
             fields = obj._meta.local_concrete_fields
             values = [f.get_db_prep_save(getattr(obj, f.attname), connection) for f in fields]
@@ -329,7 +356,7 @@ def _replace(payload):
         connection.check_constraints(table_names=[m._meta.db_table for m in hub_models()])
         if connection.vendor == "postgresql":
             cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
-    expected = sorted(payload["data"], key=lambda row: (row["model"], row["pk"]))
+    expected = sorted(records, key=lambda row: (row["model"], row["pk"]))
     actual = sorted(records_for(LEGACY_LABELS if str(payload["backup_version"]) == "1" else MODEL_LABELS), key=lambda row: (row["model"], row["pk"]))
     if str(payload["backup_version"]) == "1":
         actual = [{**r, "fields": {k: v for k, v in r["fields"].items() if k in e["fields"]}} for r, e in zip(actual, expected)]

@@ -57,6 +57,8 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
         ctx = super().get_context_data(**kwargs)
         ctx.setdefault("theme_form", ThemeForm(instance=self.request.user))
         if self.request.user.role == User.Roles.ADMIN:
+            from hub.services.sqr_tracker_settings import get_tracker_settings
+            ctx["show_classic_sqr_tracker"] = get_tracker_settings().show_classic_sqr_tracker
             ctx.update(recovery_context(self.request))
         return ctx
 

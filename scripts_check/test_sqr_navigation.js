@@ -23,12 +23,12 @@ function element(dataset = {}, hidden = false) {
     };
 }
 
-function load({query = '', saved = 'tracker', performance = true, blocked = false} = {}) {
-    const buttons = ['tracker', 'prototype'].map(name => element({sqrViewButton: name}));
-    const names = performance ? ['tracker', 'performance', 'prototype'] : ['tracker', 'prototype'];
+function load({query = '', saved = 'tracker', performance = true, classic = true, initialView, blocked = false} = {}) {
+    const buttons = (classic ? ['tracker', 'prototype'] : ['prototype']).map(name => element({sqrViewButton: name}));
+    const names = [...(classic ? ['tracker'] : []), ...(performance ? ['performance'] : []), 'prototype'];
     const panels = names.map(name => element({sqrViewPanel: name}));
-    const nav = ['performance', 'tracker'].map(name => element({sqrNavView: name}));
-    const header = element();
+    const nav = ['performance', 'prototype'].map(name => element({sqrNavView: name}));
+    const header = element(initialView ? {sqrInitialView: initialView} : {});
     const trackerLink = element();
     const trackerControls = [element(), element({}, true)];
     const prototypeControls = [element()];
@@ -69,8 +69,9 @@ function load({query = '', saved = 'tracker', performance = true, blocked = fals
 }
 
 function assertCurrent(app, name) {
+    name = name === 'tracker' ? 'prototype' : name;
     assert.equal(app.navItem(name).attributes['aria-current'], 'page');
-    const other = name === 'performance' ? 'tracker' : 'performance';
+    const other = name === 'performance' ? 'prototype' : 'performance';
     assert.equal(app.navItem(other).attributes['aria-current'], undefined);
 }
 
@@ -121,12 +122,12 @@ test('switching from PPT to the tracker restores the SQR header', () => {
     assertCurrent(app, 'tracker');
 });
 
-test('unavailable performance and focused tracker links safely select the tracker', () => {
+test('unavailable performance falls back to unified while shown focused links select Classic', () => {
     const restricted = load({query: '?view=performance', performance: false});
-    assert.equal(restricted.panel('tracker').hidden, false);
+    assert.equal(restricted.panel('prototype').hidden, false);
     assert.equal(restricted.header.hidden, false);
-    assert.equal(restricted.window.location.searchParams.get('view'), 'tracker');
-    assertCurrent(restricted, 'tracker');
+    assert.equal(restricted.window.location.searchParams.get('view'), 'prototype');
+    assertCurrent(restricted, 'prototype');
 
     const focused = load({query: '?view=performance&focus=42'});
     assert.equal(focused.panel('tracker').hidden, false);
@@ -142,11 +143,29 @@ test('explicit navigation works when browser storage is blocked', () => {
     assertCurrent(app, 'performance');
 });
 
-test('old performance preference cannot hijack a plain SQR link', () => {
-    const tracker = load({saved: 'performance'});
-    assert.equal(tracker.panel('tracker').hidden, false);
-    const prototype = load({saved: 'prototype'});
-    assert.equal(prototype.panel('prototype').hidden, false);
+test('saved preferences cannot override the server-resolved primary SQR view', () => {
+    for (const saved of ['performance', 'tracker', 'prototype']) {
+        const app = load({saved, initialView: 'prototype'});
+        assert.equal(app.panel('prototype').hidden, false);
+        assertCurrent(app, 'prototype');
+        assert.equal(app.trackerLink.attributes['aria-current'], 'page');
+    }
+});
+
+test('hidden Classic cannot be resurrected by stored preferences, focus or manual switching', () => {
+    const app = load({classic: false, saved: 'tracker', query: '?view=tracker&focus=42', initialView: 'prototype'});
+    assert.equal(app.panel('tracker'), undefined);
+    assert.equal(app.panel('prototype').hidden, false);
+    app.window.setSqrView('tracker');
+    assert.equal(app.panel('prototype').hidden, false);
+    assert.equal(app.window.location.searchParams.get('view'), 'prototype');
+    assertCurrent(app, 'prototype');
+});
+
+test('unknown bookmarks fall back to unified SQR', () => {
+    const app = load({query: '?view=unknown'});
+    assert.equal(app.panel('prototype').hidden, false);
+    assertCurrent(app, 'prototype');
 });
 
 test('focusing a project on another page returns to the tracker with filters intact', () => {
