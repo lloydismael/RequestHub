@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hub.release_changelog import EVIDENCE_POLICY, MANIFEST_PATH, MAX_COMPARISONS, SHA_RE, TEXT_MAX, missing_comparisons, validate_manifest
+from hub.release_changelog import EVIDENCE_POLICY, MANIFEST_PATH, MAX_COMPARISONS, SHA_RE, TEXT_MAX, missing_comparisons, repository_report_only, validate_manifest
 
 LOGGER = logging.getLogger(__name__)
 RECIPES_PATH = ROOT / "hub" / "changelog_capture_recipes.json"
@@ -95,7 +95,7 @@ def load_recipes(path):
                 source = safe_relative(scene.get("path"))
                 if source.suffix.lower() not in {".md", ".txt", ".rst"} or not isinstance(scene.get("heading"), str) or not scene["heading"].strip():
                     raise CaptureError("Documentation capture needs a selected text section.")
-            elif scene.get("fixture") not in ({"login", "changelog", "sqr_performance"} if scene["kind"] == "ui" else {"changelog_contract"}):
+            elif scene.get("fixture") not in ({"login", "seasonal_login", "profile", "changelog", "changelog_editor", "sqr_tracker", "sqr_performance"} if scene["kind"] == "ui" else {"changelog_contract"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             viewport = scene.get("viewport", {"width": 1200, "height": 900})
             if not isinstance(viewport, dict) or set(viewport) != {"width", "height"}:
@@ -155,6 +155,8 @@ def _fingerprint(recipe):
 def _cached(item, assets, recipe=None):
     if missing_comparisons([item], require_all=True):
         return False
+    if recipe and repository_report_only(item) and any(scene["kind"] == "ui" for scene in recipe["scenes"]):
+        return False
     try:
         from PIL import Image
 
@@ -179,16 +181,29 @@ def _cached(item, assets, recipe=None):
 def _select_recipe(repo, item, recipes):
     exact = [recipe for recipe in recipes if recipe.get("commit") == item["sha"]]
     if exact:
-        matches = exact
-    else:
-        changed = [name for name in _git(
-            repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", item["sha"],
-        ).decode("utf-8").split("\0") if name]
-        matches = [
-            recipe for recipe in recipes if not recipe.get("commit") and changed
-            and all(any(fnmatchcase(name, pattern) for pattern in recipe["paths"]) for name in changed)
-        ]
+        if len(exact) != 1:
+            raise CaptureError("Ambiguous capture recipes; declare one exact change recipe.")
+        return exact[0]
+
+    changed = [name for name in _git(
+        repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", item["sha"],
+    ).decode("utf-8").split("\0") if name]
+    by_path = [recipe for recipe in recipes if not recipe.get("commit")]
+    screens = [recipe for recipe in by_path if any(scene["kind"] == "ui" for scene in recipe["scenes"])
+               and any(fnmatchcase(name, pattern) for name in changed for pattern in recipe["paths"])]
+    if len(screens) == 1:
+        return screens[0]
+    if screens:
+        scenes = [scene for recipe in screens for scene in recipe["scenes"]]
+        if len(scenes) > MAX_COMPARISONS or len({scene["title"] for scene in scenes}) != len(scenes):
+            raise CaptureError("Overlapping or too many UI scenes; declare one exact change recipe.")
+        return {"id": "affected-screens", "recipes": [recipe["id"] for recipe in screens], "scenes": scenes}
+
+    matches = [recipe for recipe in by_path if changed and
+               all(any(fnmatchcase(name, pattern) for pattern in recipe["paths"]) for name in changed)]
     if not matches:
+        if any(name.startswith(("templates/", "static/css/", "static/js/", "static/hub/")) for name in changed):
+            raise CaptureError("No UI capture recipe covers the changed screens. Add a recipe or supply actual before/after screenshots.")
         public_paths = []
         for name in changed:
             try:
@@ -234,6 +249,8 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         "<style>*,*::before,*::after{animation:none!important;transition:none!important}"
         ".lg-enter{opacity:1!important;transform:none!important}</style>"
     )
+    if scene.get("fixture") in {"changelog", "changelog_editor"}:
+        document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []
     context = browser.new_context(
         viewport=scene.get("viewport", {"width": 1200, "height": 900}),
@@ -282,9 +299,29 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         context.route("**/*", serve)
         page = context.new_page()
         page.goto(ORIGIN, wait_until="networkidle", timeout=15000)
+        if scene.get("fixture") == "seasonal_login" and not failed_resources:
+            # Run only the historical decoration script; page scripts and network remain blocked.
+            script = snapshot / "static" / "js" / "login-christmas.js"
+            page.evaluate("""source => {
+                let seed = 421;
+                Math.random = () => (seed = Math.imul(1664525, seed) + 1013904223 >>> 0) / 4294967296;
+                const frames = [];
+                window.requestAnimationFrame = callback => frames.push(callback);
+                (0, eval)(source);
+                for (let frame = 0; frame < 3; frame++) {
+                    for (const callback of frames.splice(0)) callback(frame * 16);
+                }
+            }""", script.read_text(encoding="utf-8"))
+            if not page.locator(".xmas-deco-static").count():
+                raise CaptureError("The historical seasonal decoration did not render.")
         if failed_resources:
             raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
-        selector = ".login-card" if scene.get("fixture") == "login" else ".cl-entry" if scene.get("fixture") == "changelog" else "#sqr-performance-dashboard" if scene.get("fixture") == "sqr_performance" else "body"
+        selector = {
+            "login": ".login-hero", "seasonal_login": ".login-hero",
+            "profile": "#profile-panel-avatar .profile-card, .profile-avatar-block",
+            "changelog": ".cl-entry", "changelog_editor": ".cl-editor",
+            "sqr_tracker": "#sqr-proto", "sqr_performance": "#sqr-performance-dashboard",
+        }.get(scene.get("fixture"), "body")
         page.locator(selector).screenshot(path=str(output), animations="disabled", timeout=15000)
     finally:
         context.close()
@@ -305,7 +342,10 @@ def _capture_change(browser, repo, item, recipe, assets, vendor_dir):
     pairs = []
     outputs = []
     observable = False
+    visual_observable = False
     complete = False
+    from PIL import Image, ImageChops
+
     try:
         with tempfile.TemporaryDirectory(prefix="request-hub-capture-") as temporary:
             before = Path(temporary) / "before"
@@ -321,18 +361,30 @@ def _capture_change(browser, repo, item, recipe, assets, vendor_dir):
                     outputs.append(output)
                     _screenshot(browser, snapshot, {**scene, "revision": revision}, output, vendor_dir)
                     _asset(assets, f"{relative}/{name}")
-                observable |= (directory / names[0]).read_bytes() != (directory / names[1]).read_bytes()
+                with Image.open(directory / names[0]) as before_image, Image.open(directory / names[1]) as after_image:
+                    changed = before_image.size != after_image.size or ImageChops.difference(
+                        before_image.convert("RGB"), after_image.convert("RGB"),
+                    ).getbbox() is not None
+                observable |= changed
+                if not changed and scene["kind"] == "ui":
+                    for name in names:
+                        (directory / name).unlink()
+                    continue
+                visual_observable |= scene["kind"] == "ui"
                 pairs.append({
                     "title": scene["title"], "before_text": scene["before_text"], "after_text": scene["after_text"],
+                    "evidence_kind": scene["kind"],
                     "before_image": f"{relative}/{names[0]}", "after_image": f"{relative}/{names[1]}",
                     "before_revision": parents[1], "after_revision": item["sha"],
                     "capture_note": (
-                        f"Automatic {scene['kind']} capture, recipe {recipe['id']}. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled."
+                        f"Automatic {scene['kind']} capture, recipe {recipe['id']}. Exact Git snapshots; synthetic fixtures; external traffic blocked."
+                        + (" Only the historical decoration script rendered a reduced-motion frame."
+                           if scene.get("fixture") == "seasonal_login" else " Page scripts disabled.")
                         + (" Repository change report; not a UI screenshot. No source code or live data is displayed."
                            if scene.get("fixture") == "repository_change" else "")
                     ),
                 })
-        if not observable:
+        if not observable or (not visual_observable and any(scene["kind"] == "ui" for scene in recipe["scenes"])):
             raise CaptureError("Configured scenes show no observable change; choose relevant evidence.")
         complete = True
     finally:
@@ -376,14 +428,17 @@ def capture_manifest(manifest, repo, recipes_path, *, vendor_dir=None, failure=N
         return validate_manifest(result), failures
 
     for item in result["commits"]:
-        if _cached(item, assets):
+        cached = _cached(item, assets)
+        packaged_report = cached and repository_report_only(item)
+        if cached and not packaged_report:
             continue
         try:
             recipe = _select_recipe(repo, item, recipes)
             if not _cached(item, assets, recipe):
                 pending.append((item, recipe))
         except CaptureError as error:
-            failed(item, str(error))
+            if not packaged_report:
+                failed(item, str(error))
     if not pending:
         return validate_manifest(result), failures
     try:

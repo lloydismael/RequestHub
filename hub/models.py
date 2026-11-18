@@ -13,7 +13,7 @@ from django.db.models import Exists, OuterRef, Q
 from django.db.models.functions import Cast, Concat, StrIndex, Substr
 from django.utils import timezone
 from accounts.storage import DatabaseMediaStorage
-from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, GROUPS, missing_comparisons
+from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, GROUPS, comparison_kind, missing_comparisons
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -145,8 +145,16 @@ class Changelog(models.Model):
                     name = comparison[field]
                     image_field = self._meta.get_field(field)
                     comparison[field] = image_field.attr_class(self, image_field, name if name.startswith("changelogs/") else "")
+                comparison["is_visual"] = comparison_kind(comparison) == "ui"
                 comparisons.append(comparison)
         return comparisons
+
+    @property
+    def comparison_groups(self):
+        groups = {"visual": [], "technical": []}
+        for comparison in self.change_comparisons:
+            groups["visual" if comparison["is_visual"] else "technical"].append(comparison)
+        return groups
 
     @property
     def missing_comparisons(self):

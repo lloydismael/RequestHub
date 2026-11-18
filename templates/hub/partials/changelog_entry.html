@@ -35,17 +35,29 @@
     {% if entry.has_comparison %}
         {% include 'hub/partials/changelog_comparison.html' with comparison=entry comparison_index='overview' %}
     {% endif %}
-    {% with comparisons=entry.change_comparisons %}
-    {% if comparisons %}
+    {% with evidence=entry.comparison_groups %}
+    {% if evidence.visual %}
     <section class="cl-visual-changes" aria-labelledby="visual-changes-{{ entry.pk }}">
-        <h4 id="visual-changes-{{ entry.pk }}" class="h6 mb-3">Visual changes <span class="cl-count">{{ comparisons|length }}</span></h4>
-        {% for comparison in comparisons %}
+        <h4 id="visual-changes-{{ entry.pk }}" class="h6 mb-3">Visual changes <span class="cl-count">{{ evidence.visual|length }}</span></h4>
+        {% for comparison in evidence.visual %}
         <details class="cl-visual-change"{% if forloop.first %} open{% endif %}>
             <summary>{{ comparison.title }} <span class="cl-version">Before &amp; after</span></summary>
             <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter %}</div>
         </details>
         {% endfor %}
     </section>
+    {% endif %}
+    {% if evidence.technical %}
+    <details class="cl-visual-changes cl-visual-change cl-technical-evidence">
+        <summary>Technical evidence <span class="cl-count">{{ evidence.technical|length }}</span></summary>
+        <p class="text-muted small mt-2">Reports and documentation, not screenshots of the app.</p>
+        {% for comparison in evidence.technical %}
+        <details class="cl-visual-change">
+            <summary>{{ comparison.title }}</summary>
+            <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter technical=True %}</div>
+        </details>
+        {% endfor %}
+    </details>
     {% endif %}
     {% endwith %}
 </article>

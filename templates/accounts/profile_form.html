@@ -359,7 +359,7 @@
             <section class="glass-card settings-card mb-3" id="sqr-classic-setting" data-settings-url="{% url 'hub:sqr-tracker-settings' %}" aria-labelledby="sqr-classic-setting-title">
                 {% csrf_token %}
                 <h3 id="sqr-classic-setting-title">SQR tracker visibility</h3>
-                <p class="settings-card__intro">Global Admin setting para sa lahat ng users. Saves immediately, separately from your personal settings.</p>
+                <p class="settings-card__intro">Global admin setting for all users. Saves immediately, separately from your personal settings.</p>
                 <div class="form-check form-switch">
                     <input class="form-check-input" type="checkbox" role="switch" id="sqr-classic-visibility" aria-describedby="sqr-classic-status"{% if show_classic_sqr_tracker %} checked{% endif %}>
                     <label class="form-check-label" for="sqr-classic-visibility">Show SQR Tracker (Classic)</label>
