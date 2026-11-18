@@ -356,6 +356,17 @@
         <div class="settings-admin-wrap">
             {# ── Backup & Restore settings (admin only) ─────────────────────────── #}
             {% if request.user.role == 'admin' %}
+            <section class="glass-card settings-card mb-3" id="sqr-classic-setting" data-settings-url="{% url 'hub:sqr-tracker-settings' %}" aria-labelledby="sqr-classic-setting-title">
+                {% csrf_token %}
+                <h3 id="sqr-classic-setting-title">SQR tracker visibility</h3>
+                <p class="settings-card__intro">Global admin setting for all users. Saves immediately, separately from your personal settings.</p>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" id="sqr-classic-visibility" aria-describedby="sqr-classic-status"{% if show_classic_sqr_tracker %} checked{% endif %}>
+                    <label class="form-check-label" for="sqr-classic-visibility">Show SQR Tracker (Classic)</label>
+                </div>
+                <p class="small text-muted mt-2 mb-0" id="sqr-classic-status" role="status" aria-live="polite">Saved visibility applies when users reload SQR. Records are not deleted.</p>
+            </section>
+            <script src="{% static 'js/sqr-classic-visibility.js' %}"></script>
             {% include "accounts/_recovery_center.html" %}
             {% endif %}
         </div>

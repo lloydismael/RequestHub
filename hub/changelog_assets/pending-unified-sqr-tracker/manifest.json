@@ -1,0 +1,38 @@
+{
+  "version": "next",
+  "revision": "73ab83f53d3eb0469bed6c3847ad198e399bc1e1",
+  "generated_at": "2026-11-17T04:27:38+08:00",
+  "commits": [
+    {
+      "sha": "73ab83f53d3eb0469bed6c3847ad198e399bc1e1",
+      "parent_sha": "d3c9f98bc0f2f1ed0687f7407ef81723312efac6",
+      "type": "new",
+      "title": "Finalize unified SQR Tracker preview",
+      "comparisons": [
+        {
+          "title": "SQR Tracker controls",
+          "before_text": "The previous tracker shell before results load.",
+          "after_text": "The updated tracker shell and its rendered layout controls; client-populated results are not shown.",
+          "evidence_kind": "ui",
+          "before_image": "pending-unified-sqr-tracker/tracker-shell-before.webp",
+          "after_image": "pending-unified-sqr-tracker/tracker-shell-after.webp",
+          "before_revision": "d3c9f98bc0f2f1ed0687f7407ef81723312efac6",
+          "after_revision": "73ab83f53d3eb0469bed6c3847ad198e399bc1e1",
+          "capture_note": "Packaged ui capture, recipe affected-screens. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled."
+        },
+        {
+          "title": "Project Performance Tracking controls",
+          "before_text": "The previous performance dashboard headings and controls.",
+          "after_text": "The updated dashboard headings and controls; client-populated data is not shown.",
+          "evidence_kind": "ui",
+          "before_image": "pending-unified-sqr-tracker/performance-shell-before.webp",
+          "after_image": "pending-unified-sqr-tracker/performance-shell-after.webp",
+          "before_revision": "d3c9f98bc0f2f1ed0687f7407ef81723312efac6",
+          "after_revision": "73ab83f53d3eb0469bed6c3847ad198e399bc1e1",
+          "capture_note": "Packaged ui capture, recipe affected-screens. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled."
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

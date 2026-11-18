@@ -164,7 +164,11 @@ def configure_form(form, schema=None, *, definition=None, answers=None):
             field = core.pop(name)
             _configure_allowed_values(form, name, field, spec, key)
         if custom or version is not None or explicit:
-            field.label = spec.get("label", field.label)
+            canonical_sqr_field = (not custom and key in {"sqr_tracker_edit", "sqr_delivery"}
+                and name in {"schedule_performance", "budget_effort_performance", "quality_performance",
+                             "delivery_actual_finish_date", "managed_support_start_date", "managed_support_end_date"})
+            if not canonical_sqr_field:
+                field.label = spec.get("label", field.label)
             field.help_text = spec.get("help_text", field.help_text)
             field.widget.attrs["placeholder"] = spec.get("placeholder", field.widget.attrs.get("placeholder", ""))
         field.widget.attrs["data-form-label"] = str(field.label or name.replace("_", " ").capitalize())
@@ -200,6 +204,8 @@ def configure_form(form, schema=None, *, definition=None, answers=None):
         ordered[name] = field
     ordered.update(core)
     form.fields = ordered
+    if key in {"sqr_tracker_edit", "sqr_delivery"}:
+        form.apply_maintenance_notice()
     token = signing.dumps({"key": key, "version": version.pk if version else None}, salt=TOKEN_SALT)
     form.fields[TOKEN_FIELD] = forms.CharField(required=False, widget=forms.HiddenInput(), initial=token)
     form.initial[TOKEN_FIELD] = posted or token

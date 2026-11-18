@@ -6,11 +6,14 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=23">
 {% if active_sqr_tab != 'reports' %}
-<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=4">
-<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=7" defer></script>
+<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'css/sqr-filter-controls.css' %}?v=1">
+<script src="{% static 'js/sqr-filter-core.js' %}?v=3" defer></script>
+<script src="{% static 'js/sqr-filter-controls.js' %}?v=1" defer></script>
+<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=12" defer></script>
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
-<script src="{% static 'js/sqr-performance.js' %}?v=5" defer></script>
+<script src="{% static 'js/sqr-performance.js' %}?v=6" defer></script>
 {% endif %}
 {% endblock %}
 
@@ -19,7 +22,7 @@
     <div class="col-12">
 
         {# ── Header card ──────────────────────────────────────────────────── #}
-        <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme" data-sqr-header{% if is_pm and active_sqr_tab != 'reports' and request.GET.view == 'performance' and 'focus' not in request.GET %} hidden{% endif %}>
+        <div class="glass-card p-3 mb-3 lg-enter" data-lg-delay="0" data-navbar-surface="theme" data-sqr-header data-sqr-initial-view="{{ active_sqr_view }}"{% if active_sqr_view == 'performance' and active_sqr_tab != 'reports' %} hidden{% endif %}>
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
                 <div>
                     <h2 class="h5 mb-0"><i class="bi bi-clipboard-data-fill me-2 text-primary"></i>Service Quotation Request</h2>
@@ -27,14 +30,14 @@
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     {% if is_pm %}
                         <div class="d-flex align-items-center gap-2">
-                            <a href="{% url 'hub:sqr' %}?view=tracker" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and request.GET.view != 'performance' %} aria-current="page"{% endif %}>
+                            <a href="{% url 'hub:sqr' %}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and active_sqr_view != 'performance' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-table me-1" aria-hidden="true"></i>To SQR Tracker
                             </a>
                             <a href="{% url 'hub:sqr' %}?tab=reports" class="btn btn-sm sqr-toggle-btn lg-btn btn-outline-primary lg-btn--ghost"{% if active_sqr_tab == 'reports' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-bar-chart-line-fill me-1" aria-hidden="true"></i>To Reports
                             </a>
                         </div>
-                        {% if active_sqr_tab != 'reports' %}
+                        {% if active_sqr_tab != 'reports' and show_classic_sqr_tracker %}
                         <div class="sqr-toolbar-search-wrap" aria-label="SQR quick search" data-sqr-tracker-only>
                             <div class="mgmt-search-box sqr-toolbar-search-box" role="search" aria-label="Search SQR records">
                                 <i class="bi bi-search mgmt-search-icon"></i>
@@ -62,17 +65,21 @@
                     {% endif %}
                 </div>
             </div>
+            {% if sqr_view_notice %}<p class="alert alert-info mt-3 mb-0" role="status">{{ sqr_view_notice }}</p>{% endif %}
             {% if active_sqr_tab != 'reports' %}
             <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
-                <div class="sqr-view-toggle" role="group" aria-label="SQR table view selector">
-                    <button type="button" class="btn btn-sm btn-primary" data-sqr-view-button="tracker" aria-pressed="true">
-                        <i class="bi bi-table me-1"></i>SQR Tracker
+                <div class="sqr-view-toggle" role="group" aria-label="SQR tracker selector">
+                    <button type="button" class="btn btn-sm{% if active_sqr_view == 'prototype' %} btn-primary{% else %} btn-outline-primary{% endif %}" data-sqr-view-button="prototype" aria-pressed="{% if active_sqr_view == 'prototype' %}true{% else %}false{% endif %}">
+                        <i class="bi bi-stars me-1" aria-hidden="true"></i>SQR Tracker
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-sqr-view-button="prototype" aria-pressed="false">
-                        <i class="bi bi-stars me-1"></i>SQR Tracker Prototype
+                    {% if show_classic_sqr_tracker %}
+                    <button type="button" class="btn btn-sm{% if active_sqr_view == 'tracker' %} btn-primary{% else %} btn-outline-primary{% endif %}" data-sqr-view-button="tracker" aria-pressed="{% if active_sqr_view == 'tracker' %}true{% else %}false{% endif %}">
+                        <i class="bi bi-table me-1" aria-hidden="true"></i>SQR Tracker (Classic)
                     </button>
+                    {% endif %}
                 </div>
             </div>
+            {% if show_classic_sqr_tracker %}
             <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only>
                 <div class="sqr-filter-toolbar">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
@@ -191,7 +198,6 @@
                     </div>
                 </div>
             </div>
-            {% endif %}
             {# Summary badges — clickable filters #}
             <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-badge-filters" data-sqr-tracker-only
                  data-default-my-assigned="{% if default_my_assigned_filter %}1{% else %}0{% endif %}"
@@ -238,7 +244,9 @@
                 </button>
                 {% endif %}
             </div>
-            {# SQR Tracker Prototype stage filters: rendered by sqr-tracker-prototype.js #}
+            {% endif %}
+            {% endif %}
+            {# SQR Tracker stage filters: rendered by sqr-tracker-prototype.js #}
             <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-proto-pipeline" role="group" aria-label="Filter by pipeline stage" data-sqr-prototype-only hidden></div>
         </div>
 
@@ -560,10 +568,11 @@
                 })();
             </script>
         {% else %}
+        {% if show_classic_sqr_tracker %}
         {# ── Main Tracker Table ────────────────────────────────────────────── #}
         {% comment %}No lg-enter here: animating/compositing a card that wraps
            the whole 43-column table stalls first paint.{% endcomment %}
-        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker">
+        <div class="glass-card p-2 sqr-view-panel" data-sqr-view-panel="tracker"{% if active_sqr_view != 'tracker' %} hidden{% endif %}>
             <div id="sqr-pm-tracker-focus" class="sqr-pm-focus-notice" hidden>
                 <span id="sqr-pm-tracker-focus-label" role="status"></span>
                 <button type="button" id="sqr-pm-tracker-focus-dismiss" class="btn btn-outline-primary">Dismiss focus &amp; restore filters</button>
@@ -623,13 +632,13 @@
                             <th class="sqr-stage-delivery">Assigned PM</th>
                             <th class="sqr-stage-delivery">Assigned SSE</th>
                             <th class="sqr-stage-delivery">Start Date</th>
-                            <th class="sqr-stage-delivery">Target Finish Date</th>
+                            <th class="sqr-stage-delivery">Finish Date</th>
                             <th class="sqr-stage-delivery">Overall Status</th>
-                            <th class="sqr-stage-delivery">Health Status</th>
+                            <th class="sqr-stage-delivery">Schedule Performance</th>
+                            <th class="sqr-stage-delivery">Budget/Effort Performance</th>
+                            <th class="sqr-stage-delivery">Quality Performance</th>
                             <th class="sqr-stage-delivery">Overall Progress %</th>
                             <th class="sqr-stage-delivery">Key Updates / Risks / Issues</th>
-                            <th class="sqr-stage-delivery">Actual Finish Date</th>
-                            <th class="sqr-stage-delivery">Completion Signed Date</th>
                             <th class="sqr-stage-delivery">Completion Warranty End Date</th>
                             <th class="sqr-stage-delivery">Maintenance Start Date</th>
                             <th class="sqr-stage-delivery">Maintenance End Date</th>
@@ -798,8 +807,7 @@
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="assigned_sse" data-sqr-type="select" data-sqr-value="{{ item.assigned_sse_id|default:'' }}"><span class="sqr-display">{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username }}{% else %}&ndash;{% endif %}</span></td>
                             {# AA: Start Date #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_start_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_start_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_start_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
-                            {# AG: Target Finish Date #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_target_finish_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_target_finish_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_target_finish_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_actual_finish_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_actual_finish_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_actual_finish_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
                             {# AB: Overall Status #}
                             <td class="sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="overall_status" data-sqr-type="select" data-sqr-value="{{ item.overall_status|default:'' }}">
                                 <span class="sqr-display">
@@ -818,24 +826,9 @@
                                 {% endif %}
                                 </span>
                             </td>
-                            {# AC: Health Status #}
-                            <td class="sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_health" data-sqr-type="select" data-sqr-value="{{ item.delivery_health|default:'' }}">
-                                <span class="sqr-display">
-                                {% if item.delivery_health == 'on_track' %}
-                                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle me-1"></i>On Track</span>
-                                {% elif item.delivery_health == 'off_track' %}
-                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle"><i class="bi bi-exclamation-triangle me-1"></i>Off Track</span>
-                                {% elif item.delivery_health == 'at_risk' %}
-                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-shield-exclamation me-1"></i>At Risk</span>
-                                {% elif item.delivery_health == 'completed' %}
-                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-patch-check me-1"></i>Completed</span>
-                                {% elif item.delivery_health == 'cancelled' %}
-                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"><i class="bi bi-slash-circle me-1"></i>Cancelled</span>
-                                {% else %}
-                                    <span class="text-muted small">&ndash;</span>
-                                {% endif %}
-                                </span>
-                            </td>
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='schedule_performance' value=item.schedule_performance green='on_track' green_label='On Track' red='delayed' red_label='Delayed' editable=True %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='budget_effort_performance' value=item.budget_effort_performance green='within_budget' green_label='Within Budget' red='over_budget' red_label='Over Budget' editable=True %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='quality_performance' value=item.quality_performance green='met' green_label='Met' red='unmet' red_label='Unmet' editable=True %}
                             {# AD: Overall Progress % #}
                             <td class="sqr-inline-cell" style="min-width:120px;" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_progress" data-sqr-type="number" data-sqr-value="{{ item.delivery_progress|default:'' }}">
                                 <span class="sqr-display">
@@ -857,28 +850,7 @@
                             </td>
                             {# AE: Key Updates/Risks/Issues #}
                             <td class="cell-wrap small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="key_updates_risks" data-sqr-type="text" data-sqr-value="{{ item.key_updates_risks|default:''|escapejs }}"><span class="sqr-display">{{ item.key_updates_risks|truncatechars:80|default:"&ndash;" }}</span></td>
-                            {# AF: Actual Finish Date #}
-                            <td class="small sqr-inline-cell"
-                                data-sqr-pk="{{ item.pk }}"
-                                data-sqr-field="delivery_actual_finish_date"
-                                data-sqr-type="date"
-                                data-sqr-value="{{ item.delivery_actual_finish_date|date:'Y-m-d'|default:'' }}"
-                                data-sqr-target-date="{{ item.delivery_target_finish_date|date:'Y-m-d'|default:'' }}">
-                                <span class="sqr-display">
-                                {% if item.delivery_actual_finish_date %}
-                                    {% if item.delivery_target_finish_date and item.delivery_actual_finish_date > item.delivery_target_finish_date %}
-                                        <span class="text-danger">{{ item.delivery_actual_finish_date|date:"M d, Y" }}</span>
-                                    {% else %}
-                                        <span class="text-success">{{ item.delivery_actual_finish_date|date:"M d, Y" }}</span>
-                                    {% endif %}
-                                {% else %}
-                                    <span class="text-muted">&ndash;</span>
-                                {% endif %}
-                                </span>
-                            </td>
-                            {# AH: Completion Signed Date #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="delivery_completion_signed_date" data-sqr-type="date" data-sqr-value="{{ item.delivery_completion_signed_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.delivery_completion_signed_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
-                            {# AI: Completion Warranty End Date — computed: Completion Signed Date + 30 days (Deployment scopes) #}
+                            {# Warranty uses Finish Date + 30 days for independently eligible scopes. #}
                             <td class="small" data-sqr-computed="post_svc_warranty_end_date">
                                 {% if item.computed_post_svc_warranty_end_date %}
                                     {{ item.computed_post_svc_warranty_end_date|date:"M d, Y" }}
@@ -888,14 +860,7 @@
                             </td>
                             {# AJ: Maintenance Start Date — scope + managed support amount required #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="managed_support_start_date" data-sqr-type="date" data-sqr-value="{{ item.managed_support_start_date|date:'Y-m-d'|default:'' }}" data-sqr-computed="support_start_date"><span class="sqr-display">{% if item.computed_support_start_date %}{{ item.computed_support_start_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</span></td>
-                            {# AK: Maintenance End Date — computed: Col AJ + 365 days #}
-                            <td class="small" data-sqr-computed="managed_support_end_date">
-                                {% if item.computed_managed_support_end_date %}
-                                    {{ item.computed_managed_support_end_date|date:"M d, Y" }}
-                                {% else %}
-                                    <span class="text-muted fst-italic">NA</span>
-                                {% endif %}
-                            </td>
+                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="managed_support_end_date" data-sqr-type="date" data-sqr-value="{{ item.managed_support_end_date|date:'Y-m-d'|default:'' }}" data-sqr-computed="managed_support_end_date"><span class="sqr-display">{% if item.computed_managed_support_end_date %}{{ item.computed_managed_support_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</span><div class="text-body-secondary" data-sqr-maintenance-notice role="status"{% if not item.maintenance_notice %} hidden{% endif %}>{{ item.maintenance_notice }}</div></td>
                             {# AK: PO/PNL Date — first billing-stage column #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="po_pnl_date" data-sqr-type="date" data-sqr-value="{{ item.po_pnl_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.po_pnl_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
                             {# AL: PO Remarks — multi-line text #}
@@ -928,8 +893,7 @@
                             <td class="small">{% if item.assigned_sse %}{{ item.assigned_sse.get_full_name|default:item.assigned_sse.username }}{% else %}&ndash;{% endif %}</td>
                             {# AA: Start Date #}
                             <td class="small">{{ item.delivery_start_date|date:"M d, Y"|default:"&ndash;" }}</td>
-                            {# AG: Target Finish Date #}
-                            <td class="small">{{ item.delivery_target_finish_date|date:"M d, Y"|default:"&ndash;" }}</td>
+                            <td class="small">{{ item.delivery_actual_finish_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# AB: Overall Status #}
                             <td>
                                 {% if item.overall_status == 'on_hold' %}<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">On Hold</span>
@@ -939,15 +903,9 @@
                                 {% elif item.overall_status == 'cancelled' %}<span class="badge bg-danger-subtle text-danger border border-danger-subtle">Cancelled</span>
                                 {% else %}<span class="text-muted small">&ndash;</span>{% endif %}
                             </td>
-                            {# AC: Health Status #}
-                            <td>
-                                {% if item.delivery_health == 'on_track' %}<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check-circle me-1"></i>On Track</span>
-                                {% elif item.delivery_health == 'off_track' %}<span class="badge bg-warning-subtle text-warning border border-warning-subtle"><i class="bi bi-exclamation-triangle me-1"></i>Off Track</span>
-                                {% elif item.delivery_health == 'at_risk' %}<span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-shield-exclamation me-1"></i>At Risk</span>
-                                {% elif item.delivery_health == 'completed' %}<span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-patch-check me-1"></i>Completed</span>
-                                {% elif item.delivery_health == 'cancelled' %}<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"><i class="bi bi-slash-circle me-1"></i>Cancelled</span>
-                                {% else %}<span class="text-muted small">&ndash;</span>{% endif %}
-                            </td>
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='schedule_performance' value=item.schedule_performance green='on_track' green_label='On Track' red='delayed' red_label='Delayed' editable=False %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='budget_effort_performance' value=item.budget_effort_performance green='within_budget' green_label='Within Budget' red='over_budget' red_label='Over Budget' editable=False %}
+                            {% include 'hub/partials/sqr_assessment_cell.html' with field='quality_performance' value=item.quality_performance green='met' green_label='Met' red='unmet' red_label='Unmet' editable=False %}
                             {# AD: Overall Progress % #}
                             <td style="min-width:120px;">
                                 {% if item.delivery_progress is not None %}
@@ -963,24 +921,12 @@
                             </td>
                             {# AE: Key Updates #}
                             <td class="cell-wrap small">{{ item.key_updates_risks|truncatechars:80|default:"&ndash;" }}</td>
-                            {# AF: Actual Finish Date #}
-                            <td class="small">
-                                {% if item.delivery_actual_finish_date %}
-                                    {% if item.delivery_target_finish_date and item.delivery_actual_finish_date > item.delivery_target_finish_date %}
-                                        <span class="text-danger">{{ item.delivery_actual_finish_date|date:"M d, Y" }}</span>
-                                    {% else %}
-                                        <span class="text-success">{{ item.delivery_actual_finish_date|date:"M d, Y" }}</span>
-                                    {% endif %}
-                                {% else %}<span class="text-muted">&ndash;</span>{% endif %}
-                            </td>
-                            {# AH: Completion Signed Date #}
-                            <td class="small">{{ item.delivery_completion_signed_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# AI: Completion Warranty End Date #}
                             <td class="small">{% if item.computed_post_svc_warranty_end_date %}{{ item.computed_post_svc_warranty_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</td>
                             {# AJ: Maintenance Start Date #}
                             <td class="small">{% if item.computed_support_start_date %}{{ item.computed_support_start_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</td>
                             {# AJ: Maintenance End Date #}
-                            <td class="small">{% if item.computed_managed_support_end_date %}{{ item.computed_managed_support_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}</td>
+                            <td class="small">{% if item.computed_managed_support_end_date %}{{ item.computed_managed_support_end_date|date:"M d, Y" }}{% else %}<span class="text-muted fst-italic">NA</span>{% endif %}<div class="text-body-secondary" data-sqr-maintenance-notice role="status"{% if not item.maintenance_notice %} hidden{% endif %}>{{ item.maintenance_notice }}</div></td>
                             {# AK: PO/PNL Date #}
                             <td class="small">{{ item.po_pnl_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# AL: PO Remarks #}
@@ -1066,6 +1012,7 @@
             </div>
             {% include 'hub/partials/pagination.html' with pagination_id='sqr-pagination' %}
         </div>
+        {% endif %}
         {% if is_pm %}
         {% include "hub/partials/sqr_performance.html" %}
         {% endif %}
@@ -1131,8 +1078,8 @@
             <button type="button" class="btn sqr-approval-option sqr-approval-option--draft" id="sqr-export-tracker-btn">
                 <span class="sqr-approval-option__icon"><i class="bi bi-clipboard-data"></i></span>
                 <span>
-                    <span class="sqr-approval-option__label">SQR Tracker</span>
-                    <span class="sqr-approval-option__hint">Download the standard SQR tracker Excel file.</span>
+                    <span class="sqr-approval-option__label">SQR Tracker — All records</span>
+                    <span class="sqr-approval-option__hint">Download all authorized SQR records. Screen filters do not limit this Excel export.</span>
                 </span>
                 <span class="sqr-approval-option__arrow"><i class="bi bi-download"></i></span>
             </button>
@@ -2221,9 +2168,9 @@
     var pendingApprovalChange = null;
     var CLOSED_LOST_LOCKED_FIELDS = new Set([
         'po_pnl_date', 'assigned_pm', 'assigned_sse', 'delivery_start_date',
-        'delivery_target_finish_date', 'overall_status', 'delivery_health',
+        'overall_status', 'schedule_performance', 'budget_effort_performance', 'quality_performance',
         'delivery_progress', 'key_updates_risks', 'delivery_actual_finish_date',
-        'delivery_completion_signed_date', 'managed_support_start_date',
+        'managed_support_start_date', 'managed_support_end_date',
         'revenue_date', 'revenue_source', 'revenue_reference_no', 'revenue_status',
         'revenue_remarks', 'revenue_overview', 'revenue_declaration'
     ]);
@@ -2366,6 +2313,9 @@
         status: {submitted:'For Processing', for_revision:'For Revision', reviewed:'Approved', on_hold:'On Hold'},
         proposal_status: {submitted_pending:'Submitted', negotiation_review:'On Review', closed_won:'Closed-Won', closed_lost:'Closed-Lost', closed_canceled:'Closed-Canceled'},
         overall_status: {on_hold:'On Hold', planning:'Planning', in_progress:'In Progress', completed:'Completed', cancelled:'Cancelled'},
+        schedule_performance: {on_track:'On Track', at_risk:'At Risk', delayed:'Delayed'},
+        budget_effort_performance: {within_budget:'Within Budget', at_risk:'At Risk', over_budget:'Over Budget'},
+        quality_performance: {met:'Met', at_risk:'At Risk', unmet:'Unmet'},
         delivery_health: {on_track:'On Track', off_track:'Off Track', at_risk:'At Risk', completed:'Completed', cancelled:'Cancelled'},
         project_details: {'Deployment Only':'Deployment Only','On-Call Services':'On-Call Services','Maintenance':'Maintenance','Project Management':'Project Management','Deployment and Project Management':'Deployment and Project Management'},
         customer_company: {ESS:'ESS', HP:'HP', Dell:'Dell', ENS:'ENS', ESG:'ESG', ISG:'ISG', Other:'Other'},
@@ -2377,7 +2327,9 @@
         status: [['','— Select Status —'],['submitted','For Processing'],['for_revision','For Revision'],['reviewed','Approved'],['on_hold','On Hold']],
         proposal_status: [['','—'],['submitted_pending','Submitted'],['negotiation_review','On Review'],['closed_won','Closed-Won'],['closed_lost','Closed-Lost'],['closed_canceled','Closed-Canceled']],
         overall_status: [['','—'],['on_hold','On Hold'],['planning','Planning'],['in_progress','In Progress'],['completed','Completed'],['cancelled','Cancelled']],
-        delivery_health: [['','—'],['on_track','On Track'],['off_track','Off Track'],['at_risk','At Risk'],['completed','Completed'],['cancelled','Cancelled']],
+        schedule_performance: [['','Not assessed'],['on_track','On Track'],['at_risk','At Risk'],['delayed','Delayed']],
+        budget_effort_performance: [['','Not assessed'],['within_budget','Within Budget'],['at_risk','At Risk'],['over_budget','Over Budget']],
+        quality_performance: [['','Not assessed'],['met','Met'],['at_risk','At Risk'],['unmet','Unmet']],
         project_details: [['','— Select Scope —'],['Deployment Only','Deployment Only'],['On-Call Services','On-Call Services'],['Maintenance','Maintenance'],['Project Management','Project Management'],['Deployment and Project Management','Deployment and Project Management']],
         customer_company: [['','— Select —'],['ESS','ESS'],['HP','HP'],['Dell','Dell'],['ENS','ENS'],['ESG','ESG'],['ISG','ISG'],['Other','Other']],
         revenue_source: [['','— Select —'],['internal','Internal'],['invoiced','Invoiced'],['unbilled','Unbilled']],
@@ -2403,10 +2355,12 @@
             sse_manhrs: 'SSE Man-hrs', pm_manhrs: 'PM Man-hrs', managed_support_amount: 'Maintenance Amt.',
             discount_rate: 'Discount', status: 'Status', proposal_status: 'Proposal Status',
             po_pnl_date: 'PO / PNL Date', assigned_pm: 'Assigned PM', assigned_sse: 'Assigned SSE',
-            delivery_start_date: 'Delivery Start', delivery_target_finish_date: 'Target Finish',
-            overall_status: 'Overall Status', delivery_health: 'Delivery Health', delivery_progress: 'Delivery Progress',
-            key_updates_risks: 'Updates/Risks', delivery_actual_finish_date: 'Actual Finish',
-            delivery_completion_signed_date: 'Completion Signed', managed_support_start_date: 'Maintenance Start',
+            delivery_start_date: 'Start Date',
+            overall_status: 'Overall Status', schedule_performance: 'Schedule Performance',
+            budget_effort_performance: 'Budget/Effort Performance', quality_performance: 'Quality Performance',
+            delivery_progress: 'Delivery Progress', key_updates_risks: 'Updates/Risks',
+            delivery_actual_finish_date: 'Finish Date', managed_support_start_date: 'Maintenance Start',
+            managed_support_end_date: 'Maintenance End',
             revenue_date: 'Billed Date', revenue_source: 'Billing Type', revenue_reference_no: 'Billing Reference',
             revenue_status: 'Billing Status', revenue_remarks: 'PO Remarks', revenue_overview: 'Billing Remarks',
             revenue_declaration: 'Revenue Declaration'
@@ -2459,6 +2413,21 @@
             in_progress: 'bg-primary-subtle text-primary border border-primary-subtle',
             completed: 'bg-success-subtle text-success border border-success-subtle',
             cancelled: 'bg-danger-subtle text-danger border border-danger-subtle'
+        },
+        schedule_performance: {
+            on_track: 'bg-success-subtle text-success border border-success-subtle',
+            at_risk: 'bg-warning-subtle text-warning border border-warning-subtle',
+            delayed: 'bg-danger-subtle text-danger border border-danger-subtle'
+        },
+        budget_effort_performance: {
+            within_budget: 'bg-success-subtle text-success border border-success-subtle',
+            at_risk: 'bg-warning-subtle text-warning border border-warning-subtle',
+            over_budget: 'bg-danger-subtle text-danger border border-danger-subtle'
+        },
+        quality_performance: {
+            met: 'bg-success-subtle text-success border border-success-subtle',
+            at_risk: 'bg-warning-subtle text-warning border border-warning-subtle',
+            unmet: 'bg-danger-subtle text-danger border border-danger-subtle'
         },
         delivery_health: {
             on_track: 'bg-success-subtle text-success border border-success-subtle',
@@ -2537,7 +2506,9 @@
                 || !Object.prototype.hasOwnProperty.call(labels, value)) {
             var placeholder = document.createElement('span');
             placeholder.className = 'text-muted small';
-            placeholder.textContent = '\u2013';
+            var assessment = ['schedule_performance', 'budget_effort_performance', 'quality_performance'].indexOf(field) !== -1;
+            placeholder.textContent = assessment
+                ? (value ? 'Not assessed (review required)' : 'Not assessed') : '\u2013';
             container.appendChild(placeholder);
             return;
         }
@@ -2813,7 +2784,7 @@
             cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[normalizedValue] || normalizedValue) + '. Press Enter to edit.');
         } else if (['revenue_remarks', 'revenue_overview', 'key_updates_risks'].indexOf(field) !== -1) {
             renderMultilineText(displayEl, getDisplay(field, normalizedValue, cell));
-        } else if (['proposal_status', 'overall_status', 'delivery_health', 'revenue_declaration',
+        } else if (['proposal_status', 'overall_status', 'schedule_performance', 'budget_effort_performance', 'quality_performance', 'delivery_health', 'revenue_declaration',
                     'revenue_status', 'delivery_progress'].indexOf(field) !== -1) {
             renderStructuredDisplay(displayEl, field, normalizedValue);
         } else {
@@ -2822,6 +2793,13 @@
         cell.classList.add('sqr-saved');
         setTimeout(function() { cell.classList.remove('sqr-saved'); }, 1200);
         var row = cell.closest('tr');
+        if (row && 'maintenance_notice' in data) {
+            var maintenanceNotice = row.querySelector('[data-sqr-maintenance-notice]');
+            if (maintenanceNotice) {
+                maintenanceNotice.textContent = data.maintenance_notice || '';
+                maintenanceNotice.hidden = !data.maintenance_notice;
+            }
+        }
 
         if (field === 'proposal_status' && row) {
             row.classList.toggle(
@@ -2903,13 +2881,22 @@
                 if (msaDisp) msaDisp.innerHTML = pesoFmt(msaVal);
             }
         }
-        if ('support_start_date' in data && row) {
-            var ajCellComputed = row.querySelector('[data-sqr-computed="support_start_date"]');
-            if (ajCellComputed) ajCellComputed.querySelector('.sqr-display').innerHTML = data.support_start_date || '<span class="text-muted fst-italic">NA</span>';
-        }
-        if ('managed_support_end_date' in data && row) {
-            var akCellComputed = row.querySelector('[data-sqr-computed="managed_support_end_date"]');
-            if (akCellComputed) akCellComputed.innerHTML = data.managed_support_end_date || '<span class="text-muted fst-italic">NA</span>';
+        if (row) {
+            [
+                ['post_svc_warranty_end_date', null],
+                ['support_start_date', 'maintenance_start_value'],
+                ['managed_support_end_date', 'maintenance_end_value']
+            ].forEach(function(keys) {
+                var displayKey = keys[0], rawKey = keys[1];
+                if (!(displayKey in data) && !(rawKey && rawKey in data)) return;
+                var dateCell = row.querySelector('[data-sqr-computed="' + displayKey + '"]');
+                if (!dateCell) return;
+                if (rawKey && rawKey in data) dateCell.dataset.sqrValue = data[rawKey] || '';
+                if (displayKey in data) {
+                    var dateDisplay = dateCell.querySelector('.sqr-display') || dateCell;
+                    dateDisplay.textContent = data[displayKey] || 'NA';
+                }
+            });
         }
         if (('reviewed_at' in data || 'validity_due_date' in data) && row) {
             if ('reviewed_at' in data) {
@@ -2966,22 +2953,6 @@
                 cell.title = 'Choose how to open the approved SQR quotation email.';
                 openApprovalChoiceModal(data.approval_email_draft_url, data.approval_email_eml_url);
             }
-        }
-        if (field === 'delivery_completion_signed_date' && row) {
-            var naHtml = '<span class="text-muted fst-italic">NA</span>';
-            var aiCell = row.querySelector('[data-sqr-computed="post_svc_warranty_end_date"]');
-            if (aiCell) aiCell.innerHTML = data.post_svc_warranty_end_date || naHtml;
-            var ajCell = row.querySelector('[data-sqr-computed="support_start_date"] .sqr-display');
-            if (ajCell) ajCell.innerHTML = data.support_start_date || naHtml;
-            var akCell = row.querySelector('[data-sqr-computed="managed_support_end_date"]');
-            if (akCell) akCell.innerHTML = data.managed_support_end_date || naHtml;
-        }
-        if (field === 'managed_support_start_date' && row) {
-            var naHtml2 = '<span class="text-muted fst-italic">NA</span>';
-            var ajCell2 = row.querySelector('[data-sqr-computed="support_start_date"] .sqr-display');
-            if (ajCell2) ajCell2.innerHTML = data.support_start_date || naHtml2;
-            var akCell2 = row.querySelector('[data-sqr-computed="managed_support_end_date"]');
-            if (akCell2) akCell2.innerHTML = data.managed_support_end_date || naHtml2;
         }
         if (typeof window.refreshSqrReports === 'function') {
             window.refreshSqrReports();
@@ -3466,15 +3437,14 @@
     var prototypeControls = Array.from(document.querySelectorAll('[data-sqr-prototype-only]'));
 
     function setView(viewName) {
-        // Retired views ('esg') fall back to 'tracker'.
+        // Only panels rendered by the server can be activated.
         var available = {};
         panels.forEach(function (panel) { available[panel.dataset.sqrViewPanel] = true; });
         // A disabled view button (under maintenance) cannot be activated, even from a saved preference.
         buttons.forEach(function (button) {
             if (button.disabled) available[button.dataset.sqrViewButton] = false;
         });
-        var activeView = available[viewName] ? viewName : 'tracker';
-        if (!available[activeView]) activeView = 'tracker';
+        var activeView = available[viewName] ? viewName : 'prototype';
         if (header) header.hidden = activeView === 'performance';
         buttons.forEach(function (button) {
             var isActive = button.dataset.sqrViewButton === activeView;
@@ -3491,13 +3461,13 @@
         });
         prototypeControls.forEach(function (element) { element.hidden = activeView !== 'prototype'; });
         navLinks.forEach(function (link) {
-            var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'tracker');
+            var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'prototype');
             link.classList.toggle('active', isCurrent);
             if (isCurrent) link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         });
         trackerLinks.forEach(function (link) {
-            if (activeView === 'tracker') link.setAttribute('aria-current', 'page');
+            if (activeView !== 'performance') link.setAttribute('aria-current', 'page');
             else link.removeAttribute('aria-current');
         });
         document.title = (activeView === 'performance' ? 'PPT' : 'SQR') + ' · Request Hub';
@@ -3520,12 +3490,10 @@
         });
     });
 
-    var savedView = 'tracker';
-    try { savedView = window.localStorage.getItem(storageKey) || 'tracker'; } catch (error) {}
-    if (savedView === 'performance') savedView = 'tracker';
     var initialParams = new URLSearchParams(window.location.search);
     var requestedView = initialParams.has('focus') ? 'tracker' : initialParams.get('view');
-    setView(requestedView || savedView);
+    var initialView = header && header.dataset.sqrInitialView;
+    setView(initialView || requestedView || 'prototype');
 })();
 </script>
 
@@ -4114,74 +4082,4 @@
 </div>
 {% endif %}
 
-{% if active_sqr_tab != 'reports' %}
-<div class="sqr-approval-choice-modal" id="sqr-new-version-modal" aria-hidden="true">
-    <div class="sqr-approval-choice-modal__backdrop" data-sqr-new-version-close="true"></div>
-    <div class="sqr-approval-choice-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sqr-new-version-title" aria-describedby="sqr-new-version-desc" style="width: min(100%, 460px);">
-        <span class="sqr-approval-choice-modal__eyebrow"><i class="bi bi-stars"></i> What's new</span>
-        <h3 class="h4 mt-3 mb-2" id="sqr-new-version-title">A new version of SQR Tracker is available</h3>
-        <p class="text-muted mb-3" id="sqr-new-version-desc">Would you like to see it? Selecting OK takes you to the SQR Tracker Prototype tab.</p>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" id="sqr-new-version-dismiss">
-            <label class="form-check-label" for="sqr-new-version-dismiss">Don't show this message again</label>
-        </div>
-        <div class="sqr-approval-choice-modal__footer gap-2">
-            <button type="button" class="btn btn-outline-secondary" id="sqr-new-version-cancel">Cancel</button>
-            <button type="button" class="btn btn-primary" id="sqr-new-version-ok">OK</button>
-        </div>
-    </div>
-</div>
-<script>
-(function () {
-    'use strict';
-    var storageKey = 'requestHub.sqr.hideNewVersionNotice';
-    var modal = document.getElementById('sqr-new-version-modal');
-    var okBtn = document.getElementById('sqr-new-version-ok');
-    var cancelBtn = document.getElementById('sqr-new-version-cancel');
-    var dismissBox = document.getElementById('sqr-new-version-dismiss');
-    var viewStorageKey = 'requestHub.sqr.tableView';
-    if (!modal || !okBtn || !cancelBtn || !dismissBox) return;
-
-    function readFlag(key) {
-        try { return window.localStorage.getItem(key); } catch (error) { return null; }
-    }
-
-    // Skip when opted out, or when the user already lands on the prototype tab.
-    if (document.body.dataset.sqrFilterNavigation === '1' || readFlag(storageKey) === '1' || readFlag(viewStorageKey) === 'prototype') return;
-    var performancePanel = document.querySelector('[data-sqr-view-panel="performance"]');
-    if (performancePanel && !performancePanel.hidden) return;
-
-    var previousFocus = null;
-
-    function setVisible(isVisible) {
-        modal.classList.toggle('is-visible', isVisible);
-        modal.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
-    }
-
-    function close() {
-        if (dismissBox.checked) {
-            try { window.localStorage.setItem(storageKey, '1'); } catch (error) {}
-        }
-        setVisible(false);
-        if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus({preventScroll: true});
-    }
-
-    okBtn.addEventListener('click', function () {
-        close();
-        if (typeof window.setSqrView === 'function') window.setSqrView('prototype');
-    });
-    cancelBtn.addEventListener('click', close);
-    modal.addEventListener('click', function (event) {
-        if (event.target && event.target.getAttribute('data-sqr-new-version-close') === 'true') close();
-    });
-    document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && modal.classList.contains('is-visible')) close();
-    });
-
-    previousFocus = document.activeElement;
-    setVisible(true);
-    okBtn.focus({preventScroll: true});
-})();
-</script>
-{% endif %}
 {% endblock %}

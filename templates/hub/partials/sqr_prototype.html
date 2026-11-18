@@ -1,8 +1,17 @@
-{# Lazy shell for the SQR Tracker Prototype: records are fetched when the view is first opened. #}
+{# Lazy SQR Tracker shell: records are fetched when the view is first opened. #}
 <section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
          data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}"
-         aria-label="SQR Tracker Prototype">
-    <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list">
+         aria-label="SQR Tracker">
+    <div id="sqr-proto-filters" aria-label="Filter SQRs"></div>
+    <p id="sqr-proto-filter-notice" class="small text-secondary mb-2" role="status" hidden></p>
+    <p id="sqr-proto-result-notice" class="small mb-2" role="status" hidden></p>
+    <div class="sqr-proto__presentation" role="group" aria-label="Tracker presentation">
+        <button type="button" id="sqr-proto-list-view" class="btn btn-outline-primary" aria-pressed="true">List</button>
+        <button type="button" id="sqr-proto-table-view" class="btn btn-outline-primary" aria-pressed="false">Table</button>
+        <span id="sqr-proto-sort"></span>
+    </div>
+    <fieldset id="sqr-proto-date-columns" class="sqr-proto__date-columns" hidden><legend>Optional date columns</legend></fieldset>
+    <div class="sqr-proto__body" id="sqr-proto-body" data-mode="list" data-presentation="list">
         <aside class="sqr-proto__list" aria-label="SQR list">
             <div class="sqr-proto__tools">
                 <label class="visually-hidden" for="sqr-proto-search">Search SQRs</label>
@@ -12,6 +21,7 @@
                 </div>
             </div>
             <ul class="sqr-proto__items" id="sqr-proto-items"></ul>
+            <div id="sqr-proto-table" class="sqr-proto__table-scroll" role="region" aria-label="SQR results table; scroll horizontally for more columns" tabindex="0" hidden></div>
             <button type="button" class="btn btn-outline-primary sqr-proto__more" id="sqr-proto-more" hidden>Show more</button>
         </aside>
 

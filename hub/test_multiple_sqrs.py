@@ -80,6 +80,21 @@ class MultipleSqrTests(MultipleSqrFixtures, TestCase):
         self.assertEqual(send_email.call_count, 3)
         self.assertEqual(Notification.objects.filter(recipient=self.pm, source="SQR · New Submission").count(), 3)
 
+    def test_engineer_can_submit_training_scope_with_sse_hours(self):
+        self.client.force_login(self.engineer)
+        url = reverse("hub:sqr")
+        page = self.client.get(url)
+        scope_field = page.context["sqr_form"]["project_details"]
+        self.assertIn('<option value="Training">Training</option>', str(scope_field))
+
+        response = self.client.post(url, {**self.payload, "project_details": "Training"})
+
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        submission = SqrSubmission.objects.get(linked_request=self.rq)
+        self.assertEqual(submission.project_details, "Training")
+        self.assertEqual(submission.sse_manhrs, Decimal("20"))
+        self.assertIsNone(submission.managed_support_amount)
+
     def test_invalid_post_retains_reusable_request(self):
         self.create_sqr()
         self.client.force_login(self.engineer)

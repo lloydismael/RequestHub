@@ -6,6 +6,45 @@ from datetime import date, datetime
 from hub.models import SqrSubmission
 
 
+def build_assessment_snapshot(submission: SqrSubmission) -> dict:
+    indicators = {}
+    inconsistencies = []
+    assessed_count = 0
+    for field_name, choices in (
+        ("schedule_performance", SqrSubmission.SchedulePerformance),
+        ("budget_effort_performance", SqrSubmission.BudgetEffortPerformance),
+        ("quality_performance", SqrSubmission.QualityPerformance),
+    ):
+        value = getattr(submission, field_name)
+        if value in choices.values:
+            index = choices.values.index(value)
+            indicators[field_name] = {
+                "key": value, "label": choices.labels[index],
+                "state": ("good", "warning", "danger")[index],
+            }
+            assessed_count += 1
+        else:
+            indicators[field_name] = {"key": "", "label": "Not assessed", "state": "unknown"}
+            if value:
+                inconsistencies.append(f"Invalid {field_name} assessment.")
+    states = {indicator["state"] for indicator in indicators.values()}
+    if "danger" in states:
+        rating, label = "danger", "Action needed"
+    elif "warning" in states:
+        rating, label = "warning", "At Risk"
+    elif assessed_count == 3:
+        rating, label = "good", "Healthy"
+    elif assessed_count:
+        rating, label = "unknown", "Incomplete assessment"
+    else:
+        rating, label = "unknown", "Not assessed"
+    return {
+        "indicators": indicators, "overall_rating": rating, "overall_label": label,
+        "assessed_count": assessed_count, "assessment_total": 3,
+        "inconsistencies": inconsistencies,
+    }
+
+
 def _progress(value) -> int | None:
     if value is None:
         return None
@@ -38,20 +77,18 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
     status = submission.overall_status or "not_set"
     health = submission.delivery_health or "not_set"
     status_label = dict(SqrSubmission.OverallStatus.choices).get(status, status)
-    health_label = dict(SqrSubmission.DeliveryHealth.choices).get(health, health)
     if status == "not_set":
         status_label = "Not set"
-    if health == "not_set":
-        health_label = "Not set"
+    assessment = build_assessment_snapshot(submission)
     progress = _progress(submission.delivery_progress)
-    inconsistencies: list[str] = []
+    inconsistencies = list(assessment["inconsistencies"])
     start = _date(submission.delivery_start_date, "Start date", inconsistencies)
-    target = _date(submission.delivery_target_finish_date, "Target date", inconsistencies)
     finish = _date(submission.delivery_actual_finish_date, "Actual finish date", inconsistencies)
-    signed = _date(submission.delivery_completion_signed_date, "Completion signed date", inconsistencies)
+    maintenance_start = _date(submission.computed_support_start_date, "Maintenance start date", inconsistencies)
+    maintenance_end = _date(submission.computed_managed_support_end_date, "Maintenance end date", inconsistencies)
 
     # Malformed non-null finish evidence must not silently reopen delivery.
-    finished = bool(submission.delivery_actual_finish_date or submission.delivery_completion_signed_date)
+    finished = bool(submission.delivery_actual_finish_date or submission.legacy_delivery_completed)
     completed = status == "completed" or health == "completed" or finished
     cancelled = status == "cancelled" or health == "cancelled" or submission.proposal_status == "closed_canceled"
     operationally_open = not (
@@ -60,10 +97,10 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
     delivery_candidate = bool(
         submission.proposal_status == "closed_won"
         or status in SqrSubmission.OverallStatus.values
-        or submission.delivery_health
+        or health in {"completed", "cancelled"}
+        or any(getattr(submission, key) for key in assessment["indicators"])
         or submission.delivery_progress is not None
         or submission.delivery_start_date
-        or submission.delivery_target_finish_date
         or finished
     )
     missing_data = []
@@ -71,14 +108,14 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
         missing_data = [
             label for value, label in (
                 (submission.assigned_pm_id, "Assigned PM"),
-                (submission.delivery_health, "Delivery health"),
                 (progress is not None, "Progress"),
                 (start, "Start date"),
-                (target, "Target date"),
+                *((indicator["key"], label) for indicator, label in zip(
+                    assessment["indicators"].values(),
+                    ("Schedule Performance", "Budget/Effort Performance", "Quality Performance"),
+                )),
             ) if not value
         ]
-    if start and target and start > target:
-        inconsistencies.append("Start date is after target date")
     if start and finish and finish < start:
         inconsistencies.append("Actual finish date is before start date")
     if completed and progress is not None and progress < 100:
@@ -87,23 +124,18 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
         inconsistencies.append("Open delivery has progress at 100%")
     if completed and cancelled:
         inconsistencies.append("Conflicting completed and cancelled signals")
-    explicitly_open = status in {"planning", "in_progress", "on_hold"} or health in {
-        "on_track", "at_risk", "off_track",
-    }
-    if (completed or cancelled) and explicitly_open:
-        inconsistencies.append("Terminal delivery conflicts with open status or health")
+    if (completed or cancelled) and status in {"planning", "in_progress", "on_hold"}:
+        inconsistencies.append("Terminal delivery conflicts with open status")
 
-    days_to_target = (target - today).days if target else None
-    overdue = bool(operationally_open and days_to_target is not None and days_to_target < 0)
-    due_soon = bool(operationally_open and days_to_target is not None and 0 <= days_to_target <= 14)
     reasons = []
     priority = 6
+    for state, rank in (("danger", 0), ("warning", 2)):
+        for key, indicator in assessment["indicators"].items():
+            if indicator["state"] == state:
+                reasons.append({"key": key, "label": indicator["label"]})
+                priority = min(priority, rank)
     for condition, key, label, rank in (
-        (operationally_open and health == "off_track", "off_track", "Off Track", 0),
-        (overdue, "overdue", "Overdue", 1),
-        (operationally_open and health == "at_risk", "at_risk", "At Risk", 2),
         (operationally_open and status == "on_hold", "on_hold", "On Hold", 3),
-        (due_soon, "due_soon", "Due within 14 days", 4),
         (missing_data, "missing_data", "Missing delivery data", 5),
         (inconsistencies, "inconsistent_data", "Inconsistent delivery data", 5),
     ):
@@ -124,37 +156,13 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
     else:
         portfolio_status = "ongoing"
 
-    indicators = {
-        key: {"state": "unknown", "label": "N/R"}
-        for key in ("schedule", "scope", "resources", "customer", "risks")
-    }
-    schedule_end = finish if completed else today
-    valid_schedule = bool(
-        target and schedule_end and portfolio_status in {"ongoing", "closed"}
-        and (not start or start <= target)
-        and (not start or start <= schedule_end)
-    )
-    if valid_schedule:
-        delay = (schedule_end - target).days
-        state, label = (
-            ("danger", "Delay >2 wks") if delay > 14
-            else ("warning", "Delay ≤2 wks") if delay > 0
-            else ("good", "On target")
-        )
-        indicators["schedule"] = {"state": state, "label": label}
+    # Reuse tracker stage/billing semantics without introducing a module import cycle.
+    from .sqr_prototype import derive_stage, revenue_state
 
-    # Recorded delivery health is not evidence for any individual indicator.
-    recorded_rating = {
-        "on_track": "good", "completed": "good",
-        "at_risk": "warning", "off_track": "danger",
-    }.get(health, "unknown")
-    states = {indicators["schedule"]["state"], recorded_rating}
-    if operationally_open and status == "on_hold":
-        states.add("warning")
-    overall_rating = next(
-        (state for state in ("danger", "warning", "good") if state in states),
-        "unknown",
-    ) if portfolio_status in {"ongoing", "closed"} else "unknown"
+    stage, _ = derive_stage(submission)
+    warranty = submission.computed_post_svc_warranty_end_date if isinstance(
+        submission.delivery_actual_finish_date, date
+    ) else None
     return {
         "pk": submission.pk,
         "reference_code": submission.reference_code or "—",
@@ -166,31 +174,47 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
         "sse_name": sse_name,
         "status_key": status,
         "status_label": status_label,
-        "health_key": health,
-        "health_label": health_label,
+        "status": submission.status,
+        "overall_status": submission.overall_status or "",
+        "proposal_status": submission.proposal_status or "",
+        "approver_id": submission.pm_esg_reviewer_id,
+        "sse_id": str(submission.assigned_sse_id or ""),
+        "scope": submission.project_details or "",
+        "group": submission.customer_company or "",
+        "billing_type": submission.revenue_source or "",
+        "billing_state": revenue_state(submission),
+        "linked_request_id": str(submission.linked_request_id or ""),
+        "stage": stage,
+        "total": str(submission.computed_total_price or submission.quotation_total_price or 0),
+        **{key: indicator["key"] for key, indicator in assessment["indicators"].items()},
         "progress": progress,
         "start_date": start.isoformat() if start else None,
-        "target_date": target.isoformat() if target else None,
         "actual_finish_date": finish.isoformat() if finish else None,
-        "completion_signed_date": signed.isoformat() if signed else None,
+        "delivery_start_date": start.isoformat() if start else None,
+        "delivery_actual_finish_date": finish.isoformat() if finish else None,
+        "post_svc_warranty_end_date": warranty.isoformat() if warranty else None,
+        "managed_support_start_date": maintenance_start.isoformat() if maintenance_start else None,
+        "managed_support_end_date": maintenance_end.isoformat() if maintenance_end else None,
         "updates_risks": updates,
         "active_delivery": delivery_candidate and operationally_open,
         "delivery_candidate": delivery_candidate,
         "needs_attention": bool(reasons),
-        "overdue": overdue,
-        "due_soon": due_soon,
-        "days_to_target": days_to_target,
+        "attention": [{**reason, "tone": "warning"} for reason in reasons],
         "missing_data": missing_data,
         "inconsistencies": inconsistencies,
         "reasons": reasons,
         "priority": priority,
         "portfolio_status": portfolio_status,
-        "indicators": indicators,
-        "overall_rating": overall_rating,
+        "indicators": assessment["indicators"],
+        "overall_rating": assessment["overall_rating"],
+        "overall_label": assessment["overall_label"],
+        "assessed_count": assessment["assessed_count"],
+        "assessment_total": assessment["assessment_total"],
         "search_text": " ".join((
             submission.reference_code or "", submission.project_title or "",
             submission.customer_name or "", pm_name, sse_name,
-            status_label, health_label, updates,
+            status_label, updates,
+            *(indicator["label"] for indicator in assessment["indicators"].values()),
         )).strip().lower(),
     }
 
@@ -198,10 +222,10 @@ def normalize_sqr_project(submission: SqrSubmission, *, today: date) -> dict:
 def build_sqr_performance_snapshot(
     submissions: Iterable[SqrSubmission], *, today: date, fetched_at: datetime,
 ) -> dict:
-    """Return the JSON contract in attention/deadline/pk order; time is explicit."""
+    """Return the JSON contract in attention/project/pk order; time is explicit."""
     projects = [normalize_sqr_project(submission, today=today) for submission in submissions]
     projects.sort(key=lambda project: (
-        project["priority"], project["target_date"] or date.max.isoformat(), project["pk"],
+        project["priority"], project["project_name"].casefold(), project["pk"],
     ))
     return {
         "ok": True,

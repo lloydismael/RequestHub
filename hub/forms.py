@@ -697,8 +697,8 @@ class SqrSubmissionForm(forms.ModelForm):
         "Deployment Only",
         "On-Call Services",
         "Deployment and Project Management",
-        # Legacy values kept for existing rows.
         "Training",
+        # Legacy values kept for existing rows.
         "Support",
         "Implementation",
         "Implementation and Project Management",
@@ -720,6 +720,7 @@ class SqrSubmissionForm(forms.ModelForm):
         ("Maintenance", "Maintenance"),
         ("Project Management", "Project Management"),
         ("Deployment and Project Management", "Deployment and Project Management"),
+        ("Training", "Training"),
     )
 
     customer_company = forms.ChoiceField(
@@ -931,7 +932,39 @@ class SqrImportForm(forms.Form):
         return uploaded_file
 
 
-class SqrTrackerEditForm(forms.ModelForm):
+class SqrMaintenanceFormMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_maintenance_notice()
+
+    def apply_maintenance_notice(self):
+        notice = self.instance.maintenance_notice
+        for name in ("managed_support_start_date", "managed_support_end_date"):
+            field = self.fields.get(name)
+            if field is not None and notice and notice not in str(field.help_text):
+                field.help_text = f"{field.help_text} {notice}".strip()
+
+    def clean(self):
+        from .services.sqr_maintenance import validate_manual_maintenance_dates
+
+        cleaned = super().clean()
+        date_fields = ("managed_support_start_date", "managed_support_end_date")
+        for field in date_fields:
+            if self.add_prefix(field) not in self.data:
+                cleaned[field] = getattr(self.instance, field)
+        if any(field in self.errors for field in date_fields):
+            return cleaned
+        previous = tuple(getattr(self.instance, field) for field in date_fields)
+        proposed = tuple(cleaned.get(field) for field in date_fields)
+        if proposed != previous:
+            try:
+                validate_manual_maintenance_dates(*proposed)
+            except ValidationError as error:
+                self.add_error(None, error)
+        return cleaned
+
+
+class SqrTrackerEditForm(SqrMaintenanceFormMixin, forms.ModelForm):
     """Edit form for PM / Admin — columns N, Q, T, W, X, AA–AP."""
 
     pm_manhrs = forms.IntegerField(
@@ -973,13 +1006,14 @@ class SqrTrackerEditForm(forms.ModelForm):
             "po_pnl_date",
             "delivery_start_date",
             "overall_status",
-            "delivery_health",
+            "schedule_performance",
+            "budget_effort_performance",
+            "quality_performance",
             "delivery_progress",
             "key_updates_risks",
-            "delivery_target_finish_date",
             "delivery_actual_finish_date",
-            "delivery_completion_signed_date",
-            "warranty_end_date",
+            "managed_support_start_date",
+            "managed_support_end_date",
             "revenue_source",
             "revenue_reference_no",
             "revenue_remarks",
@@ -991,13 +1025,14 @@ class SqrTrackerEditForm(forms.ModelForm):
             "po_pnl_date": "PO / PNL Date (X)",
             "delivery_start_date": "Start Date (AA)",
             "overall_status": "Overall Status (AB)",
-            "delivery_health": "Health Status (AC)",
+            "schedule_performance": "Schedule Performance",
+            "budget_effort_performance": "Budget/Effort Performance",
+            "quality_performance": "Quality Performance",
             "delivery_progress": "Overall Progress % (AD)",
             "key_updates_risks": "Key Updates / Risks / Issues (AE)",
-            "delivery_target_finish_date": "Target Finish Date (AF)",
-            "delivery_actual_finish_date": "Actual Finish Date (AG)",
-            "delivery_completion_signed_date": "Completion Signed Date (AH)",
-            "warranty_end_date": "Warranty End Date (AI)",
+            "delivery_actual_finish_date": "Finish Date",
+            "managed_support_start_date": "Maintenance Start Date",
+            "managed_support_end_date": "Maintenance End Date",
             "revenue_source": "Source (AM)",
             "revenue_reference_no": "Billing Reference (AN)",
             "revenue_remarks": "Remarks (AP)",
@@ -1009,15 +1044,16 @@ class SqrTrackerEditForm(forms.ModelForm):
             "po_pnl_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "delivery_start_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "overall_status": forms.Select(attrs={"class": "form-select"}),
-            "delivery_health": forms.Select(attrs={"class": "form-select"}),
+            "schedule_performance": forms.Select(attrs={"class": "form-select"}),
+            "budget_effort_performance": forms.Select(attrs={"class": "form-select"}),
+            "quality_performance": forms.Select(attrs={"class": "form-select"}),
             "delivery_progress": forms.NumberInput(attrs={
                 "class": "form-control", "min": "0", "max": "100", "step": "1", "placeholder": "0–100",
             }),
             "key_updates_risks": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Updates, risks, issues…"}),
-            "delivery_target_finish_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "delivery_actual_finish_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "delivery_completion_signed_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
-            "warranty_end_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "managed_support_start_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
+            "managed_support_end_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
             "revenue_source": forms.TextInput(attrs={"class": "form-control", "placeholder": "Revenue source"}),
             "revenue_reference_no": forms.TextInput(attrs={"class": "form-control", "placeholder": "Reference number"}),
             "revenue_remarks": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Revenue remarks…"}),
@@ -1027,7 +1063,7 @@ class SqrTrackerEditForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Add empty leading option to optional choice fields
-        for fname in ("proposal_status", "overall_status", "delivery_health", "revenue_declaration"):
+        for fname in ("proposal_status", "overall_status", "schedule_performance", "budget_effort_performance", "quality_performance", "revenue_declaration"):
             if fname in self.fields:
                 current = list(self.fields[fname].choices)
                 if not current or current[0][0] != "":
@@ -1210,7 +1246,7 @@ class SqrProposalStatusForm(forms.ModelForm):
         )
 
 
-class SqrDeliveryForm(forms.ModelForm):
+class SqrDeliveryForm(SqrMaintenanceFormMixin, forms.ModelForm):
     """PM fills this to track service delivery once a deal is Closed Won."""
 
     class Meta:
@@ -1221,13 +1257,12 @@ class SqrDeliveryForm(forms.ModelForm):
             "assigned_sse",
             "delivery_start_date",
             "overall_status",
-            "delivery_health",
+            "schedule_performance",
+            "budget_effort_performance",
+            "quality_performance",
             "delivery_progress",
             "key_updates_risks",
-            "delivery_target_finish_date",
             "delivery_actual_finish_date",
-            "delivery_completion_signed_date",
-            "warranty_end_date",
             "managed_support_start_date",
             "managed_support_end_date",
         ]
@@ -1237,15 +1272,14 @@ class SqrDeliveryForm(forms.ModelForm):
             "assigned_sse": "Assigned SSE",
             "delivery_start_date": "Start Date (Execution)",
             "overall_status": "Overall Status",
-            "delivery_health": "Health Status",
+            "schedule_performance": "Schedule Performance",
+            "budget_effort_performance": "Budget/Effort Performance",
+            "quality_performance": "Quality Performance",
             "delivery_progress": "Overall Progress (%)",
             "key_updates_risks": "Key Updates / Risks / Issues",
-            "delivery_target_finish_date": "Target Finish Date (Execution)",
-            "delivery_actual_finish_date": "Actual Finish Date (Execution)",
-            "delivery_completion_signed_date": "Completion Signed Date",
-            "warranty_end_date": "Post-service Warranty End Date",
-            "managed_support_start_date": "Managed Support Start Date",
-            "managed_support_end_date": "Managed Support End Date",
+            "delivery_actual_finish_date": "Finish Date",
+            "managed_support_start_date": "Maintenance Start Date",
+            "managed_support_end_date": "Maintenance End Date",
         }
         widgets = {
             "po_pnl_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
@@ -1253,15 +1287,14 @@ class SqrDeliveryForm(forms.ModelForm):
             "assigned_sse": forms.Select(attrs={"class": "form-select"}),
             "delivery_start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "overall_status": forms.Select(attrs={"class": "form-select"}),
-            "delivery_health": forms.Select(attrs={"class": "form-select"}),
+            "schedule_performance": forms.Select(attrs={"class": "form-select"}),
+            "budget_effort_performance": forms.Select(attrs={"class": "form-select"}),
+            "quality_performance": forms.Select(attrs={"class": "form-select"}),
             "delivery_progress": forms.NumberInput(
                 attrs={"class": "form-control", "min": "0", "max": "100", "placeholder": "0\u2013100"}
             ),
             "key_updates_risks": forms.Textarea(attrs={"class": "form-control", "rows": "3"}),
-            "delivery_target_finish_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "delivery_actual_finish_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "delivery_completion_signed_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
-            "warranty_end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "managed_support_start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "managed_support_end_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
         }
@@ -1271,9 +1304,12 @@ class SqrDeliveryForm(forms.ModelForm):
         self.fields["overall_status"].choices = [("", "\u2014 Not set \u2014")] + list(
             SqrSubmission.OverallStatus.choices
         )
-        self.fields["delivery_health"].choices = [("", "\u2014 Not set \u2014")] + list(
-            SqrSubmission.DeliveryHealth.choices
-        )
+        for field, choices in (
+            ("schedule_performance", SqrSubmission.SchedulePerformance.choices),
+            ("budget_effort_performance", SqrSubmission.BudgetEffortPerformance.choices),
+            ("quality_performance", SqrSubmission.QualityPerformance.choices),
+        ):
+            self.fields[field].choices = [("", "Not assessed")] + list(choices)
         self.fields["assigned_pm"].queryset = User.objects.filter(role="pm_esg").order_by("first_name", "last_name")
         self.fields["assigned_sse"].queryset = User.objects.filter(role__in=["engineer", "on_hold"]).order_by("first_name", "last_name")
         for f in self.fields.values():

@@ -341,9 +341,21 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         workbook = self.export_workbook()
         sheet = workbook.active
         headers = [cell.value for cell in sheet[1]]
-        for header in ("Hold Reason", "Remarks"):
+        for header in (
+            "Hold Reason", "Remarks", "Schedule Performance", "Budget/Effort Performance",
+            "Quality Performance", "Legacy Stored Warranty End Date",
+        ):
             sheet.delete_cols(headers.index(header) + 1)
             headers.remove(header)
+        for old, legacy in (
+            ("Legacy Target Finish Date", "Target Finish Date"),
+            ("Legacy Health Status", "Health Status"),
+            ("Finish Date", "Actual Finish Date"),
+            ("Legacy Completion Signed Date", "Completion Signed Date"),
+        ):
+            index = headers.index(old)
+            headers[index] = legacy
+            sheet.cell(1, index + 1, legacy)
         self.assertEqual(len(headers), 43)
         self.assertEqual(headers[19], "SQR Status")
         self.assertEqual(headers[37], "PO Remarks")

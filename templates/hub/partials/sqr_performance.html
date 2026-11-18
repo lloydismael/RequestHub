@@ -16,60 +16,14 @@
     <details class="sqr-pm-filter-disclosure">
     <summary><i class="bi bi-sliders me-2" aria-hidden="true"></i>Filters</summary>
     <section class="sqr-pm-surface sqr-pm-filters" aria-labelledby="sqr-pm-filters-title">
-        <div class="sqr-pm-section-head">
-            <h3 id="sqr-pm-filters-title"><i class="bi bi-sliders me-2" aria-hidden="true"></i>Your portfolio view</h3>
-            <button type="button" id="sqr-pm-reset" class="btn btn-outline-secondary">Reset filters</button>
+        <h3 id="sqr-pm-filters-title"><i class="bi bi-sliders me-2" aria-hidden="true"></i>Your portfolio view</h3>
+        <div class="sqr-pm-search-field">
+            <label for="sqr-pm-search" class="form-label">Search projects</label>
+            <input type="search" id="sqr-pm-search" class="form-control" placeholder="SQR, project, customer, PM or updates…" autocomplete="off">
         </div>
-        <div class="sqr-pm-filter-grid">
-            <div>
-                <label for="sqr-pm-scope" class="form-label">Scope</label>
-                <select id="sqr-pm-scope" class="form-select"><option value="all" selected>All SQRs</option><option value="active">Active delivery</option></select>
-            </div>
-            <div class="sqr-pm-search-field">
-                <label for="sqr-pm-search" class="form-label">Search projects</label>
-                <input type="search" id="sqr-pm-search" class="form-control" placeholder="SQR, project, customer, PM or updates…" autocomplete="off">
-            </div>
-            <div>
-                <label for="sqr-pm-manager" class="form-label">Effective project manager</label>
-                <select id="sqr-pm-manager" class="form-select"><option value="">All managers</option></select>
-            </div>
-            <div>
-                <label for="sqr-pm-health" class="form-label">Recorded health</label>
-                <select id="sqr-pm-health" class="form-select">
-                    <option value="">All health</option><option value="on_track">On Track</option><option value="at_risk">At Risk</option><option value="off_track">Off Track</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="not_set">Not set</option>
-                </select>
-            </div>
-            <div>
-                <label for="sqr-pm-status" class="form-label">Delivery status</label>
-                <select id="sqr-pm-status" class="form-select">
-                    <option value="">All statuses</option><option value="planning">Planning</option><option value="in_progress">In Progress</option><option value="on_hold">On Hold</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option><option value="not_set">Not set</option>
-                </select>
-            </div>
-            <div>
-                <label for="sqr-pm-portfolio" class="form-label">Portfolio status</label>
-                <select id="sqr-pm-portfolio" class="form-select">
-                    <option value="">All portfolio statuses</option><option value="closed">Closed</option><option value="ongoing">Ongoing</option><option value="pipeline">Pipeline</option><option value="removed">Removed</option>
-                </select>
-            </div>
-            <div>
-                <label for="sqr-pm-rating" class="form-label">Derived delivery rating</label>
-                <select id="sqr-pm-rating" class="form-select">
-                    <option value="">All ratings</option><option value="good">On target / no issue</option><option value="warning">Action needed</option><option value="danger">Delay &gt;2 wks / Off Track</option><option value="unknown">Not rated</option>
-                </select>
-            </div>
-            <div>
-                <label for="sqr-pm-attention" class="form-label">Attention reason</label>
-                <select id="sqr-pm-attention" class="form-select">
-                    <option value="">All projects</option><option value="attention">Needs attention</option><option value="overdue">Overdue</option><option value="due_soon">Due within 14 days</option><option value="missing_data">Missing delivery data</option><option value="inconsistency">Inconsistent delivery data</option><option value="off_track">Off Track</option><option value="at_risk">At Risk</option><option value="on_hold">On Hold</option>
-                </select>
-            </div>
-        </div>
-        <div class="sqr-pm-filter-footer">
-            <div class="form-check">
-                <input type="checkbox" id="sqr-pm-mine" class="form-check-input"{% if default_my_assigned_filter %} checked{% endif %}>
-                <label for="sqr-pm-mine" class="form-check-label">My assigned only</label>
-            </div>
-        </div>
+        <div id="sqr-pm-filters" class="sqr-shared-filters"></div>
+        <p id="sqr-pm-filter-notice" class="sqr-pm-note" role="status" hidden></p>
+        <p class="sqr-pm-note">OR within each filter; AND across filters. My Assigned follows the SQR reviewer assignment.</p>
     </section>
     </details>
     </div>
@@ -85,7 +39,7 @@
                 <div class="sqr-pm-summary sqr-pm-tone--cyan"><span>Total projects</span><strong data-pm-metric="total">&mdash;</strong><small>Includes pipeline and removed</small></div>
                 <div class="sqr-pm-summary sqr-pm-tone--good"><span>Closed</span><strong data-pm-metric="closed_percent">&mdash;</strong><small id="sqr-pm-closed-coverage">Of projects in view</small></div>
                 <div class="sqr-pm-summary sqr-pm-tone--cyan"><span>In progress</span><strong data-pm-metric="ongoing">&mdash;</strong><small>Actively ongoing delivery</small></div>
-                <div class="sqr-pm-summary sqr-pm-tone--removed"><span>Needs attention</span><strong data-pm-metric="attention">&mdash;</strong><small>Deadline, health or data flags</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--removed"><span>Needs attention</span><strong data-pm-metric="attention">&mdash;</strong><small>Saved assessments, lifecycle or data flags</small></div>
             </div>
             <h4 class="sqr-pm-subheading">Projects by status</h4>
             <div class="sqr-pm-status-grid" aria-label="Project status totals">
@@ -111,7 +65,7 @@
             <div class="sqr-pm-table-scroll" role="region" aria-label="Project status tracker" tabindex="0">
                 <table class="sqr-pm-table sqr-pm-status-table">
                     <caption class="visually-hidden">Project status, owner, timeline, progress and next action for this page</caption>
-                    <thead><tr><th scope="col">#</th><th scope="col">Project name</th><th scope="col">PM</th><th scope="col">Status</th><th scope="col">Start / target</th><th scope="col">Progress</th><th scope="col">Next action / remarks</th></tr></thead>
+                    <thead><tr><th scope="col">#</th><th scope="col">Project name</th><th scope="col">PM</th><th scope="col">Status</th><th scope="col">Start / finish</th><th scope="col">Progress</th><th scope="col">Next action / remarks</th></tr></thead>
                     <tbody id="sqr-pm-status-rows"></tbody>
                 </table>
             </div>
@@ -120,20 +74,20 @@
         <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-performance-dashboard-title">
             <div class="sqr-pm-section-head"><h3 id="sqr-pm-performance-dashboard-title">Project Performance Dashboard</h3></div>
             <div class="sqr-pm-summary-grid">
-                <div class="sqr-pm-summary sqr-pm-tone--good"><span>On target / no issue</span><strong data-pm-metric="rating_good">&mdash;</strong><small id="sqr-pm-rated-coverage">Of rated projects</small></div>
-                <div class="sqr-pm-summary sqr-pm-tone--warning"><span>Action needed</span><strong data-pm-metric="rating_warning">&mdash;</strong><small>Delay &le;2 weeks, At Risk or On Hold</small></div>
-                <div class="sqr-pm-summary sqr-pm-tone--danger"><span>Delay &gt;2 wks / Off Track</span><strong data-pm-metric="rating_danger">&mdash;</strong><small>Schedule or recorded delivery health</small></div>
-                <div class="sqr-pm-summary sqr-pm-tone--unknown"><span>Not rated</span><strong data-pm-metric="rating_unknown">&mdash;</strong><small>No rating, pipeline or removed</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--good"><span>Healthy</span><strong data-pm-metric="rating_good">&mdash;</strong><small id="sqr-pm-rated-coverage">All three assessments green</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--warning"><span>At Risk</span><strong data-pm-metric="rating_warning">&mdash;</strong><small>At least one amber; no red</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--danger"><span>Action needed</span><strong data-pm-metric="rating_danger">&mdash;</strong><small>At least one red assessment</small></div>
+                <div class="sqr-pm-summary sqr-pm-tone--unknown"><span>Incomplete / Not assessed</span><strong data-pm-metric="rating_unknown">&mdash;</strong><small>Missing assessments stay neutral</small></div>
             </div>
             <div class="sqr-pm-portfolio-grid">
                 <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-indicator-chart-title">
-                    <h4 id="sqr-pm-indicator-chart-title">Ratings by health indicator</h4>
+                    <h4 id="sqr-pm-indicator-chart-title">Saved performance assessments</h4>
                     <div id="sqr-pm-indicator-chart"></div>
                     <div class="sqr-pm-legend">
-                        <span><i class="sqr-pm-rating--good" aria-hidden="true"></i>On target / no issue</span>
-                        <span><i class="sqr-pm-rating--warning" aria-hidden="true"></i>Action needed</span>
-                        <span><i class="sqr-pm-rating--danger" aria-hidden="true"></i>Delay &gt;2 wks / Off Track</span>
-                        <span><i class="sqr-pm-rating--unknown" aria-hidden="true"></i>Not recorded</span>
+                        <span><i class="sqr-pm-rating--good" aria-hidden="true"></i>On Track / Within Budget / Met</span>
+                        <span><i class="sqr-pm-rating--warning" aria-hidden="true"></i>At Risk</span>
+                        <span><i class="sqr-pm-rating--danger" aria-hidden="true"></i>Delayed / Over Budget / Unmet</span>
+                        <span><i class="sqr-pm-rating--unknown" aria-hidden="true"></i>Not assessed</span>
                     </div>
                 </section>
                 <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-rating-attention-title">
@@ -141,19 +95,19 @@
                     <div id="sqr-pm-rating-queue" class="sqr-pm-attention-list"></div>
                 </section>
             </div>
-            <p class="sqr-pm-note">Overall rating combines schedule and recorded delivery health; open On Hold needs action. Other indicators are not assumed healthy.</p>
+            <p class="sqr-pm-note">Ratings come only from SQR Delivery &gt; Progress. Any red assessment needs action; otherwise amber is At Risk. Healthy requires all three green. Missing assessments remain neutral; On Hold attention does not replace the saved rating.</p>
         </section>
 
         <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-performance-tracker-title">
             <div class="sqr-pm-section-head"><h3 id="sqr-pm-performance-tracker-title">Project Performance Tracker</h3></div>
             <div class="sqr-pm-table-scroll" role="region" aria-label="Project performance tracker" tabindex="0">
                 <table class="sqr-pm-table sqr-pm-indicator-table">
-                    <caption class="visually-hidden">Five project health indicators and separately recorded delivery health</caption>
-                    <thead><tr><th scope="col">Project</th><th scope="col">Schedule</th><th scope="col">Scope</th><th scope="col">Resources</th><th scope="col">Customer / dependencies</th><th scope="col">Risks / issues</th><th scope="col">Recorded delivery health</th></tr></thead>
+                    <caption class="visually-hidden">Three saved SQR performance assessments, overall rating and assessment coverage</caption>
+                    <thead><tr><th scope="col">Project</th><th scope="col">Schedule</th><th scope="col">Budget/Effort</th><th scope="col">Quality</th><th scope="col">Overall</th><th scope="col">Assessed</th></tr></thead>
                     <tbody id="sqr-pm-indicator-rows"></tbody>
                 </table>
             </div>
-            <p class="sqr-pm-note">N/R = not recorded. Schedule compares target with today (ongoing) or actual finish (closed). The other indicators are not separately captured in SQR.</p>
+            <p class="sqr-pm-note">Assessed shows saved coverage out of three. Dates, progress, lifecycle status and remarks do not fabricate assessments.</p>
         </section>
         <nav class="sqr-pm-pagination" aria-label="Project tracker pages">
             <button type="button" id="sqr-pm-prev" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous</button>
@@ -166,9 +120,9 @@
     <details class="sqr-pm-methodology sqr-pm-details">
         <summary>How ratings and statuses are calculated</summary>
         <div class="sqr-pm-methodology-grid">
-            <div><h4>Scope &amp; status</h4><p>All SQRs includes accessible records. Active delivery excludes terminal records and proposals without delivery evidence. Closed reflects completion; Pipeline means planning or no delivery evidence; Removed means cancelled or lost. PM falls back to the reviewer when unassigned.</p></div>
-            <div><h4>Attention</h4><p>Attention includes open Off Track, overdue, At Risk, On Hold, due within 14 days, or missing or inconsistent delivery data. Each project is counted once.</p></div>
-            <div><h4>Health</h4><p>Schedule delays of 1–14 days need action; over 14 days are red. Overall is the worse of schedule and recorded delivery health, with open On Hold needing action. Pipeline and removed projects are not rated. Notes are not converted into scores.</p></div>
+            <div><h4>Portfolio &amp; status</h4><p>The view includes accessible SQR records. Closed reflects completion; Pipeline means planning or no delivery evidence; Removed means cancelled or lost. PM falls back to the reviewer when unassigned. My Assigned follows the reviewer, not the displayed PM.</p></div>
+            <div><h4>Attention</h4><p>Saved amber or red assessments, open On Hold, and missing or inconsistent delivery data may need attention. Each matching project is counted once. Filters and charts use all matches before table pagination.</p></div>
+            <div><h4>Assessments</h4><p>Schedule, Budget/Effort and Quality use the exact saved choices in SQR Delivery &gt; Progress. Red takes priority over amber; all three must be green for Healthy. Partial coverage is Incomplete assessment; zero coverage is Not assessed. Notes and legacy Health do not supply ratings.</p></div>
         </div>
     </details>
 </section>

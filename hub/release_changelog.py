@@ -18,7 +18,9 @@ EVIDENCE_POLICY = "all_changes"
 MANIFEST_PATH = Path(__file__).with_name("release_changelog_manifest.json")
 ASSET_DIR = Path(__file__).with_name("changelog_assets")
 COMPARISON_FIELDS = ("title", "before_text", "after_text", "before_image", "after_image")
-COMPARISON_META_FIELDS = ("before_revision", "after_revision", "capture_note")
+COMPARISON_META_FIELDS = ("before_revision", "after_revision", "capture_note", "evidence_kind")
+EVIDENCE_KINDS = {"ui", "document", "report"}
+AUTOMATIC_CAPTURE_RE = re.compile(r"(?:Automatic |Packaged (?:automatic )?)(ui|document|report) capture, recipe ([^.\s]+)\.")
 MAX_COMPARISONS = 20
 TEXT_MAX = 10000
 IMAGE_PATH_RE = re.compile(r"(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.(?:png|jpe?g|webp)", re.IGNORECASE)
@@ -79,6 +81,23 @@ def complete_comparison(comparison):
     )
 
 
+def capture_metadata(comparison):
+    note = comparison.get("capture_note")
+    match = AUTOMATIC_CAPTURE_RE.match(note) if isinstance(note, str) else None
+    return match.groups() if match else ("", "")
+
+
+def comparison_kind(comparison):
+    return comparison.get("evidence_kind") or capture_metadata(comparison)[0] or "ui"
+
+
+def repository_report_only(item):
+    pairs = item.get("comparisons")
+    return isinstance(pairs, list) and bool(pairs) and all(
+        isinstance(pair, dict) and capture_metadata(pair) == ("report", "repository-change") for pair in pairs
+    )
+
+
 def missing_comparisons(commits, *, require_all=False):
     return [
         item.get("title") if isinstance(item.get("title"), str) and item["title"].strip() else "Untitled UI/UX change"
@@ -117,6 +136,8 @@ def _validate_comparison(comparison):
         value = comparison[field]
         if not isinstance(value, str) or (field.endswith("_revision") and not SHA_RE.fullmatch(value)):
             raise ManifestError(f"invalid comparison {field}")
+        if field == "evidence_kind" and value not in EVIDENCE_KINDS:
+            raise ManifestError("invalid comparison evidence kind")
         if len(value) > TEXT_MAX:
             raise ManifestError("comparison capture note is too long")
         clean[field] = value
