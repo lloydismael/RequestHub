@@ -81,6 +81,34 @@ class CaptureTests(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(repeated, result)
 
+    def test_mixed_change_selects_each_affected_screen_without_matching_docs(self):
+        for name in ("templates/profile.html", "templates/login.html"):
+            path = self.repo / name
+            path.parent.mkdir(exist_ok=True)
+            path.write_text("<h1>Updated screen</h1>", encoding="utf-8")
+        self.document.write_text("# Export\n\nUpdated guidance.\n", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "feat: update screens and guidance")
+        item = build_manifest("v2", "HEAD", self.repo, baseline=self.after)["commits"][0]
+        screen = {**self.recipe["scenes"][0], "kind": "ui"}
+        recipes = [self.recipe, *[
+            {"id": fixture, "paths": [path], "scenes": [{**screen, "fixture": fixture, "title": fixture}]}
+            for fixture, path in (("login", "templates/login.html"), ("profile", "templates/profile.html"))
+        ]]
+        chosen = _select_recipe(self.repo, item, recipes)
+        self.assertEqual([scene["fixture"] for scene in chosen["scenes"]], ["login", "profile"])
+
+    def test_unmapped_template_needs_a_screen_capture_instead_of_a_file_report(self):
+        (self.repo / "templates").mkdir()
+        (self.repo / "templates" / "export.html").write_text("<h1>Export</h1>", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "feat: add export screen")
+        manifest = build_manifest("v2", "HEAD", self.repo, baseline=self.after)
+        result, failures = capture_manifest(manifest, self.repo, self.recipes_path)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("UI capture recipe", result["commits"][0]["capture_error"])
+        self.assertFalse(result["commits"][0].get("comparisons"))
+
     def test_unmapped_change_captures_exact_revision_report(self):
         self.write_recipes([])
         result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
@@ -391,6 +419,18 @@ class CaptureTests(unittest.TestCase):
         with patch.object(Path, "read_bytes", changed_lock):
             self.assertNotEqual(before, _fingerprint(self.recipe))
 
+    def test_changed_document_does_not_substitute_for_an_unchanged_ui_scene(self):
+        visual = {**self.recipe["scenes"][0], "kind": "ui", "fixture": "login", "title": "Sign-in screen"}
+        self.recipe["scenes"].append(visual)
+        self.write_recipes([self.recipe])
+        with patch("capture_release_changelog._render", wraps=_render) as render:
+            render.side_effect = lambda snapshot, scene: (
+                "<body><div class='login-hero'>Same UI</div></body>" if scene["kind"] == "ui" else _render(snapshot, scene)
+            )
+            result, failures = capture_manifest(self.manifest, self.repo, self.recipes_path)
+        self.assertEqual(len(failures), 1)
+        self.assertFalse(result["commits"][0].get("comparisons"))
+
     def test_one_changed_scene_can_include_unchanged_companion_context(self):
         self.recipe["scenes"].append({**self.recipe["scenes"][0], "heading": "Absent companion section"})
         self.write_recipes([self.recipe])
@@ -420,7 +460,7 @@ class HistoricalSceneTests(unittest.TestCase):
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
                 try:
-                    for fixture in ("login", "changelog"):
+                    for fixture in ("login", "seasonal_login", "profile", "changelog", "changelog_editor", "sqr_tracker", "sqr_performance"):
                         with self.subTest(fixture=fixture):
                             output = Path(temporary) / f"{fixture}.png"
                             _screenshot(browser, snapshot, {"kind": "ui", "fixture": fixture}, output,

@@ -1,5 +1,4 @@
 import json
-import re
 from copy import deepcopy
 from datetime import datetime
 from hashlib import sha256
@@ -11,7 +10,7 @@ from django.db import IntegrityError, transaction
 
 from .changelog_forms import ScreenshotField
 from .models import MANILA_TZ, Changelog
-from .release_changelog import ASSET_DIR, COMPARISON_FIELDS, EVIDENCE_POLICY, GROUPS, MANIFEST_PATH, MAX_COMPARISONS, ManifestError, missing_comparisons, validate_manifest
+from .release_changelog import ASSET_DIR, COMPARISON_FIELDS, EVIDENCE_POLICY, GROUPS, MANIFEST_PATH, MAX_COMPARISONS, ManifestError, capture_metadata, comparison_kind, missing_comparisons, validate_manifest
 
 
 def load_manifest(path: Path = MANIFEST_PATH) -> dict | None:
@@ -81,20 +80,18 @@ def _store_comparisons(item: dict) -> dict:
     return item
 
 
-def _automatic_recipe(pair: dict) -> str:
-    """Return the capture recipe named by an automatic capture note, or "" for manual evidence."""
-    note = pair.get("capture_note")
-    if not isinstance(note, str):
-        return ""
-    match = re.match(r"Automatic (?:ui|document|report) capture, recipe ([^.\s]+)\.", note)
-    return match.group(1) if match else ""
-
-
 def _merge_comparisons(current: list, supplied: list) -> list:
     pairs = deepcopy([pair for pair in current if isinstance(pair, dict)]) if isinstance(current, list) else []
+    has_visual = any(comparison_kind(pair) == "ui" for pair in [*pairs, *supplied])
     matched = set()
     for index, source in enumerate(supplied):
+        source_kind = comparison_kind(source)
+        if has_visual and capture_metadata(source) == ("report", "repository-change"):
+            continue
         target = next((i for i, pair in enumerate(pairs) if i not in matched and pair.get("title") == source["title"]), None)
+        if target is None and source_kind == "ui":
+            target = next((i for i, pair in enumerate(pairs) if i not in matched and
+                           capture_metadata(pair) == ("report", "repository-change")), None)
         # Titles are editable; position preserves an admin's renamed comparison.
         if target is None and index < len(pairs) and index not in matched:
             target = index
@@ -106,14 +103,19 @@ def _merge_comparisons(current: list, supplied: list) -> list:
             continue
         matched.add(target)
         pair = pairs[target]
+        prior_capture = capture_metadata(pair)
+        incoming_capture = capture_metadata(source)
         if (
-            source.get("capture_note")
-            and _automatic_recipe(pair)
-            and _automatic_recipe(pair) != _automatic_recipe(source)
+            (prior_capture == ("report", "repository-change") and source_kind == "ui")
+            or (prior_capture[1] and incoming_capture[1] and prior_capture != incoming_capture
+                and (comparison_kind(pair) != "ui" or source_kind == "ui"))
         ):
-            # A newer automatic capture from another recipe supersedes stale generated evidence.
-            # Manual comparisons have no automatic recipe and are never replaced.
             pairs[target] = _store_comparisons({"comparisons": [source]})["comparisons"][0]
+            continue
+        if comparison_kind(pair) != source_kind:
+            if len(pairs) < MAX_COMPARISONS:
+                pairs.append(_store_comparisons({"comparisons": [source]})["comparisons"][0])
+                matched.add(len(pairs) - 1)
             continue
         missing = [field for field in COMPARISON_FIELDS if not isinstance(pair.get(field), str) or not pair[field].strip()]
         incoming = source

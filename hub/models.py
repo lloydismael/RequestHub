@@ -13,7 +13,7 @@ from django.db.models import Exists, OuterRef, Q
 from django.db.models.functions import Cast, Concat, StrIndex, Substr
 from django.utils import timezone
 from accounts.storage import DatabaseMediaStorage
-from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, GROUPS, missing_comparisons
+from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, GROUPS, comparison_kind, missing_comparisons
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -145,8 +145,16 @@ class Changelog(models.Model):
                     name = comparison[field]
                     image_field = self._meta.get_field(field)
                     comparison[field] = image_field.attr_class(self, image_field, name if name.startswith("changelogs/") else "")
+                comparison["is_visual"] = comparison_kind(comparison) == "ui"
                 comparisons.append(comparison)
         return comparisons
+
+    @property
+    def comparison_groups(self):
+        groups = {"visual": [], "technical": []}
+        for comparison in self.change_comparisons:
+            groups["visual" if comparison["is_visual"] else "technical"].append(comparison)
+        return groups
 
     @property
     def missing_comparisons(self):
@@ -707,6 +715,21 @@ class SqrSubmission(models.Model):
         COMPLETED = "completed", "Completed"
         CANCELLED = "cancelled", "Cancelled"
 
+    class SchedulePerformance(models.TextChoices):
+        ON_TRACK = "on_track", "On Track"
+        AT_RISK = "at_risk", "At Risk"
+        DELAYED = "delayed", "Delayed"
+
+    class BudgetEffortPerformance(models.TextChoices):
+        WITHIN_BUDGET = "within_budget", "Within Budget"
+        AT_RISK = "at_risk", "At Risk"
+        OVER_BUDGET = "over_budget", "Over Budget"
+
+    class QualityPerformance(models.TextChoices):
+        MET = "met", "Met"
+        AT_RISK = "at_risk", "At Risk"
+        UNMET = "unmet", "Unmet"
+
     class OverallStatus(models.TextChoices):
         ON_HOLD = "on_hold", "On Hold"
         PLANNING = "planning", "Planning"
@@ -803,6 +826,17 @@ class SqrSubmission(models.Model):
     delivery_health = models.CharField(
         max_length=20, choices=DeliveryHealth.choices, blank=True, default=""
     )
+    schedule_performance = models.CharField(
+        max_length=20, choices=SchedulePerformance.choices, blank=True, default=""
+    )
+    budget_effort_performance = models.CharField(
+        max_length=20, choices=BudgetEffortPerformance.choices, blank=True, default=""
+    )
+    quality_performance = models.CharField(
+        max_length=20, choices=QualityPerformance.choices, blank=True, default=""
+    )
+    delivery_transition_metadata = models.JSONField(blank=True, default=dict, editable=False)
+    legacy_delivery_completed = models.BooleanField(default=False, editable=False)
     delivery_progress = models.PositiveSmallIntegerField(blank=True, null=True)
     delivery_start_date = models.DateField(blank=True, null=True)
     delivery_target_finish_date = models.DateField(blank=True, null=True)
@@ -966,16 +1000,14 @@ class SqrSubmission(models.Model):
 
     @property
     def computed_post_svc_warranty_end_date(self):
-        """Completion Signed Date + 30 days — only for Implementation / Impl+PM scopes."""
-        if self.project_details in self._IMPL_SCOPES and self.delivery_completion_signed_date:
-            return self.delivery_completion_signed_date + timedelta(days=30)
+        if self.project_details in self._IMPL_SCOPES and self.delivery_actual_finish_date:
+            return self.delivery_actual_finish_date + timedelta(days=30)
         return None
 
     @property
     def computed_warranty_end_date(self):
-        """Completion Signed Date + 30 days — for all warranty scopes (Impl / Impl+PM / Managed Support)."""
-        if self.project_details in self._WARRANTY_SCOPES and self.delivery_completion_signed_date:
-            return self.delivery_completion_signed_date + timedelta(days=30)
+        if self.project_details in self._WARRANTY_SCOPES and self.delivery_actual_finish_date:
+            return self.delivery_actual_finish_date + timedelta(days=30)
         return None
 
     @property
@@ -984,22 +1016,32 @@ class SqrSubmission(models.Model):
         return self.project_details in self._WARRANTY_SCOPES and self.managed_support_amount is not None
 
     @property
+    def maintenance_notice(self):
+        from .services.sqr_maintenance import validate_manual_maintenance_dates
+
+        start, end = self.managed_support_start_date, self.managed_support_end_date
+        if start is None and end is None:
+            return ""
+        notices = []
+        if not self.is_managed_support_start_eligible:
+            notices.append("Stored Maintenance dates are inactive: an eligible scope and Maintenance budget amount are required.")
+        try:
+            validate_manual_maintenance_dates(start, end)
+        except ValidationError as error:
+            notices.append("Maintenance dates need review: " + " ".join(error.messages))
+        return " ".join(notices)
+
+    @property
     def computed_support_start_date(self):
-        """Support Start Date (Col AJ) honoring eligibility and fallback rules."""
         if not self.is_managed_support_start_eligible:
             return None
-        return self.managed_support_start_date or self.computed_warranty_end_date
+        return self.managed_support_start_date
 
     @property
     def computed_managed_support_end_date(self):
-        """Support End Date (Col AK) = AJ date + 365 days.
-
-        AJ is shown only when the support-start eligibility rules pass.
-        """
-        support_start_date = self.computed_support_start_date
-        if support_start_date:
-            return support_start_date + timedelta(days=365)
-        return None
+        if not self.is_managed_support_start_eligible:
+            return None
+        return self.managed_support_end_date
 
     @property
     def revenue_stage_key(self) -> str:
@@ -1084,6 +1126,16 @@ class SqrSubmission(models.Model):
                 )
                 self.sequence_number = next_number
                 self.reference_code = reference_code
+
+
+class SqrTrackerSettings(models.Model):
+    id = models.PositiveSmallIntegerField(default=1, editable=False, primary_key=True)
+    show_classic_sqr_tracker = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(pk=1), name="sqr_tracker_settings_singleton"),
+        ]
 
 
 class SqrSubmissionChange(models.Model):
