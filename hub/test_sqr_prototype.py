@@ -61,13 +61,20 @@ class AttentionTests(SimpleTestCase):
         self.assertNotIn("validity", self.flags("opportunity", validity_due_date=TODAY + timedelta(days=8)))
         self.assertNotIn("validity", self.flags("delivery", validity_due_date=TODAY - timedelta(days=30)))
 
-    def test_delivery_and_billing_flags(self):
-        flags = self.flags("delivery", delivery_target_finish_date=TODAY - timedelta(days=2), delivery_health="at_risk")
-        self.assertEqual(flags["overdue"]["tone"], "danger")
-        self.assertEqual(flags["health"]["label"], "At risk")
-        self.assertEqual(self.flags("delivery", delivery_health="off_track")["health"]["label"], "Off track")
+    def test_delivery_attention_uses_recorded_assessments_not_retired_fields(self):
+        self.assertEqual(self.flags("delivery", delivery_target_finish_date=TODAY - timedelta(days=2),
+                                    delivery_health="off_track"), {})
+        flags = self.flags("delivery", schedule_performance="delayed", quality_performance="at_risk")
+        self.assertEqual(flags["schedule_performance"]["tone"], "danger")
+        self.assertEqual(flags["quality_performance"]["tone"], "warning")
         self.assertIn("billing", self.flags("billing"))
-        self.assertNotIn("overdue", self.flags("billing", delivery_target_finish_date=TODAY - timedelta(days=2)))
+        self.assertNotIn("schedule_performance", self.flags("billing", schedule_performance="delayed"))
+
+    def test_maintenance_notice_still_needs_attention_on_hold(self):
+        flags = self.flags("delivery", status="on_hold", project_details="Implementation",
+                           managed_support_amount=0, managed_support_end_date=TODAY)
+        self.assertEqual(flags["maintenance"]["tone"], "warning")
+        self.assertNotIn("schedule_performance", flags)
 
 
 class NextStepTests(SimpleTestCase):
@@ -83,7 +90,7 @@ class NextStepTests(SimpleTestCase):
         self.assertEqual(self.step()["title"], "Follow up with the customer")
         self.assertEqual(self.step(proposal_status="negotiation_review")["title"], "Negotiation in progress")
         self.assertEqual(self.step("delivery")["title"], "Plan the delivery")
-        planned = self.step("delivery", delivery_start_date=TODAY, delivery_target_finish_date=TODAY, delivery_progress=40)
+        planned = self.step("delivery", delivery_start_date=TODAY, delivery_progress=40)
         self.assertEqual(planned["title"], "Delivery in progress")
         self.assertIn("40%", planned["hint"])
         self.assertEqual(self.step("billing")["title"], "Ready for billing")
@@ -165,6 +172,30 @@ class PrototypeEndpointTests(TestCase):
         self.assertEqual(data["options"], {"pm_users": [], "sse_users": [], "rq_options": []})
         self.assertFalse(data["viewer"]["is_pm"])
 
+    def test_engineer_shortcut_metadata_keeps_explicit_assignment_and_read_scope(self):
+        self.mine.assigned_sse = self.engineer
+        self.mine.save(update_fields=["assigned_sse"])
+        self.lost.assigned_sse = self.engineer
+        self.lost.save(update_fields=["assigned_sse"])
+        for role in User.ENGINEER_ACCESS_ROLES:
+            with self.subTest(role=role):
+                self.engineer.role = role
+                self.engineer.save(update_fields=["role"])
+                self.client.force_login(self.engineer)
+                data = self.client.get(self.url, {"mine": "1"}).json()
+                self.assertTrue(data["viewer"].get("is_engineer"))
+                self.assertFalse(data["viewer"]["is_pm"])
+                self.assertEqual([record["pk"] for record in data["records"]], [self.mine.pk])
+                self.assertEqual(data["records"][0]["sse_id"], str(self.engineer.pk))
+                self.assertEqual(data["records"][0]["editable"], [])
+                self.assertEqual(self.client.get(self.url, {"pk": self.lost.pk}).status_code, 404)
+        self.mine.assigned_sse = None
+        self.mine.save(update_fields=["assigned_sse"])
+        self.assertEqual(self.records(self.engineer)[self.mine.pk]["sse_id"], "")
+        for user in (self.pm, self.admin):
+            self.client.force_login(user)
+            self.assertFalse(self.client.get(self.url).json()["viewer"].get("is_engineer", True))
+
     def test_editable_fields_follow_the_inline_endpoint_rules(self):
         pm_record = self.records(self.pm)[self.mine.pk]
         admin_record = self.records(self.admin)[self.mine.pk]
@@ -197,6 +228,42 @@ class PrototypeEndpointTests(TestCase):
         self.assertEqual(record["next_step"]["action"], "review")
         self.assertEqual(record["engineer_email"], self.engineer.email)
         self.assertEqual(set(values), {spec["key"] for spec in proto.FIELD_SPECS})
+
+    def test_full_pool_and_legacy_pagination_keep_server_authorization(self):
+        self.client.force_login(self.pm)
+        full = self.client.get(self.url, {"status": "missing", "mine": "1"}).json()
+        self.assertEqual({record["pk"] for record in full["records"]}, {self.mine.pk, self.lost.pk})
+        self.assertNotIn("pagination", full)
+        paged = self.client.get(self.url, {"page": "1", "page_size": "1"}).json()
+        self.assertEqual({record["pk"] for record in paged["records"]}, {self.mine.pk, self.lost.pk})
+        self.assertEqual(paged["pagination"]["total"], 2)
+        self.assertFalse(paged["pagination"]["has_next"])
+        self.client.force_login(self.engineer)
+        own = self.client.get(self.url, {"pm_id": self.pm.pk, "mine": "0"}).json()
+        self.assertEqual([record["pk"] for record in own["records"]], [self.mine.pk])
+        self.assertEqual(own["options"], {"pm_users": [], "sse_users": [], "rq_options": []})
+
+    def test_filter_payload_has_scalars_iso_dates_and_shared_assessments(self):
+        self.mine.delivery_start_date = TODAY
+        self.mine.delivery_actual_finish_date = TODAY
+        self.mine.schedule_performance = "on_track"
+        self.mine.budget_effort_performance = "over_budget"
+        self.mine.revenue_source = "internal"
+        self.mine.save()
+        record = self.records(self.pm)[self.mine.pk]
+        self.assertEqual(record.get("pm_id"), str(self.pm.pk))
+        self.assertEqual(record.get("sse_id"), "")
+        self.assertEqual(record.get("linked_request_id"), "")
+        self.assertEqual(record.get("billing_type"), "internal")
+        self.assertEqual(record.get("billing_state"), "not_yet_billed")
+        self.assertEqual(record.get("delivery_start_date"), "2026-10-21")
+        self.assertEqual(record.get("delivery_actual_finish_date"), "2026-10-21")
+        self.assertEqual(record.get("post_svc_warranty_end_date"), "")
+        self.assertNotIn("target_date", record)
+        self.assertEqual(record.get("budget_effort_performance"), "over_budget")
+        from hub.services.sqr_performance import build_assessment_snapshot
+        self.assertEqual(record.get("assessment"), build_assessment_snapshot(self.mine))
+        self.assertNotIn("delivery_target_finish_date", record["values"])
 
     def test_single_record_fetch(self):
         self.client.force_login(self.engineer)
@@ -252,7 +319,7 @@ class PrototypeTabRenderTests(TestCase):
                     ("table", "To SQR Tracker", "bi-table", "btn-primary lg-btn--accent"),
                     ("reports", "To Reports", "bi-bar-chart-line-fill", "btn-outline-primary lg-btn--ghost"),
                 ):
-                    href = "/sqr/?view=tracker" if destination == "table" else "/sqr/?tab=reports"
+                    href = "/sqr/?view=prototype" if destination == "table" else "/sqr/?tab=reports"
                     tracker_link = " data-sqr-tracker-link" if destination == "table" else ""
                     current = ' aria-current="page"' if tab == destination else ""
                     self.assertContains(
@@ -275,6 +342,7 @@ class PrototypeTabRenderTests(TestCase):
                 response = self.client.get(reverse("hub:sqr"))
                 self.assertEqual(response.status_code, 200)
                 self.assertContains(response, 'data-sqr-view-button="prototype"')
-                self.assertContains(response, "SQR Tracker Prototype")
+                self.assertNotContains(response, "SQR Tracker Prototype")
+                self.assertNotContains(response, 'id="sqr-new-version-modal"')
                 self.assertContains(response, 'data-sqr-view-panel="prototype"')
                 self.assertContains(response, reverse("hub:sqr-prototype-data"))

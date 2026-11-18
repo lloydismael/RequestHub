@@ -12,6 +12,7 @@ from decimal import Decimal
 from django.urls import reverse
 
 from ..models import SqrSubmission
+from .sqr_performance import build_assessment_snapshot
 
 Status = SqrSubmission.Status
 Proposal = SqrSubmission.ProposalStatus
@@ -96,23 +97,22 @@ FIELD_SPECS = [
     _field("assigned_pm", "Assigned PM", "user", "delivery", "Team", options="pm_users"),
     _field("assigned_sse", "Assigned SSE", "user", "delivery", "Team", options="sse_users"),
     _field("delivery_start_date", "Start date", "date", "delivery", "Schedule"),
-    _field("delivery_target_finish_date", "Target finish date", "date", "delivery", "Schedule"),
-    _field("delivery_actual_finish_date", "Actual finish date", "date", "delivery", "Schedule"),
-    _field("delivery_completion_signed_date", "Completion signed date", "date", "delivery", "Schedule"),
+    _field("delivery_actual_finish_date", "Finish date", "date", "delivery", "Schedule"),
     _field("overall_status", "Overall status", "select", "delivery", "Progress",
            choices=_choices(Overall), allow_blank=True),
-    _field("delivery_health", "Health status", "select", "delivery", "Progress",
-           choices=_choices(Health), allow_blank=True),
+    _field("schedule_performance", "Schedule performance", "select", "delivery", "Progress",
+           choices=_choices(SqrSubmission.SchedulePerformance), allow_blank=True),
+    _field("budget_effort_performance", "Budget/Effort performance", "select", "delivery", "Progress",
+           choices=_choices(SqrSubmission.BudgetEffortPerformance), allow_blank=True),
+    _field("quality_performance", "Quality performance", "select", "delivery", "Progress",
+           choices=_choices(SqrSubmission.QualityPerformance), allow_blank=True),
     _field("delivery_progress", "Overall progress", "number", "delivery", "Progress",
            unit="%", min=0, max=100),
     _field("key_updates_risks", "Key updates / risks / issues", "textarea", "delivery", "Progress"),
     _field("post_svc_warranty_end_date", "Completion warranty end", "computed", "delivery",
-           "After delivery", format="text"),
-    _field("managed_support_start_date", "Maintenance start date", "date", "delivery", "After delivery"),
-    _field("support_start_date", "Effective maintenance start", "computed", "delivery",
-           "After delivery", format="text"),
-    _field("managed_support_end_date", "Maintenance end date", "computed", "delivery",
-           "After delivery", format="text"),
+           "MAINTENANCE", format="text"),
+    _field("managed_support_start_date", "Maintenance start date", "date", "delivery", "MAINTENANCE"),
+    _field("managed_support_end_date", "Maintenance end date", "date", "delivery", "MAINTENANCE"),
 
     _field("po_pnl_date", "PO / PNL date", "date", "billing", "Purchase order"),
     _field("revenue_remarks", "PO remarks", "textarea", "billing", "Purchase order"),
@@ -167,6 +167,7 @@ def delivery_finished(submission: SqrSubmission) -> bool:
         submission.overall_status == Overall.COMPLETED
         or submission.delivery_health == Health.COMPLETED
         or submission.delivery_actual_finish_date
+        or submission.legacy_delivery_completed
     )
 
 
@@ -179,7 +180,7 @@ def derive_stage(submission: SqrSubmission) -> tuple[str, str]:
         return "closed", "canceled"
     if proposal != Proposal.CLOSED_WON:
         return "opportunity", ""
-    if submission.overall_status == Overall.CANCELLED:
+    if submission.overall_status == Overall.CANCELLED or submission.delivery_health == Health.CANCELLED:
         return "closed", "canceled"
     if revenue_state(submission) == Billing.BILLED:
         return "closed", "billed"
@@ -190,8 +191,10 @@ def derive_stage(submission: SqrSubmission) -> tuple[str, str]:
 
 def derive_attention(submission: SqrSubmission, stage: str, today: date) -> list[dict]:
     flags: list[dict] = []
+    if submission.maintenance_notice:
+        flags.append({"key": "maintenance", "label": submission.maintenance_notice, "tone": "warning"})
     if submission.status == Status.ON_HOLD:
-        return [{"key": "hold", "label": "On Hold", "tone": "muted"}]
+        return flags + [{"key": "hold", "label": "On Hold", "tone": "muted"}]
     if submission.status == Status.FOR_REVISION:
         flags.append({"key": "revision", "label": "Revision requested", "tone": "danger"})
     elif submission.status == Status.FOR_PROCESSING:
@@ -207,13 +210,9 @@ def derive_attention(submission: SqrSubmission, stage: str, today: date) -> list
             flags.append({"key": "validity", "label": label, "tone": "warning"})
 
     if stage == "delivery":
-        target = submission.delivery_target_finish_date
-        if target and target < today:
-            flags.append({"key": "overdue", "label": "Delivery overdue", "tone": "danger"})
-        if submission.delivery_health == Health.AT_RISK:
-            flags.append({"key": "health", "label": "At risk", "tone": "danger"})
-        elif submission.delivery_health == Health.OFF_TRACK:
-            flags.append({"key": "health", "label": "Off track", "tone": "warning"})
+        for key, indicator in build_assessment_snapshot(submission)["indicators"].items():
+            if indicator["state"] in ("warning", "danger"):
+                flags.append({"key": key, "label": indicator["label"], "tone": indicator["state"]})
     if stage == "billing":
         flags.append({"key": "billing", "label": "Ready to bill", "tone": "info"})
     return flags
@@ -251,13 +250,13 @@ def derive_next_step(submission: SqrSubmission, stage: str, closed_reason: str, 
         return {"tone": "info", "title": "Follow up with the customer",
                 "hint": "Update Proposal Status when they respond.", "action": ""}
     if stage == "delivery":
-        if not (submission.delivery_start_date and submission.delivery_target_finish_date):
+        if not submission.delivery_start_date:
             return {"tone": "info", "title": "Plan the delivery",
                     "hint": "Assign the PM and SSE and set the dates.", "action": ""}
         progress = submission.delivery_progress
         suffix = f" ({progress}% complete)" if progress is not None else ""
         return {"tone": "info", "title": "Delivery in progress",
-                "hint": f"Keep progress and health current{suffix}.", "action": ""}
+                "hint": f"Keep progress and the three performance assessments current{suffix}.", "action": ""}
     if stage == "billing":
         return {"tone": "info", "title": "Ready for billing",
                 "hint": "Add the billing reference, then mark it Billed.", "action": ""}
@@ -271,7 +270,6 @@ def derive_next_step(submission: SqrSubmission, stage: str, closed_reason: str, 
 
 
 def _values(submission: SqrSubmission) -> dict:
-    support_start = submission.computed_support_start_date
     return {
         "customer_name": submission.customer_name,
         "project_title": submission.project_title,
@@ -299,17 +297,16 @@ def _values(submission: SqrSubmission) -> dict:
         "assigned_pm": str(submission.assigned_pm_id or submission.pm_esg_reviewer_id or ""),
         "assigned_sse": str(submission.assigned_sse_id or ""),
         "delivery_start_date": _iso(submission.delivery_start_date),
-        "delivery_target_finish_date": _iso(submission.delivery_target_finish_date),
         "delivery_actual_finish_date": _iso(submission.delivery_actual_finish_date),
-        "delivery_completion_signed_date": _iso(submission.delivery_completion_signed_date),
         "overall_status": submission.overall_status or "",
-        "delivery_health": submission.delivery_health or "",
         "delivery_progress": "" if submission.delivery_progress is None else str(submission.delivery_progress),
         "key_updates_risks": submission.key_updates_risks or "",
         "post_svc_warranty_end_date": _date_text(submission.computed_post_svc_warranty_end_date),
         "managed_support_start_date": _iso(submission.managed_support_start_date),
-        "support_start_date": _date_text(support_start),
-        "managed_support_end_date": _date_text(submission.computed_managed_support_end_date),
+        "managed_support_end_date": _iso(submission.managed_support_end_date),
+        "schedule_performance": submission.schedule_performance or "",
+        "budget_effort_performance": submission.budget_effort_performance or "",
+        "quality_performance": submission.quality_performance or "",
         "po_pnl_date": _iso(submission.po_pnl_date),
         "revenue_remarks": submission.revenue_remarks or "",
         "revenue_source": submission.revenue_source or "",
@@ -355,7 +352,20 @@ def serialize_record(
         "status": submission.status,
         "proposal_status": submission.proposal_status or "",
         "overall_status": submission.overall_status or "",
-        "delivery_health": submission.delivery_health or "",
+        "pm_id": values["assigned_pm"],
+        "sse_id": values["assigned_sse"],
+        "linked_request_id": str(submission.linked_request_id or ""),
+        "schedule_performance": values["schedule_performance"],
+        "budget_effort_performance": values["budget_effort_performance"],
+        "quality_performance": values["quality_performance"],
+        "billing_type": values["revenue_source"],
+        "billing_state": values["revenue_status"],
+        "assessment": build_assessment_snapshot(submission),
+        "delivery_start_date": _iso(submission.delivery_start_date),
+        "delivery_actual_finish_date": _iso(submission.delivery_actual_finish_date),
+        "post_svc_warranty_end_date": _iso(submission.computed_post_svc_warranty_end_date),
+        "managed_support_start_date": _iso(submission.computed_support_start_date),
+        "managed_support_end_date": _iso(submission.computed_managed_support_end_date),
         "revenue_status": values["revenue_status"],
         "progress": submission.delivery_progress,
         "total": values["total_price"],
@@ -371,7 +381,6 @@ def serialize_record(
              "url": reverse("hub:request-manage-collab", args=[linked.pk])}
             if linked else None
         ),
-        "target_date": _iso(submission.delivery_target_finish_date),
         "values": values,
         "perms": {
             "edit_form": owns,

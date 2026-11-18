@@ -11,7 +11,7 @@ import sys
 import warnings
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hub.release_changelog import EVIDENCE_POLICY, ManifestError, missing_comparisons, validate_manifest
+from hub.release_changelog import EVIDENCE_POLICY, ManifestError, comparison_kind, missing_comparisons, repository_report_only, validate_manifest
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_BUNDLE_BYTES = 100 * 1024 * 1024
@@ -145,7 +145,10 @@ def apply_bundle(manifest_path, assets, bundle, *, run_id, run_attempt):
     complete = 0
     for item in result["commits"]:
         source = incoming[item["sha"]]
-        if missing_comparisons([item], require_all=True):
+        better_evidence = repository_report_only(item) and any(
+            comparison_kind(pair) == "ui" for pair in source.get("comparisons", [])
+        ) and not missing_comparisons([source], require_all=True)
+        if better_evidence or missing_comparisons([item], require_all=True):
             for field in ("comparisons", "before_text", "after_text", "capture_error"):
                 if field in source:
                     item[field] = source[field]

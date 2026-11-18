@@ -12,6 +12,7 @@ from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.urls import resolve, reverse
 
 from accounts.models import User
+from hub.services.sqr_tracker_settings import resolve_sqr_view
 
 
 class NavigationParser(HTMLParser):
@@ -66,10 +67,20 @@ class SqrNavigationTests(SimpleTestCase):
                     index = labels.index("Dashboard")
                     self.assertEqual(labels[index:index + 3], ["Dashboard", "PPT", "SQR"])
                     self.assertEqual(parser.links[index + 1][1]["href"], reverse("hub:sqr") + "?view=performance")
-                    self.assertEqual(parser.links[index + 2][1]["href"], reverse("hub:sqr") + "?view=tracker")
+                    self.assertEqual(parser.links[index + 2][1]["href"], reverse("hub:sqr") + "?view=prototype")
                 else:
                     self.assertNotIn("PPT", labels)
                     self.assertEqual("SQR" in labels, role in (User.Roles.ENGINEER, User.Roles.ON_HOLD))
+
+    def view_context(self, request, *, is_pm, tab):
+        requested = "tracker" if "focus" in request.GET else request.GET.get("view")
+        view, notice = resolve_sqr_view(requested, show_classic=True, can_view_performance=is_pm)
+        if tab == "reports":
+            view, notice = "prototype", ""
+        return {
+            "active_sqr_view": view, "sqr_view_notice": notice,
+            "show_classic_sqr_tracker": True,
+        }
 
     def test_current_navigation_is_identified_on_initial_render(self):
         for query, role, active_tab, expected in (
@@ -84,7 +95,10 @@ class SqrNavigationTests(SimpleTestCase):
                 request.resolver_match = resolve(request.path)
                 request.user = User(username="fixture", role=role, christmas_default_overridden=True)
                 parser = NavigationParser()
-                parser.feed(render_to_string("base.html", {"request": request, "active_sqr_tab": active_tab}))
+                parser.feed(render_to_string("base.html", {
+                    "request": request, "active_sqr_tab": active_tab,
+                    **self.view_context(request, is_pm=role in (User.Roles.ADMIN, User.Roles.PM_ESG), tab=active_tab),
+                }))
                 current = [name for name, attrs in parser.links if attrs.get("aria-current") == "page"]
                 self.assertEqual(current, [expected])
 
@@ -93,6 +107,7 @@ class SqrNavigationTests(SimpleTestCase):
         with patch("hub.form_editor.get_definition", return_value=None):
             html = render_to_string("hub/sqr.html", {
                 "request": request, "is_pm": True, "active_sqr_tab": "proposal",
+                **self.view_context(request, is_pm=True, tab="proposal"),
             })
         self.assertFalse('data-sqr-view-button="performance"' in html, "Performance still appears in the SQR selector")
         self.assertTrue('data-sqr-view-button="tracker"' in html)
@@ -117,6 +132,7 @@ class SqrNavigationTests(SimpleTestCase):
                 with patch("hub.form_editor.get_definition", return_value=None):
                     html = render_to_string("hub/sqr.html", {
                         "request": request, "is_pm": is_pm, "active_sqr_tab": tab,
+                        **self.view_context(request, is_pm=is_pm, tab=tab),
                         "sqr_reports_summary": {"at_risk_count": 0, "off_track_count": 0},
                     })
                 parser = NavigationParser()

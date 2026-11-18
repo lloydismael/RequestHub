@@ -3,21 +3,39 @@
   "recipes": [
     {
       "id": "login-layout",
-      "paths": ["templates/accounts/login.html", "static/css/login-christmas.css"],
+      "paths": ["templates/accounts/login.html", "static/css/login-christmas.css", "static/js/login-christmas.js"],
       "scenes": [
         {
           "kind": "ui",
-          "fixture": "login",
-          "title": "Login layout - mobile",
-          "before_text": "The login layout at this change's first-parent revision.",
-          "after_text": "The updated login layout at this exact change revision.",
-          "viewport": {"width": 375, "height": 900}
+          "fixture": "seasonal_login",
+          "title": "Seasonal sign-in — desktop",
+          "before_text": "The previous rendered sign-in screen with the seasonal theme selected.",
+          "after_text": "The updated sign-in screen with the same theme selected. This static view does not show animation.",
+          "viewport": {"width": 1200, "height": 900}
+        },
+        {
+          "kind": "ui",
+          "fixture": "seasonal_login",
+          "title": "Seasonal sign-in — mobile",
+          "before_text": "The previous rendered sign-in screen on a narrow viewport.",
+          "after_text": "The updated sign-in screen on the same narrow viewport.",
+          "viewport": {"width": 375, "height": 844}
         }
       ]
     },
     {
+      "id": "profile-avatar",
+      "paths": ["templates/accounts/profile_form.html", "static/css/profile-settings.css"],
+      "scenes": [{
+        "kind": "ui", "fixture": "profile", "title": "Profile avatar controls — mobile",
+        "before_text": "The previous avatar settings for the same synthetic account.",
+        "after_text": "The updated avatar settings on the same mobile viewport; no photo was uploaded.",
+        "viewport": {"width": 375, "height": 844}
+      }]
+    },
+    {
       "id": "changelog-display",
-      "paths": ["templates/hub/partials/changelog_entry.html", "templates/hub/partials/changelog_change_list.html", "static/hub/changelogs.css"],
+      "paths": ["templates/hub/notifications.html", "templates/hub/partials/changelog_entry.html", "templates/hub/partials/changelog_change_list.html", "templates/hub/partials/changelog_comparison.html", "static/hub/changelogs.css"],
       "scenes": [
         {
           "kind": "ui",
@@ -27,6 +45,33 @@
           "after_text": "The updated changelog component using the same synthetic release after this change."
         }
       ]
+    },
+    {
+      "id": "changelog-editor",
+      "paths": ["templates/hub/partials/changelog_management.html"],
+      "scenes": [{
+        "kind": "ui", "fixture": "changelog_editor", "title": "Changelog comparison editor",
+        "before_text": "The previous evidence editor for a synthetic release with three changes.",
+        "after_text": "The updated evidence editor for the same synthetic release."
+      }]
+    },
+    {
+      "id": "sqr-tracker-shell",
+      "paths": ["templates/hub/partials/sqr_prototype.html", "static/css/sqr-tracker-prototype.css"],
+      "scenes": [{
+        "kind": "ui", "fixture": "sqr_tracker", "title": "SQR Tracker controls",
+        "before_text": "The previous tracker shell before results load.",
+        "after_text": "The updated tracker shell and its rendered layout controls; client-populated results are not shown."
+      }]
+    },
+    {
+      "id": "sqr-performance-shell",
+      "paths": ["templates/hub/partials/sqr_performance.html"],
+      "scenes": [{
+        "kind": "ui", "fixture": "sqr_performance", "title": "Project Performance Tracking controls",
+        "before_text": "The previous performance dashboard headings and controls.",
+        "after_text": "The updated dashboard headings and controls; client-populated data is not shown."
+      }]
     },
     {
           "id": "sqr-dashboard-filters",

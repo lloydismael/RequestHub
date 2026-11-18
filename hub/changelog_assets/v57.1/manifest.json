@@ -13,14 +13,15 @@
       "after_text": "Login and profile layouts gain device-safe viewport sizing, improved mobile spacing and scrolling, and updated stylesheet cache versions.",
       "comparisons": [
         {
-          "title": "Repository change report — Responsive login and profile layout",
-          "before_text": "Login and profile styles used the previous viewport sizing, spacing and stylesheet versions. Evidence: exact first-parent file metadata, not a UI screenshot.",
-          "after_text": "Login and profile layouts gain device-safe viewport sizing, improved mobile spacing and scrolling, and updated stylesheet cache versions. Evidence: exact change-revision file metadata, not a UI screenshot.",
-          "before_image": "v57.1/01-before.png",
-          "after_image": "v57.1/01-after.png",
+          "title": "Seasonal sign-in — mobile",
+          "before_text": "The previous rendered sign-in screen on a narrow viewport.",
+          "after_text": "The updated sign-in screen on the same narrow viewport.",
+          "evidence_kind": "ui",
+          "before_image": "v57.1/seasonal-sign-in-mobile-before.webp",
+          "after_image": "v57.1/seasonal-sign-in-mobile-after.webp",
           "before_revision": "ecc284e1dd19e208e4e843c0ba4a6fc009dd5204",
           "after_revision": "bb2341fdf36cfe9518ad430765d6a6755d3e1f66",
-          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+          "capture_note": "Packaged ui capture, recipe login-layout. Exact Git snapshots; synthetic fixtures; external traffic blocked. Only the historical decoration script rendered a reduced-motion frame."
         }
       ]
     }

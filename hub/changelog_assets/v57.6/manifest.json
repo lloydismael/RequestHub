@@ -13,14 +13,26 @@
       "after_text": "Refines Christmas login lighting, snow and interaction styling. Adds opt-in server telemetry to WSGI/ASGI startup with settings, dependency updates, deployment guidance and dedicated regression tests.",
       "comparisons": [
         {
-          "title": "Repository change report — Christmas login lighting and opt-in server telemetry",
-          "before_text": "Christmas login lighting used the earlier effect implementation, and the application lacked the new opt-in server telemetry integration. Evidence: exact first-parent file metadata, not a UI screenshot.",
-          "after_text": "Refines Christmas login lighting, snow and interaction styling. Adds opt-in server telemetry to WSGI/ASGI startup with settings, dependency updates, deployment guidance and dedicated regression tests. Evidence: exact change-revision file metadata, not a UI screenshot.",
-          "before_image": "v57.6/01-before.png",
-          "after_image": "v57.6/01-after.png",
+          "title": "Seasonal sign-in — desktop",
+          "before_text": "The previous rendered sign-in screen with the seasonal theme selected.",
+          "after_text": "The updated sign-in screen with the same theme selected. This static view does not show animation.",
+          "evidence_kind": "ui",
+          "before_image": "v57.6/seasonal-sign-in-desktop-before.webp",
+          "after_image": "v57.6/seasonal-sign-in-desktop-after.webp",
           "before_revision": "a85e4429da77eafbaad9eee95969a319b0a67713",
           "after_revision": "cf93e4f66cce42c01fd6a3cf7e59fe2317991090",
-          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+          "capture_note": "Packaged ui capture, recipe login-layout. Exact Git snapshots; synthetic fixtures; external traffic blocked. Only the historical decoration script rendered a reduced-motion frame."
+        },
+        {
+          "title": "Seasonal sign-in — mobile",
+          "before_text": "The previous rendered sign-in screen on a narrow viewport.",
+          "after_text": "The updated sign-in screen on the same narrow viewport.",
+          "evidence_kind": "ui",
+          "before_image": "v57.6/seasonal-sign-in-mobile-before.webp",
+          "after_image": "v57.6/seasonal-sign-in-mobile-after.webp",
+          "before_revision": "a85e4429da77eafbaad9eee95969a319b0a67713",
+          "after_revision": "cf93e4f66cce42c01fd6a3cf7e59fe2317991090",
+          "capture_note": "Packaged ui capture, recipe login-layout. Exact Git snapshots; synthetic fixtures; external traffic blocked. Only the historical decoration script rendered a reduced-motion frame."
         }
       ]
     }

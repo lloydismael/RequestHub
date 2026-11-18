@@ -13,14 +13,26 @@
       "after_text": "Adds offline exact-revision capture for UI, documentation and behavior reports; all-change evidence requirements, actionable draft recovery, automatic publication and paginated comparison editors. Management isolates changelog queries. Also includes form-editor and festive-effect refinements, v56.6-v56.8 evidence and regression coverage.",
       "comparisons": [
         {
-          "title": "Repository change report — Changelog capture, Management and festive effects",
-          "before_text": "Release evidence relied on earlier capture/editor behavior, and the Management page loaded unrelated tab data. Form-editor and festive-effect interactions used their previous handling. Evidence: exact first-parent file metadata, not a UI screenshot.",
-          "after_text": "Adds offline exact-revision capture for UI, documentation and behavior reports; all-change evidence requirements, actionable draft recovery, automatic publication and paginated comparison editors. Management isolates changelog queries. Also includes form-editor and festive-effect refinements, v56.6-v56.8 evidence and regression coverage. Evidence: exact change-revision file metadata, not a UI screenshot.",
-          "before_image": "v57.2/01-before.png",
-          "after_image": "v57.2/01-after.png",
+          "title": "Changelog comparison editor",
+          "before_text": "The evidence editor listed all three synthetic changes on one page.",
+          "after_text": "The editor shows two changes per page with navigation and guidance to save before switching.",
+          "evidence_kind": "ui",
           "before_revision": "c5f2535d241c4296cd23000af9800815851a274e",
           "after_revision": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
-          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+          "capture_note": "Packaged ui capture, recipe changelog-editor. Exact Git snapshots; synthetic fixtures; external traffic and page scripts blocked.",
+          "before_image": "v57.2/changelog-editor-before.webp",
+          "after_image": "v57.2/changelog-editor-after.webp"
+        },
+        {
+          "title": "Seasonal sign-in — mobile",
+          "before_text": "The previous rendered sign-in screen on a narrow viewport.",
+          "after_text": "The updated sign-in screen on the same narrow viewport.",
+          "evidence_kind": "ui",
+          "before_image": "v57.2/seasonal-sign-in-mobile-before.webp",
+          "after_image": "v57.2/seasonal-sign-in-mobile-after.webp",
+          "before_revision": "c5f2535d241c4296cd23000af9800815851a274e",
+          "after_revision": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
+          "capture_note": "Packaged ui capture, recipe login-layout. Exact Git snapshots; synthetic fixtures; external traffic blocked. Only the historical decoration script rendered a reduced-motion frame."
         }
       ]
     }

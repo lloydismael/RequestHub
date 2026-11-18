@@ -47,8 +47,30 @@ const context = {document};
 vm.runInNewContext(SOURCE, context);
 const display = new Element('div');
 context.renderStructuredDisplay(display, 'proposal_status', '<img src=x onerror=alert(1)>');
-assert.equal(display.textContent, '–');
+assert.equal(display.textContent, '\u2013');
+for (const [field, value, label, tone] of [
+    ['schedule_performance', 'on_track', 'On Track', 'success'],
+    ['schedule_performance', 'at_risk', 'At Risk', 'warning'],
+    ['schedule_performance', 'delayed', 'Delayed', 'danger'],
+    ['budget_effort_performance', 'within_budget', 'Within Budget', 'success'],
+    ['budget_effort_performance', 'at_risk', 'At Risk', 'warning'],
+    ['budget_effort_performance', 'over_budget', 'Over Budget', 'danger'],
+    ['quality_performance', 'met', 'Met', 'success'],
+    ['quality_performance', 'at_risk', 'At Risk', 'warning'],
+    ['quality_performance', 'unmet', 'Unmet', 'danger']
+]) {
+    context.renderStructuredDisplay(display, field, value);
+    assert.equal(display.textContent, label);
+    assert.ok(display.children[0].className.includes('bg-' + tone + '-subtle'));
+}
 assert.equal(display.children[0].name, 'span');
+for (const field of ['schedule_performance', 'budget_effort_performance', 'quality_performance']) {
+    context.renderStructuredDisplay(display, field, '');
+    assert.equal(display.textContent, 'Not assessed');
+    context.renderStructuredDisplay(display, field, '<img src=x onerror=alert(1)>');
+    assert.equal(display.textContent, 'Not assessed (review required)');
+    assert.equal(display.children[0].name, 'span');
+}
 context.renderStructuredDisplay(display, 'proposal_status', 'closed_won');
 assert.equal(display.textContent, 'Closed-Won');
 assert.equal(display.children[0].children[0].name, 'i');
@@ -516,6 +538,41 @@ for (const [field, value, label] of [
         }
         assert.equal(containsElement(display, 'IMG'), false);
         if (field === 'proposal_status') assert.equal(row.dataset.sqrProposalStatus, value);
+    }
+}
+for (const field of ['delivery_actual_finish_date', 'managed_support_start_date', 'managed_support_end_date', 'project_details', 'managed_support_amount']) {
+    for (const undone of [false, true]) {
+        const startDisplay = createNode('span');
+        const endDisplay = createNode('span');
+        const warranty = createNode('td');
+        warranty.querySelector = () => null;
+        const start = {dataset: {sqrValue: 'stale'}, querySelector: () => startDisplay,
+            set innerHTML(value) { assert.fail('Maintenance Start editor was replaced'); }};
+        const end = {dataset: {sqrValue: 'stale'}, querySelector: () => endDisplay,
+            set innerHTML(value) { assert.fail('Maintenance End editor was replaced'); }};
+        const notice = {hidden: true, textContent: '',
+            set innerHTML(value) { assert.fail('Maintenance notice must be text-safe'); }};
+        const noticeText = undone ? '' : 'Stored Maintenance dates are inactive <img src=x onerror=alert(1)>';
+        const row = {querySelector(selector) {
+            if (selector === '[data-sqr-maintenance-notice]') return notice;
+            if (selector === '[data-sqr-computed="support_start_date"]') return start;
+            if (selector === '[data-sqr-computed="managed_support_end_date"]') return end;
+            if (selector === '[data-sqr-computed="post_svc_warranty_end_date"]') return warranty;
+            return null;
+        }};
+        const cell = {dataset: {}, classList: {add() {}, remove() {}}, closest: () => row};
+        applyInlineUpdateResponse('225', field, '', cell, createNode('div'), {
+            undone, maintenance_notice: noticeText,
+            maintenance_start_value: '2028-02-01', maintenance_end_value: '2028-02-08',
+            support_start_date: '', managed_support_end_date: '', post_svc_warranty_end_date: 'Mar 02, 2028'
+        });
+        assert.equal(notice.textContent, noticeText);
+        assert.equal(notice.hidden, !noticeText);
+        assert.equal(start.dataset.sqrValue, '2028-02-01');
+        assert.equal(end.dataset.sqrValue, '2028-02-08');
+        assert.equal(startDisplay.textContent, 'NA');
+        assert.equal(endDisplay.textContent, 'NA');
+        assert.equal(warranty.textContent, 'Mar 02, 2028');
     }
 }
 for (const field of ['customer_name', 'project_title', 'revenue_reference_no']) {

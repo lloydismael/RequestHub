@@ -10,8 +10,30 @@
 
     var ENDPOINT = root.dataset.endpoint;
     var CSRF = root.dataset.csrf;
-    var STORE_KEY = 'requestHub.sqr.prototype';
+    var STORE_KEY = 'requestHub.sqr.prototype.filters.v1';
     var VIEW_KEY = 'requestHub.sqr.tableView';
+    var PRESENTATION_KEY = 'requestHub.sqr.tracker.presentation.v1';
+    var DATE_COLUMNS = [
+        ['delivery_start_date', 'Start'], ['delivery_actual_finish_date', 'Finish'],
+        ['post_svc_warranty_end_date', 'Warranty End'], ['managed_support_start_date', 'Maintenance Start'], ['managed_support_end_date', 'Maintenance End']
+    ];
+    var TABLE_COLUMNS = [
+        ['ref', 'Reference / Project'], ['account', 'Customer'], ['assigned_pm_name', 'PM'], ['assigned_sse_name', 'SSE'],
+        ['stage', 'Stage'], ['overall_status', 'Overall / Delivery Status'], ['progress', 'Progress'],
+        ['schedule_performance', 'Schedule Performance'], ['budget_effort_performance', 'Budget/Effort Performance'], ['quality_performance', 'Quality Performance']
+    ];
+    var PERFORMANCE = {
+        schedule_performance: {on_track: ['On Track', 'success'], at_risk: ['At Risk', 'warning'], delayed: ['Delayed', 'danger']},
+        budget_effort_performance: {within_budget: ['Within Budget', 'success'], at_risk: ['At Risk', 'warning'], over_budget: ['Over Budget', 'danger']},
+        quality_performance: {met: ['Met', 'success'], at_risk: ['At Risk', 'warning'], unmet: ['Unmet', 'danger']}
+    };
+    var core = window.SqrFilterCore;
+    var FILTER_LABELS = {stage: 'Stage', status: 'SQR Status', proposal_status: 'Proposal Status', overall_status: 'Overall Status',
+        pm_id: 'Project Manager', sse_id: 'SSE', schedule_performance: 'Schedule Performance', budget_effort_performance: 'Budget/Effort Performance',
+        quality_performance: 'Quality Performance', scope: 'Scope', billing_type: 'Billing Type', billing_state: 'Billing Status', linked_request_id: 'Linked Request', group: 'Group/Client'};
+    var FILTER_KEYS = Object.keys(FILTER_LABELS);
+    var preferenceNotices = [];
+    var filterControls = null;
     var PAGE_SIZE = 50;
     var STALE_MS = 60000;
 
@@ -29,7 +51,8 @@
         loaded: false, loadedAt: 0, viewer: null, schema: null, options: {}, records: [], byPk: {},
         specs: {}, sections: {}, labels: {}, selectedPk: null, tab: 'summary', shown: PAGE_SIZE,
         dirtyClassic: false, history: {}, pipeline: {}, pagination: null,
-        filters: {stage: 'all', search: ''}
+        presentation: 'list', sort: {key: 'attention', direction: 'desc'}, dateColumns: [], loading: false, loadError: '',
+        filters: core.normalizeFilters({}, FILTER_KEYS).state
     };
     loadPrefs();
     var inFlight = null;
@@ -41,9 +64,10 @@
     function $(id) { return document.getElementById('sqr-proto-' + id); }
     var el = {
         pipeline: $('pipeline'), body: $('body'), items: $('items'), more: $('more'),
-        editor: $('editor'), search: $('search'),
+        editor: $('editor'), search: $('search'), filters: $('filters'), filterNotice: $('filter-notice'),
         toast: $('toast'), toastText: $('toast-text'), toastUndo: $('toast-undo'), toastClose: $('toast-close'),
-        approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error')
+        approve: $('approve'), revise: $('revise'), reviseNotes: $('revise-notes'), reviseError: $('revise-error'),
+        table: $('table'), listView: $('list-view'), tableView: $('table-view'), dateColumns: $('date-columns'), resultNotice: $('result-notice'), sort: $('sort')
     };
 
     /* ── helpers ─────────────────────────────────────────────────── */
@@ -104,14 +128,43 @@
     }
     function record(pk) { return state.byPk[pk] || null; }
     function savePrefs() {
-        try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state.filters)); } catch (error) { /* storage unavailable */ }
+        try { sessionStorage.setItem(STORE_KEY, JSON.stringify(state.filters)); }
+        catch (error) { preferenceNotices = ['Filters are applied, but preferences could not be saved in this browser.']; renderFilterNotice(); }
     }
     function loadPrefs() {
         try {
             var saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null');
-            if (saved) { Object.keys(state.filters).forEach(function (key) { if (key in saved) state.filters[key] = saved[key]; }); return true; }
-        } catch (error) { /* ignore corrupt prefs */ }
-        return false;
+            if (saved == null) {
+                var legacy = JSON.parse(sessionStorage.getItem('requestHub.sqr.prototype') || 'null');
+                if (legacy) {
+                    saved = {search: legacy.search, selections: {stage: []}, mine: legacy.stage === 'mine', attention: legacy.stage === 'attention'};
+                    if (legacy.stage === 'on_hold') saved.selections.status = ['on_hold'];
+                    else if (legacy.stage && ['all', 'mine', 'attention'].indexOf(legacy.stage) < 0) saved.selections.stage = [legacy.stage];
+                }
+            }
+            var normalized = core.normalizeFilters(saved, FILTER_KEYS);
+            state.filters = normalized.state; preferenceNotices = normalized.notices;
+        } catch (error) { preferenceNotices = ['Saved filters could not be read. Default filters are in use.']; }
+        try {
+            var presentation = JSON.parse(sessionStorage.getItem(PRESENTATION_KEY) || 'null');
+            if (presentation) {
+                if (['list', 'table'].indexOf(presentation.presentation) >= 0) state.presentation = presentation.presentation;
+                var keys = TABLE_COLUMNS.concat(DATE_COLUMNS).map(function (column) { return column[0]; }).concat(['attention']);
+                if (presentation.sort && keys.indexOf(presentation.sort.key) >= 0 && ['asc', 'desc'].indexOf(presentation.sort.direction) >= 0) {
+                    state.sort = {key: presentation.sort.key, direction: presentation.sort.direction};
+                }
+                if (Array.isArray(presentation.dateColumns)) state.dateColumns = DATE_COLUMNS.map(function (column) { return column[0]; }).filter(function (key) { return presentation.dateColumns.indexOf(key) >= 0; });
+            }
+        } catch (error) { preferenceNotices.push('Saved presentation preferences could not be read. Default presentation is in use.'); }
+        var query = new URLSearchParams(window.location.search);
+        var queryKeys = FILTER_KEYS.concat(['manager', 'health', 'q', 'search', 'mine', 'attention', 'priceMin', 'priceMax', 'price_min', 'price_max']);
+        core.dateKeys.forEach(function (key) { queryKeys.push(key + '_from', key + '_to'); });
+        if (queryKeys.some(function (key) { return query.has(key); })) {
+            var parsed = core.fromQuery(query, FILTER_KEYS); state.filters = parsed.state; preferenceNotices = preferenceNotices.concat(parsed.notices);
+        }
+    }
+    function renderFilterNotice() {
+        el.filterNotice.textContent = preferenceNotices.join(' '); el.filterNotice.hidden = !preferenceNotices.length;
     }
 
     /* ── toast ───────────────────────────────────────────────────── */
@@ -145,43 +198,71 @@
     });
 
     /* ── filtering / sorting ─────────────────────────────────────── */
-    function needsAction(rec) {
-        if (rec.status === 'on_hold') return false;
-        return rec.attention.some(function (flag) { return flag.tone === 'danger'; }) ||
-            (state.viewer.is_pm && rec.status === 'submitted');
-    }
-    function baseMatches(rec) {
-        var f = state.filters;
-        if (f.search) {
-            var terms = f.search.toLowerCase().split(/\s+/).filter(Boolean);
-            for (var i = 0; i < terms.length; i += 1) if (rec.search.indexOf(terms[i]) === -1) return false;
-        }
-        return true;
-    }
-    function isMine(rec) { return !!state.viewer && rec.approver_id === state.viewer.pk; }
-    function stageMatches(rec) {
-        var stage = state.filters.stage;
-        if (stage === 'all') return true;
-        if (stage === 'mine') return state.viewer.is_pm ? isMine(rec) : true;
-        if (stage === 'attention') return needsAction(rec);
-        if (stage === 'on_hold') return rec.status === 'on_hold';
-        return rec.stage === stage;
-    }
+    function needsAction(rec) { return core.needsAttention(rec); }
+    function baseMatches(rec) { return core.matchesRecord(rec, state.filters, state.viewer); }
+    function isMine(rec) { return core.isMine(rec, state.viewer); }
     function attentionScore(rec) {
         return rec.attention.reduce(function (sum, flag) { return sum + (flag.tone === 'danger' ? 3 : flag.tone === 'warning' ? 2 : 0); }, 0);
     }
     function newestFirst(a, b) { return a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : b.pk - a.pk; }
     function needsAttentionFirst(a, b) { return attentionScore(b) - attentionScore(a) || newestFirst(a, b); }
+    function compareRecords(a, b) {
+        if (state.sort.key === 'attention') return needsAttentionFirst(a, b);
+        var key = state.sort.key, av = a[key], bv = b[key];
+        var missingA = av === null || av === undefined || av === '', missingB = bv === null || bv === undefined || bv === '';
+        if (missingA !== missingB) return missingA ? 1 : -1;
+        var delta = key === 'progress' ? Number(av) - Number(bv) : String(av || '').localeCompare(String(bv || ''), undefined, {numeric: true, sensitivity: 'base'});
+        return (state.sort.direction === 'desc' ? -delta : delta) || a.pk - b.pk;
+    }
     function visibleRecords() {
-        return state.records.filter(function (rec) { return baseMatches(rec) && stageMatches(rec); }).sort(needsAttentionFirst);
+        return core.filterRecords(state.records, state.filters, state.viewer).sort(compareRecords);
+    }
+    function savePresentation() {
+        try { sessionStorage.setItem(PRESENTATION_KEY, JSON.stringify({presentation: state.presentation, sort: state.sort, dateColumns: state.dateColumns})); }
+        catch (error) { preferenceNotices = ['Presentation is applied, but preferences could not be saved in this browser.']; renderFilterNotice(); }
+    }
+    function setPresentation(value) {
+        if (value !== 'list' && value !== 'table') return;
+        state.presentation = value; savePresentation(); renderAll();
+    }
+    function setSort(key, direction) {
+        state.sort = {key: key, direction: direction || (state.sort.key === key && state.sort.direction === 'asc' ? 'desc' : 'asc')};
+        savePresentation(); renderAll();
+    }
+    function performanceBadge(rec, key, labeled) {
+        var entry = PERFORMANCE[key][rec[key]];
+        var text = entry ? entry[0] : 'Not assessed';
+        return h('span', {class: 'sqr-proto__badge', dataset: {tone: entry ? entry[1] : 'muted'}, text: (labeled ? FILTER_LABELS[key] + ': ' : '') + text});
+    }
+    function resultNotice(message) {
+        el.resultNotice.textContent = message || ''; el.resultNotice.hidden = !message;
+    }
+    function clampShown() { state.shown = Math.max(PAGE_SIZE, Math.min(state.shown, visibleRecords().length)); }
+    function clearSelection(message) {
+        state.selectedPk = null; state.tab = 'summary'; el.body.dataset.mode = 'list';
+        el.editor.replaceChildren(h('div', {class: 'sqr-proto__placeholder', text: 'Select an SQR to view its details.'}));
+        resultNotice(message);
+        el.search.focus({preventScroll: true});
     }
 
     /* ── pipeline strip ──────────────────────────────────────────── */
     var STAGE_TONES = {all: 'secondary', mine: 'primary', attention: 'danger', opportunity: 'primary', delivery: 'success', billing: 'warning', closed: 'secondary'};
+    function pipelineSummary(pool) {
+        var summary = {};
+        function add(key, predicate) {
+            var rows = pool.filter(predicate);
+            summary[key] = {count: rows.length, total: String(rows.reduce(function (sum, rec) { return sum + (parseFloat(rec.total) || 0); }, 0))};
+        }
+        add('all', function () { return true; }); add('mine', isMine); add('attention', needsAction);
+        add('on_hold', function (rec) { return rec.status === 'on_hold'; });
+        state.schema.stages.forEach(function (stage) { add(stage[0], function (rec) { return rec.stage === stage[0]; }); });
+        return summary;
+    }
     function renderPipeline() {
-        var pool = state.records.filter(baseMatches);
+        var pool = visibleRecords();
+        state.pipeline = pipelineSummary(pool);
         var defs = [{key: 'all', label: 'All SQRs', test: function () { return true; }}];
-        if (state.viewer.is_pm) defs.push({key: 'mine', label: 'My Assigned SQR', icon: 'bi-person-check-fill', test: isMine});
+        if (state.viewer.is_pm || state.viewer.is_engineer) defs.push({key: 'mine', label: 'My Assigned SQR', icon: 'bi-person-check-fill', test: isMine});
         defs.push({key: 'attention', label: 'Needs action', test: needsAction});
         defs.push({key: 'on_hold', label: 'On Hold', test: function (rec) { return rec.status === 'on_hold'; }});
         state.schema.stages.forEach(function (stage) {
@@ -195,10 +276,19 @@
             return h('button', {
                 type: 'button', class: 'badge bg-' + tone + '-subtle text-' + tone + ' border border-' + tone + '-subtle sqr-badge-filter',
                 dataset: {stage: def.key}, title: compactPeso(total),
-                'aria-pressed': state.filters.stage === def.key ? 'true' : 'false',
+                'aria-pressed': String(def.key === 'mine' ? state.filters.mine : def.key === 'attention' ? state.filters.attention :
+                    def.key === 'all' ? !state.filters.selections.stage.length && !state.filters.mine && !state.filters.attention :
+                    def.key === 'on_hold' ? state.filters.selections.status.indexOf('on_hold') >= 0 : state.filters.selections.stage.indexOf(def.key) >= 0),
                 on: {click: function () {
-                    state.filters.stage = state.filters.stage === def.key ? 'all' : def.key;
-                    state.shown = PAGE_SIZE; savePrefs(); load(false);
+                    if (def.key === 'mine' || def.key === 'attention') state.filters[def.key] = !state.filters[def.key];
+                    else if (def.key === 'all') { state.filters.selections.stage = []; state.filters.mine = false; state.filters.attention = false; }
+                    else {
+                        var key = def.key === 'on_hold' ? 'status' : 'stage';
+                        var value = def.key === 'on_hold' ? 'on_hold' : def.key;
+                        var chosen = state.filters.selections[key];
+                        state.filters.selections[key] = chosen.indexOf(value) >= 0 ? chosen.filter(function (item) { return item !== value; }) : chosen.concat(value);
+                    }
+                    state.shown = PAGE_SIZE; savePrefs(); renderAll();
                 }}
             }, [def.icon ? icon(def.icon, 'me-1') : null, def.label + ': ' + (summary ? summary.count : matching.length)]);
         }));
@@ -223,6 +313,7 @@
             h('span', {class: 'sqr-proto__card-title', text: rec.account}),
             h('span', {class: 'sqr-proto__card-sub', text: rec.service}),
             h('span', {class: 'sqr-proto__card-meta'}, meta),
+            h('span', {class: 'sqr-proto__card-meta'}, Object.keys(PERFORMANCE).map(function (key) { return performanceBadge(rec, key, true); })),
             showBar ? h('span', {class: 'sqr-proto__bar', role: 'progressbar', 'aria-label': 'Delivery progress', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': rec.progress},
                 h('span', {style: 'width:' + Math.max(0, Math.min(100, rec.progress)) + '%'})) : null
         ]);
@@ -234,17 +325,121 @@
         var children = slice.map(function (rec) { return h('li', null, cardFor(rec)); });
         if (!rows.length) children.push(h('li', {class: 'sqr-proto__count', text: state.records.length ? 'No matches.' : 'No SQRs yet.'}));
         el.items.replaceChildren.apply(el.items, children);
-        el.more.hidden = state.pagination ? !state.pagination.has_next : rows.length <= slice.length;
+        el.more.hidden = rows.length <= slice.length;
         el.more.textContent = 'Show more';
         if (activePk) {
             var again = el.items.querySelector('.sqr-proto__card[data-pk="' + activePk + '"]');
             if (again) again.focus({preventScroll: true});
         }
     }
+    function renderTable(rows) {
+        var active = el.table.contains(document.activeElement) ? document.activeElement : null;
+        var focusPk = active && active.dataset.pk, focusSort = active && active.dataset.sort;
+        var columns = TABLE_COLUMNS.concat(DATE_COLUMNS.filter(function (column) { return state.dateColumns.indexOf(column[0]) >= 0; }));
+        var headers = columns.map(function (column) {
+            return h('th', {scope: 'col', 'aria-sort': state.sort.key === column[0] ? (state.sort.direction === 'asc' ? 'ascending' : 'descending') : 'none'},
+                h('button', {type: 'button', dataset: {sort: column[0]}, 'aria-label': 'Sort by ' + column[1], on: {click: function () { setSort(column[0]); }}}, column[1]));
+        });
+        headers.push(h('th', {scope: 'col', text: 'Open'}));
+        var body = rows.slice(0, state.shown).map(function (rec) {
+            var cells = columns.map(function (column) {
+                var key = column[0], content = rec[key] || '\u2014';
+                if (key === 'ref') content = h('span', null, [h('strong', {text: rec.ref}), h('span', {class: 'sqr-proto__table-project', text: rec.service})]);
+                else if (PERFORMANCE[key]) content = performanceBadge(rec, key);
+                else if (key === 'stage') content = STAGE_NAMES[rec.stage];
+                else if (key === 'overall_status') content = badge('overall_status', rec.overall_status) || '\u2014';
+                else if (key === 'progress') content = rec.progress === null || rec.progress === undefined ? '\u2014' : rec.progress + '%';
+                else if (DATE_COLUMNS.some(function (date) { return date[0] === key; })) content = core.validDate(rec[key]) ? fmtDate(rec[key]) : '\u2014';
+                return h('td', null, content);
+            });
+            var open = {class: 'sqr-proto__table-open', 'aria-label': 'Open ' + rec.ref, dataset: {pk: rec.pk}, 'aria-current': state.selectedPk === rec.pk ? 'true' : 'false'};
+            // A permitted form URL is the only alternate editor; every other row uses the existing permission-aware panel.
+            var action = rec.perms.edit_form && rec.urls.edit ? h('a', Object.assign(open, {href: rec.urls.edit}), 'Open') :
+                h('button', Object.assign(open, {type: 'button', on: {click: function () { select(rec.pk); }}}), 'Open');
+            cells.push(h('td', null, action));
+            return h('tr', {dataset: {pk: rec.pk, selected: state.selectedPk === rec.pk ? 'true' : 'false'}}, cells);
+        });
+        if (!rows.length) body.push(h('tr', null, h('td', {colspan: columns.length + 1, text: state.records.length ? 'No matches.' : 'No SQRs yet.'})));
+        el.table.replaceChildren(h('table', {class: 'sqr-proto__table'}, [
+            h('caption', {text: 'SQR Tracker — ' + rows.length + ' matching records. Showing ' + Math.min(rows.length, state.shown) + '.'}),
+            h('thead', null, h('tr', null, headers)), h('tbody', null, body)
+        ]));
+        var again = focusSort ? el.table.querySelector('[data-sort="' + focusSort + '"]') : focusPk ? el.table.querySelector('[data-pk="' + focusPk + '"][aria-current]') : null;
+        if (again) again.focus({preventScroll: true});
+    }
+    function renderPresentation() {
+        var table = state.presentation === 'table';
+        el.body.dataset.presentation = state.presentation;
+        el.items.hidden = table; el.table.hidden = !table; el.dateColumns.hidden = !table;
+        el.listView.setAttribute('aria-pressed', String(!table)); el.tableView.setAttribute('aria-pressed', String(table));
+        if (el.sort && !el.sort.children.length) {
+            var selectSort = h('select', {'aria-label': 'Sort SQRs', on: {change: function (event) {
+                var parts = event.target.value.split(':'); setSort(parts[0], parts[1]);
+            }}}, [h('option', {value: 'attention:desc', text: 'Needs attention first'})].concat(TABLE_COLUMNS.concat(DATE_COLUMNS).map(function (column) {
+                return ['asc', 'desc'].map(function (direction) { return h('option', {value: column[0] + ':' + direction, text: column[1] + (direction === 'asc' ? ' — ascending' : ' — descending')}); });
+            }).reduce(function (all, pair) { return all.concat(pair); }, [])));
+            el.sort.append(selectSort);
+        }
+        if (el.sort) el.sort.querySelector('select').value = state.sort.key + ':' + state.sort.direction;
+        if (!el.dateColumns.querySelector('input')) DATE_COLUMNS.forEach(function (column) {
+            var input = h('input', {type: 'checkbox', value: column[0], on: {change: function () {
+                state.dateColumns = DATE_COLUMNS.map(function (item) { return item[0]; }).filter(function (key) { return key === column[0] ? input.checked : state.dateColumns.indexOf(key) >= 0; });
+                savePresentation(); renderAll();
+            }}});
+            el.dateColumns.append(h('label', null, [input, ' ' + column[1]]));
+        });
+        el.dateColumns.querySelectorAll('input').forEach(function (input) { input.checked = state.dateColumns.indexOf(input.value) >= 0; });
+    }
+    function renderLoadState() {
+        var message = state.loading ? 'Loading\u2026' : state.loadError || 'Select a view to load SQR data.';
+        function retry() { return h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again'); }
+        el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: message}));
+        el.table.replaceChildren(h('p', {role: 'status', text: message}));
+        if (state.loadError && !state.loading) { el.items.append(h('li', null, retry())); el.table.append(retry()); }
+        el.more.hidden = true;
+    }
+    function filterDimensions() {
+        var aliases = {pm_id: 'assigned_pm', sse_id: 'assigned_sse', scope: 'project_details', billing_type: 'revenue_source', billing_state: 'revenue_status'};
+        var directories = {pm_id: 'pm_users', sse_id: 'sse_users', linked_request_id: 'rq_options'};
+        return FILTER_KEYS.map(function (key) {
+            var options = new Map();
+            var spec = state.specs[aliases[key] || key];
+            (key === 'stage' ? state.schema.stages : spec && spec.choices || []).forEach(function (choice) { options.set(String(choice[0]), choice[1]); });
+            (state.options[directories[key]] || []).forEach(function (choice) { options.set(String(choice.value), choice.label); });
+            var filters = Object.assign({}, state.filters, {selections: Object.assign({}, state.filters.selections)});
+            filters.selections[key] = [];
+            var counts = {};
+            state.records.forEach(function (rec) {
+                var value = String(rec[key] == null ? '' : rec[key]);
+                var label = value;
+                if (directories[key]) {
+                    if (!value) { value = '__unassigned__'; label = 'Unassigned'; }
+                    else label = key === 'pm_id' ? rec.assigned_pm_name : key === 'sse_id' ? rec.assigned_sse_name : rec.linked_request && rec.linked_request.code;
+                } else if (/_performance$/.test(key) && !value) { value = '__not_assessed__'; label = 'Not assessed'; }
+                if (!value) return;
+                if (!options.has(value)) options.set(value, label || value);
+                if (core.matchesRecord(rec, filters, state.viewer)) counts[value] = (counts[value] || 0) + 1;
+            });
+            return {key: key, label: FILTER_LABELS[key], options: Array.from(options, function (entry) { return {value: entry[0], label: entry[1], count: counts[entry[0]] || 0}; })};
+        });
+    }
+    function renderFilters() {
+        if (!filterControls) {
+            filterControls = window.SqrFilterControls.mount(el.filters, {state: state.filters, getDimensions: filterDimensions,
+                getResultCount: function () { return visibleRecords().length; }, onApply: function (next) {
+                    state.filters = core.normalizeFilters(next, FILTER_KEYS).state; state.shown = PAGE_SIZE;
+                    el.search.value = state.filters.search; resultNotice(); savePrefs(); renderAll();
+                }});
+        } else filterControls.setState(state.filters);
+        renderFilterNotice();
+    }
     function renderAll() {
-        if (!state.loaded) return;
+        renderPresentation();
+        if (!state.loaded) { renderLoadState(); renderFilterNotice(); return; }
         renderPipeline();
         renderList();
+        renderTable(visibleRecords());
+        renderFilters();
     }
 
     /* ── selection ───────────────────────────────────────────────── */
@@ -256,9 +451,10 @@
         if (changed) state.tab = 'summary';
         el.body.dataset.mode = 'detail';
         renderList();
+        renderTable(visibleRecords());
         renderEditor();
-        // On narrow screens the list is hidden, so move the reader to the record.
-        if (changed && window.matchMedia('(max-width: 1199.98px)').matches) {
+        // Table details are below the results; narrow List layouts hide the results.
+        if (state.presentation === 'table' || (changed && window.matchMedia('(max-width: 1199.98px)').matches)) {
             var heading = el.editor.querySelector('.sqr-proto__ed-title');
             if (heading) { heading.setAttribute('tabindex', '-1'); heading.focus(); }
             el.editor.scrollIntoView({block: 'start'});
@@ -266,8 +462,8 @@
     }
     function backToList() {
         el.body.dataset.mode = 'list';
-        var card = el.items.querySelector('[aria-current="true"]');
-        if (card) card.focus();
+        var card = (state.presentation === 'table' ? el.table : el.items).querySelector('[aria-current="true"]');
+        (card || el.search).focus();
     }
 
     /* ── editor: chrome (header, stepper, next step) ─────────────── */
@@ -369,6 +565,11 @@
     function fillReadonly(node, rec, spec) {
         var value = rec.values[spec.key];
         node.replaceChildren();
+        if (PERFORMANCE[spec.key]) {
+            node.append(performanceBadge(rec, spec.key));
+            node.dataset.empty = PERFORMANCE[spec.key][rec[spec.key]] ? 'false' : 'true';
+            return;
+        }
         if (spec.type === 'request' && rec.linked_request) {
             node.append(h('a', {href: rec.linked_request.url, target: '_blank', rel: 'noopener', text: rec.linked_request.code}));
             node.dataset.empty = 'false';
@@ -439,6 +640,7 @@
             control.addEventListener(eventName, function () { commit(rec.pk, spec, control, wrap); });
             wrap.append(h('div', {class: 'sqr-proto__control'}, [control, spec.unit && spec.unit !== '\u20b1' ? h('span', {class: 'sqr-proto__unit', text: spec.unit}) : null,
                 spec.unit === '\u20b1' ? h('span', {class: 'sqr-proto__unit', text: 'PHP'}) : null]));
+            if (PERFORMANCE[spec.key]) wrap.append(h('div', {class: 'sqr-proto__assessment'}, performanceBadge(rec, spec.key)));
         } else {
             var box = h('div', {class: 'sqr-proto__readonly', role: 'group', 'aria-labelledby': id + '-label'});
             fillReadonly(box, rec, spec);
@@ -575,15 +777,15 @@
             if (!v.proposal_status) add('proposal_status', 'Set the Proposal Status', 'Record where the customer stands: pending, negotiation, won, lost or canceled.');
             if (!rec.total) add('sse_manhrs', 'Add pricing', 'There is no total price yet. Enter the man-hours or maintenance amount.');
         } else if (rec.stage === 'delivery') {
-            if (flag('overdue')) add('delivery_target_finish_date', 'Delivery is overdue', 'Update the target finish date or the progress.', 'danger');
+            if (rec.schedule_performance === 'delayed') add('schedule_performance', 'Review delayed schedule', 'Review the recorded Schedule Performance and delivery plan.', 'danger');
             if (!v.assigned_sse) add('assigned_sse', 'Assign an SSE', 'Choose who will deliver the work.');
             if (!v.delivery_start_date) add('delivery_start_date', 'Set the delivery start date', 'Needed to plan the delivery.');
-            if (!v.delivery_target_finish_date) add('delivery_target_finish_date', 'Set the target finish date', 'Needed to track overdue work.');
+            Object.keys(PERFORMANCE).forEach(function (key) {
+                if (!PERFORMANCE[key][rec[key]]) add(key, 'Set ' + FILTER_LABELS[key], 'Record the assessment in Delivery > Progress.');
+            });
             if (!v.overall_status) add('overall_status', 'Set the overall status', 'Planning, in progress, on hold, completed or cancelled.');
-            if (!v.delivery_health) add('delivery_health', 'Set the health status', 'On track, off track or at risk.');
             if (!v.delivery_progress) add('delivery_progress', 'Update the progress', 'Enter the % complete.', 'info');
         } else if (rec.stage === 'billing') {
-            if (!v.delivery_completion_signed_date) add('delivery_completion_signed_date', 'Record the completion sign-off date', 'Add it once the customer signs off the delivery.');
             if (!v.po_pnl_date) add('po_pnl_date', 'Add the PO / PNL date', 'Required before billing.');
             if (!v.revenue_reference_no) add('revenue_reference_no', 'Add the billing reference', 'Invoice or internal billing reference number.');
             add('revenue_status', 'Mark as Billed', 'Do this once billing is done.', 'info');
@@ -664,8 +866,9 @@
         var v = rec.values;
         var timeline = [
             ['SQR submitted', fmtDate(rec.created_at)], ['Approved', v.reviewed_at], ['Validity due', v.validity_due_date],
-            ['Delivery start', fmtDate(v.delivery_start_date), 'delivery_start_date'], ['Target finish', fmtDate(v.delivery_target_finish_date), 'delivery_target_finish_date'],
-            ['Actual finish', fmtDate(v.delivery_actual_finish_date), 'delivery_actual_finish_date'], ['Completion signed', fmtDate(v.delivery_completion_signed_date), 'delivery_completion_signed_date'],
+            ['Delivery start', fmtDate(rec.delivery_start_date), 'delivery_start_date'], ['Finish', fmtDate(rec.delivery_actual_finish_date), 'delivery_actual_finish_date'],
+            ['Warranty End', fmtDate(rec.post_svc_warranty_end_date)],
+            ['Maintenance Start', fmtDate(rec.managed_support_start_date), 'managed_support_start_date'], ['Maintenance End', fmtDate(rec.managed_support_end_date), 'managed_support_end_date'],
             ['PO / PNL', fmtDate(v.po_pnl_date), 'po_pnl_date'], ['Billed', fmtDate(v.revenue_date), 'revenue_date']
         ];
         return [
@@ -677,7 +880,9 @@
                     fact('SQR status', badge('status', rec.status)),
                     fact('Proposal', badge('proposal_status', rec.proposal_status), rec, 'proposal_status'),
                     fact('Delivery', badge('overall_status', rec.overall_status), rec, 'overall_status'),
-                    fact('Health', badge('delivery_health', rec.delivery_health), rec, 'delivery_health'),
+                    fact('Schedule Performance', performanceBadge(rec, 'schedule_performance'), rec, 'schedule_performance'),
+                    fact('Budget/Effort Performance', performanceBadge(rec, 'budget_effort_performance'), rec, 'budget_effort_performance'),
+                    fact('Quality Performance', performanceBadge(rec, 'quality_performance'), rec, 'quality_performance'),
                     fact('Progress', rec.progress === null || rec.progress === undefined ? '' : rec.progress + '%', rec, 'delivery_progress'),
                     fact('Billing', rec.stage === 'opportunity' || (rec.stage === 'closed' && rec.closed_reason !== 'billed') ? '' : badge('revenue_status', rec.revenue_status)),
                     fact('Requester', rec.requester), fact('Approver', rec.approver),
@@ -832,6 +1037,7 @@
     function save(pk, key, value, wrap, extra) {
         extra = extra || {};
         var rec = record(pk);
+        if (!rec) { resultNotice('This SQR is no longer available. Reload or select another record.'); return Promise.resolve(); }
         var label = (state.specs[key] || {}).label || key;
         if (wrap) setFieldState(wrap, 'saving');
         var payload = {field: key, value: value};
@@ -852,7 +1058,7 @@
         }).catch(function (error) {
             var current = state.selectedPk === pk ? el.editor.querySelector('[data-field-key="' + key + '"]') : wrap;
             if (current) setFieldState(current, 'error', error.message);
-            if (extra.control && extra.spec) setControl(extra.control, record(pk), extra.spec);
+            if (extra.control && extra.spec && record(pk)) setControl(extra.control, record(pk), extra.spec);
             throw error;
         });
     }
@@ -920,6 +1126,8 @@
             var spec = state.specs[wrap.dataset.fieldKey];
             if (!spec) return;
             if (spec.workflow) { renderStatusBlock(wrap, rec, spec); return; }
+            var assessment = wrap.querySelector('.sqr-proto__assessment');
+            if (assessment) assessment.replaceChildren(performanceBadge(rec, spec.key));
             var control = wrap.querySelector('[data-key]');
             if (control) { if (document.activeElement !== control) setControl(control, rec, spec); return; }
             var box = wrap.querySelector('.sqr-proto__readonly');
@@ -928,28 +1136,33 @@
     }
     function refreshRecord(pk, workflowResponse) {
         return api(ENDPOINT + '?pk=' + encodeURIComponent(pk), {cache: 'no-store'}).then(function (res) {
+            if (res.status === 404) {
+                state.records = state.records.filter(function (rec) { return rec.pk !== pk; }); delete state.byPk[pk]; delete state.history[pk];
+                if (state.selectedPk === pk) clearSelection('This SQR is no longer available. Reload or select another record.');
+                clampShown(); renderAll(); return refreshPipeline();
+            }
             if (!res.ok) throw new Error(res.data.error || 'Unable to refresh this SQR.');
             var previous = record(pk);
             var fresh = res.data.record;
+            if (!fresh) throw new Error('Unable to refresh this SQR.');
             if (workflowResponse && Object.prototype.hasOwnProperty.call(workflowResponse, 'hold_reason')) {
                 fresh.values.hold_reason = workflowResponse.hold_reason;
             }
             state.records = state.records.map(function (rec) { return rec.pk === pk ? fresh : rec; });
+            if (!previous) return refreshPipeline();
             state.byPk[pk] = fresh;
+            clampShown();
+            if (!core.matchesRecord(fresh, state.filters, state.viewer)) resultNotice('Saved SQR no longer matches the current filters. Its details remain open.');
+            else resultNotice();
             renderAll();
             if (state.selectedPk === pk && previous) syncEditor(fresh, previous);
             return refreshPipeline();
         });
     }
     function refreshPipeline() {
-        var filterKey = JSON.stringify(state.filters);
-        var params = new URLSearchParams({page: '1', summary: '1', q: state.filters.search, stage: state.filters.stage});
-        return api(ENDPOINT + '?' + params.toString(), {cache: 'no-store'}).then(function (res) {
-            if (!res.ok) throw new Error('Unable to refresh pipeline totals.');
-            if (filterKey !== JSON.stringify(state.filters)) return;
-            state.pipeline = res.data.pipeline;
-            renderPipeline();
-        });
+        state.pipeline = pipelineSummary(visibleRecords());
+        renderPipeline();
+        return Promise.resolve();
     }
     function apply(data, append) {
         var selected = record(state.selectedPk);
@@ -974,8 +1187,8 @@
             return true;
         });
         index(records);
-        if (selected && !record(selected.pk)) state.byPk[selected.pk] = selected;
-        state.shown = records.length;
+        if (selected && !record(selected.pk)) clearSelection('This SQR is no longer available. Reload or select another record.');
+        clampShown();
         state.history = {};
         state.loaded = true;
         state.loadedAt = Date.now();
@@ -984,6 +1197,7 @@
         if (state.selectedPk && record(state.selectedPk)) {
             var focused = el.editor.contains(document.activeElement);
             if (!focused) renderEditor();
+            else if (selected) syncEditor(record(state.selectedPk), selected);
         } else if (state.selectedPk) {
             state.selectedPk = null;
             el.body.dataset.mode = 'list';
@@ -995,11 +1209,8 @@
         var version = ++loadVersion;
         loadController = new AbortController();
         var params = new URLSearchParams();
-        params.set('page', append && state.pagination ? state.pagination.page + 1 : 1);
-        params.set('page_size', PAGE_SIZE);
-        params.set('stage', state.filters.stage);
-        params.set('q', state.filters.search);
-        if (!background && !state.loaded) el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: 'Loading\u2026'}));
+        state.loading = true; state.loadError = '';
+        if (!state.loaded) renderAll();
         el.more.disabled = true;
         inFlight = api(ENDPOINT + '?' + params.toString(), {cache: 'no-store', signal: loadController.signal}).then(function (res) {
             if (version !== loadVersion) return;
@@ -1008,10 +1219,10 @@
         }).catch(function (error) {
             if (version !== loadVersion || error.name === 'AbortError') return;
             if (!state.loaded) {
-                el.items.replaceChildren(h('li', {class: 'sqr-proto__count', text: error.message}), h('li', null, h('button', {type: 'button', class: 'btn btn-outline-primary', on: {click: function () { load(); }}}, 'Try again')));
+                state.loadError = error.message; state.loading = false; renderAll();
             } else showToast(error.message, {tone: 'error'});
         }).then(function () {
-            if (version === loadVersion) { inFlight = null; el.more.disabled = false; }
+            if (version === loadVersion) { inFlight = null; state.loading = false; el.more.disabled = false; }
         });
         return inFlight;
     }
@@ -1020,9 +1231,11 @@
     var searchTimer = 0;
     el.search.addEventListener('input', function () {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(function () { state.filters.search = el.search.value.trim(); state.shown = PAGE_SIZE; savePrefs(); load(false); }, 250);
+        searchTimer = setTimeout(function () { state.filters.search = el.search.value.trim(); state.shown = PAGE_SIZE; resultNotice(); savePrefs(); renderAll(); }, 250);
     });
-    el.more.addEventListener('click', function () { load(false, true); });
+    el.listView.addEventListener('click', function () { setPresentation('list'); });
+    el.tableView.addEventListener('click', function () { setPresentation('table'); });
+    el.more.addEventListener('click', function () { state.shown += PAGE_SIZE; renderAll(); });
     el.items.addEventListener('keydown', function (event) {
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
         var cards = Array.prototype.slice.call(el.items.querySelectorAll('.sqr-proto__card'));

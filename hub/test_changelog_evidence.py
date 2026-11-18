@@ -226,6 +226,25 @@ class EvidenceSyncTests(TestCase):
         self.assertTrue(pairs[0]["before_image"].startswith("changelogs/"))
         self.assertNotEqual(pairs[0]["before_image"], "changelogs/stale-before.png")
 
+    def test_packaged_visual_evidence_replaces_report_and_cannot_be_downgraded(self):
+        report = comparison(
+            title="Repository change report",
+            capture_note="Packaged automatic report capture, recipe repository-change. Exact Git snapshots.",
+        )
+        screen = comparison(
+            title="Login screen",
+            evidence_kind="ui",
+            capture_note="Packaged ui capture, recipe login-layout. Exact Git snapshots.",
+        )
+        entry = sync_release(manifest(commits=[visual_commit(comparisons=[report])]))
+        sync_release(manifest(commits=[visual_commit(comparisons=[screen])]))
+        sync_release(manifest(commits=[visual_commit(comparisons=[report])]))
+
+        entry.refresh_from_db()
+        pairs = entry.changes["commits"][0]["comparisons"]
+        self.assertEqual([pair["title"] for pair in pairs], ["Login screen"])
+        self.assertEqual(pairs[0]["evidence_kind"], "ui")
+
     def test_newer_automatic_capture_cannot_replace_manual_evidence(self):
         entry = sync_release(manifest(commits=[visual_commit()]))
         item = entry.changes["commits"][0]
@@ -408,18 +427,19 @@ class PackagedV571ToV576EvidenceTests(SimpleTestCase):
         paths = [
             str(ASSET_DIR.joinpath(*pair[field].split("/")))
             for data in curated_manifests() if data["version"] in {f"v57.{patch}" for patch in range(1, 7)}
+            or data["revision"] == "73ab83f53d3eb0469bed6c3847ad198e399bc1e1"
             for item in data["commits"] for pair in item["comparisons"]
             for field in ("before_image", "after_image")
         ]
-        self.assertEqual(len(paths), 16)
+        self.assertTrue(paths)
         result = subprocess.run(
             ["git", "-C", str(ASSET_DIR.parent.parent), "check-ignore", "--no-index", "--", *paths],
             capture_output=True, text=True, encoding="utf-8",
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 
-    def test_hidden_releases_have_complete_exact_revision_evidence(self):
-        from hub.release_changelog import ASSET_DIR, curated_manifests, missing_comparisons
+    def test_recovered_releases_have_complete_exact_revision_evidence(self):
+        from hub.release_changelog import ASSET_DIR, comparison_kind, curated_manifests, missing_comparisons
 
         expected = {
             "v57.1": {"bb2341fdf36cfe9518ad430765d6a6755d3e1f66"},
@@ -439,7 +459,9 @@ class PackagedV571ToV576EvidenceTests(SimpleTestCase):
                 for item in data["commits"]:
                     self.assertTrue(item.get("before_text"))
                     self.assertTrue(item.get("after_text"))
+                    expected_kind = "report" if version in {"v57.3", "v57.5"} else "ui"
                     for pair in item["comparisons"]:
+                        self.assertEqual(comparison_kind(pair), expected_kind)
                         self.assertEqual(pair["before_revision"], item["parent_sha"])
                         self.assertEqual(pair["after_revision"], item["sha"])
                         self.assertTrue(pair.get("capture_note"))

@@ -13,14 +13,26 @@
       "after_text": "Refines Christmas login styling, festive interactions and light/dark transitions across the login and shared theme scripts. Adds regression coverage for login effects, theme behavior and liquid-glass interactions.",
       "comparisons": [
         {
-          "title": "Repository change report — Christmas login effects and theme transitions",
-          "before_text": "Christmas login effects and light/dark transitions used the earlier effect-state and animation handling. Evidence: exact first-parent file metadata, not a UI screenshot.",
-          "after_text": "Refines Christmas login styling, festive interactions and light/dark transitions across the login and shared theme scripts. Adds regression coverage for login effects, theme behavior and liquid-glass interactions. Evidence: exact change-revision file metadata, not a UI screenshot.",
-          "before_image": "v57.4/01-before.png",
-          "after_image": "v57.4/01-after.png",
+          "title": "Seasonal sign-in — desktop",
+          "before_text": "The previous rendered sign-in screen with the seasonal theme selected.",
+          "after_text": "The updated sign-in screen with the same theme selected. This static view does not show animation.",
+          "evidence_kind": "ui",
+          "before_image": "v57.4/seasonal-sign-in-desktop-before.webp",
+          "after_image": "v57.4/seasonal-sign-in-desktop-after.webp",
           "before_revision": "0825e1f98ea94338587180a475311281ab11943b",
           "after_revision": "a85e4429da77eafbaad9eee95969a319b0a67713",
-          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+          "capture_note": "Packaged ui capture, recipe login-layout. Exact Git snapshots; synthetic fixtures; external traffic blocked. Only the historical decoration script rendered a reduced-motion frame."
+        },
+        {
+          "title": "Seasonal sign-in — mobile",
+          "before_text": "The previous rendered sign-in screen on a narrow viewport.",
+          "after_text": "The updated sign-in screen on the same narrow viewport.",
+          "evidence_kind": "ui",
+          "before_image": "v57.4/seasonal-sign-in-mobile-before.webp",
+          "after_image": "v57.4/seasonal-sign-in-mobile-after.webp",
+          "before_revision": "0825e1f98ea94338587180a475311281ab11943b",
+          "after_revision": "a85e4429da77eafbaad9eee95969a319b0a67713",
+          "capture_note": "Packaged ui capture, recipe login-layout. Exact Git snapshots; synthetic fixtures; external traffic blocked. Only the historical decoration script rendered a reduced-motion frame."
         }
       ]
     },
@@ -34,14 +46,15 @@
       "after_text": "Reorganizes the profile avatar card, upload controls and supporting styles for clearer responsive profile editing.",
       "comparisons": [
         {
-          "title": "Repository change report — Profile avatar card and upload layout",
-          "before_text": "The profile avatar card and upload controls used the previous layout and markup. Evidence: exact first-parent file metadata, not a UI screenshot.",
-          "after_text": "Reorganizes the profile avatar card, upload controls and supporting styles for clearer responsive profile editing. Evidence: exact change-revision file metadata, not a UI screenshot.",
-          "before_image": "v57.4/02-before.png",
-          "after_image": "v57.4/02-after.png",
+          "title": "Profile avatar controls — mobile",
+          "before_text": "Profile Avatar occupied its own tab and card.",
+          "after_text": "Profile Avatar is now a section within Personal Information. The same synthetic account has no uploaded photo.",
+          "evidence_kind": "ui",
+          "before_image": "v57.4/profile-avatar-mobile-before.webp",
+          "after_image": "v57.4/profile-avatar-mobile-after.webp",
           "before_revision": "15e75aaf3c2f0ebdb3625c1735871e4f5f9d3109",
           "after_revision": "0825e1f98ea94338587180a475311281ab11943b",
-          "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; browser scripts/traffic disabled. Repository change report; not a UI screenshot. No source code or live data is displayed."
+          "capture_note": "Packaged ui capture, recipe profile-avatar. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled."
         }
       ]
     }
