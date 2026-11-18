@@ -10,9 +10,13 @@
 <link rel="stylesheet" href="{% static 'css/sqr-filter-controls.css' %}?v=1">
 <script src="{% static 'js/sqr-filter-core.js' %}?v=3" defer></script>
 <script src="{% static 'js/sqr-filter-controls.js' %}?v=1" defer></script>
-<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=12" defer></script>
+<script src="{% static 'js/sqr-tracker-prototype.js' %}?v=13" defer></script>
+{% endif %}
+{% if is_pm %}
+<link rel="stylesheet" href="{% static 'css/charts.css' %}">
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
+<script src="{% static 'js/chart-values.js' %}" defer></script>
 <script src="{% static 'js/sqr-performance.js' %}?v=6" defer></script>
 {% endif %}
 {% endblock %}
@@ -256,317 +260,9 @@
             </div>
 
             <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-            <script>
-                (function () {
-                    if (typeof Chart === 'undefined') return;
-
-                    var chartInstances = [];
-
-                    function cssVar(name, fallback) {
-                        var value = getComputedStyle(document.body).getPropertyValue(name).trim();
-                        return value || fallback;
-                    }
-                    function getTheme() {
-                        var isDark = document.body.classList.contains('dark-mode');
-                        return {
-                            text: cssVar('--lg-ink-soft', isDark ? 'rgba(226,232,240,0.82)' : '#475569'),
-                            textStrong: cssVar('--lg-ink', isDark ? '#f8fafc' : '#0f172a'),
-                            grid: cssVar('--lg-divider', isDark ? 'rgba(148,163,184,0.12)' : 'rgba(148,163,184,0.18)'),
-                            tooltipBg: isDark ? 'rgba(15,23,42,0.96)' : 'rgba(255,255,255,0.98)',
-                            tooltipBorder: cssVar('--lg-hairline-soft', isDark ? 'rgba(148,163,184,0.16)' : 'rgba(148,163,184,0.2)')
-                        };
-                    }
-
-                    function readPayload(id) {
-                        var node = document.getElementById(id);
-                        if (!node) return { labels: [], totals: [] };
-                        try {
-                            return JSON.parse(node.textContent || '{}');
-                        } catch (error) {
-                            return { labels: [], totals: [] };
-                        }
-                    }
-
-                    function formatCurrency(value) {
-                        var amount = Number(value || 0);
-                        return new Intl.NumberFormat('en-PH', {
-                            style: 'currency',
-                            currency: 'PHP',
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0
-                        }).format(amount);
-                    }
-
-                    function registerChart(chart) {
-                        if (chart) chartInstances.push(chart);
-                    }
-
-                    function destroyCharts() {
-                        chartInstances.forEach(function (chart) { chart.destroy(); });
-                        chartInstances = [];
-                    }
-
-                    function makeDonut(canvasId, payload, currencyMode, theme, tooltipCfg, donutPalette) {
-                        var canvas = document.getElementById(canvasId);
-                        if (!canvas || !payload.labels || !payload.labels.length) return;
-                        registerChart(new Chart(canvas, {
-                            type: 'doughnut',
-                            data: {
-                                labels: payload.labels,
-                                datasets: [{
-                                    data: payload.totals,
-                                    backgroundColor: donutPalette.bg.slice(0, payload.labels.length),
-                                    borderColor: donutPalette.border.slice(0, payload.labels.length),
-                                    borderWidth: 2,
-                                    hoverOffset: 10
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                cutout: '62%',
-                                plugins: {
-                                    legend: {
-                                        position: 'bottom',
-                                        labels: { color: theme.text, boxWidth: 12, boxHeight: 12, padding: 16 }
-                                    },
-                                    tooltip: {
-                                        ...tooltipCfg,
-                                        callbacks: {
-                                            label: function (ctx) {
-                                                var value = ctx.raw;
-                                                return ctx.label + ': ' + (currencyMode ? formatCurrency(value) : value);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }));
-                    }
-
-                    function buildGradient(canvas, colorA, colorB) {
-                        var ctx = canvas.getContext('2d');
-                        var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height || 320);
-                        gradient.addColorStop(0, colorA);
-                        gradient.addColorStop(1, colorB);
-                        return gradient;
-                    }
-
-                    function makeBar(canvasId, payload, options, theme, tooltipCfg) {
-                        var canvas = document.getElementById(canvasId);
-                        if (!canvas || !payload.labels || !payload.labels.length) return;
-                        options = options || {};
-                        var backgroundColor = options.backgroundColor;
-                        if (typeof options.gradient === 'function') {
-                            backgroundColor = options.gradient(canvas);
-                        }
-                        registerChart(new Chart(canvas, {
-                            type: options.type || 'bar',
-                            data: {
-                                labels: payload.labels,
-                                datasets: [{
-                                    label: options.label || 'Total',
-                                    data: payload.totals,
-                                    backgroundColor: backgroundColor || 'rgba(59,130,246,0.65)',
-                                    borderColor: options.borderColor || 'rgba(59,130,246,1)',
-                                    borderWidth: 1.5,
-                                    borderRadius: 8,
-                                    borderSkipped: false,
-                                    fill: options.fill || false,
-                                    tension: options.tension || 0.35,
-                                    maxBarThickness: options.maxBarThickness || 42
-                                }]
-                            },
-                            options: {
-                                indexAxis: options.indexAxis || 'x',
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                    x: {
-                                        grid: { color: theme.grid, display: options.hideXGrid ? false : true },
-                                        ticks: {
-                                            color: theme.text,
-                                            autoSkip: true,
-                                            maxTicksLimit: options.maxXTicks || 8,
-                                            maxRotation: 0,
-                                            minRotation: 0,
-                                            callback: function (value) {
-                                                return options.currencyMode && options.indexAxis === 'y'
-                                                    ? formatCurrency(value)
-                                                    : this.getLabelForValue(value);
-                                            }
-                                        }
-                                    },
-                                    y: {
-                                        beginAtZero: true,
-                                        grid: { color: theme.grid },
-                                        ticks: {
-                                            color: theme.text,
-                                            autoSkip: true,
-                                            maxTicksLimit: options.maxYTicks || 6,
-                                            callback: function (value) {
-                                                return options.currencyMode && options.indexAxis !== 'y'
-                                                    ? formatCurrency(value)
-                                                    : this.getLabelForValue(value);
-                                            }
-                                        }
-                                    }
-                                },
-                                plugins: {
-                                    legend: { display: !!options.showLegend, labels: { color: theme.text } },
-                                    tooltip: {
-                                        ...tooltipCfg,
-                                        callbacks: {
-                                            label: function (ctx) {
-                                                var value = ctx.parsed.y;
-                                                if (options.indexAxis === 'y') value = ctx.parsed.x;
-                                                return (options.label || 'Total') + ': ' + (options.currencyMode ? formatCurrency(value) : value);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }));
-                    }
-
-                    window.initSqrReportsCharts = function () {
-                        var root = document.getElementById('sqr-reports-root');
-                        if (!root) return;
-
-                        destroyCharts();
-
-                        var theme = getTheme();
-                        Chart.defaults.color = theme.text;
-                        Chart.defaults.borderColor = theme.grid;
-                        Chart.defaults.font.family = "'Inter', system-ui, -apple-system, sans-serif";
-
-                        var tooltipCfg = {
-                            backgroundColor: theme.tooltipBg,
-                            borderColor: theme.tooltipBorder,
-                            borderWidth: 1,
-                            titleColor: theme.textStrong,
-                            bodyColor: theme.text,
-                            padding: 10,
-                            cornerRadius: 10,
-                        };
-
-                        var donutPalette = {
-                            bg: [
-                                'rgba(59,130,246,0.72)',
-                                'rgba(16,185,129,0.72)',
-                                'rgba(245,158,11,0.72)',
-                                'rgba(244,63,94,0.72)',
-                                'rgba(99,102,241,0.72)',
-                                'rgba(6,182,212,0.72)',
-                                'rgba(148,163,184,0.72)'
-                            ],
-                            border: [
-                                'rgba(59,130,246,1)',
-                                'rgba(16,185,129,1)',
-                                'rgba(245,158,11,1)',
-                                'rgba(244,63,94,1)',
-                                'rgba(99,102,241,1)',
-                                'rgba(6,182,212,1)',
-                                'rgba(148,163,184,1)'
-                            ]
-                        };
-
-                        makeBar('sqrMonthlyTrendChart', readPayload('sqr-reports-monthly-chart-data'), {
-                            type: 'line',
-                            label: 'Submissions',
-                            gradient: function (canvas) {
-                                return buildGradient(canvas, 'rgba(59,130,246,0.28)', 'rgba(59,130,246,0.02)');
-                            },
-                            borderColor: 'rgba(59,130,246,1)',
-                            fill: true,
-                            tension: 0.38,
-                            maxBarThickness: 32,
-                            hideXGrid: true
-                        }, theme, tooltipCfg);
-                        makeBar('sqrRevenueOverviewChart', readPayload('sqr-reports-revenue-chart-data'), {
-                            label: 'Value',
-                            indexAxis: 'y',
-                            gradient: function (canvas) {
-                                return buildGradient(canvas, 'rgba(16,185,129,0.82)', 'rgba(6,182,212,0.4)');
-                            },
-                            borderColor: 'rgba(16,185,129,1)',
-                            currencyMode: true,
-                            maxYTicks: 4
-                        }, theme, tooltipCfg);
-                        makeDonut('sqrDealStageChart', readPayload('sqr-reports-deal-chart-data'), false, theme, tooltipCfg, donutPalette);
-                        makeBar('sqrGroupDistributionChart', readPayload('sqr-reports-group-chart-data'), {
-                            label: 'Submissions',
-                            indexAxis: 'y',
-                            gradient: function (canvas) {
-                                return buildGradient(canvas, 'rgba(99,102,241,0.86)', 'rgba(59,130,246,0.3)');
-                            },
-                            borderColor: 'rgba(99,102,241,1)',
-                            maxBarThickness: 28,
-                            maxYTicks: 8
-                        }, theme, tooltipCfg);
-                        makeBar('sqrFunnelChart', readPayload('sqr-reports-funnel-chart-data'), {
-                            label: 'Count',
-                            gradient: function (canvas) {
-                                return buildGradient(canvas, 'rgba(168,85,247,0.86)', 'rgba(59,130,246,0.35)');
-                            },
-                            borderColor: 'rgba(168,85,247,1)',
-                            maxBarThickness: 42,
-                            hideXGrid: true
-                        }, theme, tooltipCfg);
-                    };
-
-                    window.initSqrReportsCharts();
-                })();
-            </script>
-            <script>
-                (function () {
-                    var root = document.getElementById('sqr-reports-root');
-                    if (!root) return;
-                    // Only poll while the reports tab is actually active — the
-                    // whole point of the interval is live charts on this tab.
-                    if (new URLSearchParams(window.location.search).get('tab') !== 'reports') return;
-
-                    var refreshUrl = root.dataset.refreshUrl;
-                    var refreshInFlight = false;
-                    var lastHtml = '';
-
-                    function refreshReports() {
-                        if (!refreshUrl || refreshInFlight || document.hidden) return;
-                        // Only poll while reports root is in the document and visible
-                        if (!document.body.contains(root)) return;
-                        var style = window.getComputedStyle(root);
-                        if (style.display === 'none' || style.visibility === 'hidden') return;
-
-                        refreshInFlight = true;
-                        fetch(refreshUrl, {
-                            headers: {
-                                'X-Requested-With': 'XMLHttpRequest'
-                            }
-                        })
-                        .then(function (response) { return response.json(); })
-                        .then(function (data) {
-                            if (!data.ok || !data.html) return;
-                            // Skip identical payload to avoid full chart destroy/recreate
-                            if (data.html === lastHtml) return;
-                            lastHtml = data.html;
-                            root.innerHTML = data.html;
-                            if (typeof window.initSqrReportsCharts === 'function') {
-                                window.initSqrReportsCharts();
-                            }
-                        })
-                        .catch(function () {})
-                        .finally(function () {
-                            refreshInFlight = false;
-                        });
-                    }
-
-                    window.refreshSqrReports = refreshReports;
-                    window.setInterval(refreshReports, 15000);
-                    document.addEventListener('visibilitychange', function () {
-                        if (!document.hidden) refreshReports();
-                    });
-                })();
-            </script>
+            <script src="{% static 'js/chart-values.js' %}"></script>
+            <script src="{% static 'js/chart-theme.js' %}"></script>
+            <script src="{% static 'js/sqr-report-charts.js' %}"></script>
         {% else %}
         {% if show_classic_sqr_tracker %}
         {# ── Main Tracker Table ────────────────────────────────────────────── #}
@@ -656,6 +352,7 @@
                         {% for item in proposal_submissions %}
                         <tr class="{% if item.status == 'for_revision' %}sqr-row--revision {% endif %}{% if item.proposal_status == 'closed_lost' or item.proposal_status == 'closed_canceled' %}sqr-row--closed-lost{% endif %}"
                             data-sqr-status="{{ item.status }}"
+                            data-sqr-quote-locked="{{ item.quote_locked|yesno:'true,false' }}"
                             data-sqr-proposal-status="{{ item.proposal_status|default:'' }}"
                             data-sqr-ref="{{ item.reference_code|default:'' }}"
                             data-sqr-customer="{{ item.customer_name|default:''|escapejs }}"
@@ -711,13 +408,13 @@
                                 {% endif %}
                             </td>
                             {# C: Account Name #}
-                            <td class="col-sticky-2{% if is_admin %} sqr-inline-cell{% endif %}"{% if is_admin %} data-sqr-pk="{{ item.pk }}" data-sqr-field="customer_name" data-sqr-type="text" data-sqr-value="{{ item.customer_name|escapejs }}"{% endif %}><span class="sqr-display">{{ item.customer_name }}</span></td>
+                            <td class="col-sticky-2{% if is_admin %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if is_admin %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="customer_name" data-sqr-type="text" data-sqr-value="{{ item.customer_name|escapejs }}"{% endif %}><span class="sqr-display">{{ item.customer_name }}</span></td>
                             {# D: Service Description #}
-                            <td class="col-sticky-3{% if is_admin %} sqr-inline-cell{% endif %}"{% if is_admin %} data-sqr-pk="{{ item.pk }}" data-sqr-field="project_title" data-sqr-type="text" data-sqr-value="{{ item.project_title|escapejs }}"{% endif %}><span class="sqr-display">{{ item.project_title }}</span></td>
+                            <td class="col-sticky-3{% if is_admin %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if is_admin %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="project_title" data-sqr-type="text" data-sqr-value="{{ item.project_title|escapejs }}"{% endif %}><span class="sqr-display">{{ item.project_title }}</span></td>
                             {# E: Scope of Services #}
-                            <td class="col-sticky-4 col-sticky-border{% if is_pm %} sqr-inline-cell{% endif %}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="project_details" data-sqr-type="select" data-sqr-value="{{ item.project_details|default:''|escapejs }}"{% endif %}><span class="sqr-display">{{ item.project_details|truncatechars:50|default:"&ndash;" }}</span></td>
+                            <td class="col-sticky-4 col-sticky-border{% if item.can_review_sqr %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if item.can_review_sqr %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="project_details" data-sqr-type="select" data-sqr-value="{{ item.project_details|default:''|escapejs }}"{% endif %}><span class="sqr-display">{{ item.project_details|truncatechars:50|default:"&ndash;" }}</span></td>
                             {# F: RQ ID — supplied by engineer; links to Request; editable inline by PM/Admin #}
-                            <td class="small{% if is_pm %} sqr-inline-cell{% endif %}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="linked_request" data-sqr-type="select" data-sqr-value="{{ item.linked_request_id|default:'' }}"{% endif %}>
+                            <td class="small{% if item.can_review_sqr %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if item.can_review_sqr %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="linked_request" data-sqr-type="select" data-sqr-value="{{ item.linked_request_id|default:'' }}"{% endif %}>
                                 <span class="sqr-display">
                                 {% if item.linked_request %}
                                     <a href="{% url 'hub:request-manage-collab' item.linked_request.pk %}" class="text-info" target="_blank">{{ item.linked_request.reference_code }}</a>
@@ -725,9 +422,9 @@
                                 </span>
                             </td>
                             {# G: Group Name #}
-                            <td class="small{% if is_admin %} sqr-inline-cell{% endif %}"{% if is_admin %} data-sqr-pk="{{ item.pk }}" data-sqr-field="customer_company" data-sqr-type="select" data-sqr-value="{{ item.customer_company|default:''|escapejs }}"{% endif %}><span class="sqr-display">{{ item.customer_company|default:"&ndash;" }}</span></td>
+                            <td class="small{% if is_admin %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if is_admin %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="customer_company" data-sqr-type="select" data-sqr-value="{{ item.customer_company|default:''|escapejs }}"{% endif %}><span class="sqr-display">{{ item.customer_company|default:"&ndash;" }}</span></td>
                             {# H: Account Manager #}
-                            <td class="small{% if is_admin %} sqr-inline-cell{% endif %}"{% if is_admin %} data-sqr-pk="{{ item.pk }}" data-sqr-field="customer_contact" data-sqr-type="text" data-sqr-value="{{ item.customer_contact|default:''|escapejs }}"{% endif %}><span class="sqr-display">{{ item.customer_contact|default:"&ndash;" }}</span></td>
+                            <td class="small{% if is_admin %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if is_admin %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="customer_contact" data-sqr-type="text" data-sqr-value="{{ item.customer_contact|default:''|escapejs }}"{% endif %}><span class="sqr-display">{{ item.customer_contact|default:"&ndash;" }}</span></td>
                             {# I: Requester Name #}
                             <td class="small">{% if item.engineer %}{{ item.engineer.get_full_name|default:item.engineer.username }}{% else %}&ndash;{% endif %}</td>
                             {# J: Approver Name #}
@@ -741,23 +438,23 @@
                                 {% endif %}
                             </td>
                             {# L: SSE Man-hrs #}
-                            <td class="text-end small{% if is_pm %} sqr-inline-cell{% endif %}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="sse_manhrs" data-sqr-type="number" data-sqr-value="{{ item.sse_manhrs|default:'' }}"{% endif %}><span class="sqr-display">{% if item.sse_manhrs != None %}{{ item.sse_manhrs|floatformat:0 }}{% else %}&ndash;{% endif %}</span></td>
+                            <td class="text-end small{% if item.can_review_sqr %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if item.can_review_sqr %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="sse_manhrs" data-sqr-type="number" data-sqr-value="{{ item.sse_manhrs|default:'' }}"{% endif %}><span class="sqr-display">{% if item.sse_manhrs != None %}{{ item.sse_manhrs|floatformat:0 }}{% else %}&ndash;{% endif %}</span></td>
                             {# M: SSE Amount #}
                             <td class="text-end small" data-sqr-computed="sse_amount" data-sqr-row-pk="{{ item.pk }}">{% if item.sse_amount %}&#8369;{{ item.sse_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
                             {# N: PM Man-hrs #}
-                            <td class="text-end small{% if is_pm %} sqr-inline-cell{% endif %}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="pm_manhrs" data-sqr-type="number" data-sqr-value="{% if item.effective_pm_manhrs is not None %}{{ item.effective_pm_manhrs|floatformat:0 }}{% endif %}"{% endif %}><span class="sqr-display">{% if item.effective_pm_manhrs is not None %}{{ item.effective_pm_manhrs|floatformat:0 }}{% else %}&ndash;{% endif %}</span></td>
+                            <td class="text-end small{% if item.can_review_sqr %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if item.can_review_sqr %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="pm_manhrs" data-sqr-type="number" data-sqr-value="{% if item.effective_pm_manhrs is not None %}{{ item.effective_pm_manhrs|floatformat:0 }}{% endif %}"{% endif %}><span class="sqr-display">{% if item.effective_pm_manhrs is not None %}{{ item.effective_pm_manhrs|floatformat:0 }}{% else %}&ndash;{% endif %}</span></td>
                             {# O: PM Amount #}
                             <td class="text-end small" data-sqr-computed="pm_amount" data-sqr-row-pk="{{ item.pk }}">{% if item.effective_pm_amount %}&#8369;{{ item.effective_pm_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
                             {# P: Maintenance Amt. #}
-                            <td class="text-end small{% if is_pm %} sqr-inline-cell{% endif %}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="managed_support_amount" data-sqr-type="number" data-sqr-value="{{ item.managed_support_amount|default:'' }}"{% endif %}><span class="sqr-display">{% if item.managed_support_amount %}&#8369;{{ item.managed_support_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</span></td>
+                            <td class="text-end small{% if item.can_review_sqr %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if item.can_review_sqr %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="managed_support_amount" data-sqr-type="number" data-sqr-value="{{ item.managed_support_amount|default:'' }}"{% endif %}><span class="sqr-display">{% if item.managed_support_amount %}&#8369;{{ item.managed_support_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</span></td>
                             {# Q: Discount Rate #}
-                            <td class="text-end small{% if is_pm %} sqr-inline-cell{% endif %}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="discount_rate" data-sqr-type="number" data-sqr-value="{{ item.discount_rate|default:'0' }}"{% endif %}><span class="sqr-display">{% if item.discount_rate %}{{ item.discount_rate }}%{% else %}&ndash;{% endif %}</span></td>
+                            <td class="text-end small{% if item.can_review_sqr %}{% if not item.quote_locked %} sqr-inline-cell{% endif %}{% endif %}"{% if item.can_review_sqr %} data-sqr-quote-field data-sqr-pk="{{ item.pk }}" data-sqr-field="discount_rate" data-sqr-type="number" data-sqr-value="{{ item.discount_rate|default:'0' }}"{% endif %}><span class="sqr-display">{% if item.discount_rate %}{{ item.discount_rate }}%{% else %}&ndash;{% endif %}</span></td>
                             {# R: Discount Amount #}
                             <td class="text-end small" data-sqr-computed="discount_amount" data-sqr-row-pk="{{ item.pk }}">{% if item.computed_discount_amount %}&#8369;{{ item.computed_discount_amount|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
                             {# S: Total Price #}
                             <td class="text-end small fw-semibold" data-sqr-computed="total_price" data-sqr-row-pk="{{ item.pk }}">{% if item.computed_total_price %}&#8369;{{ item.computed_total_price|floatformat:2|intcomma }}{% elif item.quotation_total_price %}&#8369;{{ item.quotation_total_price|floatformat:2|intcomma }}{% else %}&ndash;{% endif %}</td>
                             <td class="small sqr-remarks-cell">{{ item.remarks|default:"–" }}</td>
-                            <td class="sqr-status-cell{% if is_pm %} sqr-inline-cell{% endif %}" data-sqr-hold-reason="{{ item.hold_reason|default:'' }}"{% if is_pm %} data-sqr-pk="{{ item.pk }}" data-sqr-field="status" data-sqr-type="select" data-sqr-value="{{ item.status|default:'' }}"{% endif %}>
+                            <td class="sqr-status-cell{% if item.can_review_sqr %} sqr-inline-cell{% endif %}" data-sqr-hold-reason="{{ item.hold_reason|default:'' }}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="status" data-sqr-type="select" data-sqr-value="{{ item.status|default:'' }}"{% endif %}>
                                 <span class="sqr-display">
                                 {% if item.status == 'submitted' %}
                                     <span class="badge bg-warning-subtle text-warning border border-warning-subtle">For Processing</span>
@@ -775,14 +472,14 @@
                                     <strong data-sqr-hold-label>{% if item.status == 'on_hold' %}Hold Reason{% else %}Previous Hold Reason{% endif %}:</strong>
                                     <span data-sqr-hold-text>{{ item.hold_reason }}</span>
                                 </div>
-                                {% if is_pm %}<button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-sqr-edit-hold{% if item.status != 'on_hold' %} hidden{% endif %}>Edit hold reason</button>{% endif %}
+                                {% if item.can_review_sqr %}<button type="button" class="btn btn-outline-secondary btn-sm mt-2" data-sqr-edit-hold{% if item.status != 'on_hold' %} hidden{% endif %}>Edit hold reason</button>{% endif %}
                             </td>
                             {# U: Approval Date #}
                             <td class="small" data-sqr-computed="reviewed_at">{{ item.reviewed_at|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# V: Validity Due Date #}
                             <td class="small" data-sqr-computed="validity_due_date">{{ item.validity_due_date|date:"M d, Y"|default:"&ndash;" }}</td>
                             {# W: Proposal Status #}
-                            <td{% if is_pm %} class="sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="proposal_status" data-sqr-type="select" data-sqr-value="{{ item.proposal_status|default:'' }}"{% endif %}>
+                            <td{% if item.can_review_sqr %} class="sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="proposal_status" data-sqr-type="select" data-sqr-value="{{ item.proposal_status|default:'' }}"{% endif %}>
                                 <span class="sqr-display">
                                 {% if item.proposal_status == 'submitted_pending' %}
                                     <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Submitted</span>
@@ -864,15 +561,15 @@
                             {# AK: PO/PNL Date — first billing-stage column #}
                             <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="po_pnl_date" data-sqr-type="date" data-sqr-value="{{ item.po_pnl_date|date:'Y-m-d'|default:'' }}"><span class="sqr-display">{{ item.po_pnl_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
                             {# AL: PO Remarks — multi-line text #}
-                            <td class="cell-wrap small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_remarks" data-sqr-type="textarea" data-sqr-value="{{ item.revenue_remarks|default:''|escapejs }}" title="Click to edit"><span class="sqr-display">{{ item.revenue_remarks|linebreaksbr|default:"&ndash;" }}</span></td>
+                            <td class="cell-wrap small{% if item.can_review_sqr %} sqr-inline-cell{% endif %}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_remarks" data-sqr-type="textarea" data-sqr-value="{{ item.revenue_remarks|default:''|escapejs }}" title="Click to edit"{% endif %}><span class="sqr-display">{{ item.revenue_remarks|linebreaksbr|default:"&ndash;" }}</span></td>
                             {# AM: Billing Type — Internal / Invoiced / Unbilled #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_source" data-sqr-type="select" data-sqr-value="{{ item.revenue_source|default:''|escapejs }}" title="Click to edit"><span class="sqr-display">{% if item.revenue_source == 'internal' %}Internal{% elif item.revenue_source == 'invoiced' %}Invoiced{% elif item.revenue_source == 'unbilled' %}Unbilled{% else %}&ndash;{% endif %}</span></td>
+                            <td class="small{% if item.can_review_sqr %} sqr-inline-cell{% endif %}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_source" data-sqr-type="select" data-sqr-value="{{ item.revenue_source|default:''|escapejs }}" title="Click to edit"{% endif %}><span class="sqr-display">{% if item.revenue_source == 'internal' %}Internal{% elif item.revenue_source == 'invoiced' %}Invoiced{% elif item.revenue_source == 'unbilled' %}Unbilled{% else %}&ndash;{% endif %}</span></td>
                             {# AN: Billed Date — inline calendar date input #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_date" data-sqr-type="date" data-sqr-value="{{ item.revenue_date|date:'Y-m-d'|default:'' }}" title="Click to edit"><span class="sqr-display">{{ item.revenue_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
+                            <td class="small{% if item.can_review_sqr %} sqr-inline-cell{% endif %}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_date" data-sqr-type="date" data-sqr-value="{{ item.revenue_date|date:'Y-m-d'|default:'' }}" title="Click to edit"{% endif %}><span class="sqr-display">{{ item.revenue_date|date:"M d, Y"|default:"&ndash;" }}</span></td>
                             {# AO: Billing Reference — single-line SI/PNL/CFDM number #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_reference_no" data-sqr-type="text-upper" data-sqr-value="{{ item.revenue_reference_no|upper|default:''|escapejs }}" title="{{ item.revenue_reference_no|upper|default:'SI / PNL / CFDM number' }}"><span class="sqr-display">{{ item.revenue_reference_no|upper|default:"&ndash;" }}</span></td>
+                            <td class="small{% if item.can_review_sqr %} sqr-inline-cell{% endif %}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_reference_no" data-sqr-type="text-upper" data-sqr-value="{{ item.revenue_reference_no|upper|default:''|escapejs }}" title="{{ item.revenue_reference_no|upper|default:'SI / PNL / CFDM number' }}"{% endif %}><span class="sqr-display">{{ item.revenue_reference_no|upper|default:"&ndash;" }}</span></td>
                             {# AP: Billing Status — Billed / Not Yet Billed #}
-                            <td class="small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_status" data-sqr-type="select" data-sqr-value="{% if item.revenue_status %}{{ item.revenue_status }}{% elif item.revenue_date %}billed{% else %}not_yet_billed{% endif %}" title="Click to edit">
+                            <td class="small{% if item.can_review_sqr %} sqr-inline-cell{% endif %}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_status" data-sqr-type="select" data-sqr-value="{% if item.revenue_status %}{{ item.revenue_status }}{% elif item.revenue_date %}billed{% else %}not_yet_billed{% endif %}" title="Click to edit"{% endif %}>
                                 <span class="sqr-display">
                                 {% if item.revenue_status == 'billed' or not item.revenue_status and item.revenue_date %}
                                     <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2-circle me-1"></i>Billed</span>
@@ -884,7 +581,7 @@
                                 </span>
                             </td>
                             {# AQ: Billing Remarks — multi-line text #}
-                            <td class="cell-wrap small sqr-inline-cell" data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_overview" data-sqr-type="textarea" data-sqr-value="{{ item.revenue_overview|default:''|escapejs }}" title="Click to edit"><span class="sqr-display">{{ item.revenue_overview|linebreaksbr|default:"&ndash;" }}</span></td>
+                            <td class="cell-wrap small{% if item.can_review_sqr %} sqr-inline-cell{% endif %}"{% if item.can_review_sqr %} data-sqr-pk="{{ item.pk }}" data-sqr-field="revenue_overview" data-sqr-type="textarea" data-sqr-value="{{ item.revenue_overview|default:''|escapejs }}" title="Click to edit"{% endif %}><span class="sqr-display">{{ item.revenue_overview|linebreaksbr|default:"&ndash;" }}</span></td>
                             {% else %}
                             {# Non-PM/Engineer: read-only view of delivery + revenue columns #}
                             {# Y: Assigned PM #}
@@ -974,7 +671,8 @@
                                     <div class="d-flex gap-1 justify-content-center flex-nowrap">
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-primary py-0 px-2 sqr-open-edit-btn"
-                                                title="Edit"
+                                                title="{% if item.quote_locked %}Edit remarks{% else %}Edit submission{% endif %}"
+                                                aria-label="{% if item.quote_locked %}Edit remarks{% else %}Edit submission{% endif %}"
                                                 data-pk="{{ item.pk }}"
                                                 data-url="{% url 'hub:sqr-edit' item.pk %}"
                                                 data-customer-name="{{ item.customer_name }}"
@@ -1912,6 +1610,7 @@
         <div class="requestor-modal__body">
             <form id="edit-sqr-form" method="post" action="" novalidate>
                 {% csrf_token %}
+                <p id="edit-sqr-quote-note" hidden>The approved quote is read-only. Remarks can still be edited. Ask the assigned reviewer or an admin to set the SQR to For Revision before changing the quote.</p>
                 {% form_editor_token sqr_edit_form %}
                 {% for field in sqr_edit_form.visible_fields %}
                     <div class="mb-3" data-editor-field="{{ field.html_name }}"{% if field|form_editor_initially_hidden %} hidden{% endif %}>
@@ -1979,6 +1678,20 @@
                 });
                 var department = document.getElementById('edit_customer_company');
                 if (department && data.member_map) department.dataset.memberMap = data.member_map;
+                var lockedFields = data.disabled_fields || [];
+                editForm.querySelectorAll('input, select, textarea').forEach(function (input) {
+                    if (lockedFields.includes(input.name)) {
+                        if (!input.disabled) input.dataset.sqrQuoteDisabled = 'true';
+                        input.disabled = true;
+                    } else if (input.dataset.sqrQuoteDisabled) {
+                        input.disabled = false;
+                        delete input.dataset.sqrQuoteDisabled;
+                    }
+                });
+                var lockNote = document.getElementById('edit-sqr-quote-note');
+                lockNote.hidden = !lockedFields.length;
+                if (lockedFields.length) editForm.setAttribute('aria-describedby', lockNote.id);
+                else editForm.removeAttribute('aria-describedby');
                 document.dispatchEvent(new CustomEvent('form-editor-enhance', {detail: {form: editForm}}));
             } catch (error) {
                 window.location.assign(btn.dataset.url);
@@ -2619,12 +2332,13 @@
         return value;
     }
 
-    function buildWidget(field, currentValue) {
+    function buildWidget(field, currentValue, quoteLocked) {
         var w;
         if (CHOICES[field]) {
             w = document.createElement('select');
             w.className = 'sqr-inline-input form-select form-select-sm';
             CHOICES[field].forEach(function(c) {
+                if (field === 'status' && quoteLocked && c[0] === 'submitted') return;
                 var o = document.createElement('option');
                 o.value = c[0]; o.textContent = c[1];
                 if (c[0] === currentValue) o.selected = true;
@@ -2810,6 +2524,10 @@
         }
         if (field === 'status' && row) {
             row.dataset.sqrStatus = normalizedValue;
+            if ('quote_locked' in data) {
+                row.dataset.sqrQuoteLocked = String(data.quote_locked);
+                row.querySelectorAll('[data-sqr-quote-field]').forEach(updateQuoteCell);
+            }
             if ('hold_reason' in data) cell.dataset.sqrHoldReason = data.hold_reason || '';
             var holdDetails = cell.querySelector('[data-sqr-hold-details]');
             if (holdDetails) {
@@ -2918,14 +2636,14 @@
                 var pmName = data.assigned_pm_name || '\u2013';
                 assignedPmCell.dataset.sqrValue = pmPk;
                 var assignedPmDisp = assignedPmCell.querySelector('.sqr-display');
-                if (assignedPmDisp) assignedPmDisp.innerHTML = pmName;
+                if (assignedPmDisp) assignedPmDisp.textContent = pmName;
             }
         }
         if ('assigned_sse_name' in data && row) {
             var assignedSseCell = row.querySelector('[data-sqr-field="assigned_sse"]');
             if (assignedSseCell) {
                 var assignedSseDisp = assignedSseCell.querySelector('.sqr-display');
-                if (assignedSseDisp) assignedSseDisp.innerHTML = data.assigned_sse_name || '\u2013';
+                if (assignedSseDisp) assignedSseDisp.textContent = data.assigned_sse_name || '\u2013';
             }
         }
         if ((field === 'linked_request' || 'rq_pk' in data) && row) {
@@ -2964,7 +2682,8 @@
     var undoToastTimer = null;
     function showUndoToast(context) {
         var toast = document.getElementById('sqr-undo-toast');
-        if (!toast || !context || !context.data || !context.data.undo_url) return;
+        if (!toast || !context || !context.data || !(context.data.undo_url || context.data.change_id)) return;
+        var undoUrl = context.data.undo_url;
         var message = toast.querySelector('[data-sqr-undo-message]');
         var warning = toast.querySelector('[data-sqr-undo-warning]');
         var undoBtn = toast.querySelector('[data-sqr-undo-action]');
@@ -2980,13 +2699,16 @@
             undoToastTimer = null;
         }
         if (closeBtn) closeBtn.onclick = hideToast;
-        if (undoBtn) {
+        if (undoBtn && !undoUrl) {
+            undoBtn.classList.add('d-none');
+            undoBtn.onclick = null;
+        } else if (undoBtn) {
             undoBtn.disabled = false;
             undoBtn.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i>Undo';
             undoBtn.onclick = function () {
                 undoBtn.disabled = true;
                 undoBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Undoing...';
-                fetch(context.data.undo_url, {
+                fetch(undoUrl, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF},
                     credentials: 'same-origin'
@@ -3047,9 +2769,24 @@
         });
     }
 
+    function isQuoteLockedCell(cell) {
+        var row = cell.closest('tr');
+        return cell.hasAttribute('data-sqr-quote-field') && isQuoteLockedRow(row);
+    }
+
+    function isQuoteLockedRow(row) {
+        return row && row.dataset.sqrQuoteLocked === 'true';
+    }
+
+    function updateQuoteCell(cell) {
+        var locked = isQuoteLockedCell(cell);
+        cell.classList.toggle('sqr-inline-cell', !locked);
+        cell.title = locked ? 'Set SQR status to For Revision before editing the approved quote.' : 'Click to edit';
+    }
+
     function activateCell(cell) {
         if (cell.classList.contains('sqr-editing')) return;
-        if (isClosedLostLockedCell(cell)) return;
+        if (isClosedLostLockedCell(cell) || isQuoteLockedCell(cell)) return;
         var field = cell.dataset.sqrField;
         var pk = cell.dataset.sqrPk;
         if (!field || !pk) return;
@@ -3060,7 +2797,7 @@
         cell.classList.add('sqr-editing');
         if (displayEl) displayEl.style.display = 'none';
 
-        var widget = buildWidget(field, currentValue);
+        var widget = buildWidget(field, currentValue, isQuoteLockedRow(cell.closest('tr')));
         if (field === 'status') widget.setAttribute('aria-label', 'SQR Status');
         cell.appendChild(widget);
 
@@ -3287,7 +3024,8 @@
         if (backdrop) backdrop.addEventListener('click', onCancel);
     }
 
-    document.querySelectorAll('.sqr-inline-cell').forEach(function(cell) {
+    // Initialize inline editing cells.
+    document.querySelectorAll('.sqr-inline-cell, [data-sqr-quote-field]').forEach(function(cell) {
         if (cell.dataset.sqrField === 'status') {
             cell.tabIndex = 0;
             cell.setAttribute('aria-label', 'SQR Status: ' + (LABELS.status[cell.dataset.sqrValue] || cell.dataset.sqrValue) + '. Press Enter to edit.');
@@ -3298,11 +3036,15 @@
                 }
             });
         }
-        cell.title = isClosedLostLockedCell(cell)
-            ? 'Locked because Proposal Status is Closed Lost'
-            : 'Click to edit';
+        if (cell.hasAttribute('data-sqr-quote-field')) {
+            updateQuoteCell(cell);
+        } else {
+            cell.title = isClosedLostLockedCell(cell)
+                ? 'Locked because Proposal Status is Closed Lost'
+                : 'Click to edit';
+        }
         cell.addEventListener('click', function(e) {
-            if (isClosedLostLockedCell(cell)) {
+            if (isClosedLostLockedCell(cell) || isQuoteLockedCell(cell)) {
                 e.preventDefault();
                 e.stopPropagation();
                 return;

@@ -1,5 +1,5 @@
 {# Chart card. Context: chart_id, title, subtitle, has_data, description, empty_message, donut (optional), wide (optional). #}
-<article class="glass-card rpt-chart-card rpt-chart-card--tile{% if wide %} rpt-chart-card--wide{% endif %}">
+<article class="glass-card rpt-chart-card rpt-chart-card--tile rh-chart-card{% if wide %} rpt-chart-card--wide{% endif %}">
     <div class="rpt-chart-head">
         <div>
             <h3 class="rpt-chart-title">{{ title }}</h3>
@@ -10,13 +10,7 @@
         {% endif %}
     </div>
     {% if has_data %}
-        <div class="rpt-canvas-wrap{% if donut %} rpt-canvas-wrap--donut{% endif %}">
-            <canvas id="{{ chart_id }}" data-report-chart role="img" aria-label="{{ description }}"></canvas>
-        </div>
-        <details class="rpt-chart-values">
-            <summary>View chart values</summary>
-            <div class="table-responsive rpt-chart-values__body" data-chart-values="{{ chart_id }}"></div>
-        </details>
+        {% include "hub/partials/chart_plot.html" with report_chart=True %}
     {% else %}
         <div class="rpt-empty"><i class="bi bi-bar-chart" aria-hidden="true"></i><p>{{ empty_message|default:"No data available for this chart in the selected period." }}</p></div>
     {% endif %}

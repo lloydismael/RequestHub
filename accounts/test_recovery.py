@@ -263,7 +263,9 @@ class RecoveryCenterTests(TransactionTestCase):
         account = Account.objects.create(name="Deleted customer")
         req = Request.objects.create(requestor=self.user, account=account,
                                      account_manager="Manager", product_category="Azure", engagement_type="support")
-        Request.all_objects.filter(pk=req.pk).update(is_deleted=True, deleted_at=timezone.now())
+        response = self.client.post(reverse("hub:request-delete", args=[req.pk]))
+        self.assertRedirects(response, reverse("hub:dashboard"), fetch_redirect_response=False)
+        self.assertFalse(Request.objects.filter(pk=req.pk).exists())
         _, payload = self.create_backup()
         self.assertTrue(any(row["model"] == "hub.request" and row["pk"] == req.pk
                             and row["fields"]["is_deleted"] for row in payload["data"]))
@@ -275,6 +277,77 @@ class RecoveryCenterTests(TransactionTestCase):
         self.assertTrue(Request.objects.filter(pk=req.pk).exists())
         req.refresh_from_db()
         self.assertIsNone(req.deleted_at)
+
+    def test_confirmation_removes_request_from_active_list_and_preserves_history(self):
+        from hub.models import EngineerActivityLog, Request, StatusLog
+
+        requestor = User.objects.create_user(username="recovery-requestor", role=User.Roles.REQUESTOR)
+        req = Request.objects.create(
+            requestor=requestor,
+            account=Account.objects.create(name="Recoverable customer"),
+            account_manager="Manager",
+            product_category="Azure",
+            engagement_type=Request.Engagement.SUPPORT,
+        )
+        update = StatusLog.objects.create(request=req, author=requestor, message="Scheduled follow-up")
+        activity = EngineerActivityLog.objects.create(
+            request=req, account=req.account, engineer=self.user, request_date=timezone.localdate(),
+            actual_hours=1, details="Completed review", location=EngineerActivityLog.Location.OFFICE,
+        )
+        url = reverse("hub:request-delete", args=[req.pk])
+        self.client.force_login(requestor)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        response = self.client.post(url)
+        self.assertRedirects(response, reverse("hub:dashboard"), fetch_redirect_response=False)
+        self.assertFalse(Request.objects.filter(pk=req.pk).exists())
+        removed = Request.all_objects.filter(pk=req.pk).first()
+        self.assertIsNotNone(removed)
+        self.assertTrue(removed.is_deleted)
+        self.assertIsNotNone(removed.deleted_at)
+        self.assertEqual(removed.updated_at, removed.deleted_at)
+        self.assertEqual(removed.reference_code, req.reference_code)
+        self.assertTrue(removed.status_logs.filter(pk=update.pk).exists())
+        self.assertTrue(removed.activity_logs.filter(pk=activity.pk).exists())
+
+        deleted_at = removed.deleted_at
+        self.assertRedirects(self.client.post(url), reverse("hub:dashboard"), fetch_redirect_response=False)
+        removed.refresh_from_db()
+        self.assertEqual(removed.deleted_at, deleted_at)
+        self.assertEqual(removed.updated_at, deleted_at)
+        self.assertTrue(removed.is_deleted)
+
+        restore_url = reverse("hub:request-restore", args=[req.pk])
+        self.client.post(restore_url)
+        self.assertFalse(Request.objects.filter(pk=req.pk).exists())
+        self.client.force_login(self.user)
+        self.assertRedirects(self.client.post(restore_url), reverse("accounts:update") + "#backup", fetch_redirect_response=False)
+        restored = Request.objects.get(pk=req.pk)
+        self.assertIsNone(restored.deleted_at)
+        self.assertTrue(restored.status_logs.filter(pk=update.pk).exists())
+        self.assertTrue(restored.activity_logs.filter(pk=activity.pk).exists())
+
+    def test_removal_methods_respect_request_scope(self):
+        from hub.models import Request
+
+        owner = User.objects.create_user(username="recovery-owner", role=User.Roles.REQUESTOR)
+        other = User.objects.create_user(username="recovery-unrelated", role=User.Roles.REQUESTOR)
+        req = Request.objects.create(
+            requestor=owner,
+            account=Account.objects.create(name="Scoped customer"),
+            account_manager="Manager",
+            product_category="Azure",
+            engagement_type=Request.Engagement.SUPPORT,
+        )
+        url = reverse("hub:request-delete", args=[req.pk])
+        self.client.force_login(other)
+        for remove in (self.client.post, self.client.delete):
+            with self.subTest(method=remove.__name__):
+                self.assertRedirects(remove(url), reverse("hub:dashboard"), fetch_redirect_response=False)
+                self.assertTrue(Request.objects.filter(pk=req.pk).exists())
+        self.client.force_login(self.user)
+        self.assertRedirects(self.client.delete(url), reverse("hub:dashboard"), fetch_redirect_response=False)
+        self.assertFalse(Request.objects.filter(pk=req.pk).exists())
+        self.assertTrue(Request.all_objects.filter(pk=req.pk, is_deleted=True).exists())
 
     def test_preview_bound_to_creator_and_expires(self):
         from accounts import recovery

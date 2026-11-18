@@ -1,10 +1,8 @@
-from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
-from django.core.cache import cache
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
@@ -17,7 +15,7 @@ from django.views.generic import RedirectView, UpdateView
 
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
-from accounts.sign_in_log import IDLE_LOGOUT_REASON, client_ip as _client_ip, touch_sign_in_session
+from accounts.sign_in_log import IDLE_LOGOUT_REASON, touch_sign_in_session
 from .recovery_views import recovery_context
 
 from .forms import (
@@ -27,9 +25,6 @@ from .forms import (
 )
 
 _PROFILE_PHOTO_PREFIX = "profile_photos/"
-LOGIN_THROTTLE_LIMIT = 5
-LOGIN_THROTTLE_TIMEOUT = 15 * 60
-LOGIN_THROTTLE_MESSAGE = "Too many failed login attempts. Try again later."
 
 
 def _safe_download_filename(filename: str) -> str:
@@ -178,56 +173,11 @@ class RoleLoginView(LoginView):
         context["christmas_login_default"] = context["christmas_login_enabled"] and User.christmas_default_active()
         return context
 
-    def _throttle_key(self) -> str:
-        username = (self.request.POST.get("username") or "").strip().lower()
-        return f"login-fail:{_client_ip(self.request)}:{username}"
-
-    def _failure_count(self) -> int:
-        try:
-            return int(cache.get(self._throttle_key()) or 0)
-        except (TypeError, ValueError):
-            return 0
-
-    def _is_throttled(self) -> bool:
-        return self._failure_count() >= LOGIN_THROTTLE_LIMIT
-
-    def _record_failure(self) -> int:
-        key = self._throttle_key()
-        if cache.add(key, 1, LOGIN_THROTTLE_TIMEOUT):
-            return 1
-        try:
-            return int(cache.incr(key))
-        except ValueError:
-            cache.set(key, 1, LOGIN_THROTTLE_TIMEOUT)
-            return 1
-
-    def confirm_login_allowed(self, user):
-        selected_role = self.cleaned_data.get("role")
-        if selected_role and user.role != selected_role:
-            raise forms.ValidationError(
-                "Selected role does not match the provided credentials.",
-                code="invalid_role",
-            )
-        super().confirm_login_allowed(user)
-
     def form_valid(self, form):
-        if self._is_throttled():
-            form.add_error(None, LOGIN_THROTTLE_MESSAGE)
-            return super().form_invalid(form)
-        cache.delete(self._throttle_key())
         response = super().form_valid(form)
         if self.request.user.show_login_banner:
             messages.success(self.request, "Login successful. Redirecting to your dashboard\u2026", extra_tags="login-success")
         return response
-
-    def form_invalid(self, form):
-        if self._is_throttled():
-            form.add_error(None, LOGIN_THROTTLE_MESSAGE)
-        else:
-            self._record_failure()
-            if self._is_throttled():
-                form.add_error(None, LOGIN_THROTTLE_MESSAGE)
-        return super().form_invalid(form)
 
 
 class SignInHeartbeatView(LoginRequiredMixin, View):

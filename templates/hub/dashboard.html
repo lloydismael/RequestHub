@@ -12,6 +12,7 @@
         engineer-dashboard
     {% endif %}
 {% endblock %}
+{% block extra_head %}{% if is_requestor_ui or role == 'engineer' and active_tab == 'report' %}<link rel="stylesheet" href="{% static 'css/charts.css' %}">{% endif %}{% endblock %}
 {% block content %}
 <div class="row g-4">
     <div class="{% if role == 'admin' %}col-12 col-xl-12{% elif role == 'engineer' %}col-12 col-xl-12{% else %}col-12{% endif %}">
@@ -132,11 +133,11 @@
                             </div>
                         </div>
                         <div class="col-12 mt-4">
-                            <div class="glass-card p-4 border-0 shadow-sm">
+                            <div class="glass-card rh-chart-card">
                                 <div class="d-flex flex-wrap justify-content-between align-items-start align-items-md-center gap-2 mb-3">
                                     <div>
                                         <h3 class="h5 mb-1 text-secondary fw-semibold">Count of Requests by Requestor</h3>
-                                        <p class="small text-muted mb-0">Assigned requests grouped by who raised them. Hover a bar for the exact count and share of total.</p>
+                                        <p class="small text-muted mb-0">Assigned requests grouped by who raised them. View chart values for exact counts and shares.</p>
                                     </div>
                                     <div class="d-flex flex-wrap gap-2" id="engineer-requestor-chart-summary" aria-hidden="true">
                                         <span class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle px-3 py-2" data-summary="total">Total: 0</span>
@@ -144,13 +145,7 @@
                                         <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-3 py-2" data-summary="requestors">Requestors: 0</span>
                                     </div>
                                 </div>
-                                <div class="activity-chart-wrap" id="engineer-requestor-chart-wrap" style="height: 360px;">
-                                    <canvas id="engineer-requestor-chart"></canvas>
-                                </div>
-                                <div class="small text-muted mt-3 d-flex flex-wrap align-items-center gap-3">
-                                    <span><span class="d-inline-block rounded-circle align-middle me-1" style="width:10px;height:10px;background:#2563eb;"></span>Requests assigned</span>
-                                    <span class="text-muted">Sorted highest to lowest &bull; Numbers on each bar show the exact count.</span>
-                                </div>
+                                {% include "hub/partials/chart_plot.html" with chart_id="engineer-requestor-chart" title="Count of Requests by Requestor" unit="Requests" only %}
                             </div>
                         </div>
                     </div>
@@ -468,35 +463,27 @@
                     <div class="tab-pane" id="request-report-graph-pane" role="tabpanel" aria-labelledby="request-report-graph-tab" tabindex="0">
                         <div class="row g-4">
                             <div class="col-12 col-lg-6">
-                                <div class="glass-card p-3">
-                                    <h3 class="h6 mb-3">Request Status Distribution</h3>
-                                    <div class="activity-chart-wrap">
-                                        <canvas id="requestor-status-chart"></canvas>
-                                    </div>
+                                <div class="glass-card rh-chart-card">
+                                    <h3 class="h6 mb-1">Request Status Distribution</h3>
+                                    {% include "hub/partials/chart_plot.html" with chart_id="requestor-status-chart" title="Request Status Distribution" unit="Requests" only %}
                                 </div>
                             </div>
                             <div class="col-12 col-lg-6">
-                                <div class="glass-card p-3">
-                                    <h3 class="h6 mb-3">Request Priority Distribution</h3>
-                                    <div class="activity-chart-wrap">
-                                        <canvas id="requestor-priority-chart"></canvas>
-                                    </div>
+                                <div class="glass-card rh-chart-card">
+                                    <h3 class="h6 mb-1">Request Priority Distribution</h3>
+                                    {% include "hub/partials/chart_plot.html" with chart_id="requestor-priority-chart" title="Request Priority Distribution" unit="Requests" only %}
                                 </div>
                             </div>
                             <div class="col-12 col-lg-6">
-                                <div class="glass-card p-3">
-                                    <h3 class="h6 mb-3">Engagement Distribution</h3>
-                                    <div class="activity-chart-wrap">
-                                        <canvas id="requestor-engagement-chart"></canvas>
-                                    </div>
+                                <div class="glass-card rh-chart-card">
+                                    <h3 class="h6 mb-1">Engagement Distribution</h3>
+                                    {% include "hub/partials/chart_plot.html" with chart_id="requestor-engagement-chart" title="Engagement Distribution" unit="Requests" only %}
                                 </div>
                             </div>
                             <div class="col-12 col-lg-6">
-                                <div class="glass-card p-3">
-                                    <h3 class="h6 mb-3">Monthly Requests Trend</h3>
-                                    <div class="activity-chart-wrap">
-                                        <canvas id="requestor-monthly-chart"></canvas>
-                                    </div>
+                                <div class="glass-card rh-chart-card">
+                                    <h3 class="h6 mb-1">Monthly Requests Trend</h3>
+                                    {% include "hub/partials/chart_plot.html" with chart_id="requestor-monthly-chart" title="Monthly Requests Trend" unit="Requests" only %}
                                 </div>
                             </div>
                         </div>
@@ -970,7 +957,9 @@
     {% if is_requestor_ui %}
         {{ request_report_data|json_script:"requestor-report-data" }}
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-        <script src="{% static 'js/chart-theme.js' %}?v=4"></script>
+        <script src="{% static 'js/chart-values.js' %}"></script>
+        <script src="{% static 'js/chart-theme.js' %}"></script>
+        <script src="{% static 'js/request-graphs.js' %}"></script>
     {% endif %}
     <script src="{% static 'js/account-autocomplete.js' %}?v=1"></script>
     <script>
@@ -1180,94 +1169,6 @@
                 syncScrollLock();
             }
 
-            const reportDataNode = document.getElementById("requestor-report-data");
-            const graphTabButton = document.getElementById("request-report-graph-tab");
-            const graphPane = document.getElementById("request-report-graph-pane");
-            const chartRegistry = {};
-
-            if (reportDataNode && typeof Chart !== "undefined") {
-                const reportData = JSON.parse(reportDataNode.textContent || "{}");
-                const defaultColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-
-                const upsertChart = (canvasId, config) => {
-                    const canvas = document.getElementById(canvasId);
-                    if (!canvas) return;
-                    if (chartRegistry[canvasId]) {
-                        chartRegistry[canvasId].destroy();
-                    }
-                    chartRegistry[canvasId] = new Chart(canvas, config);
-                };
-
-                const makeBar = (canvasId, labels, values, label) => {
-                    if (!labels || !labels.length) return;
-                    upsertChart(canvasId, {
-                        type: 'bar',
-                        data: {
-                            labels,
-                            datasets: [{
-                                label,
-                                data: values,
-                                backgroundColor: defaultColors,
-                                borderRadius: 8,
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                        }
-                    });
-                };
-
-                const makeLine = (canvasId, labels, values, label) => {
-                    if (!labels || !labels.length) return;
-                    upsertChart(canvasId, {
-                        type: 'line',
-                        data: {
-                            labels,
-                            datasets: [{
-                                label,
-                                data: values,
-                                borderColor: '#3b82f6',
-                                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                                fill: true,
-                                tension: 0.3,
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: { legend: { display: false } },
-                        }
-                    });
-                };
-
-                const renderRequestorCharts = () => {
-                    makeBar('requestor-status-chart', reportData.request_status?.labels, reportData.request_status?.values, 'Requests');
-                    makeBar('requestor-priority-chart', reportData.request_priority?.labels, reportData.request_priority?.values, 'Requests');
-                    makeBar('requestor-engagement-chart', reportData.request_engagement?.labels, reportData.request_engagement?.values, 'Requests');
-                    makeLine('requestor-monthly-chart', reportData.request_monthly?.labels, reportData.request_monthly?.values, 'Requests');
-                };
-
-                if (graphPane && graphPane.classList.contains('show') && graphPane.classList.contains('active')) {
-                    renderRequestorCharts();
-                    if (graphTabButton) {
-                        graphTabButton.dataset.rendered = 'true';
-                    }
-                }
-
-                if (graphTabButton) {
-                    graphTabButton.addEventListener('shown.bs.tab', () => {
-                        if (graphTabButton.dataset.rendered !== 'true') {
-                            renderRequestorCharts();
-                            graphTabButton.dataset.rendered = 'true';
-                            return;
-                        }
-                        Object.values(chartRegistry).forEach((chart) => chart.resize());
-                    });
-                }
-            }
-
             // Prevent double submissions by disabling the submit button once clicked.
             const requestForm = modal.querySelector("form[method='post']");
             const submitBtn = modal.querySelector("#submit-request-btn");
@@ -1290,222 +1191,9 @@
 {% if role == 'engineer' and active_tab == 'report' and engineer_report_data %}
     {{ engineer_report_data|json_script:"engineer-report-data" }}
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="{% static 'js/chart-theme.js' %}?v=4"></script>
-    <script>
-        (function() {
-            const reportDataNode = document.getElementById('engineer-report-data');
-            if (!reportDataNode || typeof Chart === "undefined") { return; }
-            const reportData = JSON.parse(reportDataNode.textContent || "{}");
-            const canvas = document.getElementById('engineer-requestor-chart');
-            const wrap = document.getElementById('engineer-requestor-chart-wrap');
-            const summaryEl = document.getElementById('engineer-requestor-chart-summary');
-            const byReq = reportData.requests_by_requestor || { labels: [], values: [] };
-            if (!canvas) { return; }
-
-            // Pair + sort descending so the biggest requestor is first.
-            const rawLabels = byReq.labels || [];
-            const rawValues = (byReq.values || []).map(function (v) { return Number(v) || 0; });
-            const paired = rawLabels.map(function (l, i) { return { label: l || 'Unknown', value: rawValues[i] || 0 }; })
-                .sort(function (a, b) { return b.value - a.value; });
-
-            const labels = paired.map(function (p) { return p.label; });
-            const values = paired.map(function (p) { return p.value; });
-            const total = values.reduce(function (a, b) { return a + b; }, 0);
-            const maxValue = values.length ? Math.max.apply(null, values) : 0;
-
-            // Update summary badges.
-            if (summaryEl) {
-                const totalBadge = summaryEl.querySelector('[data-summary="total"]');
-                const topBadge = summaryEl.querySelector('[data-summary="top"]');
-                const countBadge = summaryEl.querySelector('[data-summary="requestors"]');
-                if (totalBadge) { totalBadge.textContent = 'Total: ' + total; }
-                if (countBadge) { countBadge.textContent = 'Requestors: ' + labels.length; }
-                if (topBadge) {
-                    topBadge.textContent = labels.length
-                        ? 'Top: ' + labels[0] + ' (' + values[0] + ')'
-                        : 'Top: —';
-                }
-                summaryEl.setAttribute('aria-hidden', 'false');
-            }
-
-            if (!labels.length) {
-                if (wrap) {
-                    wrap.innerHTML = '<div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted">'
-                        + '<i class="bi bi-bar-chart fs-1 mb-2"></i>'
-                        + '<div class="fw-semibold">No assigned requests yet</div>'
-                        + '<div class="small">Once requests are assigned to you, they will appear here grouped by requestor.</div>'
-                        + '</div>';
-                }
-                return;
-            }
-
-            // Build a gradient fill for each bar based on its value (darker = more).
-            const palette = {
-                top: { start: '#1d4ed8', end: '#60a5fa' },
-                mid: { start: '#2563eb', end: '#93c5fd' },
-                low: { start: '#3b82f6', end: '#bfdbfe' }
-            };
-            const ctx = canvas.getContext('2d');
-            const horizontal = labels.length > 8;
-            const buildGradient = function (colorPair) {
-                const g = horizontal
-                    ? ctx.createLinearGradient(0, 0, canvas.width || 600, 0)
-                    : ctx.createLinearGradient(0, 0, 0, canvas.height || 360);
-                g.addColorStop(0, colorPair.start);
-                g.addColorStop(1, colorPair.end);
-                return g;
-            };
-            const backgroundColors = values.map(function (v) {
-                if (maxValue === 0) { return buildGradient(palette.low); }
-                const ratio = v / maxValue;
-                if (ratio >= 0.75) { return buildGradient(palette.top); }
-                if (ratio >= 0.4) { return buildGradient(palette.mid); }
-                return buildGradient(palette.low);
-            });
-            const borderColors = values.map(function (v) {
-                if (maxValue === 0) { return palette.low.start; }
-                const ratio = v / maxValue;
-                if (ratio >= 0.75) { return palette.top.start; }
-                if (ratio >= 0.4) { return palette.mid.start; }
-                return palette.low.start;
-            });
-            const resolveThemeToken = function (name, fallback) {
-                const value = getComputedStyle(document.body).getPropertyValue(name).trim();
-                return value || fallback;
-            };
-            const chartTextColor = function () { return resolveThemeToken('--lg-ink', '#0b1220'); };
-            const chartTextSoft = function () { return resolveThemeToken('--lg-ink-soft', 'rgba(11, 18, 32, 0.62)'); };
-            const chartDividerColor = function () { return resolveThemeToken('--lg-divider', 'rgba(11, 18, 32, 0.12)'); };
-            const chartValueLabelColor = function () {
-                return resolveThemeToken('--lg-ink-soft', '#0b1220');
-            };
-
-            // Grow height for horizontal layout so each bar has breathing room.
-            if (horizontal && wrap) {
-                wrap.style.height = Math.max(360, labels.length * 36 + 80) + 'px';
-            }
-
-            // Plugin: draw the value at the end of each bar so counts are visible without hovering.
-            const valueLabelPlugin = {
-                id: 'engineerRequestorValueLabels',
-                afterDatasetsDraw: function (chart) {
-                    const { ctx: c } = chart;
-                    const meta = chart.getDatasetMeta(0);
-                    if (!meta) { return; }
-                    c.save();
-                    c.fillStyle = chartValueLabelColor();
-                    c.font = '600 12px "Inter", system-ui, -apple-system, Segoe UI, sans-serif';
-                    meta.data.forEach(function (bar, i) {
-                        const value = values[i];
-                        if (value === undefined || value === null) { return; }
-                        const pos = bar.tooltipPosition();
-                        if (chart.options.indexAxis === 'y') {
-                            c.textAlign = 'left';
-                            c.textBaseline = 'middle';
-                            c.fillText(String(value), bar.x + 6, pos.y);
-                        } else {
-                            c.textAlign = 'center';
-                            c.textBaseline = 'bottom';
-                            c.fillText(String(value), pos.x, bar.y - 4);
-                        }
-                    });
-                    c.restore();
-                }
-            };
-
-            new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Assigned Requests',
-                        data: values,
-                        backgroundColor: backgroundColors,
-                        borderColor: borderColors,
-                        borderWidth: 1,
-                        borderRadius: 8,
-                        borderSkipped: false,
-                        maxBarThickness: 42,
-                        hoverBackgroundColor: borderColors
-                    }]
-                },
-                options: {
-                    indexAxis: horizontal ? 'y' : 'x',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: { padding: { top: 18, right: horizontal ? 36 : 12, bottom: 4, left: 4 } },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                            titleColor: '#f9fafb',
-                            bodyColor: '#f9fafb',
-                            padding: 12,
-                            borderColor: '#2563eb',
-                            borderWidth: 1,
-                            displayColors: false,
-                            callbacks: {
-                                title: function (items) {
-                                    return items && items.length ? items[0].label : '';
-                                },
-                                label: function (item) {
-                                    const v = item.parsed[horizontal ? 'x' : 'y'] || 0;
-                                    const pct = total > 0 ? ((v / total) * 100).toFixed(1) : '0.0';
-                                    const plural = v === 1 ? 'request' : 'requests';
-                                    return v + ' ' + plural + ' (' + pct + '% of total)';
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            beginAtZero: true,
-                            // Vertical grid lines (always on) — help align bars to tick values / categories.
-                            grid: {
-                                display: true,
-                                drawOnChartArea: true,
-                                drawTicks: false,
-                                color: function () { return chartDividerColor(); },
-                                lineWidth: 1,
-                                borderDash: horizontal ? [] : [4, 4],
-                            },
-                            border: { display: false },
-                            ticks: {
-                                stepSize: horizontal ? undefined : 1,
-                                precision: 0,
-                                color: function () { return chartTextSoft(); },
-                                font: { size: 12 }
-                            },
-                            title: horizontal ? { display: true, text: 'Number of requests', color: function () { return chartTextColor(); }, font: { size: 12, weight: '600' } } : { display: false }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            // Horizontal grid stays for value axis; light category guides when horizontal bars.
-                            grid: {
-                                display: true,
-                                drawOnChartArea: true,
-                                drawTicks: false,
-                                color: function () { return chartDividerColor(); },
-                                lineWidth: 1,
-                                borderDash: horizontal ? [4, 4] : [],
-                            },
-                            border: { display: false },
-                            ticks: {
-                                stepSize: horizontal ? undefined : 1,
-                                precision: 0,
-                                color: function () { return chartTextSoft(); },
-                                font: { size: 12 },
-                                autoSkip: false
-                            },
-                            title: !horizontal ? { display: true, text: 'Number of requests', color: function () { return chartTextColor(); }, font: { size: 12, weight: '600' } } : { display: false }
-                        }
-                    },
-                    animation: { duration: 700, easing: 'easeOutQuart' }
-                },
-                plugins: [valueLabelPlugin]
-            });
-        })();
-    </script>
+    <script src="{% static 'js/chart-values.js' %}"></script>
+    <script src="{% static 'js/chart-theme.js' %}"></script>
+    <script src="{% static 'js/request-graphs.js' %}"></script>
 {% endif %}
 
 {% if role == 'engineer' %}

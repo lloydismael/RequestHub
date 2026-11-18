@@ -104,7 +104,7 @@ def _configure_allowed_values(form, key, field, spec, form_key):
             })
 
 
-def configure_form(form, schema=None, *, definition=None, answers=None):
+def configure_form(form, schema=None, *, definition=None, answers=None, read_only_fields=()):
     from . import form_editor
     key = form_editor.get_form_key(form)
     if not key:
@@ -139,6 +139,7 @@ def configure_form(form, schema=None, *, definition=None, answers=None):
     form.editor_title = schema.get("title", "")
     form.editor_description = schema.get("description", "")
     form.editor_pin_error = pin_error
+    form.editor_read_only_fields = frozenset(read_only_fields)
     form.editor_custom_keys = []
     form.editor_visible_custom_keys = []
     instance = getattr(form, "instance", None)
@@ -185,7 +186,9 @@ def configure_form(form, schema=None, *, definition=None, answers=None):
                 dependency_field = ordered.get(condition["field"]) or form.fields.get(condition["field"])
                 dependency_spec = next((item for item in schema["fields"] if item["key"] == condition["field"]), {})
                 multiple = isinstance(dependency_field, forms.MultipleChoiceField) or dependency_spec.get("type") in ("multiselect", "multiple_choice")
-                if form.is_bound:
+                if condition["field"] in read_only_fields:
+                    value = form.initial.get(condition["field"])
+                elif form.is_bound:
                     value = form.data.getlist(dependency) if multiple and hasattr(form.data, "getlist") else form.data.get(dependency)
                     if isinstance(dependency_field, forms.BooleanField) or dependency_spec.get("type") in ("checkbox", "boolean"):
                         value = forms.BooleanField(required=False).to_python(value)
@@ -238,7 +241,7 @@ def editable_form(cls):
         finally:
             self._editor_init_depth = depth
         if depth == 0 and not skip:
-            configure_form(self)
+            configure_form(self, read_only_fields=getattr(self, "editor_read_only_fields", ()))
 
     @wraps(original_clean)
     def full_clean(self):

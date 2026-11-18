@@ -1,14 +1,20 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from threading import Event
 from unittest.mock import patch
 
+from django.contrib.auth import authenticate
+from django.contrib.auth.hashers import MD5PasswordHasher
 from django.core.cache import cache
-from django.db import DatabaseError, connection
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.db import DatabaseError, connection, connections
+from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import SignInLog, User
+from accounts.forms import LOGIN_FAILURE_MESSAGE
+from accounts.login_throttle import LOGIN_THROTTLE_LIMIT
+from accounts.models import LoginThrottleBucket, SignInLog, User
 from accounts.sign_in_log import (
     ACTIVE_WINDOW,
     INVALID_CREDENTIALS_REASON,
@@ -18,7 +24,6 @@ from accounts.sign_in_log import (
     parse_user_agent,
     sign_in_status,
 )
-from accounts.views import LOGIN_THROTTLE_LIMIT, LOGIN_THROTTLE_MESSAGE
 
 CHROME_WINDOWS = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -100,6 +105,176 @@ class UserAgentAndElapsedTests(SimpleTestCase):
         self.assertEqual(format_elapsed(3725), "1h 02m 05s")
 
 
+@override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
+class LoginQuotaTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user(username="quota-fixture", password="fixture-password-672")
+        cls.other = User.objects.create_user(username="quota-other", password="fixture-password-672")
+
+    def attempt(self, username, password="incorrect", source="192.0.2.41"):
+        return self.client.post(reverse("login"), {"username": username, "password": password}, REMOTE_ADDR=source)
+
+    def test_unknown_identity_hashes_only_permitted_attempts_and_gets_generic_feedback(self):
+        with patch.object(MD5PasswordHasher, "encode", autospec=True, side_effect=MD5PasswordHasher.encode) as encode:
+            for _ in range(6):
+                missing = self.attempt("synthetic-unregistered")
+        self.assertEqual(encode.call_count, 5)
+        real = self.attempt(self.user.username)
+        self.assertEqual(missing.context["form"].non_field_errors(), real.context["form"].non_field_errors())
+
+    def test_source_quota_bounds_distinct_identities_without_blocking_other_sources(self):
+        for attempt in range(30):
+            self.attempt(f"synthetic-unregistered-{attempt}")
+        with patch.object(User, "check_password", autospec=True, side_effect=User.check_password) as check:
+            denied = self.attempt(self.user.username, "fixture-password-672")
+        self.assertEqual(denied.status_code, 200)
+        check.assert_not_called()
+        self.assertLessEqual(LoginThrottleBucket.objects.count(), 31)
+        self.assertEqual(self.attempt(self.user.username, "fixture-password-672", "192.0.2.42").status_code, 302)
+
+    def test_cleanup_deletes_a_bounded_batch_without_touching_live_rows(self):
+        now = timezone.now()
+        LoginThrottleBucket.objects.bulk_create([
+            LoginThrottleBucket(key=f"expired-{i}", expires_at=now - timedelta(minutes=1)) for i in range(80)
+        ])
+        LoginThrottleBucket.objects.create(key="live", expires_at=now + timedelta(minutes=1))
+
+        self.attempt("synthetic-unregistered")
+        remaining = LoginThrottleBucket.objects.filter(expires_at__lte=now).count()
+        self.assertLess(remaining, 80)
+        self.assertGreater(remaining, 0)
+        self.assertTrue(LoginThrottleBucket.objects.filter(pk="live").exists())
+
+    def test_success_clears_prior_failures_for_its_own_account_and_source(self):
+        for _ in range(4):
+            self.attempt(self.user.username)
+        self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 302)
+        self.client.logout()
+        for _ in range(4):
+            self.assertEqual(self.attempt(self.user.username).status_code, 200)
+        self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 302)
+
+    def test_success_does_not_reset_the_source_budget(self):
+        for _ in range(4):
+            self.attempt(self.user.username)
+        for _ in range(5):
+            self.attempt(self.other.username)
+        for attempt in range(20):
+            self.attempt(f"synthetic-unregistered-{attempt}")
+
+        self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 302)
+        self.client.logout()
+        with patch.object(User, "check_password", autospec=True, side_effect=User.check_password) as check:
+            self.assertEqual(self.attempt(self.other.username, "fixture-password-672").status_code, 200)
+            self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 200)
+        check.assert_not_called()
+        self.assertEqual(self.attempt(self.user.username, "fixture-password-672", "192.0.2.42").status_code, 302)
+
+    def test_success_does_not_clear_same_account_attempts_from_another_source(self):
+        for _ in range(4):
+            self.attempt(self.user.username, source="192.0.2.42")
+        self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 302)
+        self.client.logout()
+        self.assertEqual(self.attempt(self.user.username, source="192.0.2.42").status_code, 200)
+        denied = self.attempt(self.user.username, "fixture-password-672", "192.0.2.42")
+        self.assertEqual(denied.status_code, 200)
+
+    def test_account_quota_expires_without_extending_on_denials(self):
+        now = timezone.now()
+        for seconds in (0, 60, 120, 180, 240):
+            with patch("django.utils.timezone.now", return_value=now + timedelta(seconds=seconds)):
+                self.attempt(self.user.username)
+        with patch("django.utils.timezone.now", return_value=now + timedelta(minutes=14)):
+            self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 200)
+        with patch("django.utils.timezone.now", return_value=now + timedelta(minutes=15)):
+            self.assertEqual(self.attempt(self.user.username, "fixture-password-672").status_code, 302)
+
+    def test_quota_store_failure_denies_before_hash(self):
+        wrong = self.attempt(self.user.username)
+        with (
+            patch.object(LoginThrottleBucket, "save", side_effect=DatabaseError("Synthetic quota store failure")),
+            patch.object(User, "check_password", autospec=True, side_effect=User.check_password) as check,
+            self.assertLogs("accounts.login_throttle", level="ERROR"),
+        ):
+            denied = self.attempt(self.user.username, "fixture-password-672")
+        self.assertEqual(denied.status_code, 200)
+        self.assertEqual(denied.context["form"].non_field_errors(), wrong.context["form"].non_field_errors())
+        self.assertNotIn("_auth_user_id", self.client.session)
+        check.assert_not_called()
+
+
+class LoginQuotaConcurrencyTests(TransactionTestCase):
+    def test_success_keeps_earlier_in_flight_attempts(self):
+        user = User.objects.create_user(username="quota-pending", password="fixture-password-672")
+        hashing = Event()
+        finish = Event()
+        real_check = User.check_password
+
+        def check(instance, password):
+            if password == "pending-invalid":
+                hashing.set()
+                if not finish.wait(10):
+                    raise AssertionError("Timed out waiting for successful authentication")
+            return real_check(instance, password)
+
+        def attempt(password):
+            request = RequestFactory().get("/", REMOTE_ADDR="192.0.2.43")
+            return authenticate(request, username=user.username, password=password)
+
+        def authenticate_in_thread():
+            try:
+                return attempt("pending-invalid")
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=1) as worker, patch.object(User, "check_password", check):
+            pending = worker.submit(authenticate_in_thread)
+            try:
+                self.assertTrue(hashing.wait(10))
+                self.assertEqual(attempt("fixture-password-672"), user)
+                for _ in range(4):
+                    self.assertIsNone(attempt("incorrect"))
+                self.assertIsNone(attempt("fixture-password-672"))
+            finally:
+                finish.set()
+            self.assertIsNone(pending.result(timeout=10))
+
+    def test_in_flight_attempts_count_and_success_keeps_newer_failures(self):
+        user = User.objects.create_user(username="quota-concurrent", password="fixture-password-672")
+        request = RequestFactory().get("/", REMOTE_ADDR="192.0.2.43")
+        hashing = Event()
+        finish = Event()
+        real_check = User.check_password
+
+        def check(instance, password):
+            if password == "fixture-password-672" and not hashing.is_set():
+                hashing.set()
+                if not finish.wait(10):
+                    raise AssertionError("Timed out waiting for concurrent attempts")
+            return real_check(instance, password)
+
+        def authenticate_in_thread():
+            try:
+                return authenticate(request, username=user.username, password="fixture-password-672")
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=1) as worker, patch.object(User, "check_password", check):
+            pending = worker.submit(authenticate_in_thread)
+            try:
+                self.assertTrue(hashing.wait(10))
+                for _ in range(4):
+                    self.assertIsNone(authenticate(request, username=user.username, password="incorrect"))
+                self.assertIsNone(authenticate(request, username=user.username, password="fixture-password-672"))
+            finally:
+                finish.set()
+            self.assertEqual(pending.result(timeout=10), user)
+
+        self.assertIsNone(authenticate(request, username=user.username, password="incorrect"))
+        self.assertIsNone(authenticate(request, username=user.username, password="fixture-password-672"))
+
+
 class SignInRecordingTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -134,7 +309,7 @@ class SignInRecordingTests(TestCase):
         response = self._login()
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, LOGIN_THROTTLE_MESSAGE)
+        self.assertContains(response, LOGIN_FAILURE_MESSAGE)
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_successful_sign_in_records_session_details(self):

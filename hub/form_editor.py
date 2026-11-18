@@ -487,7 +487,9 @@ def save_custom_answers(form, instance):
         target = condition["field"]
         if target in fields and not is_active(target, visited | {field_key}):
             return False
-        return _condition_matches(condition, form.cleaned_data.get(target))
+        value = (form.initial.get(target) if target in getattr(form, "editor_read_only_fields", ())
+                 else form.cleaned_data.get(target))
+        return _condition_matches(condition, value)
 
     for field_key, field in fields.items():
         if not is_active(field_key):

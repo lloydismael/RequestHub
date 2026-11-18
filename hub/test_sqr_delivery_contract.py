@@ -358,8 +358,8 @@ class DeliveryEditorContractTests(TestCase):
         self.assertEqual(values["managed_support_start_date"], "2028-02-05")
         self.assertEqual(values["managed_support_end_date"], "2028-02-06")
         record = sqr_prototype.serialize_record(
-            self.row, self.pm, allowed_fields=(), locked_fields=(), today=date(2028, 1, 1),
-            is_pm=True, is_admin=False, is_engineer=False,
+            self.row, self.pm, editable_fields=(), can_review=True, quote_locked=False,
+            status_choices=[], today=date(2028, 1, 1), is_pm=True, is_admin=False, is_engineer=False,
         )
         self.assertEqual(record["managed_support_start_date"], "")
         self.assertEqual(record["managed_support_end_date"], "")

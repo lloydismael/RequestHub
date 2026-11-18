@@ -5,16 +5,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
-from django.core.cache import cache
+from django.contrib.auth import aauthenticate
 from django.core import serializers as django_serializers
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase
+from django.test import Client, RequestFactory, TestCase
 from django.templatetags.static import static
 from django.urls import resolve, reverse
 
+from accounts.forms import LOGIN_FAILURE_MESSAGE
+from accounts.login_throttle import LOGIN_THROTTLE_LIMIT
 from accounts.models import StoredFile, User
 from accounts.themes import contrast_ratio, custom_theme_vars
-from accounts.views import LOGIN_THROTTLE_LIMIT, LOGIN_THROTTLE_MESSAGE
 
 
 class LoginPageTests(TestCase):
@@ -110,9 +111,6 @@ class LoginRoutingTests(TestCase):
             username="login-routing-user", password="routing-test-password",
             role=User.Roles.ADMIN, must_change_password=False,
         )
-
-    def setUp(self):
-        cache.clear()
 
     def test_login_links_use_root(self):
         self.assertEqual(reverse("login"), "/")
@@ -241,7 +239,7 @@ class LoginRoutingTests(TestCase):
             "/", {"username": self.user.username, "password": "routing-test-password"},
         )
 
-        self.assertContains(response, LOGIN_THROTTLE_MESSAGE)
+        self.assertContains(response, LOGIN_FAILURE_MESSAGE)
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_authenticated_legacy_login_redirects_through_root(self):
@@ -264,6 +262,112 @@ class LoginRoutingTests(TestCase):
 
                 self.assertEqual(response.request["PATH_INFO"], "/accounts/profile/")
                 self.assertEqual(self.client.session["_auth_user_id"], str(self.user.pk))
+
+
+class SharedLoginPolicyTests(TestCase):
+    password = "Synthetic-login-fixture-937!"
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff, _ = User.objects.update_or_create(
+            username="Admin1",
+            defaults={"role": User.Roles.ADMIN, "is_staff": True, "is_active": True, "must_change_password": False},
+        )
+        cls.staff.set_password(cls.password)
+        cls.staff.save(update_fields=["password"])
+
+    def sign_in(self, route, username, password, **extra):
+        return self.client.post(reverse(route), {"username": username, "password": password}, **extra)
+
+    def test_app_case_aliases_and_admin_share_the_pre_hash_quota(self):
+        for attempt, route in enumerate(("login", "admin:login", "login", "login", "admin:login"), 1):
+            self.sign_in(route, " aDmIn1 ", "incorrect", REMOTE_ADDR=f"192.0.2.{attempt}")
+
+        with patch.object(User, "check_password", autospec=True, side_effect=User.check_password) as check:
+            denied = self.sign_in("admin:login", "Admin1", self.password, REMOTE_ADDR="192.0.2.20")
+        self.assertEqual(denied.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        check.assert_not_called()
+
+    def test_app_alias_and_admin_exact_case_preserve_identity_selection(self):
+        duplicate = User.objects.create_user(
+            username="admin1", password="Alternate-synthetic-fixture-844!", is_staff=True,
+        )
+        self.assertEqual(self.sign_in("login", "admin1", self.password).status_code, 302)
+        self.assertEqual(self.client.session["_auth_user_id"], str(self.staff.pk))
+        self.client.logout()
+        self.assertEqual(self.sign_in("admin:login", "admin1", "Alternate-synthetic-fixture-844!").status_code, 302)
+        self.assertEqual(self.client.session["_auth_user_id"], str(duplicate.pk))
+
+    def test_successful_staff_login_preserves_next_even_for_a_non_admin_role(self):
+        self.staff.role = User.Roles.ENGINEER
+        self.staff.save(update_fields=["role"])
+        destination = reverse("admin:password_change")
+        response = self.client.post(reverse("admin:login"), {
+            "username": "aDmIn1", "password": self.password, "next": destination,
+        })
+        self.assertRedirects(response, destination, fetch_redirect_response=False)
+        self.assertEqual(self.client.session["_auth_user_id"], str(self.staff.pk))
+
+    def test_admin_nonstaff_failure_matches_unknown_identity(self):
+        self.staff.is_staff = False
+        self.staff.save(update_fields=["is_staff"])
+        rejected = self.sign_in("admin:login", "Admin1", self.password)
+        unknown = self.sign_in("admin:login", "synthetic-absent", self.password)
+        app_unknown = self.sign_in("login", "synthetic-absent", self.password)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertEqual(rejected.context["form"].non_field_errors(), unknown.context["form"].non_field_errors())
+        self.assertEqual(unknown.context["form"].non_field_errors(), app_unknown.context["form"].non_field_errors())
+
+    def test_temporary_password_requires_profile_change_before_admin_access(self):
+        self.staff.must_change_password = True
+        self.staff.save(update_fields=["must_change_password"])
+        self.assertRedirects(
+            self.client.post(reverse("admin:login"), {
+                "username": "Admin1", "password": self.password, "next": reverse("admin:index"),
+            }), reverse("admin:index"),
+            fetch_redirect_response=False,
+        )
+        profile_url = reverse("accounts:update")
+        for name in ("admin:index", "admin:accounts_user_changelist", "admin:password_change"):
+            with self.subTest(name=name):
+                self.assertRedirects(self.client.get(reverse(name)), profile_url, fetch_redirect_response=False)
+
+        self.assertRedirects(self.client.post(reverse("admin:logout")), reverse("login"))
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.sign_in("admin:login", "Admin1", self.password)
+
+        profile = self.client.get(profile_url)
+        self.assertEqual(profile.status_code, 200)
+        profile_fields = {
+            "_form_version": profile.context["form"].initial["_form_version"],
+            "banner_gradient": "default", "current_password": self.password, "save_password": "1",
+        }
+        unchanged = self.client.post(profile_url, {
+            **profile_fields, "new_password1": self.password, "new_password2": self.password,
+        })
+        self.assertEqual(unchanged.status_code, 200)
+        self.assertTrue(unchanged.context["form"].errors.get("new_password1"))
+
+        new_password = "Different-Synthetic-fixture-621!"
+        response = self.client.post(profile_url, {
+            **profile_fields, "new_password1": new_password, "new_password2": new_password,
+        })
+        self.assertRedirects(response, profile_url)
+        self.staff.refresh_from_db()
+        self.assertFalse(self.staff.must_change_password)
+        self.assertTrue(self.staff.check_password(new_password))
+        self.assertEqual(self.client.get(reverse("admin:index")).status_code, 200)
+
+    async def test_async_authentication_preserves_case_insensitivity_and_reserves_quota(self):
+        request = RequestFactory().get("/", REMOTE_ADDR="192.0.2.27")
+        user = await aauthenticate(request, username="aDmIn1", password=self.password)
+        self.assertEqual(getattr(user, "pk", None), self.staff.pk)
+        for _ in range(5):
+            self.assertIsNone(await aauthenticate(request, username="Admin1", password="incorrect"))
+        with patch.object(User, "check_password", autospec=True, side_effect=User.check_password) as check:
+            self.assertIsNone(await aauthenticate(request, username="Admin1", password=self.password))
+        check.assert_not_called()
 
 
 class AccountSettingsTests(TestCase):
@@ -302,6 +406,22 @@ class ProfileSmokeTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "Smoke")
         self.assertEqual(self.user.department, "ESS")
+
+    def test_non_admin_profile_save_keeps_the_stored_department(self):
+        self.user.role = User.Roles.ENGINEER
+        self.user.department = "HP"
+        self.user.is_staff = True
+        self.user.save(update_fields=["role", "department", "is_staff"])
+        url = reverse("accounts:update")
+        opened = self.client.get(url)
+        response = self.client.post(url, {
+            "first_name": "Profile", "department": "ESS", "banner_gradient": "default",
+            "_form_version": opened.context["form"].initial["_form_version"],
+        })
+        self.assertRedirects(response, url)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.department, "HP")
+        self.assertEqual(self.user.first_name, "Profile")
 
     def test_profile_settings_persist(self):
         response = self.client.post(reverse("accounts:update"), {

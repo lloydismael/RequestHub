@@ -12,9 +12,25 @@ from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from accounts.forms import ProfileForm, RoleAuthenticationForm, ThemeForm
 from accounts.models import User
+from request_hub.test_html_helpers import extract_scripts, omit_script_elements
 
 
 class MobileTemplateTests(SimpleTestCase):
+    def test_sqr_refresh_script_fixtures_handle_html_tag_variations(self):
+        html = (
+            '<p>Before</p><SCRIPT>window.refreshSqrReports = true;</SCRIPT >'
+            "<script TYPE='application/json'>{\"value\": 1}</script >"
+            '<script type="application/json" src="/external.js"></script><p>After</p>'
+        )
+        self.assertEqual(
+            omit_script_elements(html, keep_json_data=True),
+            '<p>Before</p><script TYPE=\'application/json\'>{"value": 1}</script ><p>After</p>',
+        )
+        self.assertEqual(
+            [script for attrs, script in extract_scripts(html) if not attrs],
+            ['window.refreshSqrReports = true;'],
+        )
+
     def test_mobile_styles_follow_page_specific_styles(self):
         base = (settings.BASE_DIR / 'templates' / 'base.html').read_text(encoding='utf-8')
         self.assertTrue('css/mobile.css' in base, 'Shared mobile stylesheet is missing')
@@ -44,8 +60,8 @@ class MobileBrowserTests(SimpleTestCase):
         cls.browser = cls.playwright.chromium.launch()
         cls.bootstrap = Path(os.environ['MOBILE_BOOTSTRAP_CSS']).read_text(encoding='utf-8')
         base = (settings.BASE_DIR / 'templates' / 'base.html').read_text(encoding='utf-8')
-        cls.mode_script = next(script for script in re.findall(r'<script>(.*?)</script>', base, re.S | re.I)
-                               if 'function syncViewMode' in script)
+        cls.mode_script = next(script for attrs, script in extract_scripts(base)
+                               if 'src' not in attrs and 'function syncViewMode' in script)
 
     @classmethod
     def tearDownClass(cls):
@@ -62,18 +78,19 @@ class MobileBrowserTests(SimpleTestCase):
                 'form': RoleAuthenticationForm() if anonymous else ProfileForm(instance=request.user),
                 'theme_form': None if anonymous else ThemeForm(instance=request.user)}
 
-    def page(self, width=390, height=844, template=None, dark=False):
+    def page(self, width=390, height=844, template=None, dark=False, fixture=None, scripts=None):
         context = self.browser.new_context(viewport={'width': width, 'height': height},
                                            is_mobile=True, has_touch=True)
         self.addCleanup(context.close)
         page = context.new_page()
         page.set_default_timeout(3000)
         page.route('**/*', lambda route: route.abort())
-        html = render_to_string(template, self.context(anonymous=template == 'accounts/login.html')) if template else (
+        html = render_to_string(template, fixture or self.context(anonymous=template == 'accounts/login.html')) if template else (
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<main class="container"></main>')
-        # Keep all verification local: no remote scripts, user data or CDN requests.
-        html = re.sub(r'<script\b[^>]*>.*?</script>', '', html, flags=re.S | re.I)
+        # Retain inert chart data only for fixtures that opt into local scripts.
+        html = omit_script_elements(html, keep_json_data=scripts is not None)
+
         def inline_styles(match):
             href = re.search(r'href="([^"]+)"', match.group())
             if not href:
@@ -99,7 +116,213 @@ class MobileBrowserTests(SimpleTestCase):
         page.evaluate(self.mode_script)
         if dark:
             page.evaluate("document.body.classList.add('dark-mode')")
+        for script in scripts or ():
+            if script.is_file():
+                page.add_script_tag(content=script.read_text(encoding='utf-8'))
         return page
+
+    def test_fixture_retains_only_opted_in_chart_data(self):
+        fixture = (
+            '<meta name="viewport" content="width=device-width, initial-scale=1">'
+            '<main class="container"><p>Before &amp; after</p>'
+            "<SCRIPT TYPE='application/json' id='chart-data'>{\"label\": \"example\"}</SCRIPT >"
+            '<script type="text/plain">Test notes</script><p>Still present</p></main>'
+        )
+        for keep_data in (False, True):
+            with self.subTest(keep_data=keep_data):
+                with patch('hub.test_mobile_ui.render_to_string', return_value=fixture):
+                    page = self.page(template='hub/dashboard.html', scripts=() if keep_data else None)
+                self.assertEqual(page.locator('script').count(), int(keep_data))
+                if keep_data:
+                    self.assertEqual(page.locator('#chart-data').text_content(), '{"label": "example"}')
+                self.assertEqual(page.locator('main p').all_text_contents(), ['Before & after', 'Still present'])
+
+    def report_fixture(self):
+        return {
+            **self.context(), 'report_view': 'operational', 'request_trend_has_data': True, 'engineer_stats': [{'name': 'North Operations'}],
+            'request_trend_chart': {'labels': ['<North>', 'July', 'August'], 'created': [0, None, 4], 'completed': [0, 1, 3]},
+            'engineer_chart': {'labels': ['North Operations and Shared Infrastructure', 'Others'],
+                               'completed': [8, 0], 'ongoing': [2, 2], 'totals': [10, 2]},
+            'engineer_chart_full': {
+                'labels': ['North Operations and Shared Infrastructure', *[f'Engineer {n}' for n in range(2, 13)]],
+                'completed': [8, *[0] * 11], 'ongoing': [2, *[1] * 11], 'totals': [10, *[1] * 11],
+            },
+        }
+
+    def chart_scripts(self, *names, chart=True):
+        scripts = [Path(os.environ['MOBILE_CHART_JS'])] if chart else []
+        if chart:
+            self.assertTrue(scripts[0].is_file(), 'MOBILE_CHART_JS must point to local Chart.js 4.4.0')
+        return scripts + [settings.BASE_DIR / 'static' / 'js' / name for name in names]
+
+    def test_reports_chart_values_survive_unavailable_renderer(self):
+        page = self.page(320, template='hub/report.html', fixture=self.report_fixture(), scripts=self.chart_scripts(
+            'chart-theme.js', 'chart-values.js', 'report-charts.js', chart=False))
+        card = page.locator('article').filter(has=page.locator('#requestTrendChart'))
+        card.locator('summary').focus()
+        page.keyboard.press('Enter')
+        self.assertEqual(card.locator('tbody tr').all_inner_texts(), ['<North>\t0\t0', 'July\t—\t1', 'August\t4\t3'])
+        self.assertTrue(card.get_by_text('Chart unavailable. Exact values are available below.').is_visible())
+
+    def test_reports_rankings_and_expanded_chart_share_values_after_theme_change(self):
+        page = self.page(390, template='hub/report.html', fixture=self.report_fixture(), scripts=self.chart_scripts(
+            'chart-theme.js', 'chart-values.js', 'report-charts.js'))
+        button = page.get_by_role('button', name='Expand Top 10 Engineers + Others chart')
+        button.click()
+        page.wait_for_function("Chart.getChart('rptModalCanvas')")
+        self.assertEqual(page.evaluate("Chart.getChart('engineerChart').options.indexAxis"), 'y')
+        page.locator('#rptChartModal summary').click()
+        self.assertEqual(page.locator('#rptChartModal tbody tr').count(), 12)
+        self.assertEqual(page.locator('#rptChartModal tbody th').first.inner_text(), 'North Operations and Shared Infrastructure')
+        page.evaluate("""() => {
+            window.expandedChart = Chart.getChart('rptModalCanvas');
+            document.body.classList.add('dark-mode');
+            window.dispatchEvent(new Event('requesthub:theme-changed'));
+        }""")
+        self.assertTrue(page.evaluate("window.expandedChart === Chart.getChart('rptModalCanvas')"))
+        self.assertTrue(page.locator('#rptChartModal details').evaluate('el => el.open'))
+        self.assertTrue(page.evaluate("""() => {
+            const c = Chart.getChart('rptModalCanvas');
+            return c.ctx.getImageData(0, 0, 1, 1).data[3] === 255;
+        }"""))
+        with page.expect_download() as png:
+            page.locator('#rptChartModalPng').click()
+        self.assertEqual(png.value.path().read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
+        page.keyboard.press('Escape')
+        self.assertTrue(button.evaluate('el => el === document.activeElement'))
+
+    def test_expanded_chart_controls_fit_phone_and_leave_tab_order_on_close(self):
+        page = self.page(320, template='hub/report.html', fixture=self.report_fixture(), scripts=self.chart_scripts(
+            'chart-values.js', 'chart-theme.js', 'report-charts.js'))
+        button = page.locator('[data-expand-chart="engineerChart"]')
+        button.click()
+        inner = page.locator('#rptChartModal .rpt-chart-modal__inner')
+        self.assertTrue(inner.evaluate('el => el.scrollWidth <= el.clientWidth'))
+        page.keyboard.press('Escape')
+        self.assertTrue(page.locator('#rptChartModal').evaluate('el => { el.querySelector("button").focus(); return !el.contains(document.activeElement); }'))
+
+    def test_png_draws_series_key_and_narrow_axis_distinguishes_years(self):
+        fixture = self.report_fixture()
+        fixture['request_trend_chart']['labels'] = ['Jan 2025', 'Jul 2025', 'Jan 2026']
+        page = self.page(375, template='hub/report.html', fixture=fixture, scripts=self.chart_scripts(
+            'chart-values.js', 'chart-theme.js', 'report-charts.js'))
+        page.locator('[data-expand-chart="requestTrendChart"]').click()
+        page.evaluate('''() => {
+            const ctx = Chart.getChart('rptModalCanvas').ctx;
+            const draw = ctx.fillText.bind(ctx);
+            window.pngText = [];
+            ctx.fillText = (...args) => { window.pngText.push(args[0]); draw(...args); };
+        }''')
+        with page.expect_download():
+            page.locator('#rptChartModalPng').click()
+        self.assertEqual(page.evaluate("window.pngText.includes('Created') && window.pngText.includes('Completed')"), True)
+        ticks = page.evaluate("Chart.getChart('rptModalCanvas').scales.x.ticks.map(t => t.label)")
+        self.assertNotIn('Jan', ticks)
+
+    def test_chart_initialization_without_context_keeps_exact_values(self):
+        page = self.page(375, template='hub/report.html', fixture=self.report_fixture(), scripts=self.chart_scripts(
+            'chart-values.js', 'chart-theme.js'))
+        page.evaluate("HTMLCanvasElement.prototype.getContext = () => null")
+        page.add_script_tag(content=self.chart_scripts('report-charts.js', chart=False)[0].read_text(encoding='utf-8'))
+        card = page.locator('.rh-chart-card').filter(has=page.locator('#requestTrendChart'))
+        self.assertTrue(card.get_by_text('Chart unavailable. Exact values are available below.').is_visible())
+        card.locator('summary').click()
+        self.assertEqual(card.locator('tbody tr').count(), 3)
+
+    def graph_fixture(self, dashboard):
+        context = self.context()
+        data = {
+            'request_status': {'labels': ['Ongoing', 'Completed'], 'values': [2, 7 if dashboard else 5]},
+            'request_priority': {'labels': ['High', 'Normal'], 'values': [1, 6]},
+            'request_engagement': {'labels': ['Consulting'], 'values': [2]},
+            'request_monthly': {'labels': ['Jul 2026'], 'values': [3]},
+            'activity_type': {'labels': ['Design'], 'values': [2]},
+            'monthly': {'labels': ['Jul 2026'], 'hours': [2.75]},
+        }
+        return {**context, 'role': 'requestor', 'is_requestor_ui': True, 'metrics': {'ongoing': 2, 'completed': 7},
+                'request_report_data' if dashboard else 'activity_report_data': data}
+
+    def tab_scripts(self, *names):
+        return [Path(os.environ['MOBILE_BOOTSTRAP_JS']), *self.chart_scripts(*names)]
+
+    def test_graph_tabs_mount_when_shown_and_retheme_without_reset(self):
+        for dashboard, path, button, chart_id, value in (
+            (False, 'activity_logs', 'activity-graph-tab', 'request-status-chart', 5),
+            (True, 'dashboard', 'request-report-graph-tab', 'requestor-status-chart', 7),
+        ):
+            with self.subTest(view=path):
+                page = self.page(320, template=f'hub/{path}.html', fixture=self.graph_fixture(dashboard),
+                                 scripts=self.tab_scripts('chart-values.js', 'chart-theme.js', 'request-graphs.js'))
+                page.evaluate("window.dispatchEvent(new Event('requesthub:theme-changed'))")
+                self.assertFalse(page.evaluate('(id) => !!Chart.getChart(id)', chart_id))
+                page.locator('#' + button).click()
+                card = page.locator('.rh-chart-card').filter(has=page.locator('#' + chart_id))
+                self.assertTrue(page.evaluate('(id) => Chart.getChart(id)?.width > 0', chart_id))
+                card.locator('summary').click()
+                self.assertEqual(card.locator('tbody tr').all_inner_texts(), [f'Completed\t{value}', 'Ongoing\t2'])
+                page.evaluate('''id => {
+                    window.shownChart = Chart.getChart(id);
+                    window.lightBars = window.shownChart.data.datasets[0].backgroundColor;
+                    document.body.classList.add('dark-mode', 'pref-reduce-motion');
+                    window.dispatchEvent(new Event('requesthub:theme-changed'));
+                }''', chart_id)
+                self.assertTrue(page.evaluate('''id => window.shownChart === Chart.getChart(id) &&
+                    window.lightBars[0] !== window.shownChart.data.datasets[0].backgroundColor[0]''', chart_id))
+                self.assertTrue(card.locator('details').evaluate('el => el.open'))
+
+    def sqr_chart_fixture(self):
+        return {**self.context(), 'is_pm': True, 'active_sqr_tab': 'reports', 'sqr_reports_summary': {'off_track_count': 0},
+                'sqr_reports_funnel_chart': {'labels': ['Total SQR', 'Approved'], 'totals': [6, 2]},
+                'sqr_reports_deal_chart': {'labels': ['Open', 'Closed Won'], 'totals': [4, 2]},
+                'sqr_reports_group_chart': {'labels': ['North', 'Central'], 'totals': [2, 4]},
+                'sqr_reports_monthly_chart': {'labels': ['Jul 2026', 'Sep 2026'], 'totals': [4, 2]},
+                'sqr_reports_revenue_chart': {'labels': ['Closed Won'], 'totals': [12345.67]}}
+
+    def test_sqr_report_live_refresh_preserves_chart_values_focus(self):
+        fixture = self.sqr_chart_fixture()
+        page = self.page(390, template='hub/sqr.html', fixture=fixture, scripts=self.chart_scripts('chart-values.js', 'chart-theme.js'))
+        refresh_url = 'http://request-hub.test/sqr/?tab=reports'
+        page.route(refresh_url, lambda route: route.fulfill(body='<html></html>', content_type='text/html'))
+        html = page.content()
+        page.goto(refresh_url)
+        html = omit_script_elements(html, keep_json_data=True)
+        page.set_content(html)
+        updated = render_to_string('hub/partials/sqr_reports.html', {
+            **fixture, 'sqr_reports_revenue_chart': {'labels': ['Closed Won'], 'totals': [12345.68]},
+            'sqr_reports_funnel_chart': {'labels': [f'Stage {n}' for n in range(12)], 'totals': list(range(12, 0, -1))},
+        })
+        page.evaluate('''html => {
+            window.fetch = () => Promise.resolve({json: () => Promise.resolve({ok: true, html})});
+        }''', updated)
+        scripts = self.chart_scripts('chart-values.js', 'chart-theme.js', 'sqr-report-charts.js')
+        for script in scripts:
+            if script.is_file():
+                page.add_script_tag(content=script.read_text(encoding='utf-8'))
+        if not scripts[-1].is_file():
+            original = render_to_string('hub/sqr.html', fixture)
+            for attrs, script in extract_scripts(original):
+                if attrs:
+                    continue
+                if 'window.initSqrReportsCharts =' in script or 'window.refreshSqrReports =' in script:
+                    page.add_script_tag(content=script)
+        self.assertEqual(page.evaluate("Chart.getChart('sqrMonthlyTrendChart').data.datasets[0].data"), [4, None, 2])
+        self.assertEqual(page.locator('[data-chart-values="sqrMonthlyTrendChart"] tbody th').all_text_contents(), ['Jul 2026', 'Sep 2026'])
+        card = page.locator('.rh-chart-card').filter(has=page.locator('#sqrRevenueOverviewChart'))
+        summary = card.locator('summary')
+        summary.focus()
+        page.keyboard.press('Enter')
+        self.assertEqual(card.locator('tbody td').inner_text(), '₱12,345.67')
+        page.evaluate('window.refreshSqrReports()')
+        page.wait_for_function("document.querySelector('[data-chart-values=sqrRevenueOverviewChart] tbody td')?.textContent.includes('345.68')")
+        restored = summary.evaluate('''el => {
+            const { top, bottom } = el.getBoundingClientRect();
+            return { focused: document.activeElement === el, open: el.parentElement.open, top, bottom, height: innerHeight };
+        }''')
+        self.assertTrue(restored['focused'] and restored['open'] and
+                        0 <= restored['top'] <= restored['bottom'] <= restored['height'], restored)
+        page.evaluate("window.liveRevenue = Chart.getChart('sqrRevenueOverviewChart')")
+        page.evaluate('window.refreshSqrReports()')
+        self.assertTrue(page.evaluate("window.liveRevenue === Chart.getChart('sqrRevenueOverviewChart') && Object.keys(Chart.instances).length === 5"))
 
     def test_phone_detection_survives_blocked_storage_and_resize(self):
         page = self.page()
@@ -159,11 +382,12 @@ class MobileBrowserTests(SimpleTestCase):
 
     def test_ppt_hides_sqr_header_from_view_and_keyboard(self):
         template = (settings.BASE_DIR / 'templates' / 'hub' / 'sqr.html').read_text(encoding='utf-8')
-        view_script = next(script for script in re.findall(r'<script>(.*?)</script>', template, re.S)
-                           if '// ── SQR table view toggle' in script)
+        view_script = next(script for attrs, script in extract_scripts(template)
+                           if 'src' not in attrs and '// ── SQR table view toggle' in script)
         for width, dark in ((375, False), (375, True), (1280, False), (1280, True)):
             with self.subTest(width=width, dark=dark):
-                page = self.page(width, template='hub/sqr.html', dark=dark)
+                page = self.page(width, template='hub/sqr.html', dark=dark,
+                                 fixture={**self.context(), 'show_classic_sqr_tracker': True})
                 page.locator('main').evaluate("el => el.insertAdjacentHTML('beforeend', '<section data-sqr-view-panel=\"performance\" hidden></section>')")
                 page.evaluate(view_script)
                 page.evaluate("window.setSqrView('performance')")
@@ -187,8 +411,8 @@ class MobileBrowserTests(SimpleTestCase):
         page.locator('#navbarNav.show').wait_for()
         self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
         base = (settings.BASE_DIR / 'templates' / 'base.html').read_text(encoding='utf-8')
-        avatar_script = next(script for script in re.findall(r'<script>(.*?)</script>', base, re.S | re.I)
-                             if '// Nav avatar dropdown' in script)
+        avatar_script = next(script for attrs, script in extract_scripts(base)
+                             if 'src' not in attrs and '// Nav avatar dropdown' in script)
         page.evaluate(avatar_script)
         avatar = page.locator('#nav-avatar-trigger')
         self.assertGreaterEqual(avatar.bounding_box()['width'], 44)

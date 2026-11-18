@@ -2,7 +2,6 @@ import json
 import re
 import subprocess
 from datetime import date, datetime, timezone as datetime_timezone
-from html.parser import HTMLParser
 from unittest.mock import patch
 
 from django.db import IntegrityError, connection, transaction
@@ -11,35 +10,25 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import User
-
-
-class InlineScriptParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.scripts = []
-        self._current_script = None
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "script":
-            self._current_script = (dict(attrs), [])
-
-    def handle_data(self, data):
-        if self._current_script is not None:
-            self._current_script[1].append(data)
-
-    def handle_endtag(self, tag):
-        if tag == "script" and self._current_script is not None:
-            attrs, data = self._current_script
-            self.scripts.append((attrs, "".join(data)))
-            self._current_script = None
+from request_hub.test_html_helpers import extract_scripts, omit_script_elements
 
 
 class InlineScriptParserTests(SimpleTestCase):
-    def test_handles_whitespace_before_script_closing_angle_bracket(self):
-        parser = InlineScriptParser()
-        parser.feed("<script>run()</script >")
-
-        self.assertEqual(parser.scripts, [({}, "run()")])
+    def test_extracts_and_omits_complete_script_elements(self):
+        markup = (
+            '<!DOCTYPE html>\r\n<!-- <script>example</script> -->\r\n'
+            '<p>One &amp; two</p><SCRIPT type="application/json">{"label":"<example>"}</SCRIPT >\r\n'
+            '<script type="text/plain">Notes</script><p>End</p>'
+        )
+        self.assertEqual(extract_scripts(markup), [
+            ({"type": "application/json"}, '{"label":"<example>"}'),
+            ({"type": "text/plain"}, "Notes"),
+        ])
+        self.assertEqual(
+            omit_script_elements(markup),
+            '<!DOCTYPE html>\r\n<!-- <script>example</script> -->\r\n'
+            '<p>One &amp; two</p>\r\n<p>End</p>',
+        )
 
 
 class ChristmasDefaultThemeTests(SimpleTestCase):
@@ -216,10 +205,8 @@ class ChristmasDefaultAccountTests(TestCase):
         login_page = Client().get(reverse("login"))
         scripts = []
         for response in (account_page, login_page):
-            parser = InlineScriptParser()
-            parser.feed(response.content.decode())
             matching_scripts = [
-                script for _, script in parser.scripts
+                script for _, script in extract_scripts(response.content.decode())
                 if "reqHubLoginTheme" in script
             ]
             self.assertTrue(matching_scripts, "the login Christmas theme script is missing")
@@ -290,10 +277,8 @@ class ChristmasDefaultAccountTests(TestCase):
         self.user.save(update_fields=["pref_christmas_enabled", "pref_christmas_snow"])
         response = self.client.get(reverse("accounts:update"))
         self.assert_page_theme(response, "christmas")
-        parser = InlineScriptParser()
-        parser.feed(response.content.decode())
         effects = next(
-            script for attrs, script in parser.scripts
+            script for attrs, script in extract_scripts(response.content.decode())
             if attrs.get("id") == "christmas-effects-settings"
         )
         self.assertEqual(json.loads(effects), {

@@ -49,9 +49,14 @@
                 <div class="sqr-pm-status-tile sqr-pm-state--removed"><strong data-pm-metric="removed">&mdash;</strong><span>Removed</span></div>
             </div>
             <div class="sqr-pm-portfolio-grid">
-                <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-manager-title">
+                <section class="sqr-pm-surface rh-chart-card" aria-labelledby="sqr-pm-manager-title">
                     <h4 id="sqr-pm-manager-title">Projects by PM (includes removed)</h4>
+                    <p class="rh-chart-unit">Projects</p>
                     <div id="sqr-pm-manager-chart"></div>
+                    <details class="rh-chart-values" hidden>
+                        <summary>View chart values</summary>
+                        <div id="sqr-pm-manager-values" data-chart-values="sqr-pm-manager-chart"></div>
+                    </details>
                 </section>
                 <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-status-attention-title">
                     <h4 id="sqr-pm-status-attention-title">Needs attention</h4>
@@ -80,15 +85,20 @@
                 <div class="sqr-pm-summary sqr-pm-tone--unknown"><span>Incomplete / Not assessed</span><strong data-pm-metric="rating_unknown">&mdash;</strong><small>Missing assessments stay neutral</small></div>
             </div>
             <div class="sqr-pm-portfolio-grid">
-                <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-indicator-chart-title">
+                <section class="sqr-pm-surface rh-chart-card" aria-labelledby="sqr-pm-indicator-chart-title">
                     <h4 id="sqr-pm-indicator-chart-title">Saved performance assessments</h4>
+                    <p class="rh-chart-unit">Projects per indicator</p>
                     <div id="sqr-pm-indicator-chart"></div>
-                    <div class="sqr-pm-legend">
-                        <span><i class="sqr-pm-rating--good" aria-hidden="true"></i>On Track / Within Budget / Met</span>
-                        <span><i class="sqr-pm-rating--warning" aria-hidden="true"></i>At Risk</span>
-                        <span><i class="sqr-pm-rating--danger" aria-hidden="true"></i>Delayed / Over Budget / Unmet</span>
-                        <span><i class="sqr-pm-rating--unknown" aria-hidden="true"></i>Not assessed</span>
-                    </div>
+                    <ul class="rh-chart-legend">
+                        <li class="rh-chart-key-positive">On Track / Within Budget / Met</li>
+                        <li class="rh-chart-key-caution">At Risk</li>
+                        <li class="rh-chart-key-critical">Delayed / Over Budget / Unmet</li>
+                        <li class="rh-chart-key-unassessed">Not assessed</li>
+                    </ul>
+                    <details class="rh-chart-values" hidden>
+                        <summary>View chart values</summary>
+                        <div id="sqr-pm-indicator-values" data-chart-values="sqr-pm-indicator-chart"></div>
+                    </details>
                 </section>
                 <section class="sqr-pm-surface sqr-pm-panel-soft" aria-labelledby="sqr-pm-rating-attention-title">
                     <h4 id="sqr-pm-rating-attention-title">Projects needing attention</h4>

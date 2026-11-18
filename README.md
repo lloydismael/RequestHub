@@ -55,7 +55,13 @@ Coordinate engineering work, enforce SLA timelines, and gain operational visibil
 
 Phones below 768px automatically use full-width mobile layouts, including wider phones and landscape views. Shared mobile styles improve text sizing, touch controls, table scrolling, and viewport-safe dialogs. Ambient orb animation and login-card tilt are disabled on phones; desktop effects and themes remain unchanged. Profile's mobile preview remains a 390px frame on larger screens.
 
-Mobile regressions live in [hub/test_mobile_ui.py](hub/test_mobile_ui.py). Template checks run normally; opt-in Chromium checks render local templates without database access or live network requests. Install the existing browser-test dependencies and Chromium if needed, then set `RUN_MOBILE_BROWSER_TESTS=1`, `MOBILE_BOOTSTRAP_CSS` to a local Bootstrap 5.3.2 CSS file, and `MOBILE_BOOTSTRAP_JS` to its bundle JS file before running `python manage.py test hub.test_mobile_ui --settings=request_hub.settings_ci`. These fixture checks cover widths from 320px to 1280px, navigation, dialogs, scrolling, and motion preferences; they do not replace real-device workflow testing.
+Mobile regressions live in [hub/test_mobile_ui.py](hub/test_mobile_ui.py). Template checks run normally; opt-in Chromium checks render local templates without database access or live network requests. Install the existing browser-test dependencies and Chromium if needed, then set `RUN_MOBILE_BROWSER_TESTS=1`, `MOBILE_BOOTSTRAP_CSS` to a local Bootstrap 5.3.2 CSS file, `MOBILE_BOOTSTRAP_JS` to its bundle JS file, and `MOBILE_CHART_JS` to a local Chart.js 4.4.0 UMD bundle before running `python manage.py test hub.test_mobile_ui --settings=request_hub.settings_ci`. These fixture checks cover responsive layouts, navigation, dialogs, scrolling, motion preferences, chart rendering and fallback, and live chart updates; they do not replace real-device workflow testing.
+
+### Chart conventions
+
+Dashboard, Activity Logs, Reports, SQR Reports, and PPT use shared chart surfaces, text, and semantic colors. Charts follow the active light/dark and account themes. Use **View chart values** for the full labels and source precision, including when charts cannot load. An em dash denotes missing data, not zero. Operational Reports rankings expand to show all engineers or account managers and can be downloaded as PNG. SQR revenue is displayed in Philippine pesos, and missing months in SQR activity are not treated as zero submissions. PPT bars use saved assessments only; striped segments mean **Not assessed**.
+
+For maintenance, keep chart assets scoped to views that use them. Reuse [the chart plot partial](templates/hub/partials/chart_plot.html), [the shared renderer](static/js/chart-theme.js), and [the values renderer](static/js/chart-values.js) with the view's existing authorized payload. PPT uses the shared CSS and values renderer without Chart.js. See the [unreleased chart notes](docs/unreleased-chart-consistency-changelog.md) for release evidence and verification status.
 
 | Page | Description |
 |------|-------------|
@@ -87,7 +93,7 @@ Mobile regressions live in [hub/test_mobile_ui.py](hub/test_mobile_ui.py). Templ
 - **Admin/PM dashboard**: filterable, sortable request table with stat pills (All / Ongoing / Completed / Overdue)
 - **Engineer dashboard**: Assigned vs Backup tabs, personal activity report graph
 - **Requestor dashboard**: personal metrics, request creation, and progress tracking; click a request ID to open its Manage page
-- **Reports page (Operational)**: stacked bar charts requests by requestor, by engineer, by engagement type, by product category
+- **Reports page (Operational)**: a created-versus-completed trend and horizontal stacked comparisons by engagement type, product category, engineer, and account manager
 - **Reports page (Activity)**: billable vs non-billable hours, work location mix (donut), activity type breakdown, paginated engineer log
 - Chart **expand button** on every chart card for full-screen view
 
@@ -656,13 +662,17 @@ Full Azure App Service container deployment guide:
 - `.env` is gitignored and dockerignored; only `.env.example` (empty placeholders) is committed
 - Rotate any exposed credentials immediately
 - Production boot is fail-closed: missing `DJANGO_SECRET_KEY`, `DB_HOST`, `DB_USER`, or `DB_PASSWORD` refuses to start when `DJANGO_DEBUG` is false
-- Login failures are throttled at 5 attempts / 15 minutes per IP+username. `X-Forwarded-For` is ignored unless the direct peer is in `TRUSTED_PROXY_CIDRS` (comma-separated proxy IPs/CIDRs, empty by default). Only configure controlled proxies that append the actual client address; the first untrusted hop is resolved from the right, and malformed headers/configuration fall back to the peer IP. Never trust arbitrary client address ranges.
+- App and Django admin sign-in share PostgreSQL-backed limits checked before password hashing: 30 credential attempts per client source and 5 per account plus source, with an additional 5-attempt limit per existing account across sources. Unknown usernames have only a source-scoped quota. Each window expires 15 minutes after it starts; denials do not extend it, and expired rows are removed in bounded batches. A successful sign-in clears earlier completed failures for that account and source only, not the source budget or checks still in progress. Denials use generic feedback. Apply the accounts migration before rolling out the new sign-in code.
+- `X-Forwarded-For` is ignored unless the direct peer is in `TRUSTED_PROXY_CIDRS` (comma-separated proxy IPs/CIDRs, empty by default). Only configure controlled proxies that append the actual client address; the first untrusted hop is resolved from the right, and malformed headers/configuration fall back to the peer IP. Never trust arbitrary client address ranges.
 - Avatar input is limited to 16,000,000 pixels before decoding/conversion; valid uploads are center-cropped and saved as square JPEGs with a maximum edge of 512 pixels. Oversized/decompression-bomb inputs return form validation errors.
 - CSV exports neutralize formula-like user text, including leading whitespace/control and full-width operator prefixes, while preserving numeric cells. All SQR workbook report formats write text as literal strings rather than formulas or error cells.
 - Inline SQR updates validate edited and derived saved fields against their model constraints before persistence, including numeric limits, precision, finite decimals, and choices. Integer/foreign-key fields reject boolean, fractional, and non-finite decoded numeric values before coercion; invalid updates do not create history or undo records.
+- SQR reviewers (Admin or the assigned PM-ESG reviewer) control review, protected quote, and revenue actions. Approved quote fields stay locked across inline edits, the submission form, Undo, and History Restore until an authorized reviewer chooses **For Revision**. Eligible owners can still edit remarks, and independently authorized Delivery work remains available. Classic PM and SSE assignment labels display names as plain text after Save and Undo.
+- Request removal preserves the row and its history for Admin recovery. In collaborative request management, eligible engineer roles can edit their own activity entries, not other users' entries. The request account and recorded request date are read-only for engineers; authorized deployment scheduling remains available.
+- Local verification does not clear GitHub code-scanning findings. See the [unreleased hardening changelog](docs/unreleased-code-scanning-hardening-changelog.md) for the capture checklist, release visibility requirements, and the fresh-scan gate.
 - Database media is limited to profile photos and referenced changelog screenshots, with changelog publication/access checks. Screenshot uploads verify actual image bytes, accept only PNG/JPEG/WebP, and store the detected image MIME rather than the client-supplied MIME; serving responses include `X-Content-Type-Options: nosniff`.
-- Admin password reset issues a one-time temporary password and sets `must_change_password`
-- `MustChangePasswordMiddleware` enforces password rotation on flagged accounts
+- Admin password reset sets `must_change_password`. Flagged users must set a different password in their profile before accessing protected pages, including Django admin. Logout remains available.
+- Only users with the Request Hub Admin role can change department in their own profile; Django staff status alone does not permit that change.
 - `ProfileCompleteMiddleware` blocks access until profile fields are filled
 - All role checks are enforced server-side via `LoginRequiredMixin` + custom role mixins
 - PostgreSQL connections use SSL in production (enforced by Azure Flexible Server)
