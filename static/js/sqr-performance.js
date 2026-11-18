@@ -142,6 +142,12 @@
         if (!items.length && emptyText) fragment.append(node('p', 'sqr-pm-empty', emptyText));
         el(id).replaceChildren(fragment);
     }
+    function chartValues(id, labels, series, keyLabel) {
+        var holder = el(id + '-values');
+        holder.parentNode.hidden = !labels.length;
+        if (labels.length) window.rhChartValues.render(holder, {labels: labels, series: series, keyLabel: keyLabel});
+        else holder.replaceChildren();
+    }
     function attentionRow(project, performance) {
         var rating = performance ? project.overall_rating : (
             project.overall_rating === 'danger' ? 'danger' : 'warning'
@@ -190,6 +196,8 @@
             row.append(label, bar);
             return row;
         }, 'No project managers in this view.');
+        chartValues('manager', owners.map(function (owner) { return owner.name; }),
+            [{label: 'Projects', values: owners.map(function (owner) { return owner.count; })}], 'Project Manager');
         replaceList('status-queue', filtered.filter(function (project) { return project.needs_attention; }).slice(0, 5),
             function (project) { return attentionRow(project, false); }, 'No attention flags in this view.');
         var attention = filtered.filter(function (project) { return ['danger', 'warning'].includes(project.overall_rating); })
@@ -197,12 +205,16 @@
         replaceList('rating-queue', attention.slice(0, 5), function (project) { return attentionRow(project, true); }, 'No rated projects need attention in this view.');
         if (counts.attention > 5) el('status-queue').append(node('p', 'sqr-pm-row-meta', 'Showing 5 of ' + counts.attention));
         if (attention.length > 5) el('rating-queue').append(node('p', 'sqr-pm-row-meta', 'Showing 5 of ' + attention.length));
-        replaceList('indicator-chart', indicatorLabels, function (indicator) {
+        var coverage = filtered.length ? indicatorLabels.map(function (indicator) {
+            var totals = {good: 0, warning: 0, danger: 0, unknown: 0};
+            filtered.forEach(function (project) { totals[project.indicators[indicator[0]].state]++; });
+            return {indicator: indicator, totals: totals};
+        }) : [];
+        replaceList('indicator-chart', coverage, function (entry) {
+            var indicator = entry.indicator, totals = entry.totals;
             var row = node('div', 'sqr-pm-indicator-chart-row');
             row.append(node('span', 'sqr-pm-row-title', indicator[1]));
             var bar = node('div', 'sqr-pm-stacked-bar');
-            var totals = {good: 0, warning: 0, danger: 0, unknown: 0};
-            filtered.forEach(function (project) { totals[project.indicators[indicator[0]].state]++; });
             var description = [];
             Object.keys(totals).forEach(function (state) {
                 var count = totals[state];
@@ -218,7 +230,12 @@
             bar.title = description.join('; ');
             row.append(bar);
             return row;
-        });
+        }, 'No matching projects.');
+        var assessmentKeys = [['good', 'On Track / Within Budget / Met'], ['warning', 'At Risk'],
+            ['danger', 'Delayed / Over Budget / Unmet'], ['unknown', 'Not assessed']];
+        chartValues('indicator', coverage.map(function (entry) { return entry.indicator[1]; }), assessmentKeys.map(function (pair) {
+            return {label: pair[1], values: coverage.map(function (entry) { return entry.totals[pair[0]]; })};
+        }), 'Indicator');
     }
     function renderTrackerTables(projects) {
         function titleCell(project) {

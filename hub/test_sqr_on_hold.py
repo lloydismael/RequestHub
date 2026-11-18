@@ -3,21 +3,23 @@
 import io
 import json
 from datetime import timedelta
+from decimal import Decimal
 from html.parser import HTMLParser
 from unittest.mock import patch
 
-from django.contrib.messages.storage.fallback import FallbackStorage
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
-from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
 
 from accounts.models import User
+from hub import form_editor
+from hub.form_editor_runtime import TOKEN_FIELD
 from hub.models import Notification, SqrSubmission, SqrSubmissionChange, SqrSubmissionHistory
 from hub.test_multiple_sqrs import MultipleSqrFixtures
-from hub.views import SqrEngineerUpdateView, SqrImportView
+from hub.views import SqrImportView
 
 
 class TrackerRows(HTMLParser):
@@ -413,25 +415,18 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         self.assertEqual(imported.revenue_remarks, "Separate PO note")
 
     def test_stale_engineer_remarks_edit_preserves_concurrent_pm_hold_and_history(self):
-        request = RequestFactory().post(
-            reverse("hub:sqr-edit", args=[self.submission.pk]),
-            {**self.payload, "remarks": "Updated engineer remarks"},
-        )
-        request.user = self.engineer
-        request.session = self.client.session
-        request._messages = FallbackStorage(request)
-        view = SqrEngineerUpdateView()
-        view.setup(request, pk=self.submission.pk)
-        view.object = SqrSubmission.objects.get(pk=self.submission.pk)
-        form = view.get_form()
-        self.assertTrue(form.is_valid(), form.errors)
+        url = reverse("hub:sqr-edit", args=[self.submission.pk])
+        self.client.force_login(self.engineer)
+        form = self.client.get(url).context["form"]
         self.assertEqual(form.instance.status, "submitted")
         self.assertEqual(form.instance.hold_reason, "")
 
+        self.client.force_login(self.pm)
         response = self.update_status("on_hold", hold_reason="PM hold after engineer loaded form")
         self.assertEqual(response.status_code, 200)
         hold_change = SqrSubmissionChange.objects.get(pk=response.json()["change_id"])
-        response = view.form_valid(form)
+        self.client.force_login(self.engineer)
+        response = self.client.post(url, {**self.payload, "remarks": "Updated engineer remarks"})
         self.assertEqual(response.status_code, 302)
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.remarks, "Updated engineer remarks")
@@ -513,6 +508,273 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         imported = SqrSubmission.objects.get(reference_code=self.submission.reference_code)
         self.assertEqual(imported.remarks, "SSE note only")
         self.assertEqual(imported.revenue_remarks, "")
+
+
+@override_settings(ACS_EMAIL_CONNECTION_STRING="", ACS_EMAIL_SENDER="")
+class SqrApprovalPolicyTests(MultipleSqrFixtures, TestCase):
+    def setUp(self):
+        super().setUp()
+        self.delivery_pm = User.objects.create_user(username="sqr_delivery_pm", role=User.Roles.PM_ESG)
+        self.row = self.create_sqr()
+        self.payload["project_details"] = "Implementation"
+        SqrSubmission.objects.filter(pk=self.row.pk).update(assigned_pm=self.delivery_pm)
+
+    def inline(self, field, value, **extra):
+        return self.client.post(reverse("hub:sqr-inline-update", args=[self.row.pk]),
+                                {"field": field, "value": value, **extra}, content_type="application/json")
+
+    def edit_url(self):
+        return reverse("hub:sqr-edit", args=[self.row.pk])
+
+    def state(self):
+        return (SqrSubmission.objects.filter(pk=self.row.pk).values().get(),
+                list(self.row.field_changes.values()), list(self.row.history_entries.values()))
+
+    def approve(self):
+        self.client.force_login(self.pm)
+        self.assertEqual(self.inline("status", "reviewed").status_code, 200)
+
+    def history_url(self):
+        return reverse("hub:sqr-history", args=[self.row.pk])
+
+    def restore_url(self, entry):
+        return reverse("hub:sqr-history-restore", args=[self.row.pk, entry.pk])
+
+    def test_approved_owner_can_save_remarks_without_saving_quote_fields(self):
+        quote = {"sse_amount": Decimal("40123.00"), "pm_amount": Decimal("24678.00")}
+        SqrSubmission.objects.filter(pk=self.row.pk).update(**quote)
+        self.client.force_login(self.engineer)
+        self.assertEqual(self.client.get(self.edit_url()).status_code, 200)
+        self.approve()
+        self.engineer.role = User.Roles.ON_HOLD
+        self.engineer.save(update_fields=["role"])
+        self.client.force_login(self.engineer)
+        self.assertIn('disabled', str(self.client.get(self.edit_url()).context["form"]["sse_manhrs"]))
+        before, changes, entries = self.state()
+        response = self.client.post(self.edit_url(), {**self.payload, "remarks": "Filing note", "sse_manhrs": "36"})
+        self.assertRedirects(response, reverse("hub:sqr"), fetch_redirect_response=False)
+        after, unchanged_changes, updated_entries = self.state()
+        self.assertEqual(after.pop("remarks"), "Filing note")
+        self.assertNotEqual(after.pop("updated_at"), before.pop("updated_at"))
+        before.pop("remarks")
+        self.assertEqual(after, before)
+        self.assertEqual(unchanged_changes, changes)
+        self.assertEqual(len(updated_entries), len(entries) + 1)
+        self.assertEqual(updated_entries[0]["new_values"], {"remarks": "Filing note"})
+
+    def test_pausing_legacy_approval_without_dates_keeps_quote_locked(self):
+        SqrSubmission.objects.filter(pk=self.row.pk).update(status=SqrSubmission.Status.APPROVED)
+        self.client.force_login(self.pm)
+        response = self.inline("status", "on_hold", hold_reason="Awaiting budget")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["quote_locked"])
+        self.client.force_login(self.engineer)
+        form = self.client.get(self.edit_url()).context["form"]
+        self.assertTrue(form.fields["project_title"].disabled)
+
+    def test_locked_form_preserves_legacy_missing_filing_values_when_saving_remarks(self):
+        SqrSubmission.objects.filter(pk=self.row.pk).update(linked_request=None, sqr_folder_link="")
+        self.approve()
+        self.client.force_login(self.engineer)
+        self.assertRedirects(self.client.post(self.edit_url(), {"remarks": "Legacy filing note"}),
+                             reverse("hub:sqr"), fetch_redirect_response=False)
+        self.row.refresh_from_db()
+        self.assertIsNone(self.row.linked_request_id)
+        self.assertEqual(self.row.sqr_folder_link, "")
+        self.assertEqual(self.row.remarks, "Legacy filing note")
+
+    def test_locked_form_condition_uses_saved_quote_to_store_visible_answer(self):
+        key = "sqr_submission"
+        schema = form_editor.baseline_schema(key)
+        schema["fields"].append({
+            "key": "custom_filing_note", "type": "text", "label": "Filing note",
+            "condition": {"field": "project_details", "operator": "equals", "value": "Implementation"},
+        })
+        form_editor.save_draft(key, schema, self.admin, 0)
+        form_editor.publish(key, self.admin, 1)
+        self.approve()
+        self.client.force_login(self.engineer)
+        form = self.client.get(self.edit_url()).context["form"]
+        self.assertTrue(form.fields["project_details"].disabled)
+        response = self.client.post(self.edit_url(), {
+            TOKEN_FIELD: form.initial[TOKEN_FIELD], "remarks": "Optional note", "custom_filing_note": "Filed",
+        })
+        self.assertRedirects(response, reverse("hub:sqr"), fetch_redirect_response=False)
+        self.assertEqual(form_editor.get_custom_answers(key, self.row), {"custom_filing_note": "Filed"})
+
+    @patch("hub.views._send_sqr_for_revision_email")
+    def test_assigned_reviewer_explicitly_reopens_approved_hold_for_owner(self, revision_email):
+        self.approve()
+        self.assertEqual(self.inline("status", "on_hold", hold_reason="Awaiting decision").status_code, 200)
+        before = self.state()
+        self.assertEqual(self.client.post(reverse("hub:sqr-revenue-update", args=[self.row.pk]), {
+            "stage_action": "quotation", f"quote-{self.row.pk}-quotation_total_price": "90000",
+            f"quote-{self.row.pk}-discount_rate": "5",
+        }).status_code, 302)
+        self.assertEqual(self.state(), before)
+        self.client.force_login(self.engineer)
+        response = self.client.post(self.edit_url(), {**self.payload, "sse_manhrs": "36"})
+        self.assertEqual(response.status_code, 302)
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.sse_manhrs, Decimal("20"))
+        self.assertEqual(self.state()[1:], before[1:])
+        self.client.force_login(self.pm)
+        before = self.state()
+        self.assertEqual(self.inline("status", "submitted").status_code, 409)
+        self.assertEqual(self.state(), before)
+        self.assertEqual(self.inline("status", "for_revision", review_notes="Review revised scope").status_code, 200)
+        self.row.refresh_from_db()
+        self.assertIsNone(self.row.reviewed_at)
+        self.assertIsNone(self.row.validity_due_date)
+        self.assertEqual(self.row.reviewed_by, self.pm)
+        self.assertEqual(self.row.assigned_pm, self.delivery_pm)
+        revision_email.assert_called_once()
+        self.client.force_login(self.engineer)
+        response = self.client.post(self.edit_url(), {**self.payload, "sse_manhrs": "36"})
+        self.assertEqual(response.status_code, 302)
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.sse_manhrs, Decimal("36"))
+
+    def test_nonreviewer_reads_grid_and_history_but_only_edits_delivery(self):
+        self.client.force_login(self.pm)
+        change = self.inline("sse_manhrs", "22").json()
+        quote_entry = self.row.history_entries.get()
+        self.client.force_login(self.delivery_pm)
+        history = self.client.get(self.history_url()).json()["entries"]
+        self.assertEqual(history[0]["id"], quote_entry.pk)
+        self.assertFalse(history[0]["restorable"])
+        record = self.client.get(reverse("hub:sqr-prototype-data"), {"pk": self.row.pk}).json()["record"]
+        self.assertIn("delivery_progress", record["editable"])
+        for field in ("status", "sse_manhrs", "proposal_status", "revenue_status"):
+            self.assertNotIn(field, record["editable"])
+        page = self.client.get(reverse("hub:sqr"), {"view": "tracker", "assigned": "all"})
+        parser = TrackerRows()
+        parser.feed(page.content.decode())
+        row = next(row for row in parser.rows if row["attrs"].get("data-sqr-ref") == self.row.reference_code)
+        fields = {cell["attrs"].get("data-sqr-field") for cell in row["cells"]}
+        self.assertIn("delivery_progress", fields)
+        self.assertTrue(fields.isdisjoint({"status", "sse_manhrs", "proposal_status", "revenue_status"}))
+        before = self.state()
+        for field, value in (("status", "reviewed"), ("hold_reason", "Wait"), ("sse_manhrs", "28"),
+                             ("proposal_status", "closed_won"), ("revenue_status", "billed")):
+            with self.subTest(field=field):
+                self.assertEqual(self.inline(field, value).status_code, 403)
+                self.assertEqual(self.state(), before)
+        for url in (change["undo_url"], self.restore_url(quote_entry)):
+            self.assertEqual(self.client.post(url).status_code, 403)
+            self.assertEqual(self.state(), before)
+        delivery = self.inline("delivery_progress", 40).json()
+        self.assertTrue(delivery["ok"])
+        self.assertEqual(self.client.post(delivery["undo_url"]).status_code, 200)
+
+    def test_approval_cannot_be_reverted_to_an_unapproved_state(self):
+        self.client.force_login(self.pm)
+        for previous_status in (SqrSubmission.Status.FOR_PROCESSING, SqrSubmission.Status.ON_HOLD):
+            for action in ("undo", "restore"):
+                with self.subTest(previous_status=previous_status, action=action):
+                    self.row = self.create_sqr()
+                    if previous_status == SqrSubmission.Status.ON_HOLD:
+                        response = self.inline("status", previous_status, hold_reason="Awaiting review")
+                        self.assertEqual(response.status_code, 200)
+                    self.approve()
+                    change = self.row.field_changes.latest("pk")
+                    entry = self.row.history_entries.latest("pk")
+                    before = self.state()
+                    if action == "undo":
+                        url = reverse("hub:sqr-inline-undo", args=[self.row.pk, change.pk])
+                    else:
+                        url = self.restore_url(entry)
+                        listed = self.client.get(self.history_url()).json()["entries"]
+                        with self.subTest(affordance="history"):
+                            self.assertFalse(next(item for item in listed if item["id"] == entry.pk)["restorable"])
+                    self.assertEqual(self.client.post(url).status_code, 409)
+                    self.assertEqual(self.state(), before)
+
+    def test_undo_to_approved_keeps_approved_hold_locked_and_preserves_metadata(self):
+        self.approve()
+        approved, _, _ = self.state()
+        held = self.inline("status", "on_hold", hold_reason="Awaiting customer decision").json()
+        self.assertTrue(held["quote_locked"])
+        restore = self.client.post(held["undo_url"])
+        self.assertEqual(restore.status_code, 200)
+        self.assertTrue(restore.json()["quote_locked"])
+        restored, _, _ = self.state()
+        self.assertEqual(restored, approved)
+
+    @patch("hub.views._send_sqr_for_revision_email")
+    def test_history_cannot_restore_approval_after_a_newer_quote_edit(self, revision_email):
+        self.client.force_login(self.pm)
+        quote = self.inline("pm_manhrs", "16").json()
+        quote_entry = self.row.history_entries.get()
+        self.approve()
+        before = self.state()
+        self.assertEqual(self.inline("pm_manhrs", "24").status_code, 409)
+        for url in (quote["undo_url"], self.restore_url(quote_entry)):
+            self.assertEqual(self.client.post(url).status_code, 409)
+        self.assertEqual(self.state(), before)
+        revision = self.inline("status", "for_revision", review_notes="Revise estimate").json()
+        revision_entry = self.row.history_entries.latest("pk")
+        self.assertEqual(self.inline("pm_manhrs", "24").status_code, 200)
+        self.assertEqual(self.inline("pm_manhrs", "16").status_code, 200)
+        before = self.state()
+        for url in (revision["undo_url"], self.restore_url(revision_entry)):
+            self.assertEqual(self.client.post(url).status_code, 409)
+            self.assertEqual(self.state(), before)
+        listed = self.client.get(self.history_url()).json()["entries"]
+        self.assertFalse(next(entry for entry in listed if entry["id"] == revision_entry.pk)["restorable"])
+
+    def test_approved_proposal_saves_configured_answer_from_saved_price(self):
+        key = "sqr_proposal_status"
+        schema = form_editor.baseline_schema(key)
+        schema["fields"].append({
+            "key": "custom_customer_decision", "type": "text", "label": "Customer decision",
+            "condition": {"field": "quotation_total_price", "operator": "not_empty"},
+        })
+        form_editor.save_draft(key, schema, self.admin, 0)
+        form_editor.publish(key, self.admin, 1)
+        SqrSubmission.objects.filter(pk=self.row.pk).update(quotation_total_price=Decimal("90000.00"))
+        self.approve()
+        form = form_editor.get_form_class(key)(instance=SqrSubmission.objects.get(pk=self.row.pk))
+        response = self.client.post(reverse("hub:sqr-proposal-update", args=[self.row.pk]), {
+            TOKEN_FIELD: form.initial[TOKEN_FIELD], "proposal_status": "closed_won",
+            "custom_customer_decision": "Accepted",
+        })
+        self.assertRedirects(response, reverse("hub:sqr"), fetch_redirect_response=False)
+        self.assertEqual(form_editor.get_custom_answers(key, self.row), {"custom_customer_decision": "Accepted"})
+
+    def test_current_stage_protects_pricing_but_reviewer_can_save_proposal_and_order(self):
+        tracker_url = reverse("hub:sqr-revenue-update", args=[self.row.pk])
+        proposal_url = reverse("hub:sqr-proposal-update", args=[self.row.pk])
+        unlock_url = reverse("hub:sqr-to-revenue", args=[self.row.pk])
+        revenue_url = reverse("hub:sqr-revenue-stage-update", args=[self.row.pk])
+        self.client.force_login(self.pm)
+        self.assertEqual(self.client.post(tracker_url, {
+            "stage_action": "quotation", f"quote-{self.row.pk}-quotation_total_price": "90000",
+            f"quote-{self.row.pk}-discount_rate": "5",
+        }).status_code, 302)
+        self.approve()
+        self.client.force_login(self.delivery_pm)
+        before = self.state()
+        for url, data in ((unlock_url, {}), (proposal_url, {"proposal_status": "closed_won"}),
+                          (revenue_url, {"revenue_status": "billed"})):
+            self.assertEqual(self.client.post(url, data).status_code, 302)
+            self.assertEqual(self.state(), before)
+        self.client.force_login(self.pm)
+        self.assertEqual(self.client.post(proposal_url, {"proposal_status": "closed_won",
+                                                        "quotation_total_price": "95000"}).status_code, 302)
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.proposal_status, "closed_won")
+        self.assertEqual(self.row.quotation_total_price, Decimal("90000.00"))
+        self.assertEqual(self.row.discount_rate, 5)
+        self.assertEqual(self.client.post(tracker_url, {
+            "stage_action": "order", f"order-{self.row.pk}-po_attachment_link": "https://example.com/po",
+        }).status_code, 302)
+        self.assertEqual(self.client.post(unlock_url).status_code, 302)
+        self.assertEqual(self.client.post(revenue_url, {"revenue_status": "billed"}).status_code, 302)
+        self.row.refresh_from_db()
+        self.assertTrue(self.row.revenue_unlocked)
+        self.assertIsNotNone(self.row.po_attached_at)
+        self.assertEqual(self.row.revenue_status, "billed")
 
 
 class SqrOnHoldMigrationTests(MultipleSqrFixtures, TransactionTestCase):

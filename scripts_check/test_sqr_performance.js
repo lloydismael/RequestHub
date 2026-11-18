@@ -90,6 +90,9 @@ function dashboard(projects, {storage, search = '', responses} = {}) {
         addEventListener: (key, callback) => { events[key] = callback; }};
     const elements = {};
     for (const match of template.matchAll(/id="([^"]+)"/g)) elements[match[1]] = document.createElement('div');
+    for (const id of ['sqr-pm-manager-values', 'sqr-pm-indicator-values']) {
+        if (elements[id]) document.createElement('details').append(elements[id]);
+    }
     const root = elements['sqr-performance-dashboard'];
     root.hidden = true;
     root.dataset = {endpoint: '/data/', currentUserId: '7', defaultMine: '0'};
@@ -118,7 +121,7 @@ function dashboard(projects, {storage, search = '', responses} = {}) {
         },
     };
     vm.createContext(context);
-    ['sqr-filter-core.js', 'sqr-filter-controls.js', 'sqr-performance.js'].forEach(name => {
+    ['chart-values.js', 'sqr-filter-core.js', 'sqr-filter-controls.js', 'sqr-performance.js'].forEach(name => {
         vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', name), 'utf8'), context);
     });
     return {
@@ -282,6 +285,21 @@ test('PPT shows exactly Schedule Budget-Effort Quality and saved coverage', asyn
     const cells = app.elements['sqr-pm-indicator-rows'].children[0].children;
     assert.deepEqual(cells.slice(1).map(cell => cell.textContent), ['On Track', 'Within Budget', 'Met', 'Healthy', '3/3']);
     assert.match(app.elements['sqr-pm-status-rows'].textContent, /Customer/);
+});
+
+test('indicator chart values count missing assessments separately and show a readable empty state', async () => {
+    const partial = project(1, 'ongoing', 'unknown');
+    partial.schedule_performance = 'on_track';
+    partial.indicators.schedule_performance = {state: 'good', label: 'On Track'};
+    const app = dashboard([partial, project(2, 'ongoing', 'danger')]);
+    await app.open();
+    const values = app.elements['sqr-pm-indicator-values'];
+    assert.ok(values);
+    assert.match(values.textContent, /Not assessed/);
+    assert.deepEqual(values.querySelectorAll('tbody')[0].children.map(row => row.children.slice(1).map(cell => +cell.textContent)),
+        [[1, 0, 1, 0], [1, 0, 0, 1], [1, 0, 0, 1]]);
+    const empty = dashboard([]); await empty.open();
+    assert.match(empty.elements['sqr-pm-indicator-chart'].textContent, /No matching projects/);
 });
 
 test('partial ratings preserve gray and coverage without fabricated assessments', async () => {

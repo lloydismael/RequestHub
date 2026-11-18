@@ -29,15 +29,11 @@ def _get_view_name(request):
     return match.view_name
 
 
-def _is_password_change_exempt(view_name: str) -> bool:
-    if not view_name:
-        return False
-    exempt = {"accounts:update", "accounts:sign-in-heartbeat", "logout", "login", "legacy-login", "healthz"}
-    if view_name in exempt:
-        return True
-    if view_name.startswith("admin:"):
-        return True
-    return False
+def _is_password_change_exempt(view_name: str | None) -> bool:
+    return view_name in {
+        "accounts:update", "accounts:sign-in-heartbeat", "logout", "admin:logout",
+        "login", "legacy-login", "healthz",
+    }
 
 
 def _is_assistant_api(view_name: str | None) -> bool:

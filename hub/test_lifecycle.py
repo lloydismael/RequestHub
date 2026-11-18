@@ -304,6 +304,103 @@ class RequestLifecycleManagePageTests(TestCase):
         )
         request_lifecycle.record_created(self.request.pk, actor=self.requestor)
 
+    def _details_data(self, **overrides):
+        return {
+            "form_type": "details",
+            "product_category": self.request.product_category,
+            "engagement_type": self.request.engagement_type,
+            "priority": self.request.priority,
+            "engineer": self.request.engineer_id,
+            "description": "Updated request details",
+            **overrides,
+        }
+
+    def test_engineer_can_save_details_without_resubmitting_read_only_fields(self):
+        self.client.force_login(self.primary)
+        url = reverse("hub:request-manage-collab", args=[self.request.pk])
+        saved_date = self.request.start_date
+        response = self.client.post(url, self._details_data(backup_engineer=self.secondary.pk))
+
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.account_id, self.account.pk)
+        self.assertEqual(self.request.start_date, saved_date)
+        self.assertEqual(self.request.description, "Updated request details")
+        self.assertEqual(self.request.engineer_id, self.primary.pk)
+        self.assertEqual(self.request.backup_engineer_id, self.secondary.pk)
+        form = self.client.get(url).context["form"]
+        self.assertTrue(form.fields["account_name"].disabled)
+        self.assertTrue(form.fields["needed_by"].disabled)
+        self.assertEqual(form["account_name"].value(), self.account.name)
+        self.assertEqual(form["needed_by"].value(), saved_date)
+
+    def test_engineer_can_reschedule_the_deployment_calendar(self):
+        Request.objects.filter(pk=self.request.pk).update(
+            engagement_type=Request.Engagement.DEPLOYMENT,
+            start_date="2026-11-23",
+            due_date="2026-11-24",
+        )
+        self.request.refresh_from_db()
+        self.client.force_login(self.primary)
+        url = reverse("hub:request-manage-collab", args=[self.request.pk])
+        response = self.client.post(url, self._details_data(
+            deployment_start="2026-11-25", deployment_end="2026-11-27",
+        ))
+
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.start_date.isoformat(), "2026-11-25")
+        self.assertEqual(self.request.due_date.isoformat(), "2026-11-27")
+        self.assertEqual(self.request.account_id, self.account.pk)
+
+    def test_requestor_and_managers_can_edit_account_and_request_date(self):
+        admin = User.objects.create_user(username="tracker-admin", role=User.Roles.ADMIN)
+        url = reverse("hub:request-manage-collab", args=[self.request.pk])
+        for index, actor in enumerate((self.requestor, self.manager, admin), start=1):
+            with self.subTest(role=actor.role):
+                self.client.force_login(actor)
+                account_name = f"Tracker Account {index}"
+                request_date = f"2026-11-0{index}"
+                response = self.client.post(url, self._details_data(
+                    account_name=account_name, needed_by=request_date,
+                ))
+                self.assertRedirects(response, url, fetch_redirect_response=False)
+                self.request.refresh_from_db()
+                self.assertEqual(self.request.account.name, account_name)
+                self.assertEqual(self.request.start_date.isoformat(), request_date)
+
+    def test_published_form_uses_saved_account_for_engineer_custom_fields(self):
+        from hub import form_editor
+        from hub.form_editor_runtime import TOKEN_FIELD
+
+        admin = User.objects.create_user(username="tracker-form-admin", role=User.Roles.ADMIN)
+        schema = form_editor.baseline_schema("request")
+        schema["fields"].append({
+            "key": "custom_account_note",
+            "label": "Account note",
+            "type": "text",
+            "required": True,
+            "condition": {"field": "account_name", "operator": "equals", "value": self.account.name},
+        })
+        definition = form_editor.save_draft("request", schema, admin, 0)
+        form_editor.publish("request", admin, definition.revision)
+        self.client.force_login(self.primary)
+        url = reverse("hub:request-manage-collab", args=[self.request.pk])
+        page = self.client.get(url)
+        token = page.context["form"].initial[TOKEN_FIELD]
+
+        self.assertEqual(page.context["form"].editor_visible_custom_keys, ["custom_account_note"])
+        details = self._details_data(custom_account_note="Scheduled account review")
+        stale = self.client.post(url, details)
+        self.assertContains(stale, "This form has changed. Reload the page and submit again.")
+        self.assertEqual(form_editor.get_custom_answers("request", self.request), {})
+
+        valid = self.client.post(url, {**details, TOKEN_FIELD: token})
+        self.assertRedirects(valid, url, fetch_redirect_response=False)
+        self.assertEqual(form_editor.get_custom_answers("request", self.request), {
+            "custom_account_note": "Scheduled account review",
+        })
+
     def test_manage_page_renders_tracker_and_acknowledge_for_primary(self):
         self.client.force_login(self.primary)
         response = self.client.get(reverse("hub:request-manage-collab", args=[self.request.pk]))

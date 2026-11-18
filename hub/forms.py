@@ -167,7 +167,7 @@ class RequestForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
         }
 
-    def __init__(self, *args, actor_role=None, actor_user=None, **kwargs):
+    def __init__(self, *args, actor_role=None, actor_user=None, collaborative_edit=False, **kwargs):
         self.actor_role = actor_role
         self.actor_user = actor_user
         super().__init__(*args, **kwargs)
@@ -339,14 +339,23 @@ class RequestForm(forms.ModelForm):
             suggestions.append(cleaned)
         self.account_name_suggestions = tuple(suggestions)
 
-        if self.is_bound and self.errors:
-            for name, field in self.fields.items():
-                if name in self.errors:
-                    widget = field.widget
-                    existing_classes = widget.attrs.get("class", "")
-                    class_list = existing_classes.split()
-                    if "is-invalid" not in class_list:
-                        widget.attrs["class"] = (existing_classes + " is-invalid").strip()
+        self._protect_request_details = (
+            collaborative_edit and self.instance.pk is not None and actor_role in User.ENGINEER_ACCESS_ROLES
+        )
+        if self._protect_request_details:
+            self.initial.update(account_name=self.instance.account.name, needed_by=self.instance.start_date)
+            self.editor_read_only_fields = frozenset({"account_name", "needed_by"})
+            for name in self.editor_read_only_fields:
+                self.fields[name].disabled = True
+
+    def full_clean(self):
+        super().full_clean()
+        for name in self._errors:
+            if name in self.fields:
+                widget = self.fields[name].widget
+                existing_classes = widget.attrs.get("class", "")
+                if "is-invalid" not in existing_classes.split():
+                    widget.attrs["class"] = (existing_classes + " is-invalid").strip()
 
     @staticmethod
     def _choices_with_placeholder(choices, placeholder: str):
@@ -443,9 +452,10 @@ class RequestForm(forms.ModelForm):
         return engineer
 
     def save(self, commit=True):
-        account_name = self.cleaned_data["account_name"]
-        account, _ = Account.objects.get_or_create(name=account_name)
-        self.instance.account = account
+        if not self._protect_request_details:
+            account_name = self.cleaned_data["account_name"]
+            account, _ = Account.objects.get_or_create(name=account_name)
+            self.instance.account = account
         self.instance.engineer = self.cleaned_data.get("engineer")
         priority_value = self.cleaned_data.get("priority") or Request.Priority.MEDIUM
         self.instance.priority = priority_value
@@ -878,6 +888,18 @@ class SqrSubmissionForm(forms.ModelForm):
             if current_value and current_value not in dict(self.fields[field_name].choices):
                 self.fields[field_name].choices = tuple(self.fields[field_name].choices) + ((current_value, current_value),)
 
+    def full_clean(self):
+        read_only = getattr(self, "editor_read_only_fields", ())
+        if not read_only:
+            return super().full_clean()
+        # Display the saved quote without revalidating its historical values.
+        fields = self.fields
+        self.fields = {name: field for name, field in fields.items() if name not in read_only}
+        try:
+            return super().full_clean()
+        finally:
+            self.fields = fields
+
     def clean_linked_request(self):
         value = self.cleaned_data.get("linked_request")
         if not value:
@@ -902,6 +924,8 @@ class SqrSubmissionForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        if "sse_manhrs" in getattr(self, "editor_read_only_fields", ()):
+            return cleaned_data
         scope = cleaned_data.get("project_details") or ""
         normalized_scope = self._normalize_scope(scope)
         sse_scopes = {self._normalize_scope(item) for item in self.SSE_MANHRS_SCOPES}

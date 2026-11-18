@@ -3,6 +3,7 @@
 {% load static %}
 {% block body_class %}engineer-dashboard engineer-activity-logs{% endblock %}
 {% block title %}Activity Logs · Request Hub{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/charts.css' %}">{% endblock %}
 {% block content %}
 <div class="activity-summary-card mb-4">
     <div class="activity-summary-card__body">
@@ -303,7 +304,7 @@
         {# ── Chart grid ── #}
         <div class="row g-4">
             <div class="col-12 col-lg-6">
-                <div class="glass-card rpt-chart-card">
+                <div class="glass-card rpt-chart-card rh-chart-card">
                     <div class="rpt-chart-head">
                         <span class="rpt-chart-icon rpt-icon--blue"><i class="bi bi-pie-chart-fill"></i></span>
                         <div>
@@ -311,13 +312,11 @@
                             <p class="rpt-chart-sub">Breakdown of request statuses</p>
                         </div>
                     </div>
-                    <div class="rpt-canvas-wrap rpt-canvas-wrap--donut">
-                        <canvas id="request-status-chart"></canvas>
-                    </div>
+                    {% include "hub/partials/chart_plot.html" with chart_id="request-status-chart" title="Request Status Distribution" unit="Requests" only %}
                 </div>
             </div>
             <div class="col-12 col-lg-6">
-                <div class="glass-card rpt-chart-card">
+                <div class="glass-card rpt-chart-card rh-chart-card">
                     <div class="rpt-chart-head">
                         <span class="rpt-chart-icon rpt-icon--violet"><i class="bi bi-bar-chart-fill"></i></span>
                         <div>
@@ -325,13 +324,11 @@
                             <p class="rpt-chart-sub">How priorities are spread across requests</p>
                         </div>
                     </div>
-                    <div class="rpt-canvas-wrap rpt-canvas-wrap--donut">
-                        <canvas id="request-priority-chart"></canvas>
-                    </div>
+                    {% include "hub/partials/chart_plot.html" with chart_id="request-priority-chart" title="Request Priority Distribution" unit="Requests" only %}
                 </div>
             </div>
             <div class="col-12 col-lg-6">
-                <div class="glass-card rpt-chart-card">
+                <div class="glass-card rpt-chart-card rh-chart-card">
                     <div class="rpt-chart-head">
                         <span class="rpt-chart-icon rpt-icon--indigo"><i class="bi bi-grid-fill"></i></span>
                         <div>
@@ -339,13 +336,11 @@
                             <p class="rpt-chart-sub">What types of work you logged</p>
                         </div>
                     </div>
-                    <div class="rpt-canvas-wrap rpt-canvas-wrap--donut">
-                        <canvas id="activity-type-chart"></canvas>
-                    </div>
+                    {% include "hub/partials/chart_plot.html" with chart_id="activity-type-chart" title="Activity Type Breakdown" unit="Activities" only %}
                 </div>
             </div>
             <div class="col-12 col-lg-6">
-                <div class="glass-card rpt-chart-card">
+                <div class="glass-card rpt-chart-card rh-chart-card">
                     <div class="rpt-chart-head">
                         <span class="rpt-chart-icon rpt-icon--cyan"><i class="bi bi-graph-up-arrow"></i></span>
                         <div>
@@ -353,9 +348,7 @@
                             <p class="rpt-chart-sub">Total hours logged per month</p>
                         </div>
                     </div>
-                    <div class="rpt-canvas-wrap">
-                        <canvas id="activity-monthly-chart"></canvas>
-                    </div>
+                    {% include "hub/partials/chart_plot.html" with chart_id="activity-monthly-chart" title="Monthly Activity Hours" unit="Hours" only %}
                 </div>
             </div>
         </div>
@@ -561,181 +554,7 @@
 
 {{ activity_report_data|json_script:"activity-report-data" }}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="{% static 'js/chart-theme.js' %}?v=4"></script>
-<script>
-    (function () {
-        const dataNode = document.getElementById('activity-report-data');
-        if (!dataNode || typeof Chart === 'undefined') {
-            return;
-        }
-
-        const reportData = JSON.parse(dataNode.textContent || '{}');
-        const chartRegistry = {};
-        const token = window.lgChartToken || ((name, fallback) => {
-            const bodyVal = getComputedStyle(document.body).getPropertyValue(name).trim();
-            return bodyVal || getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-        });
-        const reducedMotion = !!window.lgReducedMotion;
-
-        // ── Transparent canvas background plugin ──────────────────────────
-        // Force Chart.js to use a transparent canvas background
-        const transparentBgPlugin = {
-            id: 'transparentBg',
-            beforeDraw(chart) {
-                const { ctx, width, height } = chart;
-                ctx.save();
-                ctx.clearRect(0, 0, width, height);
-                ctx.restore();
-            }
-        };
-        Chart.register(transparentBgPlugin);
-
-        // ── Shared glass palette + theme-aware scales ──────────────────────
-        const paletteColors = () => (window.lgChartPalette && window.lgChartPalette.length)
-            ? window.lgChartPalette.slice()
-            : ['#0a84ff', '#30d158', '#ff9f0a', '#ff453a', '#bf5af0', '#40c8e0'];
-        const scaleOpts = () => ({
-            grid: {
-                color: token('--lg-divider', 'rgba(11,18,32,0.09)'),
-                tickColor: 'transparent',
-            },
-            ticks: {
-                color: token('--lg-ink-soft', 'rgba(11,18,32,0.62)'),
-                font: { size: 11 },
-            },
-            border: { color: 'transparent' },
-        });
-        const pluginOpts = () => ({
-            legend: { display: false },
-            // Tooltip inherits Chart.defaults from chart-theme.js
-        });
-
-        const upsertChart = (canvasId, config) => {
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) return;
-            if (chartRegistry[canvasId]) {
-                chartRegistry[canvasId].destroy();
-            }
-            chartRegistry[canvasId] = new Chart(canvas, config);
-        };
-
-        const animDur = () => (reducedMotion ? 0 : 600);
-
-        const makeBar = (canvasId, labels, values, label) => {
-            if (!labels || !labels.length) return;
-            const so = scaleOpts();
-            upsertChart(canvasId, {
-                type: 'bar',
-                data: {
-                    labels,
-                    datasets: [{
-                        label,
-                        data: values,
-                        backgroundColor: paletteColors(),
-                        borderRadius: 8,
-                        borderSkipped: false,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: pluginOpts(),
-                    scales: {
-                        x: { ...so, grid: { ...so.grid, display: false }, ticks: { ...so.ticks, autoSkip: true, maxRotation: 35 } },
-                        y: { ...so, maxTicksLimit: 6 },
-                    },
-                    animation: { duration: animDur(), easing: 'easeOutQuart' },
-                }
-            });
-        };
-
-        const hexToRgba = (hex, alpha) => {
-            const h = (hex || '').replace('#', '').trim();
-            const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
-            if (full.length !== 6) return `rgba(10,132,255,${alpha})`;
-            const r = parseInt(full.slice(0, 2), 16), g = parseInt(full.slice(2, 4), 16), b = parseInt(full.slice(4, 6), 16);
-            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-        };
-
-        const makeLine = (canvasId, labels, values, label) => {
-            if (!labels || !labels.length) return;
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) return;
-            const so = scaleOpts();
-            const accent = paletteColors()[0] || '#0a84ff';
-            // build a gradient fill
-            const ctx = canvas.getContext('2d');
-            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-            gradient.addColorStop(0, hexToRgba(accent, 0.32));
-            gradient.addColorStop(1, hexToRgba(accent, 0.02));
-            upsertChart(canvasId, {
-                type: 'line',
-                data: {
-                    labels,
-                    datasets: [{
-                        label,
-                        data: values,
-                        borderColor: accent,
-                        backgroundColor: gradient,
-                        fill: true,
-                        tension: 0.42,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        pointBackgroundColor: accent,
-                        pointBorderColor: token('--lg-tint', '#ffffff'),
-                        pointBorderWidth: 2,
-                        borderWidth: 2.5,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: pluginOpts(),
-                    scales: {
-                        x: { ...so, grid: { ...so.grid, display: false }, ticks: { ...so.ticks, autoSkip: true } },
-                        y: { ...so, maxTicksLimit: 6 },
-                    },
-                    animation: { duration: reducedMotion ? 0 : 700, easing: 'easeOutQuart' },
-                }
-            });
-        };
-
-        const renderCharts = () => {
-            makeBar('request-status-chart', reportData.request_status?.labels, reportData.request_status?.values, 'Requests');
-            makeBar('request-priority-chart', reportData.request_priority?.labels, reportData.request_priority?.values, 'Requests');
-            makeBar('activity-type-chart', reportData.activity_type?.labels, reportData.activity_type?.values, 'Activities');
-            makeLine('activity-monthly-chart', reportData.monthly?.labels, reportData.monthly?.hours, 'Hours');
-        };
-
-        const graphTabButton = document.getElementById('activity-graph-tab');
-        const graphPane = document.getElementById('activity-graph-pane');
-
-        if (graphPane && graphPane.classList.contains('show') && graphPane.classList.contains('active')) {
-            renderCharts();
-            if (graphTabButton) {
-                graphTabButton.dataset.rendered = 'true';
-            }
-        }
-
-
-        // Re-render with shared palette/scales when the theme flips.
-        if (window.lgChartOnTheme) {
-            window.lgChartOnTheme(() => {
-                if (graphTabButton && graphTabButton.dataset.rendered === 'true') {
-                    renderCharts();
-                }
-            });
-        }
-        if (graphTabButton) {
-            graphTabButton.addEventListener('shown.bs.tab', () => {
-                if (graphTabButton.dataset.rendered !== 'true') {
-                    renderCharts();
-                    graphTabButton.dataset.rendered = 'true';
-                    return;
-                }
-                Object.values(chartRegistry).forEach((chart) => chart.resize());
-            });
-        }
-    })();
-</script>
+<script src="{% static 'js/chart-values.js' %}"></script>
+<script src="{% static 'js/chart-theme.js' %}"></script>
+<script src="{% static 'js/request-graphs.js' %}"></script>
 {% endblock %}

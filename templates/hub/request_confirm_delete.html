@@ -6,7 +6,7 @@
     <div class="col-lg-6">
         <div class="glass-card p-4">
             <h1 class="h4 mb-3">Delete Request</h1>
-            <p class="mb-4">Are you sure you want to delete <strong>{{ object.reference_code }}</strong>? This action cannot be undone.</p>
+            <p class="mb-4">Delete <strong>{{ object.reference_code }}</strong> from active requests? Its history will be kept. An administrator can restore it from Profile → Backup &amp; Restore.</p>
             <form method="post">
                 {% csrf_token %}
                 <div class="d-flex gap-2">

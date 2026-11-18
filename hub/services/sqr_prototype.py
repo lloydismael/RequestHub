@@ -321,8 +321,10 @@ def serialize_record(
     submission: SqrSubmission,
     user,
     *,
-    allowed_fields,
-    locked_fields,
+    editable_fields,
+    can_review: bool,
+    quote_locked: bool,
+    status_choices: list[str],
     today: date,
     is_pm: bool,
     is_admin: bool,
@@ -330,9 +332,7 @@ def serialize_record(
 ) -> dict:
     stage, closed_reason = derive_stage(submission)
     locked = submission.proposal_status in (Proposal.CLOSED_LOST, Proposal.CLOSED_CANCELED)
-    editable = sorted(
-        key for key in (allowed_fields or ()) if key in EDIT_FIELD_KEYS and not (locked and key in locked_fields)
-    )
+    editable = sorted(EDIT_FIELD_KEYS.intersection(editable_fields))
     values = _values(submission)
     linked = submission.linked_request
     owns = is_engineer and submission.engineer_id == user.pk
@@ -372,8 +372,10 @@ def serialize_record(
         "stage": stage,
         "closed_reason": closed_reason,
         "attention": derive_attention(submission, stage, today),
-        "next_step": derive_next_step(submission, stage, closed_reason, is_pm=is_pm),
+        "next_step": derive_next_step(submission, stage, closed_reason, is_pm=can_review),
         "editable": editable,
+        "status_choices": status_choices if can_review else [],
+        "quote_locked": quote_locked,
         "locked": locked,
         "review_notes": submission.review_notes if submission.status == Status.FOR_REVISION else "",
         "linked_request": (
@@ -384,6 +386,7 @@ def serialize_record(
         "values": values,
         "perms": {
             "edit_form": owns,
+            "review": can_review,
             "delete": is_admin,
             "history": is_pm,
         },

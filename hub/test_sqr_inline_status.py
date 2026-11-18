@@ -84,7 +84,7 @@ assert.equal(display.children[0].children[0].children[0].style.width, '50%');
     def test_revision_email_only_saves_without_opening_teams(self):
         template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
         source = "function openRevisionModal" + template.split("function openRevisionModal", 1)[1].split(
-            "    document.querySelectorAll('.sqr-inline-cell')", 1
+            "    // Initialize inline editing cells.", 1
         )[0]
         self.assertIn('id="sqr-revision-email-only"', template)
         self.assertIn("Submit Email Notification Only", template)
@@ -386,6 +386,45 @@ const vm = require('node:vm');
         result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_classic_approval_confirmation_replaces_previous_undo_action(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        source = "    var undoToastTimer = null;" + template.split("    var undoToastTimer = null;", 1)[1].split(
+            "    function saveField(", 1
+        )[0]
+        script = r"""
+const assert = require('node:assert/strict');
+function node() {
+    const classes = new Set(['d-none']);
+    return {classList: {
+        add: name => classes.add(name), remove: name => classes.delete(name),
+        contains: name => classes.has(name),
+        toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name)
+    }};
+}
+const undo = node(), warning = node(), message = node(), close = node(), toast = node();
+const fields = {action: undo, warning, message, close};
+toast.querySelector = selector => fields[selector.slice('[data-sqr-undo-'.length, -1)];
+const document = {getElementById: () => toast};
+const window = {clearTimeout() {}, setTimeout: () => 1};
+const fieldLabel = () => 'SQR Status';
+""" + source + r"""
+showUndoToast({field: 'status', data: {change_id: 1, undo_url: '/undo/'}});
+assert.equal(typeof undo.onclick, 'function');
+assert.equal(undo.classList.contains('d-none'), false);
+showUndoToast({field: 'status', data: {
+    change_id: 2, workflow_side_effect_warning: true, workflow_side_effect_message: 'Use For Revision to reopen.'
+}});
+assert.equal(undo.classList.contains('d-none'), true);
+assert.equal(undo.onclick, null);
+assert.equal(warning.textContent, 'Use For Revision to reopen.');
+assert.equal(toast.classList.contains('d-none'), false);
+showUndoToast({field: 'status', data: {change_id: 3, undo_url: '/undo/'}});
+assert.equal(typeof undo.onclick, 'function');
+assert.equal(undo.classList.contains('d-none'), false);
+"""
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_status_response_renders_badge_and_launches_selected_advisory(self):
         template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
         display_helpers = template.split("    function renderStatusBadge(", 1)[1].split(
@@ -590,4 +629,70 @@ for (const field of ['customer_name', 'project_title', 'revenue_reference_no']) 
             [shutil.which("node"), "-"], input=script, text=True,
             capture_output=True, timeout=15, check=False,
         )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_assignment_labels_are_literal_after_save_and_undo(self):
+        template = (Path(settings.BASE_DIR) / "templates" / "hub" / "sqr.html").read_text(encoding="utf-8")
+        handlers = "    function applyInlineUpdateResponse(" + template.split(
+            "    function applyInlineUpdateResponse(", 1
+        )[1].split("    function isQuoteLockedCell(", 1)[0]
+        script = r"""
+const assert = require('node:assert/strict');
+const idle = () => {};
+const classList = {add: idle, remove: idle};
+const window = {setTimeout: idle, clearTimeout: idle};
+const setTimeout = idle;
+const CustomEvent = function(type) { this.type = type; };
+const CSRF = 'test-csrf';
+const fieldLabel = field => field;
+const getDisplay = (field, value) => value;
+const undoButton = {classList};
+const message = {};
+const toast = {classList, querySelector: selector => ({
+    '[data-sqr-undo-action]': undoButton, '[data-sqr-undo-message]': message
+})[selector]};
+const document = {getElementById: () => toast, dispatchEvent: idle};
+let responses;
+function fetch(url) {
+    const response = responses.shift();
+    assert.equal(url, response.url);
+    return Promise.resolve({ok: true, json: async () => response.data});
+}
+""" + handlers + r"""
+const flush = () => new Promise(resolve => setImmediate(resolve));
+(async () => {
+    for (const [field, name] of [['assigned_pm', 'Taylor <PM> & Co.'], ['assigned_sse', 'Morgan <SSE> & Co.']]) {
+        const shown = {textContent: 'Previous label', htmlWrites: [],
+            set innerHTML(value) { this.htmlWrites.push(value); }};
+        const row = {querySelector: selector => selector === `[data-sqr-field="${field}"]` ? cell : null};
+        const cell = {dataset: {}, classList, closest: () => row, querySelector: () => shown};
+        const undoUrl = '/sqr/225/inline-update/200/undo/';
+        const responseData = (displayName, fieldValue) => ({
+            ok: true, field_value: fieldValue, [`${field}_name`]: displayName,
+            ...(field === 'assigned_pm' ? {assigned_pm_pk: fieldValue} : {})
+        });
+        for (const [saved, undone] of [[name, ''], ['', name]]) {
+            const saveValue = saved ? '17' : '';
+            responses = [
+                {url: '/sqr/225/inline-update/', data: {...responseData(saved, saveValue), undo_url: undoUrl}},
+                {url: undoUrl, data: {...responseData(undone, undone ? '17' : ''), undone: true}}
+            ];
+            saveField(225, field, saveValue, cell, shown);
+            await flush();
+            const saveText = shown.textContent;
+            const saveKey = cell.dataset.sqrValue;
+            undoButton.onclick();
+            await flush();
+            assert.equal(message.textContent, 'Change undone.');
+            assert.equal(responses.length, 0);
+            assert.equal(saveText, saved || '\u2013', `${field} Save label`);
+            assert.equal(shown.textContent, undone || '\u2013', `${field} Undo label`);
+            assert.equal(saveKey, saveValue);
+            assert.equal(cell.dataset.sqrValue, undone ? '17' : '');
+            assert.deepEqual(shown.htmlWrites, [], `${field} must not use HTML for the label`);
+        }
+    }
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+        result = subprocess.run([shutil.which("node"), "-"], input=script, text=True, capture_output=True, timeout=15, check=False)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

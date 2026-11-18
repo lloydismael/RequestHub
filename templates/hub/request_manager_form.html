@@ -122,6 +122,9 @@
             <form method="post" novalidate class="rmf-form">
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="details">
+                {% if form.non_field_errors %}
+                    <div class="alert alert-danger" role="alert">{{ form.non_field_errors }}</div>
+                {% endif %}
                 {% if is_admin_form %}
                 <input type="hidden" name="override_capacity" value="0" data-override-flag>
                 {% endif %}

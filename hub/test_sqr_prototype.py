@@ -216,8 +216,9 @@ class PrototypeEndpointTests(TestCase):
         self.assertEqual(pm_record["stage"], "closed")
         for key in ("delivery_start_date", "revenue_status", "assigned_pm", "key_updates_risks"):
             self.assertNotIn(key, pm_record["editable"])
-        for key in ("proposal_status", "discount_rate", "status"):
+        for key in ("proposal_status", "status"):
             self.assertIn(key, pm_record["editable"])
+        self.assertNotIn("discount_rate", pm_record["editable"])
 
     def test_record_payload_contains_computed_values_and_guidance(self):
         record = self.records(self.pm)[self.mine.pk]

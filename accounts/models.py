@@ -68,6 +68,14 @@ class RecoveryPreview(models.Model):
     consumed_at = models.DateTimeField(null=True, blank=True)
 
 
+class LoginThrottleBucket(models.Model):
+    key = models.CharField(primary_key=True, max_length=64)
+    expires_at = models.DateTimeField(db_index=True)
+    source_attempts = models.PositiveSmallIntegerField(default=0)
+    reservations = models.JSONField(default=list)
+    failed_tokens = models.JSONField(default=list)
+
+
 class SignInLog(models.Model):
     """One row per sign-in session or failed sign-in attempt."""
 

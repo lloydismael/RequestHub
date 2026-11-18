@@ -1,8 +1,10 @@
 from django import forms
-from django.contrib.auth import password_validation
+from django.contrib.admin.forms import AdminAuthenticationForm
+from django.contrib.auth import authenticate, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
+from django.views.decorators.debug import sensitive_variables
 
 from io import BytesIO
 
@@ -25,22 +27,8 @@ ROLE_LABELS = {
 
 ROLE_CHOICES = [(key, label) for key, label in ROLE_LABELS.items()]
 
-ROLE_ALIAS_MAP = {
-    User.Roles.ADMIN: {
-        "admin": "Admin",
-        "admin1": "Admin1",
-    },
-    User.Roles.ENGINEER: {
-        "admin": "engineer_admin",
-        "admin1": "engineer_admin1",
-    },
-    User.Roles.REQUESTOR: {
-        "admin": "account_admin",
-        "admin1": "manager_admin1",
-    },
-}
-
-ROLE_DEFAULT_USERNAMES = {role: aliases.get("admin", "") for role, aliases in ROLE_ALIAS_MAP.items()}
+LOGIN_FAILURE_MESSAGE = "Sign-in failed. Check your credentials or try again later."
+APP_USERNAME_ALIASES = {"admin": "Admin", "admin1": "Admin1"}
 
 
 class ThemeForm(forms.ModelForm):
@@ -159,15 +147,13 @@ class ProfileForm(forms.ModelForm):
     def __init__(self, *args, is_admin=False, **kwargs):
         super().__init__(*args, **kwargs)
         if not is_admin:
-            dept_widget = self.fields["department"].widget
-            dept_widget.attrs["disabled"] = True
-            dept_widget.attrs["title"] = "Only administrators can edit this field"
-            self.fields["department"].required = False
+            department = self.fields["department"]
+            department.disabled = True
+            department.widget.attrs["title"] = "Only administrators can edit this field"
 
     def clean_department(self):
-        # Non-admin: keep existing value (disabled fields are not submitted)
-        submitted = self.data.get("department")
-        if submitted is None and self.instance and self.instance.pk:
+        # A partial profile save can omit department even for an administrator.
+        if self.add_prefix("department") not in self.data and self.instance.pk:
             return self.instance.department
         return self.cleaned_data.get("department", "")
 
@@ -249,6 +235,8 @@ class ProfileForm(forms.ModelForm):
 
             if not new_password1:
                 self.add_error("new_password1", "Enter a new password.")
+            elif user.must_change_password and new_password1 == current_password:
+                self.add_error("new_password1", "Choose a password different from your temporary password.")
             if new_password1 and new_password1 != new_password2:
                 self.add_error("new_password2", "Passwords do not match.")
 
@@ -284,50 +272,13 @@ class ProfileForm(forms.ModelForm):
 
 
 class RoleAuthenticationForm(AuthenticationForm):
+    error_messages = {**AuthenticationForm.error_messages, "invalid_login": LOGIN_FAILURE_MESSAGE}
+
+    def clean_username(self):
+        username = self.cleaned_data["username"]
+        return APP_USERNAME_ALIASES.get(username.lower(), username)
 
     def __init__(self, request=None, *args, **kwargs):
-        self._matched_role: str | None = None
-        username_field = User.USERNAME_FIELD
-        data = kwargs.get("data")
-        if data:
-            data = data.copy()
-            username_input = data.get(username_field)
-            if username_input:
-                normalized = username_input.strip()
-                normalized_lower = normalized.lower()
-                matched_alias = None
-                matched_role = None
-                for role_value, alias_map in ROLE_ALIAS_MAP.items():
-                    alias = alias_map.get(normalized_lower)
-                    if alias:
-                        matched_alias = alias
-                        matched_role = role_value
-                        break
-
-                if matched_alias:
-                    data[username_field] = matched_alias
-                    self._matched_role = matched_role
-                else:
-                    exact_match = User.objects.filter(username__exact=normalized).values_list("username", "role").first()
-                    if exact_match:
-                        actual_username, role_value = exact_match
-                        data[username_field] = actual_username
-                        self._matched_role = self._matched_role or role_value
-                    else:
-                        case_insensitive_match = (
-                            User.objects.filter(username__iexact=normalized)
-                            .order_by("username")
-                            .values_list("username", "role")
-                            .first()
-                        )
-                        if case_insensitive_match:
-                            actual_username, role_value = case_insensitive_match
-                            data[username_field] = actual_username
-                            self._matched_role = self._matched_role or role_value
-                        else:
-                            data[username_field] = normalized_lower
-            kwargs["data"] = data
-
         super().__init__(request=request, *args, **kwargs)
 
         # placeholder=" " is required for the CSS floating-label rule
@@ -338,6 +289,21 @@ class RoleAuthenticationForm(AuthenticationForm):
         self.fields["password"].widget.attrs.update(
             {"class": "form-control", "placeholder": " ", "autocomplete": "current-password"}
         )
+
+
+class StaffAuthenticationForm(AdminAuthenticationForm):
+    error_messages = {**AdminAuthenticationForm.error_messages, "invalid_login": LOGIN_FAILURE_MESSAGE}
+
+    @sensitive_variables("password")
+    def clean(self):
+        username = self.cleaned_data.get("username")
+        password = self.cleaned_data.get("password")
+        if username is not None and password:
+            self.user_cache = authenticate(self.request, username=username, password=password, staff_only=True)
+            if self.user_cache is None:
+                raise self.get_invalid_login_error()
+            self.confirm_login_allowed(self.user_cache)
+        return self.cleaned_data
 
 
 class UserManagementForm(forms.ModelForm):

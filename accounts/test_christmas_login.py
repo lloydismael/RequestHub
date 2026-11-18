@@ -15,6 +15,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import User
+from request_hub.test_html_helpers import extract_scripts
 
 REMEMBER = "localStorage.setItem('reqHubLoginTheme', 'christmas');"
 FORGET = "localStorage.removeItem('reqHubLoginTheme');"
@@ -49,7 +50,7 @@ class ChristmasLoginThemeTests(TestCase):
             with patch("accounts.models.timezone.localdate", return_value=today):
                 html = self.client.get(reverse("login")).content.decode()
             root = re.search(r"<html\b[^>]*>", html).group(0)
-            scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
+            scripts = (script for attrs, script in extract_scripts(html) if "src" not in attrs)
             pages[seasonal] = {
                 "initial": "login-christmas" in root,
                 "script": "\n".join(script for script in scripts if "reqHubLoginTheme" in script),

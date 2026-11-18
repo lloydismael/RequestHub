@@ -479,7 +479,7 @@
         var names = ['opportunity', 'delivery', 'billing'];
         var states = stepStates(rec);
         var actions = [];
-        if (rec.perms.edit_form) actions.push(h('a', {class: 'btn btn-outline-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), 'Edit submission']));
+        if (rec.perms.edit_form) actions.push(h('a', {class: 'btn btn-outline-primary', href: rec.urls.edit}, [icon('bi-pencil-square', 'me-2'), rec.quote_locked ? 'Edit remarks' : 'Edit submission']));
         var newTab = function () { return h('span', {class: 'visually-hidden', text: ' (opens in a new tab)'}); };
         if (rec.values.sqr_folder_link) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.values.sqr_folder_link, target: '_blank', rel: 'noopener'}, [icon('bi-folder2-open', 'me-2'), 'SQR documents', icon('bi-box-arrow-up-right', 'ms-2 sqr-proto__ext'), newTab()]));
         if (rec.linked_request) actions.push(h('a', {class: 'btn btn-outline-secondary', href: rec.linked_request.url, target: '_blank', rel: 'noopener'}, [icon('bi-link-45deg', 'me-2'), rec.linked_request.code, icon('bi-box-arrow-up-right', 'ms-2 sqr-proto__ext'), newTab()]));
@@ -531,7 +531,9 @@
     function lockReason(rec, spec) {
         if (!rec.editable.length) return 'Read-only for your role';
         if (rec.locked && spec.tab !== 'opportunity') return 'Locked: proposal is closed';
-        return 'Admin only';
+        if (rec.perms.review === false) return 'Only the assigned reviewer or an admin can edit this field';
+        if (rec.quote_locked && spec.tab === 'opportunity' && spec.key !== 'proposal_status') return 'Set SQR status to For Revision before editing the approved quote';
+        return 'Read-only for your role';
     }
     function optionsFor(rec, spec) {
         var current = rec.values[spec.key] || '';
@@ -539,6 +541,9 @@
         if (spec.type === 'select') list = spec.choices.map(function (c) { return {value: c[0], label: c[1]}; });
         else if (spec.type === 'user') list = (state.options[spec.options] || []).slice();
         else list = (state.options.rq_options || []).slice();
+        if (spec.key === 'status' && rec.status_choices) {
+            list = list.filter(function (option) { return rec.status_choices.includes(option.value); });
+        }
         var blank = spec.key !== 'status';
         var known = list.some(function (o) { return o.value === current; });
         if (current && !known) {

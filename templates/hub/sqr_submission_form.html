@@ -5,7 +5,8 @@
 <div class="glass-card p-4">
     <h1 class="h4">{{ form_title }}</h1>
     {% if form.editor_description %}<p>{{ form.editor_description }}</p>{% endif %}
-    <form method="post">
+    {% if sqr_quote_locked %}<p id="sqr-quote-lock-note">The approved quote is read-only. Remarks can still be edited. Ask the assigned reviewer or an admin to set the SQR to For Revision before changing the quote.</p>{% endif %}
+    <form method="post"{% if sqr_quote_locked %} aria-describedby="sqr-quote-lock-note"{% endif %}>
         {% csrf_token %}
         {{ form.non_field_errors }}
         {% form_editor_token form %}

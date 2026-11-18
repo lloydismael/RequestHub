@@ -1778,6 +1778,108 @@ class RequestActivityLogEditModalTests(TestCase):
         self.assertContains(response, 'name="form_type" value="activity_log"')
         self.assertContains(response, f'name="log_id" value="{self.activity_log.pk}"')
 
+    def _activity_data(self, **overrides):
+        return {
+            "form_type": "activity_log",
+            "request": self.request_obj.pk,
+            "request_date": self.activity_log.request_date.isoformat(),
+            "activity_type": self.activity_log.activity_type,
+            "actual_hours": "1.25",
+            "details": "Updated activity details",
+            "location": self.activity_log.location,
+            "is_billable": "false",
+            "status": EngineerActivityLog.Status.COMPLETED,
+            **overrides,
+        }
+
+    def test_collaborators_cannot_open_or_submit_an_activity_edit(self):
+        url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
+        backup = User.objects.create_user(username="activity-backup-viewer", role=User.Roles.ENGINEER)
+        Request.objects.filter(pk=self.request_obj.pk).update(backup_engineer=backup)
+        for actor, role in (
+            (self.requestor, User.Roles.REQUESTOR),
+            (self.requestor, User.Roles.REQUESTOR_ESS),
+            (self.requestor, User.Roles.PM_ESS),
+            (backup, User.Roles.ENGINEER),
+        ):
+            with self.subTest(role=role):
+                actor.role = role
+                actor.save(update_fields=["role"])
+                self.client.force_login(actor)
+                with self.subTest(method="GET"):
+                    page = self.client.get(url, {"edit_activity": self.activity_log.pk})
+                    self.assertEqual(page.status_code, 200)
+                    self.assertIsNone(page.context["editing_activity_log"])
+                    self.assertIsNone(page.context["activity_form"])
+                with self.subTest(method="POST"):
+                    response = self.client.post(url, {"form_type": "activity_log", "log_id": self.activity_log.pk})
+                    self.assertRedirects(response, url, fetch_redirect_response=False)
+        self.activity_log.refresh_from_db()
+        self.assertEqual(self.activity_log.actual_hours, Decimal("2.50"))
+
+    def test_authorized_activity_edits_keep_the_original_author(self):
+        url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
+        for actor, role in (
+            (self.engineer, User.Roles.ENGINEER),
+            (self.engineer, User.Roles.ON_HOLD),
+            (self.requestor, User.Roles.ADMIN),
+            (self.requestor, User.Roles.PM_ESG),
+        ):
+            with self.subTest(role=role):
+                actor.role = role
+                actor.save(update_fields=["role"])
+                self.client.force_login(actor)
+                page = self.client.get(url, {"edit_activity": self.activity_log.pk})
+                self.assertEqual(page.status_code, 200)
+                self.assertEqual(page.context["editing_activity_log"], self.activity_log)
+                details = f"Activity reviewed by {role}"
+                response = self.client.post(url, self._activity_data(log_id=self.activity_log.pk, details=details))
+                self.assertRedirects(response, url, fetch_redirect_response=False)
+                self.activity_log.refresh_from_db()
+                self.assertEqual(self.activity_log.engineer_id, self.engineer.pk)
+                self.assertEqual(self.activity_log.details, details)
+
+    def test_activity_edit_selection_is_scoped_to_the_current_request(self):
+        other_request = Request.objects.create(
+            requestor=self.requestor,
+            account=self.account,
+            account_manager="Other request manager",
+            product_category="Azure",
+            engagement_type=Request.Engagement.SUPPORT,
+        )
+        self.requestor.role = User.Roles.ADMIN
+        self.requestor.save(update_fields=["role"])
+        self.client.force_login(self.requestor)
+        url = reverse("hub:request-manage-collab", args=[other_request.pk])
+        page = self.client.get(url, {"edit_activity": self.activity_log.pk})
+        self.assertEqual(page.status_code, 200)
+        self.assertIsNone(page.context["activity_form"])
+        response = self.client.post(url, {"form_type": "activity_log", "log_id": self.activity_log.pk})
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+
+    def test_backup_engineer_activity_is_attributed_to_the_actor(self):
+        backup = User.objects.create_user(username="activity-backup-author", role=User.Roles.ENGINEER)
+        Request.objects.filter(pk=self.request_obj.pk).update(backup_engineer=backup)
+        self.client.force_login(backup)
+        url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
+        response = self.client.post(url, self._activity_data())
+
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        log = self.request_obj.activity_logs.get(details="Updated activity details")
+        self.assertEqual(log.engineer_id, backup.pk)
+        self.assertEqual(log.account_id, self.account.pk)
+
+    def test_admin_collaborative_activity_retains_assignee_attribution(self):
+        self.requestor.role = User.Roles.ADMIN
+        self.requestor.save(update_fields=["role"])
+        self.client.force_login(self.requestor)
+        url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
+        response = self.client.post(url, self._activity_data())
+
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        log = self.request_obj.activity_logs.get(details="Updated activity details")
+        self.assertEqual(log.engineer_id, self.engineer.pk)
+
 
 class SqrSubmissionAccountManagerTests(TestCase):
     def test_hp_account_manager_is_available_and_accepted(self):
@@ -2104,6 +2206,13 @@ class SqrEngineerLinkedRequestAccessTests(TestCase):
 
         self.assertEqual(view.get_object(), self.linked_request)
 
+    def test_sqr_editor_advertises_only_supported_html_methods(self):
+        self.client.force_login(self.engineer)
+        response = self.client.options(reverse("hub:sqr-edit", args=[self.submission.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(set(response.headers["Allow"].split(", ")), {"GET", "POST", "HEAD", "OPTIONS"})
+
     def test_engineer_can_save_own_sqr_with_preserved_linked_request(self):
         self.client.force_login(self.engineer)
 
@@ -2334,27 +2443,20 @@ class SqrInlineUndoTests(TestCase):
             reverse("hub:sqr-approval-email-microsoft", args=[self.submission.pk]),
         )
 
-    def test_status_undo_restores_status_metadata_with_warning(self):
+    def test_approval_keeps_its_email_action_without_offering_undo(self):
         with override_settings(SQR_OUTLOOK_CLIENT_ID=""):
             response = self._inline_update("status", SqrSubmission.Status.APPROVED)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["approval_email_draft_url"], reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk]))
-        self.assertNotIn("approval_email_microsoft_url", response.json())
-        change = SqrSubmissionChange.objects.get(pk=response.json()["change_id"])
+        data = response.json()
+        self.assertEqual(data["approval_email_draft_url"], reverse("hub:sqr-approval-email-formatted-draft", args=[self.submission.pk]))
+        self.assertNotIn("approval_email_microsoft_url", data)
+        self.assertNotIn("undo_url", data)
+        self.assertNotIn("undo_expires_at", data)
+        self.assertIn("For Revision", data["workflow_side_effect_message"])
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.status, SqrSubmission.Status.APPROVED)
         self.assertIsNotNone(self.submission.reviewed_at)
         self.assertIsNotNone(self.submission.validity_due_date)
-
-        undo_response = self._undo(change)
-
-        self.assertEqual(undo_response.status_code, 200)
-        undo_data = undo_response.json()
-        self.assertTrue(undo_data["workflow_side_effect_warning"])
-        self.submission.refresh_from_db()
-        self.assertEqual(self.submission.status, SqrSubmission.Status.FOR_PROCESSING)
-        self.assertIsNone(self.submission.reviewed_at)
-        self.assertIsNone(self.submission.validity_due_date)
 
     def test_stale_undo_is_rejected(self):
         response = self._inline_update("pm_manhrs", "16")

@@ -1,0 +1,10 @@
+{% if unit %}<p class="rh-chart-unit">{{ unit }}</p>{% endif %}
+<ul class="rh-chart-legend" hidden></ul>
+<div class="rh-chart-plot" hidden>
+    <canvas id="{{ chart_id }}"{% if report_chart %} data-report-chart{% endif %} role="img" aria-label="{{ description|default:title }}"></canvas>
+</div>
+<p class="rh-chart-state" hidden></p>
+<details class="rh-chart-values" hidden>
+    <summary>View chart values</summary>
+    <div data-chart-values="{{ chart_id }}"></div>
+</details>

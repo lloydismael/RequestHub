@@ -61,7 +61,7 @@ if csrf_hosts:
     CSRF_TRUSTED_ORIGINS = csrf_hosts
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "accounts.apps.RequestHubAdminConfig",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",

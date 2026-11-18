@@ -10,7 +10,9 @@ import re
 import threading
 import uuid
 from collections import Counter, defaultdict
+from copy import copy
 from dataclasses import dataclass
+from hashlib import sha256
 from decimal import Decimal, InvalidOperation
 from datetime import date, datetime, timedelta
 from functools import partial
@@ -2876,6 +2878,46 @@ def _make_sqr_edit_form(user):
     return form
 
 
+SQR_FILING_QUOTE_FIELDS = frozenset({
+    "linked_request", "customer_company", "customer_contact", "pm_esg_reviewer", "customer_name",
+    "project_title", "project_details", "sse_manhrs", "sqr_folder_link",
+})
+SQR_APPROVED_QUOTE_FIELDS = SQR_FILING_QUOTE_FIELDS | {
+    "documentation_links", "hourly_rate", "pm_manhrs", "pm_amount", "sse_amount",
+    "managed_support_amount", "quotation_total_price", "discount_rate", "validity_due_date",
+}
+SQR_REVIEW_FIELDS = SQR_APPROVED_QUOTE_FIELDS | {
+    "status", "hold_reason", "reviewed_at", "reviewed_by", "review_notes", "proposal_status",
+    "po_attachment_link", "po_attached_at", "revenue_unlocked", "revenue_date", "revenue_source",
+    "revenue_reference_no", "revenue_status", "revenue_remarks", "revenue_overview", "revenue_declaration",
+}
+SQR_REOPEN_MESSAGE = "Approved quotation fields are locked. Set SQR status to For Revision before editing them."
+
+
+def _can_review_sqr(user, submission):
+    return user.role == User.Roles.ADMIN or (
+        user.role == PM_ESG_ROLE and submission.pm_esg_reviewer_id == user.pk
+    )
+
+
+def _sqr_quote_locked(submission, values=None):
+    values = values or {}
+    status = values.get("status", submission.status)
+    return status == SqrSubmission.Status.APPROVED or (
+        status == SqrSubmission.Status.ON_HOLD and bool(
+            values.get("reviewed_at", submission.reviewed_at)
+            or values.get("validity_due_date", submission.validity_due_date)
+        )
+    )
+
+
+def _sqr_status_choices(submission):
+    choices = SqrSubmission.Status.values
+    if _sqr_quote_locked(submission):
+        return [status for status in choices if status != SqrSubmission.Status.FOR_PROCESSING]
+    return choices
+
+
 def _sqr_queryset_for_user(user):
     """Shared Tracker/dashboard read scope; preserve joins and ordering."""
     queryset = SqrSubmission.objects.select_related(
@@ -3007,6 +3049,9 @@ class SqrListView(LoginRequiredMixin, TemplateView):
             if show_classic:
                 from hub.services.sqr_queries import tracker_page
                 context.update(tracker_page(self.get_queryset(), self.request.GET, user, timezone.localdate()))
+                for submission in context["proposal_submissions"]:
+                    submission.can_review_sqr = _can_review_sqr(user, submission)
+                    submission.quote_locked = _sqr_quote_locked(submission)
             else:
                 context["default_my_assigned_filter"] = can_review
                 context["sqr_reports_summary"] = None
@@ -3666,8 +3711,6 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
         serialize = partial(
             sqr_prototype.serialize_record,
             user=user,
-            allowed_fields=SqrInlineFieldUpdateView._allowed_fields_for_user(user),
-            locked_fields=SqrInlineFieldUpdateView._CLOSED_LOST_LOCKED_FIELDS,
             today=timezone.localdate(),
             is_pm=is_pm,
             is_admin=user.role == User.Roles.ADMIN,
@@ -3681,7 +3724,13 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
             if request.GET.get("summary") == "1":
                 return JsonResponse({"ok": True, "pipeline": pipeline})
             queryset = page.object_list
-        records = [serialize(submission) for submission in queryset]
+        records = [serialize(
+            submission,
+            editable_fields=SqrInlineFieldUpdateView.editable_fields(user, submission),
+            can_review=_can_review_sqr(user, submission),
+            quote_locked=_sqr_quote_locked(submission),
+            status_choices=_sqr_status_choices(submission),
+        ) for submission in queryset]
         if raw_pk is not None:
             if not records:
                 return JsonResponse({"ok": False, "error": "Not found"}, status=404)
@@ -3746,6 +3795,8 @@ class SqrReportsDataView(LoginRequiredMixin, View):
 
 
 class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
+    http_method_names = ["get", "post", "head", "options"]
+
     def get(self, request, *args, **kwargs):
         if request.GET.get("format") == "form-editor":
             self.object = self.get_object()
@@ -3758,7 +3809,10 @@ class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
             }, request=request)
             selectors = {name: str(form[name]) for name in ("customer_contact", "pm_esg_reviewer") if name in form.fields}
             member_map = form.fields["customer_company"].widget.attrs.get("data-member-map", "{}")
-            return JsonResponse({"html": html, "selectors": selectors, "member_map": member_map})
+            return JsonResponse({
+                "html": html, "selectors": selectors, "member_map": member_map,
+                "disabled_fields": [name for name in SQR_FILING_QUOTE_FIELDS if form.fields[name].disabled],
+            })
         return super().get(request, *args, **kwargs)
 
     model = SqrSubmission
@@ -3777,8 +3831,11 @@ class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
             return redirect("hub:sqr")
 
     def get_form(self, form_class=None):
-        form = super().get_form(form_class)
         obj = self.object
+        form_class = form_class or self.get_form_class()
+        filing_locks = SQR_FILING_QUOTE_FIELDS if _sqr_quote_locked(obj) else ()
+        form = form_class(**self.get_form_kwargs(), _form_editor_skip=True)
+        configure_form(form, read_only_fields=filing_locks)
         if self.request.user.role == User.Roles.ADMIN:
             qs = (
                 Request.objects
@@ -3796,43 +3853,63 @@ class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
             )
         form.fields["linked_request"].queryset = qs
         _refresh_sqr_request_account_map(form)
+        if self.request.method == "POST":
+            self.original = copy(obj)
+        if filing_locks:
+            for name in filing_locks:
+                form.fields[name].disabled = True
+                form.fields[name].required = False
+                form.fields[name].widget.attrs.pop("required", None)
+                form.fields[name].widget.attrs.pop("aria-required", None)
+                form.fields[name].widget.attrs["data-editor-required"] = "false"
+            form.fields["pm_esg_reviewer"].queryset = User.objects.filter(pk=obj.pm_esg_reviewer_id)
         return form
 
     def get_queryset(self):
-        if self.request.user.role == User.Roles.ADMIN:
-            return SqrSubmission.objects.select_related("engineer", "pm_esg_reviewer")
-        return SqrSubmission.objects.select_related("engineer", "pm_esg_reviewer").filter(engineer=self.request.user)
+        queryset = SqrSubmission.objects.all()
+        if self.request.method == "POST":
+            queryset = queryset.select_for_update()
+        if self.request.user.role != User.Roles.ADMIN:
+            queryset = queryset.filter(engineer=self.request.user)
+        return queryset
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["back_url"] = reverse("hub:sqr")
         context["form_title"] = f"Edit Submission {self.object.reference_code}"
         context["submit_label"] = "Save changes"
+        context["sqr_quote_locked"] = _sqr_quote_locked(self.object)
         return context
 
     def form_valid(self, form):
-        original = SqrSubmission.objects.get(pk=self.object.pk)
         self.object = form.save(commit=False)
-        save_fields = list(form._meta.fields) + ["pm_manhrs", "pm_amount", "sse_amount", "updated_at"]
-        save_configured_instance(form, self.object, update_fields=save_fields)
-        response = HttpResponseRedirect(self.get_success_url())
-        changed_fields = []
-        for field in form.changed_data:
-            if hasattr(self.object, field):
-                changed_fields.append(field)
-        if changed_fields:
-            old_values = SqrInlineFieldUpdateView._snapshot_values(original, changed_fields)
-            new_values = SqrInlineFieldUpdateView._snapshot_values(self.object, changed_fields)
+        quote_locked = _sqr_quote_locked(self.original)
+        if quote_locked:
+            # Form cleaning can normalize even disabled fields. Do not persist those values.
+            self.object = copy(self.original)
+            self.object.remarks = form.cleaned_data["remarks"]
+            save_fields = ["remarks"]
+        else:
+            save_fields = list(form._meta.fields) + ["pm_manhrs", "pm_amount", "sse_amount"]
+        old_values = SqrInlineFieldUpdateView._snapshot_values(self.original, save_fields)
+        save_configured_instance(form, self.object, update_fields=[*save_fields, "updated_at"])
+        new_values = SqrInlineFieldUpdateView._snapshot_values(self.object, save_fields)
+        changed = [field for field in save_fields if old_values[field] != new_values[field]]
+        if changed:
             record_sqr_history(
                 self.object,
                 self.request.user,
-                field=changed_fields[0] if len(changed_fields) == 1 else "",
-                old_values=old_values,
-                new_values=new_values,
+                field=changed[0] if len(changed) == 1 else "",
+                old_values={field: old_values[field] for field in changed},
+                new_values={field: new_values[field] for field in changed},
                 source="engineer_edit",
             )
         messages.success(self.request, f"SQR {self.object.reference_code} updated.")
-        return response
+        return HttpResponseRedirect(self.get_success_url())
 
 
 class SqrEngineerDeleteView(LoginRequiredMixin, DeleteView):
@@ -4039,7 +4116,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         "revenue_date", "revenue_source", "revenue_reference_no", "revenue_status",
         "revenue_remarks", "revenue_overview", "revenue_declaration",
     ])
-    _SERIALIZED_FK_FIELDS = _FK_FIELDS | frozenset(["reviewed_by"])
+    _SERIALIZED_FK_FIELDS = _FK_FIELDS | {"reviewed_by", "pm_esg_reviewer"}
+    _RESTORE_RELATED_FIELDS = {"reviewed_at", "reviewed_by", "validity_due_date", "review_notes", "sse_amount", "pm_amount"}
     _UNDO_RETENTION = timedelta(hours=24)
     _PRICE_TRIGGERS = frozenset(["pm_amount", "sse_amount", "managed_support_amount", "discount_rate"])
 
@@ -4049,6 +4127,63 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             return cls._ADMIN_ALLOWED
         if user.role == User.Roles.PM_ESG:
             return cls._PM_ESG_ALLOWED
+        return None
+
+    @classmethod
+    def _policy_error(cls, user, submission, fields):
+        if fields & SQR_REVIEW_FIELDS and not _can_review_sqr(user, submission):
+            return "Only the assigned reviewer or an admin can edit these fields.", 403
+        if _sqr_quote_locked(submission) and fields & SQR_APPROVED_QUOTE_FIELDS:
+            return SQR_REOPEN_MESSAGE, 409
+        if (submission.proposal_status in (SqrSubmission.ProposalStatus.CLOSED_LOST,
+                                           SqrSubmission.ProposalStatus.CLOSED_CANCELED)
+                and fields & cls._CLOSED_LOST_LOCKED_FIELDS):
+            return "Delivery and billing fields are locked when Proposal Status is Closed-Lost or Closed-Canceled", 400
+        return None
+
+    @classmethod
+    def editable_fields(cls, user, submission):
+        return {
+            field for field in cls._allowed_fields_for_user(user) or ()
+            if cls._policy_error(user, submission, {field}) is None
+        }
+
+    # Validity is approval metadata. History checks compare the quote itself separately.
+    _QUOTE_CONTENT_FIELDS = SQR_APPROVED_QUOTE_FIELDS - {"validity_due_date"}
+
+    @classmethod
+    def _quote_fingerprint(cls, submission):
+        values = cls._snapshot_values(submission, cls._QUOTE_CONTENT_FIELDS)
+        return sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
+
+    @classmethod
+    def _restore_policy_error(cls, user, submission, old_values, new_values, created_at, metadata):
+        fields = set(old_values) | set(new_values)
+        changed = {field for field in fields if old_values.get(field) != new_values.get(field)}
+        allowed = cls._allowed_fields_for_user(user) or frozenset()
+        if changed - (allowed | cls._RESTORE_RELATED_FIELDS):
+            return "You cannot restore one or more fields in this history entry.", 403
+        if changed & SQR_REVIEW_FIELDS and not _can_review_sqr(user, submission):
+            return "Only the assigned reviewer or an admin can restore these fields.", 403
+        # Status snapshots may carry validity as approval metadata, not as a quote edit.
+        policy_fields = changed - {"validity_due_date"} if "status" in fields else changed
+        if error := cls._policy_error(user, submission, policy_fields):
+            return error
+        if cls._snapshot_values(submission, new_values) != new_values:
+            return "This SQR changed after the selected edit.", 409
+        current_locked = _sqr_quote_locked(submission)
+        restored_locked = _sqr_quote_locked(submission, old_values)
+        if current_locked and not restored_locked:
+            return SQR_REOPEN_MESSAGE, 409
+        if restored_locked and (not current_locked or "status" in changed):
+            if metadata.get("quote_fingerprint") != cls._quote_fingerprint(submission):
+                return "The prior approval cannot be restored. Review and approve the current quotation.", 409
+            later_edits = submission.history_entries.filter(
+                created_at__gt=created_at, new_values__has_any_keys=sorted(cls._QUOTE_CONTENT_FIELDS),
+            ).values_list("old_values", "new_values")
+            if any(any(old.get(field) != new.get(field) for field in cls._QUOTE_CONTENT_FIELDS)
+                   for old, new in later_edits):
+                return "The prior approval cannot be restored after a newer quotation edit.", 409
         return None
 
     @classmethod
@@ -4121,21 +4256,30 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             response_data["approval_email_eml_url"] = approval_urls["eml"]
         if approval_urls.get("microsoft"):
             response_data["approval_email_microsoft_url"] = approval_urls["microsoft"]
+        quote_locked = _sqr_quote_locked(submission)
+        undo_reopens_quote = change is not None and quote_locked and not _sqr_quote_locked(submission, change.old_values)
         if change is not None:
             response_data["change_id"] = change.pk
-            response_data["undo_url"] = reverse("hub:sqr-inline-undo", args=[submission.pk, change.pk])
-            response_data["undo_expires_at"] = change.expires_at.isoformat()
+            if not undo_reopens_quote:
+                response_data["undo_url"] = reverse("hub:sqr-inline-undo", args=[submission.pk, change.pk])
+                response_data["undo_expires_at"] = change.expires_at.isoformat()
         if undone:
             response_data["undone"] = True
         if field == "status" or field == "hold_reason":
             response_data["hold_reason"] = submission.hold_reason
         if field == "status":
+            response_data["quote_locked"] = quote_locked
             response_data["workflow_side_effect_warning"] = True
-            response_data["workflow_side_effect_message"] = (
-                "Status was reverted in Request Hub. Emails, Teams chats, or Outlook drafts already opened cannot be undone."
-                if undone else
-                "This status change can be reverted in Request Hub, but emails, Teams chats, or Outlook drafts cannot be undone."
-            )
+            external_warning = "Emails, Teams chats, or Outlook drafts already opened cannot be undone."
+            if undone:
+                message = f"Status was reverted in Request Hub. {external_warning}"
+            elif undo_reopens_quote:
+                message = f"{SQR_REOPEN_MESSAGE} {external_warning}"
+            elif change is not None:
+                message = f"This status change can be reverted in Request Hub. {external_warning}"
+            else:
+                message = external_warning
+            response_data["workflow_side_effect_message"] = message
 
         save_fields = set(save_fields or [])
         if "pm_amount" in save_fields:
@@ -4183,6 +4327,27 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         return response_data
 
     def post(self, request, pk):
+        result = self._save_inline(request, pk)
+        if isinstance(result, JsonResponse):
+            return result
+        submission, field, old_status, tracked_fields, change = result
+        approval_urls = {}
+        if field == "status" and old_status != submission.status:
+            if submission.status == SqrSubmission.Status.FOR_REVISION:
+                _send_sqr_for_revision_email(
+                    submission, request.user.get_full_name() or request.user.username, http_request=request,
+                )
+            elif submission.status == SqrSubmission.Status.APPROVED:
+                approval_urls["draft"] = reverse("hub:sqr-approval-email-formatted-draft", args=[submission.pk])
+                approval_urls["eml"] = reverse("hub:sqr-approval-email-eml", args=[submission.pk])
+                if outlook_is_configured():
+                    approval_urls["microsoft"] = reverse("hub:sqr-approval-email-microsoft", args=[submission.pk])
+        return JsonResponse(self._build_inline_response(
+            submission, field, tracked_fields, request=request, change=change, approval_urls=approval_urls,
+        ))
+
+    @transaction.atomic
+    def _save_inline(self, request, pk):
         allowed = self._allowed_fields_for_user(request.user)
         if allowed is None:
             return JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
@@ -4199,22 +4364,27 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
         review_notes_override = data.get("review_notes", None)  # supplied when status → for_revision
         hold_reason_override = data.get("hold_reason", None)
 
+        if not isinstance(field, str) or field not in allowed:
+            return JsonResponse({"ok": False, "error": "Field not allowed"}, status=400)
+
+        submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
+        policy_error = self._policy_error(request.user, submission, {field})
+        if policy_error:
+            error, status = policy_error
+            return JsonResponse({"ok": False, "error": error}, status=status)
+
         if field == "status":
             if not isinstance(value, str) or value not in SqrSubmission.Status.values:
                 return JsonResponse({"ok": False, "error": "Invalid SQR status"}, status=400)
+            if value not in _sqr_status_choices(submission):
+                return JsonResponse({"ok": False, "error": SQR_REOPEN_MESSAGE}, status=409)
             if value == SqrSubmission.Status.ON_HOLD:
                 if not isinstance(hold_reason_override, str) or not hold_reason_override.strip():
                     return JsonResponse({"ok": False, "error": "Hold Reason is required when status is On Hold."}, status=400)
                 hold_reason_override = hold_reason_override.strip()
 
-        if not field or field not in allowed:
-            return JsonResponse({"ok": False, "error": "Field not allowed"}, status=400)
-
-        submission = get_object_or_404(
-            SqrSubmission.objects.select_related("engineer"), pk=pk
-        )
         old_status = submission.status
-        original_submission = SqrSubmission.objects.get(pk=pk)
+        original_submission = copy(submission)
 
         if field == "hold_reason":
             if not isinstance(value, str):
@@ -4222,21 +4392,6 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             value = value.strip()
             if submission.status == SqrSubmission.Status.ON_HOLD and not value:
                 return JsonResponse({"ok": False, "error": "Hold Reason is required when status is On Hold."}, status=400)
-
-        if (
-            submission.proposal_status in (
-                SqrSubmission.ProposalStatus.CLOSED_LOST,
-                SqrSubmission.ProposalStatus.CLOSED_CANCELED,
-            )
-            and field in self._CLOSED_LOST_LOCKED_FIELDS
-        ):
-            return JsonResponse(
-                {
-                    "ok": False,
-                    "error": "Delivery and billing fields are locked when Proposal Status is Closed-Lost or Closed-Canceled",
-                },
-                status=400,
-            )
 
         try:
             if field in self._INT_FIELDS or field in self._FK_FIELDS:
@@ -4308,33 +4463,39 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
             submission.managed_support_amount = new_msa
             save_fields.append("managed_support_amount")
 
-        # When status changes: auto-set reviewed_at, validity_due_date, reviewed_by, assigned_pm
         if field == "status":
-            if coerced == SqrSubmission.Status.APPROVED:
-                now = timezone.now()
-                if not submission.reviewed_at:
-                    submission.reviewed_at = now
-                submission.validity_due_date = submission.reviewed_at.date() + timedelta(days=45)
+            new_approval = (coerced == SqrSubmission.Status.APPROVED and old_status != coerced
+                            and (old_status != SqrSubmission.Status.ON_HOLD or not submission.reviewed_at))
+            undated_approval = (coerced == SqrSubmission.Status.ON_HOLD and old_status == SqrSubmission.Status.APPROVED
+                                and not (submission.reviewed_at or submission.validity_due_date))
+            if new_approval or undated_approval:
+                # Preserve the lock when pausing a legacy approval with no approval dates.
+                submission.reviewed_at = timezone.now()
+                submission.validity_due_date = timezone.localtime(submission.reviewed_at, MANILA_TZ).date() + timedelta(days=45)
                 submission.reviewed_by = request.user
                 save_fields += ["reviewed_at", "reviewed_by", "validity_due_date"]
+            if coerced == SqrSubmission.Status.APPROVED and old_status != coerced:
                 if not submission.assigned_pm_id:
                     submission.assigned_pm_id = submission.pm_esg_reviewer_id
                     save_fields.append("assigned_pm")
-            elif coerced != SqrSubmission.Status.ON_HOLD:
+            elif coerced == SqrSubmission.Status.FOR_REVISION:
+                if review_notes_override is not None and not isinstance(review_notes_override, str):
+                    return JsonResponse({"ok": False, "error": "Invalid review notes"}, status=400)
                 submission.reviewed_at = None
                 submission.validity_due_date = None
-                save_fields += ["reviewed_at", "validity_due_date"]
-            if coerced == SqrSubmission.Status.ON_HOLD:
+                submission.reviewed_by = request.user
+                save_fields += ["reviewed_at", "reviewed_by", "validity_due_date"]
+                if review_notes_override is not None or old_status != coerced:
+                    submission.review_notes = review_notes_override or ""
+                    save_fields.append("review_notes")
+            elif coerced == SqrSubmission.Status.FOR_PROCESSING:
+                submission.reviewed_at = None
+                submission.validity_due_date = None
+                submission.reviewed_by = None
+                save_fields += ["reviewed_at", "reviewed_by", "validity_due_date"]
+            elif coerced == SqrSubmission.Status.ON_HOLD:
                 submission.hold_reason = hold_reason_override
                 save_fields.append("hold_reason")
-            # Save review_notes when status → for_revision (provided by the comments modal)
-            if coerced == SqrSubmission.Status.FOR_REVISION and review_notes_override is not None:
-                submission.review_notes = review_notes_override
-                submission.reviewed_by = request.user
-                if "review_notes" not in save_fields:
-                    save_fields.append("review_notes")
-                if "reviewed_by" not in save_fields:
-                    save_fields.append("reviewed_by")
 
         try:
             for saved_field in save_fields[1:]:
@@ -4346,61 +4507,22 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
 
         tracked_fields = self._tracked_fields_for_change(field, save_fields)
         old_values = self._snapshot_values(original_submission, tracked_fields)
-        with transaction.atomic():
-            submission.save(update_fields=save_fields)
-            new_values = self._snapshot_values(submission, tracked_fields)
+        submission.save(update_fields=save_fields)
+        new_values = self._snapshot_values(submission, tracked_fields)
+        change = None
+        if old_values != new_values:
             change = SqrSubmissionChange.objects.create(
-                submission=submission,
-                changed_by=request.user,
-                field=field,
-                old_values=old_values,
-                new_values=new_values,
-                expires_at=timezone.now() + self._UNDO_RETENTION,
+                submission=submission, changed_by=request.user, field=field,
+                old_values=old_values, new_values=new_values, expires_at=timezone.now() + self._UNDO_RETENTION,
             )
+            metadata = {"change_id": change.pk}
+            if field == "status" and _sqr_quote_locked(original_submission):
+                metadata["quote_fingerprint"] = self._quote_fingerprint(original_submission)
             record_sqr_history(
-                submission,
-                request.user,
-                field=field,
-                old_values=old_values,
-                new_values=new_values,
-                source="inline",
-                metadata={"change_id": change.pk},
+                submission, request.user, field=field, old_values=old_values, new_values=new_values,
+                source="inline", metadata=metadata,
             )
-
-        # Email engineer when status changed to For Revision via inline edit
-        if (
-            field == "status"
-            and coerced == SqrSubmission.Status.FOR_REVISION
-            and old_status != SqrSubmission.Status.FOR_REVISION
-        ):
-            reviewer_name = request.user.get_full_name() or request.user.username
-            _send_sqr_for_revision_email(
-                submission,
-                reviewer_name,
-                http_request=request,
-            )
-
-        # When status → Approved: launch the user's default email app with the draft.
-        approval_urls = {}
-        if (
-            field == "status"
-            and coerced == SqrSubmission.Status.APPROVED
-            and old_status != SqrSubmission.Status.APPROVED
-        ):
-            approval_urls["draft"] = reverse("hub:sqr-approval-email-formatted-draft", args=[submission.pk])
-            approval_urls["eml"] = reverse("hub:sqr-approval-email-eml", args=[submission.pk])
-            if outlook_is_configured():
-                approval_urls["microsoft"] = reverse("hub:sqr-approval-email-microsoft", args=[submission.pk])
-
-        response_data = self._build_inline_response(
-            submission,
-            field,
-            tracked_fields,
-            request=request,
-            change=change,
-            approval_urls=approval_urls,
-        )
-        return JsonResponse(response_data)
+        return submission, field, old_status, tracked_fields, change
 
 
 class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
@@ -4412,10 +4534,9 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
             return JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
 
         with transaction.atomic():
+            submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
             change = get_object_or_404(
-                SqrSubmissionChange.objects.select_for_update().select_related("submission"),
-                pk=change_id,
-                submission_id=pk,
+                SqrSubmissionChange.objects.select_for_update(), pk=change_id, submission_id=pk,
             )
             if change.field not in allowed:
                 return JsonResponse({"ok": False, "error": "Field not allowed"}, status=400)
@@ -4424,32 +4545,15 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
             if change.is_expired:
                 return JsonResponse({"ok": False, "error": "Undo expired for this change."}, status=400)
 
-            submission = SqrSubmission.objects.select_for_update().get(pk=pk)
-            if (
-                submission.proposal_status in (
-                    SqrSubmission.ProposalStatus.CLOSED_LOST,
-                    SqrSubmission.ProposalStatus.CLOSED_CANCELED,
-                )
-                and change.field != "proposal_status"
-                and any(field in self._CLOSED_LOST_LOCKED_FIELDS for field in change.old_values)
-            ):
-                return JsonResponse(
-                    {
-                        "ok": False,
-                        "error": "Delivery and billing fields are locked when Proposal Status is Closed-Lost or Closed-Canceled",
-                    },
-                    status=400,
-                )
-
-            current_values = self._snapshot_values(submission, change.new_values.keys())
-            if current_values != change.new_values:
-                return JsonResponse(
-                    {
-                        "ok": False,
-                        "error": "Undo skipped because this SQR was changed again after the saved edit.",
-                    },
-                    status=409,
-                )
+            metadata = {}
+            if change.field == "status":
+                metadata = submission.history_entries.filter(metadata__change_id=change.pk).values_list("metadata", flat=True).first() or {}
+            error = self._restore_policy_error(
+                request.user, submission, change.old_values, change.new_values, change.changed_at, metadata,
+            )
+            if error:
+                message, status = error
+                return JsonResponse({"ok": False, "error": message}, status=status)
 
             restore_fields = list(change.old_values.keys())
             saved_dates = (submission.managed_support_start_date, submission.managed_support_end_date)
@@ -4472,9 +4576,13 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
             change.undone_at = timezone.now()
             change.undone_by = request.user
             change.save(update_fields=["undone_at", "undone_by"])
-            submission = SqrSubmission.objects.select_related(
-                "assigned_pm", "assigned_sse", "linked_request"
-            ).get(pk=pk)
+            if set(restore_fields) & self._QUOTE_CONTENT_FIELDS:
+                record_sqr_history(
+                    submission, request.user, field=change.field,
+                    old_values=change.new_values, new_values=change.old_values,
+                    action=SqrSubmissionHistory.Action.RESTORED, source="inline_undo",
+                    metadata={"change_id": change.pk},
+                )
 
         response_data = self._build_inline_response(
             submission,
@@ -4515,7 +4623,12 @@ class SqrHistoryView(LoginRequiredMixin, View):
                 "restored_by": (entry.restored_by.get_full_name() or entry.restored_by.username) if entry.restored_by else "",
                 "restored_at": timezone.localtime(entry.restored_at, MANILA_TZ).strftime("%b %d, %Y · %I:%M %p") if entry.restored_at else "",
                 "restore_url": reverse("hub:sqr-history-restore", args=[submission.pk, entry.pk]),
-                "restorable": entry.action == SqrSubmissionHistory.Action.UPDATED and not entry.is_restored and bool(entry.old_values),
+                "restorable": (
+                    entry.action == SqrSubmissionHistory.Action.UPDATED and not entry.is_restored
+                    and bool(entry.old_values) and SqrInlineFieldUpdateView._restore_policy_error(
+                        request.user, submission, entry.old_values, entry.new_values, entry.created_at, entry.metadata,
+                    ) is None
+                ),
                 "changes": [
                     {
                         "field": changed_field,
@@ -4543,35 +4656,20 @@ class SqrHistoryRestoreView(LoginRequiredMixin, View):
         if request.user.role not in ADMIN_PANEL_ROLES:
             return JsonResponse({"ok": False, "error": "Permission denied"}, status=403)
 
-        allowed = SqrInlineFieldUpdateView._allowed_fields_for_user(request.user) or frozenset()
         with transaction.atomic():
+            submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
             history = get_object_or_404(
-                SqrSubmissionHistory.objects.select_for_update().select_related("submission"),
-                pk=history_id,
-                submission_id=pk,
+                SqrSubmissionHistory.objects.select_for_update(), pk=history_id, submission_id=pk,
             )
-            if history.action != SqrSubmissionHistory.Action.UPDATED or history.is_restored:
+            if history.action != SqrSubmissionHistory.Action.UPDATED or history.is_restored or not history.old_values:
                 return JsonResponse({"ok": False, "error": "This history entry cannot be restored."}, status=400)
-            restore_fields = list(history.old_values.keys())
-            disallowed = [field for field in restore_fields if field not in allowed and field not in {"reviewed_at", "reviewed_by", "validity_due_date", "review_notes", "sse_amount", "pm_amount", "managed_support_amount"}]
-            if disallowed:
-                return JsonResponse({"ok": False, "error": "You cannot restore one or more fields in this history entry."}, status=403)
-
-            submission = SqrSubmission.objects.select_for_update().get(pk=pk)
-            if (submission.proposal_status in (SqrSubmission.ProposalStatus.CLOSED_LOST,
-                                               SqrSubmission.ProposalStatus.CLOSED_CANCELED)
-                    and history.field != "proposal_status"
-                    and set(restore_fields) & SqrInlineFieldUpdateView._CLOSED_LOST_LOCKED_FIELDS):
-                return JsonResponse({"ok": False, "error": "Delivery and billing fields are locked when Proposal Status is Closed-Lost or Closed-Canceled"}, status=400)
-            current_values = SqrInlineFieldUpdateView._snapshot_values(submission, history.new_values.keys())
-            if current_values != history.new_values:
-                return JsonResponse(
-                    {
-                        "ok": False,
-                        "error": "Restore skipped because this SQR changed after the selected history entry.",
-                    },
-                    status=409,
-                )
+            error = SqrInlineFieldUpdateView._restore_policy_error(
+                request.user, submission, history.old_values, history.new_values, history.created_at, history.metadata,
+            )
+            if error:
+                message, status = error
+                return JsonResponse({"ok": False, "error": message}, status=status)
+            restore_fields = list(history.old_values)
 
             saved_dates = (submission.managed_support_start_date, submission.managed_support_end_date)
             for restore_field, restore_value in history.old_values.items():
@@ -4641,26 +4739,31 @@ class SqrRevenueTrackerUpdateView(LoginRequiredMixin, View):
     def _tracker_redirect_url():
         return f"{reverse('hub:sqr')}?{urlencode({'tab': 'revenue-tracker'})}"
 
+    @transaction.atomic
     def post(self, request, pk):
-        if request.user.role != PM_ESG_ROLE:
-            messages.error(request, "Only PM-ESG can update Revenue Tracker details.")
+        if request.user.role not in ADMIN_PANEL_ROLES:
+            messages.error(request, "Only PM-ESG or Admin can update Revenue Tracker details.")
             return redirect(self._tracker_redirect_url())
 
-        submission = get_object_or_404(
-            SqrSubmission.objects.select_related("pm_esg_reviewer"),
-            pk=pk,
-            pm_esg_reviewer=request.user,
-        )
+        submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
+        if not _can_review_sqr(request.user, submission):
+            raise Http404
 
         stage_action = (request.POST.get("stage_action") or "").strip().lower()
         if stage_action == "quotation":
-            if submission.revenue_stage_key != "quotation":
-                messages.error(request, "Quotation pricing can only be updated in Quotation stage.")
+            if _sqr_quote_locked(submission):
+                messages.error(request, SQR_REOPEN_MESSAGE)
                 return redirect(self._tracker_redirect_url())
 
+            fields = SqrRevenueQuotationForm.Meta.fields
+            before = SqrInlineFieldUpdateView._snapshot_values(submission, fields)
             form = SqrRevenueQuotationForm(request.POST, instance=submission, prefix=f"quote-{submission.pk}")
             if form.is_valid():
-                form.save()
+                save_configured_instance(form, form.save(commit=False), update_fields=[*fields, "updated_at"])
+                record_sqr_history(
+                    submission, request.user, field="quotation_total_price", old_values=before,
+                    new_values=SqrInlineFieldUpdateView._snapshot_values(submission, fields), source="revenue_quotation",
+                )
                 messages.success(request, f"Quotation pricing saved for {submission.reference_code}.")
             else:
                 self._flash_form_errors(request, form)
@@ -4678,9 +4781,9 @@ class SqrRevenueTrackerUpdateView(LoginRequiredMixin, View):
                     messages.error(request, "Set the quotation pricing before attaching a P.O.")
                     return redirect(self._tracker_redirect_url())
 
-                if not submission.po_attachment_link:
-                    updated_submission.po_attached_at = timezone.now()
-                save_configured_instance(form, updated_submission)
+                updated_submission.po_attached_at = timezone.now()
+                save_configured_instance(form, updated_submission,
+                                         update_fields=[*SqrRevenueOrderForm.Meta.fields, "po_attached_at", "updated_at"])
                 messages.success(request, f"P.O attached for {submission.reference_code}. Moved to Revenue stage.")
             else:
                 self._flash_form_errors(request, form)
@@ -4691,29 +4794,30 @@ class SqrRevenueTrackerUpdateView(LoginRequiredMixin, View):
 
 
 class SqrProposalUpdateView(LoginRequiredMixin, View):
-    """PM-ESG / Admin: update pricing and deal/proposal status on an approved SQR."""
+    """Assigned reviewer / Admin: update the deal status on an approved SQR."""
 
+    @transaction.atomic
     def post(self, request, pk):
         if request.user.role not in ADMIN_PANEL_ROLES:
             messages.error(request, "Only PM-ESG or Admin can update Proposal details.")
             return redirect("hub:sqr")
 
-        submission = get_object_or_404(
-            SqrSubmission.objects.select_related("pm_esg_reviewer"),
-            pk=pk,
-        )
-
-        if request.user.role == PM_ESG_ROLE and submission.pm_esg_reviewer_id != request.user.id:
-            messages.error(request, "Only the assigned PM-ESG can update this proposal.")
+        submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
+        if not _can_review_sqr(request.user, submission):
+            messages.error(request, "Only the assigned reviewer can update this proposal.")
             return redirect("hub:sqr")
 
         if submission.status != SqrSubmission.Status.APPROVED:
             messages.error(request, "Proposal details can only be updated after the SQR is Approved.")
             return redirect("hub:sqr")
 
-        form = SqrProposalStatusForm(request.POST, instance=submission)
+        form = SqrProposalStatusForm(request.POST, instance=submission, _form_editor_skip=True)
+        quote_fields = SQR_APPROVED_QUOTE_FIELDS.intersection(form.fields)
+        configure_form(form, read_only_fields=quote_fields)
+        for field in quote_fields:
+            form.fields.pop(field)
         if form.is_valid():
-            form.save()
+            save_configured_instance(form, form.save(commit=False), update_fields=["proposal_status", "updated_at"])
             messages.success(request, f"Proposal details updated for {submission.reference_code}.")
         else:
             for field, errors in form.errors.items():
@@ -4725,14 +4829,18 @@ class SqrProposalUpdateView(LoginRequiredMixin, View):
 
 
 class SqrToRevenueView(LoginRequiredMixin, View):
-    """PM-ESG / Admin: unlock Step 4 Revenue Stage by clicking 'To Revenue'."""
+    """Assigned reviewer / Admin: unlock Step 4 Revenue Stage by clicking 'To Revenue'."""
 
+    @transaction.atomic
     def post(self, request, pk):
         if request.user.role not in ADMIN_PANEL_ROLES:
             messages.error(request, "Only PM-ESG or Admin can unlock the Revenue Stage.")
             return redirect("hub:sqr")
 
-        submission = get_object_or_404(SqrSubmission, pk=pk)
+        submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
+        if not _can_review_sqr(request.user, submission) or submission.status != SqrSubmission.Status.APPROVED:
+            messages.error(request, "Only the assigned reviewer or an admin can unlock revenue for an Approved SQR.")
+            return redirect("hub:sqr")
 
         if not submission.revenue_unlocked:
             submission.revenue_unlocked = True
@@ -4761,7 +4869,7 @@ class SqrDeliveryUpdateView(LoginRequiredMixin, View):
         before = SqrInlineFieldUpdateView._snapshot_values(submission, fields)
         form = SqrDeliveryForm(request.POST, instance=submission)
         if form.is_valid():
-            form.save()
+            save_configured_instance(form, form.save(commit=False), update_fields=[*fields, "updated_at"])
             after = SqrInlineFieldUpdateView._snapshot_values(submission, fields)
             changed = [field for field in fields if before[field] != after[field]]
             if changed:
@@ -4801,20 +4909,17 @@ class SqrPerformanceUpdateView(LoginRequiredMixin, View):
 
 
 class SqrRevenueUpdateView(LoginRequiredMixin, View):
-    """PM-ESG / Admin: record revenue recognition details on an approved SQR."""
+    """Assigned reviewer / Admin: record revenue recognition details on an approved SQR."""
 
+    @transaction.atomic
     def post(self, request, pk):
         if request.user.role not in ADMIN_PANEL_ROLES:
             messages.error(request, "Only PM-ESG or Admin can update Revenue details.")
             return redirect("hub:sqr")
 
-        submission = get_object_or_404(
-            SqrSubmission.objects.select_related("pm_esg_reviewer"),
-            pk=pk,
-        )
-
-        if request.user.role == PM_ESG_ROLE and submission.pm_esg_reviewer_id != request.user.id:
-            messages.error(request, "Only the assigned PM-ESG can update this revenue record.")
+        submission = get_object_or_404(SqrSubmission.objects.select_for_update(), pk=pk)
+        if not _can_review_sqr(request.user, submission):
+            messages.error(request, "Only the assigned reviewer can update this revenue record.")
             return redirect("hub:sqr")
 
         if submission.status != SqrSubmission.Status.APPROVED:
@@ -4823,7 +4928,7 @@ class SqrRevenueUpdateView(LoginRequiredMixin, View):
 
         form = SqrRevenueForm(request.POST, instance=submission)
         if form.is_valid():
-            form.save()
+            save_configured_instance(form, form.save(commit=False), update_fields=[*SqrRevenueForm.Meta.fields, "updated_at"])
             messages.success(request, f"Revenue details updated for {submission.reference_code}.")
         else:
             for field, errors in form.errors.items():
@@ -5315,30 +5420,36 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
     def _source_label(self, suffix: str) -> str:
         return f"{self._actor_prefix()} · {suffix}"
 
-    def _get_requested_edit_activity_log(self, request_obj):
-        edit_activity_id = (self.request.GET.get("edit_activity") or "").strip()
-        if not edit_activity_id:
-            return None
-        try:
-            edit_activity_id_int = int(edit_activity_id)
-        except (TypeError, ValueError):
-            messages.error(self.request, "We could not find that activity log to edit.")
-            return None
-
+    def _get_editable_activity_log(self, request_obj, log_id):
+        user = self.request.user
         queryset = EngineerActivityLog.objects.select_related("engineer", "account", "request").filter(
             request=request_obj
         )
-        if self.request.user.role in ENGINEER_ACCESS_ROLES:
-            queryset = queryset.filter(engineer=self.request.user)
-        try:
-            return queryset.get(pk=edit_activity_id_int)
-        except EngineerActivityLog.DoesNotExist:
-            messages.error(self.request, "We could not find that activity log to edit.")
+        if user.role in ENGINEER_ACCESS_ROLES:
+            queryset = queryset.filter(engineer=user)
+        elif user.role not in ADMIN_PANEL_ROLES:
             return None
+        try:
+            return queryset.get(pk=int(log_id))
+        except (EngineerActivityLog.DoesNotExist, ValueError):
+            return None
+
+    def _get_requested_edit_activity_log(self, request_obj):
+        log_id = (self.request.GET.get("edit_activity") or "").strip()
+        if not log_id:
+            return None
+        activity_log = self._get_editable_activity_log(request_obj, log_id)
+        if activity_log is None:
+            messages.error(self.request, "We could not find that activity log to edit.")
+        return activity_log
+
+    def _details_form(self, request_obj, data=None):
+        user = self.request.user
+        return RequestForm(data, instance=request_obj, actor_role=user.role, actor_user=user, collaborative_edit=True)
 
     def get_context_data(self, request_obj, form=None, status_form=None, log_form=None, activity_form=None, editing_activity_log=None):
         if form is None:
-            form = RequestForm(instance=request_obj, actor_role=self.request.user.role, actor_user=self.request.user)
+            form = self._details_form(request_obj)
         status_allowed = (
             self.request.user.pk == request_obj.engineer_id
             or self.request.user.role in ADMIN_PANEL_ROLES
@@ -5390,18 +5501,17 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             raise PermissionDenied("Only engineers and admins can add activity logs.")
         instance = None
         if log_id:
-            queryset = EngineerActivityLog.objects.select_related("engineer", "account", "request").filter(
-                request=request_obj
-            )
-            if request.user.role in ENGINEER_ACCESS_ROLES:
-                queryset = queryset.filter(engineer=request.user)
-            try:
-                instance = queryset.get(pk=log_id)
-            except (EngineerActivityLog.DoesNotExist, ValueError):
+            instance = self._get_editable_activity_log(request_obj, log_id)
+            if instance is None:
                 messages.error(request, "Unable to update the selected activity log.")
                 return redirect("hub:request-manage-collab", pk=request_obj.pk)
 
-        engineer_for_form = instance.engineer if instance else (request_obj.engineer or request.user)
+        if instance is not None:
+            engineer_for_form = instance.engineer
+        elif request.user.role == User.Roles.ADMIN:
+            engineer_for_form = request_obj.engineer or request.user
+        else:
+            engineer_for_form = request.user
         form = EngineerActivityLogForm(
             data=request.POST,
             engineer=engineer_for_form,
@@ -5423,7 +5533,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         return render(request, self.template_name, context)
 
     def _handle_details_update(self, request, request_obj):
-        form = RequestForm(request.POST, instance=request_obj, actor_role=request.user.role, actor_user=request.user)
+        form = self._details_form(request_obj, request.POST)
         if form.is_valid():
             source_label = self._source_label("Manage Request")
             form.instance._actor_user = request.user
@@ -5622,16 +5732,27 @@ class RequestDeleteView(LoginRequiredMixin, DeleteView):
             return qs.filter(requestor=user)
         return qs.none()
 
+    def form_valid(self, form):
+        return self._soft_delete()
+
     def delete(self, request, *args, **kwargs):
-        obj = self.get_object()
+        self.object = self.get_object()
+        return self._soft_delete()
+
+    def _soft_delete(self):
+        success_url = self.get_success_url()
         now = timezone.now()
-        Request.objects.filter(pk=obj.pk).update(
+        updated = self.get_queryset().filter(pk=self.object.pk).update(
             is_deleted=True,
             deleted_at=now,
             updated_at=now,
         )
-        messages.success(request, f"Request {obj.reference_code} deleted. You can restore it from Profile → Backup &amp; Restore.")
-        return redirect(self.success_url)
+        if updated:
+            messages.success(
+                self.request,
+                f"Request {self.object.reference_code} deleted. An administrator can restore it from Profile → Backup & Restore.",
+            )
+        return redirect(success_url)
 
 
 class RequestRestoreView(LoginRequiredMixin, View):
