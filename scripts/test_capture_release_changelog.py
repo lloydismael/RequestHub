@@ -2,6 +2,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 from io import BytesIO
@@ -443,6 +444,22 @@ class CaptureTests(unittest.TestCase):
 
 
 class HistoricalSceneTests(unittest.TestCase):
+    def test_ui_scene_explicitly_selects_accounts_config_without_database(self):
+        result = subprocess.run(
+            [sys.executable, "-c", (
+                "import sys; from pathlib import Path; "
+                "from changelog_capture_scenes import _ui; "
+                "_ui(Path(sys.argv[1]), 'login'); "
+                "from django.apps import apps; from django.conf import settings; "
+                "config = apps.get_app_config('accounts'); "
+                "assert config.__class__.__name__ == 'AccountsConfig'; "
+                "assert config.get_model('User')._meta.app_config is config; "
+                "assert settings.DATABASES['default']['ENGINE'] == 'django.db.backends.dummy'"
+            ), str(ROOT)],
+            cwd=ROOT / "scripts", capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_login_scene_uses_the_seasonal_default_without_browser_storage(self):
         document = _render(ROOT, {"kind": "ui", "fixture": "login"})
         root = re.search(r"<html\b[^>]*>", document).group(0)
