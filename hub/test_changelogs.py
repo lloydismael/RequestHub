@@ -537,6 +537,48 @@ class ChangelogTests(TestCase):
         self.client.logout()
         self.assertEqual(self.client.get(urls[0]).status_code, 302)
 
+    def test_recovered_christmas_login_screens_are_visible_with_original_revisions(self):
+        from hub.changelog_sync import sync_release
+        from hub.release_changelog import curated_manifests
+
+        release = next(data for data in curated_manifests() if data["version"] == "v57.6")
+        entry = sync_release(release)
+        self.client.force_login(self.reader)
+
+        response = self.feed()
+
+        self.assertContains(response, 'alt="Before: Seasonal sign-in')
+        self.assertContains(response, 'alt="After: Seasonal sign-in')
+        self.assertContains(response, "a85e442")
+        self.assertContains(response, "cf93e4f")
+        self.assertNotContains(response, "View full report")
+        pair = entry.changes["commits"][0]["comparisons"][0]
+        for field in ("before_image", "after_image"):
+            url = reverse("accounts:media", kwargs={"name": pair[field]})
+            self.assertContains(response, url)
+            image_response = self.client.get(url)
+            self.assertEqual(image_response.status_code, 200)
+            self.assertEqual(image_response["Content-Type"], "image/webp")
+            self.assertIn("no-store", image_response["Cache-Control"])
+
+    def test_notifications_separates_legacy_reports_from_screen_comparisons(self):
+        entry = self.visual_entry(is_published=True)
+        pairs = entry.changes["commits"][0]["comparisons"]
+        pairs.insert(0, {**pairs[0], "title": "Repository change report — Login",
+                         "capture_note": "Packaged automatic report capture, recipe repository-change. Exact Git snapshots."})
+        entry.save()
+        self.client.force_login(self.reader)
+
+        response = self.feed()
+
+        self.assertContains(response, "Technical evidence")
+        html = response.content.decode()
+        visual, technical = html.split('<details class="cl-visual-changes cl-visual-change cl-technical-evidence">', 1)
+        self.assertIn("Request composer", visual)
+        self.assertNotIn("Repository change report", visual)
+        self.assertIn("Repository change report", technical)
+        self.assertContains(response, "View full report")
+
     def test_admin_can_add_required_visual_evidence_and_publish(self):
         from .test_changelog_evidence import visual_commit
 

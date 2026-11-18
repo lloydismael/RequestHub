@@ -697,8 +697,8 @@ class SqrSubmissionForm(forms.ModelForm):
         "Deployment Only",
         "On-Call Services",
         "Deployment and Project Management",
-        # Legacy values kept for existing rows.
         "Training",
+        # Legacy values kept for existing rows.
         "Support",
         "Implementation",
         "Implementation and Project Management",
@@ -720,6 +720,7 @@ class SqrSubmissionForm(forms.ModelForm):
         ("Maintenance", "Maintenance"),
         ("Project Management", "Project Management"),
         ("Deployment and Project Management", "Deployment and Project Management"),
+        ("Training", "Training"),
     )
 
     customer_company = forms.ChoiceField(

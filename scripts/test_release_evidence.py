@@ -68,6 +68,20 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertEqual(result["commits"][0]["comparisons"][0]["before_revision"], self.parent)
         self.assertTrue((self.root / "release-assets" / "automatic" / "test" / "after.png").is_file())
 
+    def test_verified_screen_replaces_generic_packaged_report(self):
+        item = self.data["commits"][0]
+        pair = item["comparisons"][0]
+        pair.update(evidence_kind="ui", title="Login screen")
+        self.manifest.write_text(json.dumps(self.data))
+        self.export()
+        pair.update(evidence_kind="report", title="Repository change report",
+                    capture_note="Packaged report capture, recipe repository-change. Exact Git snapshots.")
+        self.manifest.write_text(json.dumps(self.data))
+
+        self.assertEqual(self.apply(), 1)
+        updated = json.loads(self.manifest.read_text())["commits"][0]["comparisons"][0]
+        self.assertEqual(updated["title"], "Login screen")
+
     def test_other_run_or_attempt_is_rejected_without_changing_release(self):
         self.export()
         original = self.release()

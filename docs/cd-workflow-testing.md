@@ -118,18 +118,18 @@ Each release creates its own entry under **Management → Changelogs**. New gene
 
 ### Recovery of the v57.1–v57.6 backlog
 
-These six releases already had changelog entries, but all eight recorded changes were hidden because capture reported `No capture recipe covers this change.` Their packaged manifests now include exact-parent/exact-change repository reports and descriptive notes for the full change footprint:
+The original backlog used exact first-parent repository reports to recover six releases that had been kept in draft. The versioned manifests now use verified application screenshots wherever the corresponding screen can be recovered. The commit descriptions still record backend, tests, and other nonvisual work.
 
-| Release | Recorded changes |
+| Release | Evidence in Notifications |
 | --- | --- |
-| v57.1 | Responsive login/profile styles, mobile spacing and stylesheet cache versions. |
-| v57.2 | Offline automatic changelog capture, draft recovery/publication, paginated comparison editing, Management query isolation, form-editor and festive-effect refinements, and earlier release evidence. |
-| v57.3 | Avatar/sign-in/request validation hardening and the stored-image buffer regression assertion. |
-| v57.4 | Profile avatar-card layout, Christmas login effects, theme transitions and their regression coverage. |
-| v57.5 | Contributor conduct guidance. |
-| v57.6 | Christmas login lighting refinements and opt-in server telemetry, settings, deployment guidance and tests. |
+| v57.1 | Mobile seasonal sign-in layout. |
+| v57.2 | Changelog comparison-editor pagination and mobile festive sign-in. |
+| v57.3 | Technical reports for validation hardening and the stored-image regression test. |
+| v57.4 | Mobile avatar controls and seasonal sign-in on desktop and mobile. |
+| v57.5 | Technical report for contributor conduct guidance. |
+| v57.6 | Seasonal sign-in lighting on desktop and mobile; the captures do not demonstrate telemetry. |
 
-The approved images are stored alongside each versioned manifest, not in the Git-ignored `hub/changelog_assets/automatic/` capture cache. This ensures ordinary commits and subsequent image builds retain all evidence. Packaged reports remain reusable without installing capture dependencies again.
+Images are stored alongside each versioned manifest, not in the Git-ignored `hub/changelog_assets/automatic/` capture cache. The same packaging also supplies two unreleased SQR shell comparisons for commit `73ab83f5`; those assets do not publish a release on their own.
 
 `sync_release_changelog` enriches matching existing entries from these packaged manifests without relogging commits. System drafts publish when evidence is complete. Legacy/admin-held drafts still require an explicit publication choice; the v57.1 legacy draft was explicitly opted into publication during this authorized recovery. Existing release titles, summaries, dates and previous-version links are preserved.
 
@@ -141,13 +141,15 @@ CI exports only the manifest, referenced images, checksums, and run/revision met
 
 `workflow_run` still waits for the entire CI workflow, including optional capture. This overlaps capture with validation and removes browser setup from the release-image job; it is not a fully asynchronous release and does not guarantee a three-minute end-to-end saving. Compare actual CI-to-production timings after rollout. Capture dependencies, scripts, tests, and vendor caches remain excluded from the runtime image.
 
-Recipes in `hub/changelog_capture_recipes.json` use schema 1, a unique `id`, and either a full `commit` SHA or `paths` patterns covering **all files changed by that commit**. Exact-commit recipes take precedence. Multiple matching recipes are an error, not an arbitrary choice. When no recipe covers the whole change, capture generates a `repository_change` report from the exact parent and change snapshots. Its before/after images list public changed files, presence, byte counts and SHA-256 fingerprint prefixes; private/unsafe paths are excluded and source contents are never rendered. Reports are explicitly labeled as reports, not UI screenshots. An explicitly selected recipe that fails or shows no observable change remains a capture failure; the report fallback does not conceal it. Each scene declares a bounded `title`, `before_text`, `after_text`, and optional `viewport` (`width` 320-1920; `height` 240-1600):
+Recipes in `hub/changelog_capture_recipes.json` use schema 1, a unique `id`, and either a full `commit` SHA or `paths` patterns. Exact-commit recipes take precedence. A UI recipe matches any covered file, even when other files change in the same commit. Multiple UI recipes can contribute distinct scenes within the 20-pair limit. Document and behavior-report recipes still match only when they cover the entire change.
 
-- `kind: "ui"` selects the allowlisted `login` or `changelog` component. Historical Django templates render against synthetic, unsaved fixtures and a dummy database, not the deployed app.
+When an uncovered change touches templates, stylesheets, or browser scripts, it needs an explicit recipe or manual screenshots. Other uncovered changes can use a `repository_change` report from the exact parent and change snapshots. Reports show public paths, presence, byte counts, and fingerprints, but not file contents. Existing packaged reports remain usable as technical evidence when the UI cannot be recovered. The Notifications feed keeps reports and documentation under **Technical evidence** and screenshots under **Visual changes**. Each scene declares a bounded `title`, `before_text`, `after_text`, and optional `viewport` (`width` 320-1920; `height` 240-1600):
+
+- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, changelog display or editor, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app.
 - `kind: "document"` selects a repository-relative text `path` and Markdown `heading`. Code blocks and private configuration/credential paths are rejected.
 - `kind: "report"` selects the allowlisted `changelog_contract` deterministic report. It observes historical release-manifest behavior with synthetic inputs, not live provider calls.
 
-Initial recipes cover login layout, changelog display, the README changelog section and the release-contract module. Other changes need an explicit relevant recipe/fixture or manually supplied evidence. All configured scenes must succeed, and at least one before/after pair must visibly differ; unrelated or unchanged content cannot satisfy automatic capture. Source revisions, recipes, fixture/runner implementation and pinned dependencies determine the automatic-cache fingerprint.
+All configured scenes must render successfully. A UI recipe must produce at least one visually different UI pair; pixel-identical UI pairs are omitted. A changed technical report cannot satisfy that check. Source revisions, recipes, fixture/runner implementation and pinned dependencies determine the automatic-cache fingerprint. Verified screen evidence can replace generic repository reports during CI import and database sync; older reports cannot displace screen evidence or admin uploads.
 
 For local capture/retry (Windows, from the repository root):
 
@@ -159,7 +161,7 @@ For local capture/retry (Windows, from the repository root):
 .\.venv\Scripts\python.exe scripts\capture_release_changelog.py
 ```
 
-Use the actual release version in place of `vNEXT`, a full-history checkout, and the matching source revision. Capture never reads production settings or the application database. Browser scripts, service workers and external traffic are disabled; only snapshot static resources and verified vendor assets are served. Do not invoke the startup sync locally against a shared database for testing. Import a completed manifest only into the intended app database after reviewing its evidence. Publication intent is stored in the existing changelog JSON; this improvement needs no additional schema migration.
+Use the actual release version in place of `vNEXT`, a full-history checkout, and the matching source revision. Capture never reads production settings or the application database. Page scripts, service workers and external traffic are disabled; only snapshot static resources and verified vendor assets are served. The seasonal sign-in fixture explicitly runs only the snapshot's local decoration script for a seeded, reduced-motion frame. Do not invoke the startup sync locally against a shared database for testing. Import a completed manifest only into the intended app database after reviewing its evidence. Publication intent is stored in the existing changelog JSON; this improvement needs no additional schema migration.
 
 Capture the actual previous and updated UI using the same synthetic fixture and viewport. Do not relabel an after-only screenshot as "before", use live personal/request data, or claim that a static screenshot proves provider calls, email delivery or animations. Include meaningful before/after descriptions for non-visual changes as well; do not invent UI screenshots for backend-only fixes.
 
@@ -176,6 +178,7 @@ Each annotated commit retains its `sha`, `type` and `title`, and can add `before
   "after_image": "next/composer-after.webp",
   "before_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "after_revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "evidence_kind": "ui",
   "capture_note": "Historical UI capture with synthetic data; no external messages were sent."
 }
 ```

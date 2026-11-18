@@ -7,7 +7,7 @@ import json
 import re
 import socket
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from html import escape
 from pathlib import Path, PurePosixPath
 from unittest.mock import patch
@@ -126,6 +126,15 @@ def _report(snapshot, scene):
     ) + "</table>"
 
 
+def _seasonal_root(root):
+    match = re.search(r' class="([^"]*)"', root)
+    if not match:
+        return root[:-1] + ' class="login-christmas">'
+    if "login-christmas" not in match[1].split():
+        return root[:match.end(1)] + " login-christmas" + root[match.end(1):]
+    return root
+
+
 def _ui(snapshot, fixture):
     sys.path.insert(0, str(snapshot))
     from django.conf import settings
@@ -153,11 +162,37 @@ def _ui(snapshot, fixture):
     request.user = AnonymousUser()
     request.META["CSRF_COOKIE"] = "0" * 32
     context = {"request": request, "assistant_widget": {"native_enabled": False}}
-    if fixture == "login":
+    if fixture in {"login", "seasonal_login"}:
         from accounts.views import RoleLoginView
-        # Compare the real anonymous view on a fixed day within the 2026 seasonal window.
         with patch("django.utils.timezone.now", return_value=datetime(2026, 12, 31, 4, tzinfo=timezone.utc)):
-            return RoleLoginView.as_view()(request).render().content.decode("utf-8")
+            response = RoleLoginView.as_view()(request)
+            if fixture == "seasonal_login":
+                response.context_data["christmas_login_default"] = True
+            document = response.render().content.decode("utf-8")
+        if fixture == "seasonal_login":
+            # Older templates applied this same preference via localStorage and inline JS.
+            document = re.sub(r"<html\b[^>]*>", lambda match: _seasonal_root(match[0]), document, count=1)
+        return document
+    if fixture == "profile":
+        from accounts.forms import ProfileForm, ThemeForm
+        from accounts.models import User
+
+        user = User(username="demo-viewer", first_name="Demo", last_name="Viewer", role="engineer")
+        request.user = user
+        with patch("hub.form_editor.get_definition", return_value=None):
+            document = render_to_string("accounts/profile_form.html", {
+                **context, "user": user, "form": ProfileForm(instance=user), "theme_form": ThemeForm(instance=user),
+            }, request=request)
+        return document.replace('class="profile-panel" id="profile-panel-avatar"',
+                                'class="profile-panel profile-panel--active" id="profile-panel-avatar"', 1)
+    if fixture == "sqr_tracker":
+        context["capture_component"] = render_to_string("hub/partials/sqr_prototype.html", {"sqr_active_view": "prototype"})
+        template = engines["django"].from_string(
+            "{% extends 'base.html' %}{% load static %}"
+            "{% block extra_head %}<link rel='stylesheet' href='{% static \"css/sqr-tracker-prototype.css\" %}'>{% endblock %}"
+            "{% block content %}{{ capture_component|safe }}{% endblock %}"
+        )
+        return re.sub(r'(<section id="sqr-proto"[^>]*?) hidden(?=\s|>)', r"\1", template.render(context, request=request), count=1)
     if fixture == "sqr_performance":
         # The dashboard is a lazy shell: its filters and headings are server-rendered, while the data
         # tables are filled by JavaScript, which capture disables. Render the real partial and reveal
@@ -179,13 +214,31 @@ def _ui(snapshot, fixture):
         ).replace('id="sqr-pm-content" hidden', 'id="sqr-pm-content"', 1)
     from hub.models import Changelog
     entry = Changelog(
-        title="Synthetic release fixture", previous_version="v0", new_version="v1",
+        pk=1, title="Synthetic release fixture", previous_version="v0", new_version="v1",
+        release_date=date(2026, 11, 6),
         summary="The same unsaved release fixture is rendered at both source revisions.",
         release_sha="1" * 40,
-        changes={"commits": [{"sha": "2" * 40, "type": "improved", "title": "Synthetic comparison",
-                             "before_text": "Previous synthetic state.", "after_text": "Updated synthetic state."}]},
+        changes={"commits": [
+            {"sha": "2" * 40, "type": "improved", "title": "Screen layout", "comparisons": [{
+                "title": "Screen layout", "before_text": "Previous synthetic layout.", "after_text": "Updated synthetic layout.",
+            }]},
+            {"sha": "3" * 40, "type": "maintenance", "title": "Release test coverage", "comparisons": [{
+                "title": "Repository change report", "before_text": "Previous test coverage.", "after_text": "Updated test coverage.",
+                "capture_note": "Automatic report capture, recipe repository-change. Exact Git snapshots.",
+            }]},
+        ]},
     )
-    context["capture_component"] = render_to_string("hub/partials/changelog_entry.html", {"entry": entry})
+    if fixture == "changelog_editor":
+        from hub.changelog_forms import ChangelogForm
+
+        entry.changes["commits"].append({"sha": "4" * 40, "type": "fixed", "title": "Synthetic form update"})
+        for change in entry.changes["commits"]:
+            change["requires_comparison"] = True
+        context["capture_component"] = render_to_string("hub/partials/changelog_management.html", {
+            "changelog_entry": entry, "changelog_form": ChangelogForm(instance=entry),
+        }, request=request)
+    else:
+        context["capture_component"] = render_to_string("hub/partials/changelog_entry.html", {"entry": entry})
     template = engines["django"].from_string(
         "{% extends 'base.html' %}{% load static %}"
         "{% block extra_head %}<link rel='stylesheet' href='{% static \"hub/changelogs.css\" %}'>{% endblock %}"
