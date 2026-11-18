@@ -12,6 +12,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import HttpResponse
 from django.core.management import call_command
+from django.templatetags.static import static
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -3306,10 +3307,9 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertIn('data-current-user-id="' + str(self.pm.pk) + '"', content)
         self.assertIn('data-default-mine="1"', content)
         self.assertIn('id="sqr-pm-filters"', content)
-        self.assertIn('js/sqr-filter-controls.js', content)
+        self.assertIn(static("js/sqr-filter-controls.js"), content)
         self.assertIn('id="sqr-pm-content" hidden', content)
         self.assertIn('id="sqr-pm-empty" class="sqr-pm-empty" hidden', content)
-        from django.templatetags.static import static
         self.assertIn(static("js/sqr-performance.js") + "?v=", content)
         self.assertRegex(content, r'sqr-performance[^" ]*\?v=\d+" defer')
         self.assertNotIn("sqr-perf-grid", content)
@@ -3340,7 +3340,7 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertNotIn('data-sqr-view-button="performance"', eng_content)
         self.assertNotRegex(eng_content, r'<section\b[^>]*data-sqr-view-panel="performance"')
         self.assertNotIn('id="sqr-performance-dashboard"', eng_content)
-        self.assertNotIn('js/sqr-performance.js', eng_content)
+        self.assertNotIn(static("js/sqr-performance.js"), eng_content)
 
     def test_performance_endpoint_preserves_saved_assessments_status_and_progress(self):
         other_pm = User.objects.create_user(
@@ -3530,8 +3530,8 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertIsNotNone(parser.performance_link)
         self.assertEqual(parser.performance_link["href"], reverse("hub:sqr") + "?view=performance")
         self.assertEqual(parser.filters, set())
-        self.assertIn("js/sqr-filter-controls.js", content)
-        self.assertLess(content.index("js/sqr-filter-core.js"), content.index("js/sqr-performance.js"))
+        self.assertLess(content.index(static("js/sqr-filter-core.js")), content.index(static("js/sqr-filter-controls.js")))
+        self.assertLess(content.index(static("js/sqr-filter-controls.js")), content.index(static("js/sqr-performance.js")))
         self.assertIn("Schedule", content)
         self.assertIn("Budget/Effort", content)
         self.assertIn("Quality", content)
@@ -3551,7 +3551,7 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertNotIn('id="sqr-pm-mine" class="form-check-input" checked', content)
         reports = self.client.get(reverse("hub:sqr") + "?tab=reports").content.decode()
         self.assertNotIn('id="sqr-performance-dashboard"', reports)
-        self.assertNotIn('js/sqr-performance.js', reports)
+        self.assertNotIn(static("js/sqr-performance.js"), reports)
 
     def test_performance_export_headers(self):
         self.client.force_login(self.pm)

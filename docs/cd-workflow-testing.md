@@ -22,6 +22,8 @@ The container stays on digest-pinned Python 3.12, matching Django validation and
 
 Dependabot still proposes Python patch/digest updates, but minor/major runtime upgrades require a coordinated dependency, CI, and cleanup review. `python -m unittest discover -s scripts -p test_workflow_steps.py` covers the runtime pin and update policy alongside the existing workflow checks. This fix is included in the generated release changelog; its exact-parent repository-change captures supply before/after evidence for publication in Notifications → Changelogs.
 
+Django validation now tests classic tracker pagination with classic mode enabled, builds the original 43-column SQR import fixture, and resolves performance scripts through Django's static storage. The release changelog records this test maintenance; verify its exact-parent repository-change evidence and Notifications → Changelogs visibility after release.
+
 ## Measuring release latency
 
 Use the offline analyzer and export commands in [the CI testing guide](ci-workflow-testing.md#measuring-latency-and-duplicate-work). Annotate individual release REST objects with `migration_window: "executed"` or `"skipped"` only when the controlled-deployment timing log proves it; otherwise the analyzer reports `unknown`. Never infer skipped migrations merely from a fast release.
