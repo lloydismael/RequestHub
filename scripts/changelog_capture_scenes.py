@@ -143,7 +143,7 @@ def _ui(snapshot, fixture):
         SECRET_KEY="disposable-capture-fixture-not-for-deployment",
         DEBUG=False, ALLOWED_HOSTS=["changelog.capture.invalid"], ROOT_URLCONF="request_hub.urls",
         INSTALLED_APPS=["django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes", "django.contrib.sessions",
-                        "django.contrib.messages", "django.contrib.staticfiles", "accounts", "hub"],
+                        "django.contrib.messages", "django.contrib.staticfiles", "accounts.apps.AccountsConfig", "hub"],
         AUTH_USER_MODEL="accounts.User", DATABASES={"default": {"ENGINE": "django.db.backends.dummy"}},
         TEMPLATES=[{"BACKEND": "django.template.backends.django.DjangoTemplates", "DIRS": [str(snapshot / "templates")],
                     "APP_DIRS": True, "OPTIONS": {"context_processors": []}}],
