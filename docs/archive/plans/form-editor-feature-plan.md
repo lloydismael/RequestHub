@@ -1,5 +1,7 @@
 # Form Editor — Feature and Implementation Plan
 
+> Archived design plan. For the current layout and commands, see the [README](../../../README.md).
+
 Status: Proposed; planning only. No application code or database changes are included.
 
 ## 1. Goal and agreed scope
@@ -14,14 +16,14 @@ Configuration is application-wide by default. Role-specific presentation is supp
 
 | Area | Current implementation | Planning implication |
 |---|---|---|
-| Management | [management template](../templates/hub/management.html) has Users and Accounts tabs; [UserManagementView](../hub/views.py) handles management | Add Form Editor as a third tab. Preserve existing user and account operations. |
-| Admin access | [AdminRequiredMixin](../hub/mixins.py) checks the Admin role | Use the same role requirement for every editor endpoint. Staff/superuser flags alone must not silently grant access. |
-| Request forms | [RequestForm](../hub/forms.py), dashboard creation, request edit/collaborative management | Share configuration across registered surfaces without bypassing actor-specific logic. |
-| Request rendering | [dashboard template](../templates/hub/dashboard.html) contains special priority, deployment-calendar, and date rendering | Replace special-case rendering only after equivalent components and behavior exist. |
-| SQR forms | [SqrSubmissionForm](../hub/forms.py) and SQR tracker/review/stage forms | Register each distinct form/surface, retaining its permissions and validation. |
-| SQR rendering | [SQR template](../templates/hub/sqr.html) includes creation and edit modals with JavaScript dependencies | Preserve field identities, modal behavior, dynamic selections, and script hooks. |
-| Business records | [models](../hub/models.py) include Request/SQR relationships and constraints | Keep typed core model fields authoritative. Store new custom answers separately. |
-| Routing | [hub URLs](../hub/urls.py) | Use dedicated editor routes rather than mixing schema writes into user/account formset handling. |
+| Management | [management template](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/templates/hub/management.html) has Users and Accounts tabs; [UserManagementView](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/hub/views.py) handles management | Add Form Editor as a third tab. Preserve existing user and account operations. |
+| Admin access | [AdminRequiredMixin](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/hub/mixins.py) checks the Admin role | Use the same role requirement for every editor endpoint. Staff/superuser flags alone must not silently grant access. |
+| Request forms | [RequestForm](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/hub/forms.py), dashboard creation, request edit/collaborative management | Share configuration across registered surfaces without bypassing actor-specific logic. |
+| Request rendering | [dashboard template](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/templates/hub/dashboard.html) contains special priority, deployment-calendar, and date rendering | Replace special-case rendering only after equivalent components and behavior exist. |
+| SQR forms | [SqrSubmissionForm](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/hub/forms.py) and SQR tracker/review/stage forms | Register each distinct form/surface, retaining its permissions and validation. |
+| SQR rendering | [SQR template](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/templates/hub/sqr.html) includes creation and edit modals with JavaScript dependencies | Preserve field identities, modal behavior, dynamic selections, and script hooks. |
+| Business records | [models](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/hub/models.py) include Request/SQR relationships and constraints | Keep typed core model fields authoritative. Store new custom answers separately. |
+| Routing | [hub URLs](https://github.com/lloydismael/request-hub/blob/be4dc30b47120abcd7e690d83a9bb238f963c5b9/hub/urls.py) | Use dedicated editor routes rather than mixing schema writes into user/account formset handling. |
 
 Observed rules to preserve include support-priority requirements, deployment dates and derived request dates, engineer eligibility/capacity handling, SQR Request ID and approver requirements, SQR folder-link requirements, scope-dependent SSE man-hours, and uniqueness of linked SQR requests. Exact capabilities must come from server validation and model constraints, not only current visual required markers.
 

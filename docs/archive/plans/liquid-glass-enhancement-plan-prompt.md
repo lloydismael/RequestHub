@@ -1,5 +1,7 @@
 # Plan Prompt — iOS 26 Liquid Glass Enhancement (Landing / Login Page)
 
+> Archived design plan. For the current layout and commands, see the [README](../../../README.md).
+
 > Paste this into your AI coding agent (Copilot / Claude / Cursor). It forces a
 > PLAN first, enforces anti-slop rules, replicates real iOS Liquid Glass motion,
 > and mandates full light/dark support. Fill in the **MY STACK / CONTEXT** block

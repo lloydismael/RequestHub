@@ -1,5 +1,7 @@
 # Smoke Test Results - 2026-10-20
 
+> Historical results, not a current test run. See the [CI testing guide](../../ci-workflow-testing.md) for current checks.
+
 ## Summary
 
 The authenticated profile crash was reproduced and fixed. The final isolated

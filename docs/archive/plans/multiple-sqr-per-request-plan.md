@@ -1,5 +1,7 @@
 # Plan: Multiple SQRs per RQ ID
 
+> Archived design plan. For the current layout and commands, see the [README](../../../README.md).
+
 ## Confirmed requirements
 
 - Engineers create SQRs separately and may reuse the same RQ ID without a fixed limit.

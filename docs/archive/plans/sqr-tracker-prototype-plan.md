@@ -1,5 +1,7 @@
 # SQR Tracker Prototype — Plan
 
+> Archived design plan. For the current layout and commands, see the [README](../../../README.md).
+
 A new view on the SQR page, **SQR Tracker Prototype**, that rebuilds the classic Tracker as a guided workspace instead of a 43-column spreadsheet. The classic Tracker stays untouched and remains the system of record for reference.
 
 ## 1. Why

@@ -335,7 +335,7 @@ request-hub/
 
 +-- accounts/                   # User management app
    +-- models.py               #   User (AbstractUser + roles + profile photo)
-   +-- views.py                #   Login, profile, notifications
+   +-- views.py                #   Login and profile
    +-- backends.py             #   Email-or-username auth backend
    +-- middleware.py           #   Password-change & profile-complete guards
    +-- storage.py              #   DatabaseMediaStorage for profile photos
@@ -363,15 +363,16 @@ request-hub/
 +-- templates/
    +-- base.html               # Shared layout (navbar, dark-mode, notifications)
    +-- landing.html
-   +-- accounts/               # Login, profile, notification templates
-   +-- hub/                    # Dashboard, detail, report, SQR templates
+   +-- accounts/               # Login and profile templates
+   +-- hub/                    # Dashboard, notifications, reports, and SQR templates
 
 +-- static/
-   +-- css/app.css             # All custom styles (glass-card, rpt-*, dbd-*, rmf-*)
+   +-- css/                    # Shared and page-specific styles
    +-- js/
    +-- img/
 
 +-- docs/
+   +-- archive/                # Historical plans and audits
    +-- azure-app-service-deployment.md
 
 +-- Dockerfile
