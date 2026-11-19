@@ -336,6 +336,7 @@ def serialize_record(
     values = _values(submission)
     linked = submission.linked_request
     owns = is_engineer and submission.engineer_id == user.pk
+    can_delete = is_admin and not getattr(submission, "deletion_protected", False)
     record = {
         "pk": submission.pk,
         "ref": submission.reference_code or f"SQR #{submission.pk}",
@@ -387,14 +388,14 @@ def serialize_record(
         "perms": {
             "edit_form": owns,
             "review": can_review,
-            "delete": is_admin,
+            "delete": can_delete,
             "history": is_pm,
         },
         "urls": {
             "inline": reverse("hub:sqr-inline-update", args=[submission.pk]),
             "history": reverse("hub:sqr-history", args=[submission.pk]) if is_pm else "",
             "edit": reverse("hub:sqr-edit", args=[submission.pk]) if owns else "",
-            "delete": reverse("hub:sqr-delete", args=[submission.pk]) if is_admin else "",
+            "delete": reverse("hub:sqr-delete", args=[submission.pk]) if can_delete else "",
         },
         "search": " ".join(filter(None, [
             submission.reference_code, submission.customer_name, submission.project_title,

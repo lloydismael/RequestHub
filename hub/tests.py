@@ -203,6 +203,35 @@ class UserManagementPasswordResetTests(TestCase):
         self.assertNotIn("Reset to Default Password", html)
         self.assertIn("Reset to Temporary Password", html)
 
+    def test_application_admin_cannot_manage_django_superuser(self):
+        actor = User.objects.create_user(username="application-admin", role=User.Roles.ADMIN)
+        self.client.force_login(actor)
+        password_hash = self.admin.password
+        data = {"username": self.admin.username, "role": User.Roles.ADMIN, "first_name": "Updated"}
+        actions = (
+            (reverse("hub:management"), {"user_action": f"reset_password:{self.admin.pk}"}),
+            (reverse("hub:user-edit", args=[self.admin.pk]), data),
+            (reverse("hub:management"), {
+                "form-TOTAL_FORMS": "1", "form-INITIAL_FORMS": "1",
+                "form-0-id": self.admin.pk, **{f"form-0-{key}": value for key, value in data.items()},
+            }),
+        )
+        for url, payload in actions:
+            with self.subTest(payload=payload):
+                self.assertEqual(self.client.post(url, payload).status_code, 403)
+                self.admin.refresh_from_db()
+                self.assertEqual(self.admin.password, password_hash)
+                self.assertEqual(self.admin.first_name, "")
+
+    def test_application_admin_can_reset_an_ordinary_account(self):
+        actor = User.objects.create_user(username="application-admin", role=User.Roles.ADMIN)
+        self.client.force_login(actor)
+        previous_password = self.target.password
+        response = self.client.post(reverse("hub:management"), {"user_action": f"reset_password:{self.target.pk}"})
+        self.assertRedirects(response, reverse("hub:management"), fetch_redirect_response=False)
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.password, previous_password)
+
     def test_password_reset_issues_one_time_password_and_requires_change(self):
         self.client.force_login(self.admin)
         one_time = "TempPasswrdXY2345"
@@ -2248,6 +2277,130 @@ class SqrEngineerLinkedRequestAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(set(response.headers["Allow"].split(", ")), {"GET", "POST", "HEAD", "OPTIONS"})
+
+    def test_historical_sqr_grants_read_access_only(self):
+        self.client.force_login(self.engineer)
+        url = reverse("hub:request-manage-collab", args=[self.linked_request.pk])
+        response = self.client.get(url)
+        self.assertContains(response, self.submission.reference_code)
+        self.assertContains(response, "Read-only request")
+        for form_type in ("details", "status", "status_log", "activity_log"):
+            with self.subTest(form_type=form_type):
+                self.assertEqual(self.client.post(url, {"form_type": form_type}).status_code, 403)
+
+    def test_only_superuser_can_permanently_remove_protected_sqrs(self):
+        admin = User.objects.create_user(username="sqr-app-admin", role=User.Roles.ADMIN)
+        root = User.objects.create_superuser(username="sqr-root", role=User.Roles.ADMIN)
+        url = reverse("hub:sqr-delete", args=[self.submission.pk])
+        for fields in (
+            {"status": SqrSubmission.Status.APPROVED},
+            {"proposal_status": SqrSubmission.ProposalStatus.CLOSED_LOST},
+            {"revenue_status": SqrSubmission.RevenueStatus.BILLED},
+            {"status": SqrSubmission.Status.FOR_REVISION},
+        ):
+            with self.subTest(fields=fields):
+                SqrSubmission.objects.filter(pk=self.submission.pk).update(
+                    status=SqrSubmission.Status.FOR_PROCESSING,
+                    proposal_status=SqrSubmission.ProposalStatus.SUBMITTED_PENDING,
+                    revenue_status=SqrSubmission.RevenueStatus.NOT_YET_BILLED,
+                )
+                SqrSubmission.objects.filter(pk=self.submission.pk).update(**fields)
+                if fields.get("status") == SqrSubmission.Status.FOR_REVISION:
+                    SqrSubmissionHistory.objects.create(
+                        submission=self.submission, actor=self.pm, field="status",
+                        old_values={"status": SqrSubmission.Status.APPROVED}, new_values=fields,
+                    )
+                for actor in (self.engineer, admin):
+                    self.client.force_login(actor)
+                    with patch.object(SqrSubmission, "delete", return_value=(0, {})):
+                        for method in (self.client.get, self.client.post, self.client.delete):
+                            self.assertEqual(method(url).status_code, 403)
+        self.client.force_login(root)
+        self.assertRedirects(self.client.post(url), reverse("hub:sqr"), fetch_redirect_response=False)
+        self.assertFalse(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_application_admin_cannot_replace_a_table_containing_protected_sqrs(self):
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        admin = User.objects.create_user(username="sqr-import-admin", role=User.Roles.ADMIN)
+        self.client.force_login(admin)
+
+        response = self.client.post(reverse("hub:sqr-import"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_django_staff_with_delete_permission_cannot_delete_protected_sqr(self):
+        from django.contrib.auth.models import Permission
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        staff = User.objects.create_user(username="sqr-staff", is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(content_type__app_label="hub", codename="delete_sqrsubmission"))
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:hub_sqrsubmission_delete", args=[self.submission.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_protected_sqr_has_no_delete_action_in_tracker(self):
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        admin = User.objects.create_user(username="sqr-tracker-admin", role=User.Roles.ADMIN)
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("hub:sqr-prototype-data"), {"pk": self.submission.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["record"]["perms"]["delete"])
+
+    def test_owner_can_still_delete_an_unprotected_sqr(self):
+        SqrSubmissionHistory.objects.create(
+            submission=self.submission, actor=self.pm, field="status",
+            old_values={"status": SqrSubmission.Status.FOR_PROCESSING, "reviewed_at": None},
+            new_values={"status": SqrSubmission.Status.ON_HOLD, "validity_due_date": None, "revenue_date": ""},
+        )
+        self.client.force_login(self.engineer)
+        url = reverse("hub:sqr-delete", args=[self.submission.pk])
+        self.assertRedirects(self.client.post(url), reverse("hub:sqr"), fetch_redirect_response=False)
+        self.assertFalse(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_django_staff_cannot_edit_protection_fields_on_approved_sqr(self):
+        from django.contrib.auth.models import Permission
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        staff = User.objects.create_user(username="sqr-edit-staff", is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(content_type__app_label="hub", codename="change_sqrsubmission"))
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:hub_sqrsubmission_change", args=[self.submission.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("status", response.context["adminform"].form.fields)
+        self.assertIn("remarks", response.context["adminform"].form.fields)
+
+    def test_django_staff_cannot_remove_protected_sqr_history(self):
+        from django.contrib.auth.models import Permission
+
+        self.submission.status = SqrSubmission.Status.FOR_REVISION
+        self.submission.save(update_fields=["status"])
+        entry = SqrSubmissionHistory.objects.create(
+            submission=self.submission, actor=self.pm, field="status",
+            old_values={"status": SqrSubmission.Status.APPROVED},
+            new_values={"status": SqrSubmission.Status.FOR_REVISION},
+        )
+        staff = User.objects.create_user(username="sqr-history-staff", is_staff=True)
+        staff.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="hub", codename__in=["view_sqrsubmissionhistory", "delete_sqrsubmissionhistory"],
+        ))
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:hub_sqrsubmissionhistory_delete", args=[entry.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(SqrSubmissionHistory.objects.filter(pk=entry.pk).exists())
 
     def test_engineer_can_save_own_sqr_with_preserved_linked_request(self):
         self.client.force_login(self.engineer)

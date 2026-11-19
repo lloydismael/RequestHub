@@ -745,6 +745,36 @@ class SqrSubmission(models.Model):
         DECLARED = "declared", "Declared"
         NOT_YET = "not_yet", "Not Yet"
 
+    @classmethod
+    def protected_from_deletion(cls):
+        history = SqrSubmissionHistory.objects.filter(submission_id=OuterRef("pk"))
+        historical_protection = Q()
+        for snapshot in ("old_values", "new_values"):
+            historical_protection |= Q(**{
+                f"{snapshot}__status": cls.Status.APPROVED,
+            }) | Q(**{
+                f"{snapshot}__proposal_status__in": (
+                    cls.ProposalStatus.CLOSED_WON, cls.ProposalStatus.CLOSED_LOST, cls.ProposalStatus.CLOSED_CANCELED,
+                ),
+            }) | Q(**{
+                f"{snapshot}__revenue_status": cls.RevenueStatus.BILLED,
+            })
+            for field in ("reviewed_at", "validity_due_date", "revenue_date"):
+                key = f"{snapshot}__{field}"
+                historical_protection |= (
+                    Q(**{f"{key}__isnull": False}) & ~Q(**{key: None}) & ~Q(**{key: ""})
+                )
+        return (
+            Q(status=cls.Status.APPROVED)
+            | Q(reviewed_at__isnull=False)
+            | Q(validity_due_date__isnull=False)
+            | Q(proposal_status__in=(cls.ProposalStatus.CLOSED_WON, cls.ProposalStatus.CLOSED_LOST,
+                                     cls.ProposalStatus.CLOSED_CANCELED))
+            | Q(revenue_status=cls.RevenueStatus.BILLED)
+            | Q(revenue_date__isnull=False)
+            | Q(Exists(history.filter(historical_protection)))
+        )
+
     reference_code = models.CharField(max_length=24, unique=True, editable=False, blank=True, null=True)
     year = models.PositiveIntegerField(editable=False, db_index=True)
     sequence_number = models.PositiveIntegerField(editable=False, db_index=True, blank=True, null=True)

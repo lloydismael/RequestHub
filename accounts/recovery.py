@@ -364,6 +364,20 @@ def _replace(payload):
         raise RecoveryError("Post-restore record verification failed.")
 
 
+def _protected_sqr_records():
+    sqr = apps.get_model("hub.SqrSubmission")
+    protected = sqr.objects.filter(sqr.protected_from_deletion())
+    return dict(protected.values_list("pk", "reference_code"))
+
+
+def _sqr_history_for(submission_ids):
+    history = apps.get_model("hub.SqrSubmissionHistory")
+    rows = json.loads(serializers.serialize(
+        "json", history.objects.filter(submission_id__in=submission_ids).order_by("pk"),
+    ))
+    return {row["pk"]: canonical(row) for row in rows}
+
+
 def _dry_run(payload):
     with transaction.atomic():
         _replace(payload)
@@ -411,7 +425,19 @@ def restore_preview(actor, token):
             if canonical(records_for(MODEL_LABELS)) != canonical(safety_payload["data"]):
                 raise RecoveryError("Hub data changed after the safety snapshot. Validate and retry; no data was restored.")
             report = validate_payload(preview.payload)
+            is_superuser = User.objects.filter(pk=actor.pk, is_superuser=True).exists()
+            if not is_superuser:
+                protected_records = _protected_sqr_records()
+                protected_history = _sqr_history_for(protected_records)
             _replace(preview.payload)
+            if not is_superuser and protected_records:
+                restored_records = _protected_sqr_records()
+                restored_history = _sqr_history_for(protected_records)
+                if not (
+                    protected_records.items() <= restored_records.items()
+                    and protected_history.items() <= restored_history.items()
+                ):
+                    raise RecoveryError("Only Django superusers can restore a backup that removes protected SQRs or their history.")
             with connection.cursor() as cursor:
                 for sql in connection.ops.sequence_reset_sql(no_style(), hub_models()):
                     cursor.execute(sql)

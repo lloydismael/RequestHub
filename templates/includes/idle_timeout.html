@@ -1,0 +1,20 @@
+{% load l10n static %}
+{% if request.user.is_authenticated %}
+<link rel="stylesheet" href="{% static 'css/idle-timeout.css' %}">
+<div class="alo-overlay" id="aloOverlay" role="dialog" aria-modal="true" aria-labelledby="aloTitle"
+     data-enabled="{{ request.user.idle_timeout_enabled|yesno:'true,false' }}"
+     data-user="{{ request.user.pk }}" data-remaining="{{ request.idle_remaining_ms|default_if_none:''|unlocalize }}"
+     data-heartbeat-url="{% url 'accounts:sign-in-heartbeat' %}" data-logout-url="{% url 'logout' %}"
+     data-login-url="{% url 'login' %}" data-csrf-token="{{ csrf_token }}">
+    <div class="alo-card">
+        <i class="bi bi-clock-history alo-icon" aria-hidden="true"></i>
+        <div class="alo-title" id="aloTitle">Are you still there?</div>
+        <div class="alo-sub">You've been inactive for a while.<br>You'll be logged out automatically in:</div>
+        <div class="alo-countdown" id="aloCountdown" aria-live="polite">60</div>
+        <button class="alo-btn" id="aloStayBtn" type="button">
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i> Yes, I'm here
+        </button>
+    </div>
+</div>
+<script src="{% static 'js/idle-timeout.js' %}" defer></script>
+{% endif %}

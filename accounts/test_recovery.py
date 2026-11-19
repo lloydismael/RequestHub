@@ -188,6 +188,27 @@ class RecoveryCenterTests(TransactionTestCase):
         self.assertContains(response, "Test snapshot")
         self.assertContains(response, "Recovery Center")
 
+    def test_project_restore_cannot_drop_protected_sqr_history(self):
+        from accounts import recovery
+        from hub.models import SqrSubmission, SqrSubmissionHistory
+
+        sqr = SqrSubmission.objects.create(
+            engineer=self.user, pm_esg_reviewer=self.user, customer_name="Retained Customer",
+            project_title="Retained SQR", status=SqrSubmission.Status.FOR_REVISION,
+        )
+        _, payload = self.create_backup()
+        preview, _ = recovery.create_preview(self.user, payload)
+        entry = SqrSubmissionHistory.objects.create(
+            submission=sqr, actor=self.user, field="status",
+            old_values={"status": SqrSubmission.Status.APPROVED},
+            new_values={"status": SqrSubmission.Status.FOR_REVISION},
+        )
+
+        with self.assertRaisesRegex(recovery.RecoveryError, "Only Django superusers"):
+            recovery.restore_preview(self.user, preview.token)
+
+        self.assertTrue(SqrSubmissionHistory.objects.filter(pk=entry.pk, submission=sqr).exists())
+
     def test_validation_is_non_destructive(self):
         account = Account.objects.create(name="Original customer")
         _, payload = self.create_backup()

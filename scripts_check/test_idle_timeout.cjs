@@ -4,17 +4,17 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-function idlePage(enabled = true) {
-    const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'base.html'), 'utf8');
-    const script = [...template.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script(?:\s[^>]*)?>/gi)]
-        .map(match => match[1]).find(source => source.includes('var IDLE_MS'));
+function idlePage(enabled = true, checkResponse = {status: 401}) {
+    const script = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'idle-timeout.js'), 'utf8');
     let now = 0;
     let nextId = 0;
-    let submissions = 0;
     const timers = new Map();
     const events = {};
     const storageEvents = {};
     const writes = [];
+    const heartbeats = [];
+    const navigations = [];
+    let checkCount = 0;
     function element() {
         const classes = new Set();
         return {
@@ -27,22 +27,40 @@ function idlePage(enabled = true) {
             addEventListener: () => {},
         };
     }
-    const elements = Object.fromEntries(['aloOverlay', 'aloCountdown', 'aloStayBtn', 'alo-logout-form']
+    const elements = Object.fromEntries(['aloOverlay', 'aloCountdown', 'aloStayBtn']
         .map(id => [id, element()]));
-    elements['alo-logout-form'].submit = () => { submissions++; };
+    elements.aloOverlay.dataset = {
+        enabled: String(enabled), user: '42', remaining: '', csrfToken: 'fixture-token',
+        heartbeatUrl: '/accounts/sign-in-heartbeat/', logoutUrl: '/accounts/logout/', loginUrl: '/',
+    };
     const schedule = (callback, delay, repeat = false) => {
         const id = ++nextId;
         timers.set(id, {callback, at: now + delay, repeat: repeat ? delay : 0});
         return id;
     };
-    vm.runInNewContext(script
-        .replace("{{ request.user.idle_timeout_enabled|yesno:'true,false' }}", String(enabled))
-        .replace('{{ request.user.pk }}', '42'), {
+    vm.runInNewContext(script, {
         document: {
             getElementById: id => elements[id],
             addEventListener: (name, callback) => { events[name] = callback; },
         },
-        window: {addEventListener: (name, callback) => { storageEvents[name] = callback; }},
+        window: {
+            addEventListener: (name, callback) => { storageEvents[name] = callback; },
+            location: {assign: url => navigations.push(url)},
+        },
+        Date: {now: () => now},
+        fetch: async (url, options) => {
+            if (url.includes('sign-in-heartbeat')) {
+                heartbeats.push(options.headers);
+                return {status: 204, headers: {get: () => null}};
+            }
+            assert.equal(url, '/accounts/logout/');
+            assert.equal(options.body, 'reason=idle');
+            assert.equal(options.headers['X-Request-Hub-Activity'], undefined);
+            const index = checkCount++;
+            const {status, remaining} = Array.isArray(checkResponse)
+                ? checkResponse[Math.min(index, checkResponse.length - 1)] : checkResponse;
+            return {status, headers: {get: () => remaining ?? null}};
+        },
         localStorage: {setItem: (key, value) => writes.push({key, value})},
         console,
         setTimeout: (callback, delay) => schedule(callback, delay),
@@ -52,8 +70,8 @@ function idlePage(enabled = true) {
         requestAnimationFrame: callback => schedule(callback, 0),
     });
     return {
-        elements, events, storageEvents, writes,
-        submissions: () => submissions,
+        elements, events, storageEvents, writes, heartbeats, navigations,
+        checks: () => checkCount,
         advance(ms) {
             const end = now + ms;
             while (true) {
@@ -71,14 +89,16 @@ function idlePage(enabled = true) {
     };
 }
 
-test('enabled timeout warns at five minutes and logs out after the one-minute warning', () => {
+test('enabled timeout warns at five minutes and logs out after the server confirms expiry', async () => {
     const app = idlePage();
     app.advance(299999);
     assert.equal(app.elements.aloOverlay.classList.contains('is-open'), false);
     app.advance(1);
     assert.equal(app.elements.aloOverlay.classList.contains('is-open'), true);
     app.advance(60000);
-    assert.equal(app.submissions(), 1);
+    assert.equal(app.checks(), 1);
+    await Promise.resolve();
+    assert.deepEqual(app.navigations, ['/']);
 });
 
 test('saving disabled preference cancels a running warning and logout', () => {
@@ -86,44 +106,70 @@ test('saving disabled preference cancels a running warning and logout', () => {
     app.advance(300000);
     app.events['requesthub:idle-timeout-changed']({detail: {enabled: false}});
     app.advance(600000);
-    assert.equal(app.submissions(), 0);
+    assert.equal(app.checks(), 0);
     assert.equal(app.elements.aloOverlay.classList.contains('is-open'), false);
     assert.deepEqual(app.writes, [{key: 'reqHubIdleTimeout:42', value: 'false'}]);
 });
 
-test('another tab disabling timeout cancels even an already queued warning callback', () => {
+test('another tab disabling timeout cancels a pending warning', () => {
     const app = idlePage();
-    app.events.mousemove();
+    app.events.mousemove({isTrusted: true});
     app.storageEvents.storage({key: 'reqHubIdleTimeout:42', newValue: 'false'});
     app.advance(600000);
-    assert.equal(app.submissions(), 0);
+    assert.equal(app.checks(), 0);
     assert.equal(app.elements.aloOverlay.classList.contains('is-open'), false);
 });
 
 test('a tab loaded with timeout disabled starts timing when another tab enables it', () => {
     const app = idlePage(false);
     app.advance(600000);
-    assert.equal(app.submissions(), 0);
+    assert.equal(app.checks(), 0);
     app.storageEvents.storage({key: 'reqHubIdleTimeout:42', newValue: 'true'});
     app.advance(360000);
-    assert.equal(app.submissions(), 1);
+    assert.equal(app.checks(), 1);
 });
 
 test('other accounts storage events do not change the timeout', () => {
     const app = idlePage();
     app.storageEvents.storage({key: 'reqHubIdleTimeout:99', newValue: 'false'});
     app.advance(360000);
-    assert.equal(app.submissions(), 1);
+    assert.equal(app.checks(), 1);
 });
 
-test('discrete activity resets the five-minute idle period', () => {
-    const app = idlePage();
-    app.advance(299999);
-    app.events.click();
-    app.advance(299999);
+test('a stale deadline checks without navigating and uses the backend deadline', async () => {
+    const app = idlePage(true, [{status: 204, remaining: '300000'}, {status: 401}]);
+    app.advance(360000);
+    await Promise.resolve();
+    assert.equal(app.checks(), 1);
+    assert.deepEqual(app.navigations, []);
+    assert.equal(app.elements.aloOverlay.classList.contains('is-open'), false);
+    app.advance(239999);
     assert.equal(app.elements.aloOverlay.classList.contains('is-open'), false);
     app.advance(1);
     assert.equal(app.elements.aloOverlay.classList.contains('is-open'), true);
+    app.advance(60000);
+    await Promise.resolve();
+    assert.equal(app.navigations.length, 1);
+});
+
+test('a server-side opt-out clears a stale warning without leaving the page', async () => {
+    const app = idlePage(true, {status: 204});
+    app.advance(360000);
+    await Promise.resolve();
+    app.advance(360000);
+    assert.equal(app.checks(), 1);
+    assert.deepEqual(app.navigations, []);
+    assert.equal(app.elements.aloOverlay.classList.contains('is-open'), false);
+});
+
+test('only deliberate activity and warning confirmation request an idle renewal', () => {
+    const app = idlePage();
+    assert.equal(app.heartbeats[0]?.['X-Request-Hub-Activity'], undefined);
+    app.advance(300000);
+    app.events.mousemove({isTrusted: true});
+    assert.equal(app.heartbeats.length, 1);
+    app.events.keydown({key: 'Escape', isTrusted: true});
+    assert.equal(app.heartbeats[1]?.['X-Request-Hub-Activity'], 'interactive');
 });
 
 for (const succeeds of [true, false]) {

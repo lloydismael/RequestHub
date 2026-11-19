@@ -119,6 +119,9 @@
                 </div>
             </div>
 
+            {% if request_read_only %}
+                <p class="alert alert-info mx-3 mt-3">Read-only request: only current assignees can make updates.</p>
+            {% endif %}
             <form method="post" novalidate class="rmf-form">
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="details">
@@ -294,9 +297,11 @@
                 </div>{# /rmf-fields-wrap #}
 
                 <div class="rmf-form-actions mt-3">
-                    <button class="btn btn-primary rmf-btn-save" type="submit">
-                        <i class="bi bi-floppy-fill me-1"></i>Save changes
-                    </button>
+                    {% if not request_read_only %}
+                        <button class="btn btn-primary rmf-btn-save" type="submit">
+                            <i class="bi bi-floppy-fill me-1"></i>Save changes
+                        </button>
+                    {% endif %}
                     <a class="btn btn-outline-secondary" href="{{ back_url }}">
                         <i class="bi bi-arrow-left me-1"></i>Back
                     </a>
@@ -375,7 +380,7 @@
                                     <span class="rmf-timeline__time">{{ log.created_at|timezone:"Asia/Manila"|date:"M d, Y · h:i A" }}</span>
                                 </div>
                                 <div class="rmf-timeline__message">{{ log.message }}</div>
-                                {% if log.author.id == request.user.id %}
+                                {% if not request_read_only and log.author.id == request.user.id %}
                                     <a href="{% url 'hub:status-log-edit' log.pk %}" class="rmf-timeline__edit">
                                         <i class="bi bi-pencil me-1"></i>Edit
                                     </a>
@@ -387,10 +392,11 @@
             {% else %}
                 <div class="rmf-empty-log">
                     <i class="bi bi-chat-left-dots rmf-empty-log__icon"></i>
-                    <p>No updates yet. Be the first to post one.</p>
+                    <p>No updates yet.{% if not request_read_only %} Be the first to post one.{% endif %}</p>
                 </div>
             {% endif %}
 
+            {% if not request_read_only %}
             <form method="post" class="rmf-log-form" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="form_type" value="status_log">
@@ -404,6 +410,7 @@
                     </button>
                 </div>
             </form>
+            {% endif %}
         </div>
 
         <div class="rmf-card mt-4">
@@ -438,12 +445,14 @@
                     </div>
                 </div>
 
+                {% if not request_read_only %}
                 {% if request.user.role == 'engineer' or request.user.role == 'admin' %}
                 <div class="d-flex justify-content-end mb-3">
                     <a href="{% url 'hub:activity-logs' %}?request={{ object.pk }}" class="btn btn-primary btn-sm request-activity-empty-state__action">
                         <i class="bi bi-plus-circle me-1"></i>Add Activity Logs
                     </a>
                 </div>
+                {% endif %}
                 {% endif %}
 
                 {% if related_activity_logs %}
@@ -462,7 +471,7 @@
                             <tbody>
                                 {% for activity_log in related_activity_logs %}
                                     <tr
-                                        {% if request.user.is_engineer_access_role and activity_log.engineer_id == request.user.id %}
+                                        {% if not request_read_only and request.user.is_engineer_access_role and activity_log.engineer_id == request.user.id %}
                                             class="request-activity-row request-activity-row--clickable"
                                             data-href="{% url 'hub:request-manage-collab' object.pk %}?edit_activity={{ activity_log.pk }}"
                                             role="link"

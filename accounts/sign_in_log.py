@@ -16,13 +16,13 @@ from django.db.models import Q
 from django.dispatch import receiver
 from django.utils import timezone
 
+from accounts.idle_timeout import start_idle_timeout
 from accounts.models import SignInLog, User
 
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL_SECONDS = 60
 ACTIVE_WINDOW = timedelta(minutes=10)
-IDLE_LOGOUT_REASON = "idle"
 INVALID_CREDENTIALS_REASON = "Invalid username or password"
 
 STATUS_ACTIVE = "active"
@@ -247,11 +247,16 @@ def _never_block_auth(handler):
 
 
 @receiver(user_logged_in)
-@_never_block_auth
 def record_sign_in(sender, request, user, **kwargs):
     session_key = _session_key(request)
     if not session_key:
         return
+    start_idle_timeout(session_key, user)
+    _record_sign_in(request, user, session_key)
+
+
+@_never_block_auth
+def _record_sign_in(request, user, session_key):
     now = timezone.now()
     SignInLog.objects.create(
         user=user,
@@ -284,7 +289,7 @@ def record_sign_out(sender, request, user=None, **kwargs):
     if not session_key:
         return
     now = timezone.now()
-    is_idle = request.POST.get("reason") == IDLE_LOGOUT_REASON
+    is_idle = getattr(request, "idle_timeout_expired", False)
     SignInLog.objects.filter(
         session_key=session_key,
         outcome=SignInLog.Outcome.SIGNED_IN,

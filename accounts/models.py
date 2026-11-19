@@ -76,6 +76,13 @@ class LoginThrottleBucket(models.Model):
     failed_tokens = models.JSONField(default=list)
 
 
+class SessionIdleDeadline(models.Model):
+    session = models.OneToOneField(
+        "sessions.Session", on_delete=models.DB_CASCADE, primary_key=True, related_name="idle_timeout",
+    )
+    deadline = models.DateTimeField()
+
+
 class SignInLog(models.Model):
     """One row per sign-in session or failed sign-in attempt."""
 

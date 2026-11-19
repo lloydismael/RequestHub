@@ -13,9 +13,10 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import RedirectView, UpdateView
 
+from accounts.idle_timeout import ACTIVITY_HEADER, IDLE_LOGOUT_REASON, check_idle_timeout, idle_expired_response
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
-from accounts.sign_in_log import IDLE_LOGOUT_REASON, touch_sign_in_session
+from accounts.sign_in_log import touch_sign_in_session
 from .recovery_views import recovery_context
 
 from .forms import (
@@ -93,6 +94,8 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
                 "pref_compact_tables", "pref_large_text",
                 "pref_reduce_effects", "pref_reduce_motion",
             ])
+            if check_idle_timeout(request, renew=True) == 0:
+                return idle_expired_response(request)
             if request.headers.get("Accept") == "application/json":
                 return JsonResponse({
                     "message": "Settings saved.",
@@ -138,13 +141,10 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
 
 class RoleLogoutView(LogoutView):
     def post(self, request, *args, **kwargs):
-        # Older tabs can still submit timers created before the preference changed.
-        if (
-            request.POST.get("reason") == IDLE_LOGOUT_REASON
-            and request.user.is_authenticated
-            and not request.user.idle_timeout_enabled
-        ):
-            return redirect("accounts:update")
+        if request.POST.get("reason") == IDLE_LOGOUT_REASON:
+            if not request.user.is_authenticated or check_idle_timeout(request) == 0:
+                return idle_expired_response(request)
+            return HttpResponse(status=204)
         return super().post(request, *args, **kwargs)
 
 
@@ -183,7 +183,14 @@ class RoleLoginView(LoginView):
 class SignInHeartbeatView(LoginRequiredMixin, View):
     http_method_names = ["post"]
 
+    def handle_no_permission(self):
+        if "application/json" in self.request.headers.get("Accept", ""):
+            return idle_expired_response(self.request)
+        return super().handle_no_permission()
+
     def post(self, request, *args, **kwargs):
+        if request.headers.get(ACTIVITY_HEADER) == "interactive" and check_idle_timeout(request, renew=True) == 0:
+            return idle_expired_response(request)
         touch_sign_in_session(request.session.session_key)
         return HttpResponse(status=204)
 
