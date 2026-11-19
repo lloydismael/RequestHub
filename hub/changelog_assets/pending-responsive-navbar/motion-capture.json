@@ -1,0 +1,64 @@
+{
+  "status": "unreleased",
+  "base_revision": "c369afa4363922e96169d85982f21cd208421fba",
+  "after_revision": null,
+  "capture_note": "Both phases were captured from the working tree, before and after the follow-up, using identical synthetic PPT/Notifications fixtures and offline pinned browser assets. Bind or recapture against exact revisions before production release.",
+  "comparisons": {
+    "seasonal-tablet-ppt": {
+      "title": "Expanded Christmas navbar on PPT",
+      "viewport": [
+        1037,
+        460
+      ],
+      "before_text": "The pill shape cuts into the edges of the expanded menu, and PPT can be activated again.",
+      "after_text": "Rounded panel corners frame the links and lights; PPT is marked as the current page without a reload action.",
+      "before": {
+        "file": "seasonal-tablet-ppt-before.png",
+        "sha256": "2031592c1a2df82c13ee2338f4c5d578737e20dd325f3b465d8a448ef4f981fb"
+      },
+      "after": {
+        "file": "seasonal-tablet-ppt-after.png",
+        "sha256": "cf54466a2525c29e50238688eb0ecbbe4dc61b7dc040c02dcdf1b8dda7cce3f1"
+      }
+    },
+    "landscape-closing": {
+      "title": "Closing the compact menu in landscape",
+      "viewport": [
+        640,
+        280
+      ],
+      "before_text": "The compact menu disappears immediately when closing.",
+      "after_text": "The compact menu visibly contracts and fades before it closes, even in a short viewport.",
+      "before": {
+        "file": "landscape-closing-before.png",
+        "sha256": "e8f3f41d6e2d45c5b2e0bf9c29bf9b3c77591031e25e43915ca2193338b75828"
+      },
+      "after": {
+        "file": "landscape-closing-after.png",
+        "sha256": "b5bb2c2a2089493f1e5fdbbc88487f031a2102fdf2deed7cc0fa28c8624412a7"
+      }
+    }
+  },
+  "before_source_sha256": {
+    "templates/base.html": "8417b0cbe32bce10cfb92bf8cde3d848001ba252be6d99babeaf4e952f44e021",
+    "templates/includes/primary_nav_item.html": null,
+    "templates/hub/sqr.html": "63ac1c71f02af47657c9e3d327fc6f9ba0c89e3f76e89451ed961707956435d5",
+    "static/css/app.css": "ade863a3f1e62f4d837fc2106e52d938530bfd016de9f2034c0dee01e8c51924",
+    "static/css/liquid-glass-dashboard.css": "909b94fb54173f96a3f142e443cf2c78e38e9a9c79b70683abbc5f231d5632a0",
+    "static/css/account-themes.css": "4ccdcf8675004accbfdd445f27fe13ff3c0735e6ea71f44da6004b3d7f7b05a0",
+    "static/css/christmas-theme.css": "a8fd7d01d117c7af405500e0e9e3a04cc9b8959535500ec0c67e670c47430864",
+    "static/css/christmas-lights.css": "64dde68b39320c7f8142fb853818d267f29ea6e475e637b3766a2f1d6cf7bb85",
+    "static/js/christmas-lights.js": "3e509707dd417ae4f218be01bb1ef719fbe2b54785955763df3e9443310503e6"
+  },
+  "after_source_sha256": {
+    "templates/base.html": "c3b554feaa8374b9da918fbd6a0f2ed42e15da8464b0d07ff2f2654a29c91ba9",
+    "templates/includes/primary_nav_item.html": "795e4888400eb8b31d125fb851e335212aa570c9610deb29c2cf08d6b0514889",
+    "templates/hub/sqr.html": "3852b622f45eb112a7092e709faf9a6c1263f62bdba62d26748108e0b6d059d1",
+    "static/css/app.css": "ade863a3f1e62f4d837fc2106e52d938530bfd016de9f2034c0dee01e8c51924",
+    "static/css/liquid-glass-dashboard.css": "1291f6962c708bb2fe266720c7219caef43f0c386c6f2fdfa29bd96b6d6d4f84",
+    "static/css/account-themes.css": "4ccdcf8675004accbfdd445f27fe13ff3c0735e6ea71f44da6004b3d7f7b05a0",
+    "static/css/christmas-theme.css": "32da2e8485402a8e8cac25d2d62721df40af0a15276f39790d375b942b5592be",
+    "static/css/christmas-lights.css": "64dde68b39320c7f8142fb853818d267f29ea6e475e637b3766a2f1d6cf7bb85",
+    "static/js/christmas-lights.js": "287c8237ccd4c80b3fb453f7fce29dd04a5e101f4d28abf4a38cc8a7a0576d2e"
+  }
+}

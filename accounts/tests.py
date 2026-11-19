@@ -509,7 +509,7 @@ class ProfileSmokeTests(TestCase):
         self.assertContains(page, static('css/christmas-lights.css'))
         self.assertContains(page, static('js/christmas-lights.js'))
         self.assertContains(page, 'data-seasonal-lights-theme="christmas"')
-        self.assertContains(page, 'shadow-sm seasonal-lights')
+        self.assertRegex(page.content.decode(), r'<nav\b[^>]*class="(?:[^"]*\s)?seasonal-lights(?=[\s"])')
         response = self.client.post(reverse("accounts:update"), {
             "save_theme": "1", "banner_gradient": "christmas",
         })

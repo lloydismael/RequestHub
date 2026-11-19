@@ -366,7 +366,8 @@ class SignInRecordingTests(TestCase):
     def test_idle_timeout_logout_is_labelled_separately(self):
         self._login()
 
-        self.client.post(reverse("logout"), {"reason": "idle"})
+        with patch.object(timezone, "now", return_value=timezone.now() + timedelta(minutes=6)):
+            self.client.post(reverse("logout"), {"reason": "idle"})
 
         log = SignInLog.objects.get()
         self.assertEqual(log.end_reason, SignInLog.EndReason.IDLE_TIMEOUT)

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from django.urls import reverse
@@ -314,6 +316,46 @@ class RequestLifecycleManagePageTests(TestCase):
             "description": "Updated request details",
             **overrides,
         }
+
+    def test_requestor_reassignment_records_lifecycle_change(self):
+        backup = User.objects.create_user(username="tracker-backup", role=User.Roles.ENGINEER)
+        Request.objects.filter(pk=self.request.pk).update(backup_engineer=backup)
+        self.client.force_login(self.requestor)
+        url = reverse("hub:request-edit", args=[self.request.pk])
+        response = self.client.post(url, self._details_data(
+            account_name=self.account.name, engineer=self.secondary.pk,
+        ))
+
+        self.assertRedirects(response, reverse("hub:dashboard"), fetch_redirect_response=False)
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.engineer_id, self.secondary.pk)
+        self.assertEqual(self.request.backup_engineer_id, backup.pk)
+        self.assertEqual(self.request.assignment_revision, 2)
+        event = self.request.lifecycle_events.get(event_type=RequestLifecycleEvent.EventType.ASSIGNED, assignment_revision=2)
+        self.assertEqual(event.metadata["previous_engineer_id"], self.primary.pk)
+
+    def test_requestor_edit_rolls_back_if_lifecycle_recording_fails(self):
+        self.client.force_login(self.requestor)
+        url = reverse("hub:request-edit", args=[self.request.pk])
+        previous_description = self.request.description
+        with patch.object(request_lifecycle, "record_assignment_change", side_effect=RuntimeError("recording failed")):
+            with self.assertRaisesRegex(RuntimeError, "recording failed"):
+                self.client.post(url, self._details_data(account_name=self.account.name))
+
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.description, previous_description)
+
+    def test_collaborative_assignment_email_waits_for_the_update_to_commit(self):
+        from hub.views import AssignmentEmailResult
+
+        self.client.force_login(self.primary)
+        url = reverse("hub:request-manage-collab", args=[self.request.pk])
+        with patch("hub.views.notify_engineer_assignment_email", return_value=AssignmentEmailResult("sent")) as send:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(url, self._details_data(backup_engineer=self.secondary.pk))
+                self.assertRedirects(response, url, fetch_redirect_response=False)
+                send.assert_not_called()
+            send.assert_called_once()
 
     def test_engineer_can_save_details_without_resubmitting_read_only_fields(self):
         self.client.force_login(self.primary)

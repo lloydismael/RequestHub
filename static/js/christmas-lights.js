@@ -112,13 +112,16 @@
         return path + 'Z';
     }
 
-    function bulbElement([part, u, relative, color], edge, offsetAt, scale) {
+    function bulbTransform([part, u, relative], edge, offsetAt, scale) {
         const base = edge.point(part, u);
         const offset = offsetAt(edge.starts[part] + u * edge.lengths[part]);
         const angle = Math.atan2(base.ny, base.nx) * 180 / Math.PI + 90 + relative;
+        return `translate(${round(base.x + base.nx * offset)} ${round(base.y + base.ny * offset)}) rotate(${round(angle)}) scale(${round(scale)})`;
+    }
+
+    function bulbElement([, , relative, color]) {
         const bulb = svgElement('g', {
             class: Math.abs(relative) > 100 ? 'seasonal-light-bulb seasonal-light-bulb--inward' : 'seasonal-light-bulb',
-            transform: `translate(${round(base.x + base.nx * offset)} ${round(base.y + base.ny * offset)}) rotate(${round(angle)}) scale(${round(scale)})`,
         });
         bulb.style.setProperty('--bulb-color', colors[color]);
         bulb.style.setProperty('--twinkle-duration', `${round(random(2, 4))}s`);
@@ -137,19 +140,41 @@
 
     document.querySelectorAll('.navbar[data-nav-surface]').forEach(nav => {
         let overlay = null;
+        let wires = [];
+        let bulbs = [];
+        let tabletLayout;
         let dimensions = '';
         let frame = null;
         function remove() {
             if (overlay) overlay.remove();
             overlay = null;
+            wires = [];
+            bulbs = [];
             dimensions = '';
             if (nav.classList.contains('seasonal-lights--active')) nav.classList.remove('seasonal-lights--active');
         }
-        function build(width, height, radius, tablet) {
-            overlay = svgElement('svg', {
-                class: 'seasonal-lights-overlay', viewBox: `0 0 ${width} ${height}`,
-                'aria-hidden': 'true', focusable: 'false', preserveAspectRatio: 'none',
-            });
+        function draw(width, height, radius, tablet) {
+            // Keep the existing emitters connected while the drawer changes height.
+            if (!overlay || tablet !== tabletLayout) {
+                if (overlay) overlay.remove();
+                overlay = svgElement('svg', {
+                    class: 'seasonal-lights-overlay',
+                    'aria-hidden': 'true', focusable: 'false', preserveAspectRatio: 'none',
+                });
+                wires = ['seasonal-light-wire', 'seasonal-light-wire seasonal-light-wire--twist'].map(className => {
+                    const wire = svgElement('path', { class: className, 'vector-effect': 'non-scaling-stroke' });
+                    overlay.appendChild(wire);
+                    return wire;
+                });
+                bulbs = BULBS.filter((_, index) => !tablet || index % 3 !== 2).map(spec => {
+                    const bulb = bulbElement(spec);
+                    overlay.appendChild(bulb);
+                    return { spec, bulb };
+                });
+                tabletLayout = tablet;
+                nav.appendChild(overlay);
+            }
+            overlay.setAttribute('viewBox', `0 0 ${width} ${height}`);
             const edge = perimeter(width, height, radius);
             const scale = Math.min(1.3, Math.max(0.8, height / REFERENCE_HEIGHT));
             const offsetAt = wireOffsets(edge, scale);
@@ -161,19 +186,15 @@
                     samples.push({ ...edge.point(part, u), s: edge.starts[part] + u * edge.lengths[part] });
                 }
             }
-            for (const twist of [-1.1, 1.1]) {
+            wires.forEach((wire, index) => {
+                const twist = index === 0 ? -1.1 : 1.1;
                 const points = samples.map(point => {
                     const offset = offsetAt(point.s) + twist * Math.sin(point.s / 9 * Math.PI * 2);
                     return { x: point.x + point.nx * offset, y: point.y + point.ny * offset };
                 });
-                overlay.appendChild(svgElement('path', {
-                    class: twist < 0 ? 'seasonal-light-wire' : 'seasonal-light-wire seasonal-light-wire--twist',
-                    d: closedSpline(points), 'vector-effect': 'non-scaling-stroke',
-                }));
-            }
-            BULBS.filter((_, index) => !tablet || index % 3 !== 2)
-                .forEach(bulb => overlay.appendChild(bulbElement(bulb, edge, offsetAt, scale)));
-            nav.appendChild(overlay);
+                wire.setAttribute('d', closedSpline(points));
+            });
+            bulbs.forEach(({ spec, bulb }) => bulb.setAttribute('transform', bulbTransform(spec, edge, offsetAt, scale)));
         }
         // The decoration class changes the navbar's sticky offset and margin, so its
         // border box (getBoundingClientRect) is not a stable cache key: every class
@@ -197,9 +218,8 @@
             const tablet = window.innerWidth < 1024;
             const nextDimensions = `${round(width)},${round(height)},${round(radius)},${tablet}`;
             if (dimensions !== nextDimensions) {
-                remove();
                 dimensions = nextDimensions;
-                build(width, height, radius, tablet);
+                draw(width, height, radius, tablet);
             }
             if (!nav.classList.contains('seasonal-lights--active')) nav.classList.add('seasonal-lights--active');
             const body = document.body;

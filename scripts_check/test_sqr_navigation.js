@@ -27,7 +27,14 @@ function load({query = '', saved = 'tracker', performance = true, classic = true
     const buttons = (classic ? ['tracker', 'prototype'] : ['prototype']).map(name => element({sqrViewButton: name}));
     const names = [...(classic ? ['tracker'] : []), ...(performance ? ['performance'] : []), 'prototype'];
     const panels = names.map(name => element({sqrViewPanel: name}));
-    const nav = ['performance', 'prototype'].map(name => element({sqrNavView: name}));
+    const nav = ['performance', 'prototype'].map(name => {
+        const url = '/sqr/?view=' + name;
+        const link = element({sqrNavView: name, sqrNavUrl: url});
+        if (name !== (query.includes('view=performance') && performance ? 'performance' : 'prototype')) {
+            link.setAttribute('href', url);
+        }
+        return link;
+    });
     const header = element(initialView ? {sqrInitialView: initialView} : {});
     const trackerLink = element();
     const trackerControls = [element(), element({}, true)];
@@ -71,8 +78,10 @@ function load({query = '', saved = 'tracker', performance = true, classic = true
 function assertCurrent(app, name) {
     name = name === 'tracker' ? 'prototype' : name;
     assert.equal(app.navItem(name).attributes['aria-current'], 'page');
+    assert.equal(app.navItem(name).attributes.href, undefined);
     const other = name === 'performance' ? 'prototype' : 'performance';
     assert.equal(app.navItem(other).attributes['aria-current'], undefined);
+    assert.equal(app.navItem(other).attributes.href, '/sqr/?view=' + other);
 }
 
 test('PPT link opens the performance panel even when tracker was saved', () => {
@@ -116,6 +125,7 @@ test('switching to the prototype updates navigation and keeps URL filters', () =
 test('switching from PPT to the tracker restores the SQR header', () => {
     const app = load({query: '?view=performance'});
     assert.equal(app.header.hidden, true);
+    assertCurrent(app, 'performance');
     app.window.setSqrView('tracker');
     assert.equal(app.header.hidden, false);
     assert.equal(app.panel('tracker').hidden, false);

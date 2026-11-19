@@ -93,11 +93,12 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "hub.middleware.PagePerformanceMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    "accounts.middleware.IdleAwareSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "accounts.middleware.IdleTimeoutMiddleware",
     "accounts.middleware.PasswordChangeRequiredMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -221,6 +222,7 @@ TRUSTED_PROXY_CIDRS = [
 # capped at 8 hours (28 800 s) as a fallback for browsers that restore tabs.
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_AGE = 28800  # 8 hours in seconds
+IDLE_TIMEOUT_SECONDS = 6 * 60
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SAMESITE = "Lax"

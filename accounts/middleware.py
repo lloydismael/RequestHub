@@ -2,9 +2,14 @@ from uuid import uuid4
 
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import Resolver404, resolve, reverse
+
+from accounts.idle_timeout import (
+    DATABASE_SESSIONS, REMAINING_HEADER, IdleAwareSessionStore, check_idle_timeout, idle_expired_response,
+)
 
 FORCE_PASSWORD_CHANGE_SESSION_KEY = "_force_password_change_prompt"
 
@@ -73,6 +78,40 @@ class ProfileCompletionMiddleware:
             if not _is_exempt(view_name):
                 return redirect("accounts:update")
         return self.get_response(request)
+
+
+class IdleAwareSessionMiddleware(SessionMiddleware):
+    def __init__(self, get_response):
+        super().__init__(get_response)
+        if settings.SESSION_ENGINE == DATABASE_SESSIONS:
+            self.SessionStore = IdleAwareSessionStore
+
+
+class IdleTimeoutMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.user.is_authenticated and check_idle_timeout(request, allow_snapshot=True) == 0:
+            return idle_expired_response(request)
+
+        response = self.get_response(request)
+        remaining = getattr(request, "idle_remaining_ms", None)
+        if request.user.is_authenticated and remaining:
+            response.headers[REMAINING_HEADER] = str(remaining)
+        return response
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        if (
+            request.user.is_authenticated
+            and request.user.idle_timeout_enabled
+            and request.headers.get("Sec-Fetch-Mode") == "navigate"
+            and request.headers.get("Sec-Fetch-User") == "?1"
+            and request.headers.get("Sec-Fetch-Site") in {"same-origin", "none"}
+            and request.resolver_match.view_name not in {"logout", "admin:logout", "accounts:sign-in-heartbeat"}
+        ):
+            if check_idle_timeout(request, renew=True) == 0:
+                return idle_expired_response(request)
 
 
 class PasswordChangeRequiredMiddleware:

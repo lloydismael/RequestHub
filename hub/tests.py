@@ -203,6 +203,35 @@ class UserManagementPasswordResetTests(TestCase):
         self.assertNotIn("Reset to Default Password", html)
         self.assertIn("Reset to Temporary Password", html)
 
+    def test_application_admin_cannot_manage_django_superuser(self):
+        actor = User.objects.create_user(username="application-admin", role=User.Roles.ADMIN)
+        self.client.force_login(actor)
+        password_hash = self.admin.password
+        data = {"username": self.admin.username, "role": User.Roles.ADMIN, "first_name": "Updated"}
+        actions = (
+            (reverse("hub:management"), {"user_action": f"reset_password:{self.admin.pk}"}),
+            (reverse("hub:user-edit", args=[self.admin.pk]), data),
+            (reverse("hub:management"), {
+                "form-TOTAL_FORMS": "1", "form-INITIAL_FORMS": "1",
+                "form-0-id": self.admin.pk, **{f"form-0-{key}": value for key, value in data.items()},
+            }),
+        )
+        for url, payload in actions:
+            with self.subTest(payload=payload):
+                self.assertEqual(self.client.post(url, payload).status_code, 403)
+                self.admin.refresh_from_db()
+                self.assertEqual(self.admin.password, password_hash)
+                self.assertEqual(self.admin.first_name, "")
+
+    def test_application_admin_can_reset_an_ordinary_account(self):
+        actor = User.objects.create_user(username="application-admin", role=User.Roles.ADMIN)
+        self.client.force_login(actor)
+        previous_password = self.target.password
+        response = self.client.post(reverse("hub:management"), {"user_action": f"reset_password:{self.target.pk}"})
+        self.assertRedirects(response, reverse("hub:management"), fetch_redirect_response=False)
+        self.target.refresh_from_db()
+        self.assertNotEqual(self.target.password, previous_password)
+
     def test_password_reset_issues_one_time_password_and_requires_change(self):
         self.client.force_login(self.admin)
         one_time = "TempPasswrdXY2345"
@@ -372,9 +401,8 @@ class RequestReportViewTests(TestCase):
         response = self.client.get(reverse("hub:report"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, " authenticated")
-        self.assertContains(response, 'class="rpt2-header lg-enter"')
         self.assertContains(response, 'data-navbar-surface="theme"')
+        self.assertContains(response, "Request Hub analytics")
 
     def test_operational_charts_include_all_configured_categories(self):
         self._create_request(
@@ -433,13 +461,9 @@ class RequestReportViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["report_view"], "activity")
-        self.assertContains(response, 'class="rpt-tab rpt-tab--active"')
-        self.assertContains(response, 'aria-current="page"')
-        self.assertContains(response, 'class="glass-card rpt2-filter rpt2-activity-filter')
-        self.assertContains(response, 'name="start_month" value="2026-08"')
-        self.assertContains(response, 'name="end_month" value="2026-09"')
-        self.assertContains(response, 'class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid"')
-        self.assertContains(response, 'class="glass-card rpt-chart-card rpt2-activity-log-card')
+        self.assertContains(response, "Activity overview")
+        self.assertContains(response, "Hours and utilisation")
+        self.assertContains(response, "Total Hours")
         self.assertContains(response, "Recent Engineer Activity")
         self.assertContains(response, "Activity report regression entry")
         self.assertEqual(response.context["activity_start_month"], "2026-08")
@@ -449,6 +473,22 @@ class RequestReportViewTests(TestCase):
         self.assertContains(response, "August 2026 to September 2026")
         self.assertContains(response, "start_month=2026-08&end_month=2026-09")
         self.assertContains(response, f"edit_activity={activity_log.pk}")
+
+    def test_reversed_month_filter_stays_visible_and_links_use_normalized_range(self):
+        self.client.force_login(self.admin)
+        for view, other, caption in (("operational", "activity", "Created:"), ("activity", "operational", "Dated:")):
+            with self.subTest(view=view):
+                response = self.client.get(reverse("hub:report"), {
+                    "report_view": view, "start_month": "2026-09", "end_month": "2026-08",
+                })
+                self.assertContains(response, '<details class="rpt-filters" open>')
+                self.assertContains(response, f"{caption} August 2026 to September 2026")
+                self.assertContains(response, "Range was reversed")
+                self.assertContains(response, 'name="start_month" value="2026-08"')
+                self.assertContains(response, 'name="end_month" value="2026-09"')
+                range_query = "&start_month=2026-08&end_month=2026-09"
+                self.assertContains(response, f'href="?report_view={other}{range_query}"')
+                self.assertContains(response, f'href="{reverse("hub:report-export")}?report_view={view}{range_query}"')
 
     def test_activity_report_pagination_preserves_month_filters(self):
         for index in range(51):
@@ -465,10 +505,35 @@ class RequestReportViewTests(TestCase):
         )
 
         self.assertEqual(response.context["activity_logs_page_obj"].paginator.num_pages, 2)
-        self.assertContains(
-            response,
-            "?report_view=activity&start_month=2026-08&end_month=2026-08&activity_log_page=2",
-        )
+        page_two_url = "?report_view=activity&start_month=2026-08&end_month=2026-08&activity_log_page=2"
+        self.assertContains(response, page_two_url)
+        page_two = self.client.get(reverse("hub:report") + page_two_url)
+        self.assertEqual(len(page_two.context["activity_logs"]), 1)
+        self.assertEqual(page_two.context["activity_start_month"], "2026-08")
+        self.assertContains(page_two, 'aria-current="page">2</span>')
+
+    def test_report_activity_edit_preserves_errors_and_filtered_return(self):
+        log = self._create_activity_log()
+        self.client.force_login(self.admin)
+        url = reverse("hub:report")
+        filters = {"report_view": "activity", "start_month": "2026-08", "end_month": "2026-09"}
+        return_url = f"{url}?report_view=activity&start_month=2026-08&end_month=2026-09"
+        editing = self.client.get(url, {**filters, "edit_activity": log.pk})
+        self.assertContains(editing, f'href="{return_url}"')
+        data = {
+            **filters, "log_id": log.pk, "account": log.account_id,
+            "request_date": log.request_date.isoformat(), "activity_type": log.activity_type,
+            "details": log.details, "location": log.location, "status": log.status,
+            "is_billable": "true", "actual_hours": "not-a-number",
+        }
+        rejected = self.client.post(url, data)
+        self.assertIn("actual_hours", rejected.context["activity_form"].errors)
+        log.refresh_from_db()
+        self.assertEqual(log.actual_hours, Decimal("2.50"))
+        saved = self.client.post(url, {**data, "actual_hours": "3.50"})
+        self.assertRedirects(saved, return_url)
+        log.refresh_from_db()
+        self.assertEqual(log.actual_hours, Decimal("3.50"))
 
     def test_operational_report_health_metrics_and_attention_list(self):
         today = timezone.localdate()
@@ -2212,6 +2277,130 @@ class SqrEngineerLinkedRequestAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(set(response.headers["Allow"].split(", ")), {"GET", "POST", "HEAD", "OPTIONS"})
+
+    def test_historical_sqr_grants_read_access_only(self):
+        self.client.force_login(self.engineer)
+        url = reverse("hub:request-manage-collab", args=[self.linked_request.pk])
+        response = self.client.get(url)
+        self.assertContains(response, self.submission.reference_code)
+        self.assertContains(response, "Read-only request")
+        for form_type in ("details", "status", "status_log", "activity_log"):
+            with self.subTest(form_type=form_type):
+                self.assertEqual(self.client.post(url, {"form_type": form_type}).status_code, 403)
+
+    def test_only_superuser_can_permanently_remove_protected_sqrs(self):
+        admin = User.objects.create_user(username="sqr-app-admin", role=User.Roles.ADMIN)
+        root = User.objects.create_superuser(username="sqr-root", role=User.Roles.ADMIN)
+        url = reverse("hub:sqr-delete", args=[self.submission.pk])
+        for fields in (
+            {"status": SqrSubmission.Status.APPROVED},
+            {"proposal_status": SqrSubmission.ProposalStatus.CLOSED_LOST},
+            {"revenue_status": SqrSubmission.RevenueStatus.BILLED},
+            {"status": SqrSubmission.Status.FOR_REVISION},
+        ):
+            with self.subTest(fields=fields):
+                SqrSubmission.objects.filter(pk=self.submission.pk).update(
+                    status=SqrSubmission.Status.FOR_PROCESSING,
+                    proposal_status=SqrSubmission.ProposalStatus.SUBMITTED_PENDING,
+                    revenue_status=SqrSubmission.RevenueStatus.NOT_YET_BILLED,
+                )
+                SqrSubmission.objects.filter(pk=self.submission.pk).update(**fields)
+                if fields.get("status") == SqrSubmission.Status.FOR_REVISION:
+                    SqrSubmissionHistory.objects.create(
+                        submission=self.submission, actor=self.pm, field="status",
+                        old_values={"status": SqrSubmission.Status.APPROVED}, new_values=fields,
+                    )
+                for actor in (self.engineer, admin):
+                    self.client.force_login(actor)
+                    with patch.object(SqrSubmission, "delete", return_value=(0, {})):
+                        for method in (self.client.get, self.client.post, self.client.delete):
+                            self.assertEqual(method(url).status_code, 403)
+        self.client.force_login(root)
+        self.assertRedirects(self.client.post(url), reverse("hub:sqr"), fetch_redirect_response=False)
+        self.assertFalse(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_application_admin_cannot_replace_a_table_containing_protected_sqrs(self):
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        admin = User.objects.create_user(username="sqr-import-admin", role=User.Roles.ADMIN)
+        self.client.force_login(admin)
+
+        response = self.client.post(reverse("hub:sqr-import"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_django_staff_with_delete_permission_cannot_delete_protected_sqr(self):
+        from django.contrib.auth.models import Permission
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        staff = User.objects.create_user(username="sqr-staff", is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(content_type__app_label="hub", codename="delete_sqrsubmission"))
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:hub_sqrsubmission_delete", args=[self.submission.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_protected_sqr_has_no_delete_action_in_tracker(self):
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        admin = User.objects.create_user(username="sqr-tracker-admin", role=User.Roles.ADMIN)
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse("hub:sqr-prototype-data"), {"pk": self.submission.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["record"]["perms"]["delete"])
+
+    def test_owner_can_still_delete_an_unprotected_sqr(self):
+        SqrSubmissionHistory.objects.create(
+            submission=self.submission, actor=self.pm, field="status",
+            old_values={"status": SqrSubmission.Status.FOR_PROCESSING, "reviewed_at": None},
+            new_values={"status": SqrSubmission.Status.ON_HOLD, "validity_due_date": None, "revenue_date": ""},
+        )
+        self.client.force_login(self.engineer)
+        url = reverse("hub:sqr-delete", args=[self.submission.pk])
+        self.assertRedirects(self.client.post(url), reverse("hub:sqr"), fetch_redirect_response=False)
+        self.assertFalse(SqrSubmission.objects.filter(pk=self.submission.pk).exists())
+
+    def test_django_staff_cannot_edit_protection_fields_on_approved_sqr(self):
+        from django.contrib.auth.models import Permission
+
+        self.submission.status = SqrSubmission.Status.APPROVED
+        self.submission.save(update_fields=["status"])
+        staff = User.objects.create_user(username="sqr-edit-staff", is_staff=True)
+        staff.user_permissions.add(Permission.objects.get(content_type__app_label="hub", codename="change_sqrsubmission"))
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:hub_sqrsubmission_change", args=[self.submission.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("status", response.context["adminform"].form.fields)
+        self.assertIn("remarks", response.context["adminform"].form.fields)
+
+    def test_django_staff_cannot_remove_protected_sqr_history(self):
+        from django.contrib.auth.models import Permission
+
+        self.submission.status = SqrSubmission.Status.FOR_REVISION
+        self.submission.save(update_fields=["status"])
+        entry = SqrSubmissionHistory.objects.create(
+            submission=self.submission, actor=self.pm, field="status",
+            old_values={"status": SqrSubmission.Status.APPROVED},
+            new_values={"status": SqrSubmission.Status.FOR_REVISION},
+        )
+        staff = User.objects.create_user(username="sqr-history-staff", is_staff=True)
+        staff.user_permissions.add(*Permission.objects.filter(
+            content_type__app_label="hub", codename__in=["view_sqrsubmissionhistory", "delete_sqrsubmissionhistory"],
+        ))
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse("admin:hub_sqrsubmissionhistory_delete", args=[entry.pk]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(SqrSubmissionHistory.objects.filter(pk=entry.pk).exists())
 
     def test_engineer_can_save_own_sqr_with_preserved_linked_request(self):
         self.client.force_login(self.engineer)

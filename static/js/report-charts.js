@@ -11,8 +11,8 @@
         requestTrendChart: { type: 'line', fields: [['created', 'Created', 'accent'], ['completed', 'Completed', 'positive']], integer: true },
         engagementChart: { fields: requests, horizontal: true, ranked: true, integer: true },
         productChart: { fields: requests, horizontal: true, ranked: true, integer: true },
-        engineerChart: { fields: requests, horizontal: true, integer: true, fullTitle: 'Requests by Engineer' },
-        accountManagerChart: { fields: requests, horizontal: true, integer: true, fullTitle: 'Requests by Account Manager' },
+        engineerChart: { fields: requests, horizontal: true, integer: true },
+        accountManagerChart: { fields: requests, horizontal: true, integer: true },
         activityMonthlyChart: { fields: hours, period: true },
         activityEngineerChart: { fields: hours, horizontal: true },
         activityTypeChart: { fields: hours, horizontal: true, ranked: true },
@@ -35,16 +35,35 @@
             unit: config.integer ? 'Requests' : 'Hours' };
     }
 
+    function limitPreview(data, limit) {
+        const take = values => values.slice(0, limit);
+        const takeSeries = series => series.map(s => ({ ...s, values: take(s.values) }));
+        return { ...data, labels: take(data.labels), series: takeSeries(data.series),
+            totals: data.totals && take(data.totals), extraValues: takeSeries(data.extraValues) };
+    }
+
+    const shell = document.querySelector('[data-report-preview-limit]');
+    if (!shell) return;
+    const limit = Number(shell.dataset.reportPreviewLimit);
     const entries = new Map();
-    document.querySelectorAll('canvas[data-report-chart]').forEach(canvas => {
+    shell.querySelectorAll('canvas[data-report-chart]').forEach(canvas => {
         const id = canvas.id;
         const config = definitions[id];
         const data = charts.read(id + '-data');
         if (!config || !data?.labels) return;
         const card = canvas.closest('.rpt-chart-card');
         const full = charts.read(id + '-full-data');
-        entries.set(id, { config, data, full, title: card.querySelector('.rpt-chart-title').textContent.trim() });
-        charts.mount(canvas, spec(config, data));
+        const title = card.querySelector('.rpt-chart-title').textContent.trim();
+        const fullSpec = spec(config, full?.labels?.length ? full : data);
+        const capped = config.horizontal && card.closest('.rpt-chart-grid') && fullSpec.labels.length > limit;
+        entries.set(id, { title, spec: fullSpec });
+        charts.mount(canvas, capped ? limitPreview(fullSpec, limit) : fullSpec);
+        if (capped) {
+            const footer = card.querySelector('.rpt-card-more');
+            footer.querySelector('.rpt-preview-count').textContent = `Showing ${limit} of ${fullSpec.labels.length}`;
+            card.querySelector('.rpt-expand-btn').hidden = true;
+            footer.hidden = false;
+        }
     });
 
     const modal = document.getElementById('rptChartModal');
@@ -60,7 +79,7 @@
         if (!entry || modal.classList.contains('is-open')) return;
         opener = button;
         previousOverflow = document.body.style.overflow;
-        title.textContent = entry.config.fullTitle || entry.title;
+        title.textContent = entry.title;
         canvas.setAttribute('aria-label', title.textContent);
         modal.querySelector('details').open = false;
         modal.classList.add('is-open');
@@ -68,7 +87,7 @@
         modal.setAttribute('aria-hidden', 'false');
         modal.querySelector('.rpt-chart-modal__inner').scrollTop = 0;
         document.body.style.overflow = 'hidden';
-        active = charts.mount(canvas, spec(entry.config, entry.full?.labels?.length ? entry.full : entry.data));
+        active = charts.mount(canvas, entry.spec);
         download.disabled = !active;
         closeButton.focus();
     }

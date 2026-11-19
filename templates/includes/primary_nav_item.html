@@ -1,0 +1,19 @@
+{% url destination_route as nav_url %}
+<li class="nav-item{% if notification %} position-relative{% endif %}">
+    <a class="nav-link{% if notification and new_ticket_count %} nav-link-with-dot{% endif %}"
+       {% if nav_route != destination_route or nav_view == 'performance' and active_sqr_view != 'performance' or nav_view == 'prototype' and active_sqr_view == 'performance' %}
+           href="{{ nav_url }}{% if nav_view %}?view={{ nav_view }}{% endif %}"
+       {% else %}
+           aria-current="page"
+       {% endif %}
+       {% if nav_view %}data-sqr-nav-view="{{ nav_view }}" data-sqr-nav-url="{{ nav_url }}?view={{ nav_view }}"{% endif %}
+       {% if tooltip %}title="{{ tooltip }}"{% endif %}
+       {% if notification %}data-notification-link{% endif %}>
+        <i class="bi bi-{{ icon }} nav-icon" aria-hidden="true"></i>{{ label }}
+        {% if notification and new_ticket_count %}
+            <span class="notification-dot notification-dot--nav" title="Unread notifications" aria-label="{{ new_ticket_count }} new items" data-notification-badge role="status">
+                <span class="notification-dot__count" data-notification-count>{{ new_ticket_count }}</span>
+            </span>
+        {% endif %}
+    </a>
+</li>

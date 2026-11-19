@@ -1,23 +1,24 @@
-<section class="glass-card rpt2-filter{% if report_view == 'activity' %} rpt2-activity-filter{% endif %}">
-    <div class="rpt-filter-panel">
-        <form method="get" class="row align-items-end">
-            <input type="hidden" name="report_view" value="{{ report_view }}">
-            <div class="col-12 col-sm-6">
-                <label class="form-label" for="report-start-month">Start month</label>
-                <input class="form-control" type="month" id="report-start-month" name="start_month" value="{{ period_start_month }}">
-            </div>
-            <div class="col-12 col-sm-6">
-                <label class="form-label" for="report-end-month">End month</label>
-                <input class="form-control" type="month" id="report-end-month" name="end_month" value="{{ period_end_month }}">
-            </div>
-            <div class="col-12 d-flex flex-wrap align-items-center gap-2">
-                <button type="submit" class="btn btn-primary lg-btn lg-btn--accent">Apply</button>
-                <a class="btn btn-outline-secondary lg-btn lg-btn--ghost" href="?report_view={{ report_view }}">Clear</a>
-                <span class="rpt-period-badge"><i class="bi bi-calendar3 me-1"></i>{{ caption }}{{ period_label }}</span>
-                {% if period_range_swapped %}
-                    <span class="rpt-range-hint"><i class="bi bi-exclamation-triangle-fill me-1"></i>Range was reversed</span>
-                {% endif %}
-            </div>
-        </form>
-    </div>
-</section>
+<details class="rpt-filters"{% if period_range_swapped %} open{% endif %}>
+    <summary>
+        <span class="rpt-filter-label"><i class="bi bi-sliders" aria-hidden="true"></i> Filters <i class="bi bi-chevron-down" aria-hidden="true"></i></span>
+        <span class="rpt-filter-period"><i class="bi bi-calendar3" aria-hidden="true"></i> {% if report_view == 'activity' %}Dated:{% else %}Created:{% endif %} {{ period_label }}</span>
+    </summary>
+    <form method="get" class="rpt-filter-form">
+        <input type="hidden" name="report_view" value="{{ report_view }}">
+        <div>
+            <label class="form-label" for="report-start-month">Start month</label>
+            <input class="form-control" type="month" id="report-start-month" name="start_month" value="{{ period_start_month }}">
+        </div>
+        <div>
+            <label class="form-label" for="report-end-month">End month</label>
+            <input class="form-control" type="month" id="report-end-month" name="end_month" value="{{ period_end_month }}">
+        </div>
+        <div class="rpt-filter-actions">
+            <button type="submit" class="btn rpt-primary">Apply</button>
+            <a class="btn btn-outline-secondary" href="?report_view={{ report_view }}">Clear</a>
+        </div>
+        {% if period_range_swapped %}
+            <p class="rpt-range-hint mb-0"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Range was reversed; the months have been swapped.</p>
+        {% endif %}
+    </form>
+</details>

@@ -654,10 +654,12 @@
                                                 title="View History">
                                             <i class="bi bi-clock-history me-1"></i>View History
                                         </button>
+                                        {% if not item.deletion_protected %}
                                         <a class="btn btn-sm btn-outline-danger py-0 px-2"
                                            href="{% url 'hub:sqr-delete' item.pk %}" title="Delete">
                                             <i class="bi bi-trash"></i>
                                         </a>
+                                        {% endif %}
                                     </div>
                                 {% elif is_pm %}
                                     <button type="button"
@@ -688,10 +690,12 @@
                                                 data-linked-request-text="{{ item.linked_request.reference_code|default:'' }}{% if item.linked_request and item.linked_request.account %} – {{ item.linked_request.account.name }}{% endif %}">
                                             <i class="bi bi-pencil"></i>
                                         </button>
+                                        {% if not item.deletion_protected %}
                                         <a class="btn btn-sm btn-outline-danger py-0 px-2 sqr-delete-btn d-none"
                                            href="{% url 'hub:sqr-delete' item.pk %}" title="Delete">
                                             <i class="bi bi-trash"></i>
                                         </a>
+                                        {% endif %}
                                     </div>
                                 {% else %}
                                     <span class="text-muted">&ndash;</span>
@@ -3204,9 +3208,13 @@
         prototypeControls.forEach(function (element) { element.hidden = activeView !== 'prototype'; });
         navLinks.forEach(function (link) {
             var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'prototype');
-            link.classList.toggle('active', isCurrent);
-            if (isCurrent) link.setAttribute('aria-current', 'page');
-            else link.removeAttribute('aria-current');
+            if (isCurrent) {
+                link.setAttribute('aria-current', 'page');
+                link.removeAttribute('href');
+            } else {
+                link.removeAttribute('aria-current');
+                link.setAttribute('href', link.dataset.sqrNavUrl);
+            }
         });
         trackerLinks.forEach(function (link) {
             if (activeView !== 'performance') link.setAttribute('aria-current', 'page');

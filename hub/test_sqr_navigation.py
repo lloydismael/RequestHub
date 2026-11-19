@@ -21,24 +21,27 @@ class NavigationParser(HTMLParser):
         self.in_navigation = False
         self.current_link = None
         self.links = []
+        self.brand = None
         self.sqr_header = None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
+        if "navbar-brand" in attrs.get("class", "").split():
+            self.brand = attrs
         if tag == "div" and "glass-card" in attrs.get("class", "").split() and attrs.get("data-navbar-surface") == "theme":
             self.sqr_header = attrs
         if tag == "ul" and "navbar-nav" in attrs.get("class", "").split():
             self.in_navigation = True
-        elif self.in_navigation and tag == "a":
-            self.current_link = [attrs, ""]
+        elif self.in_navigation and "nav-link" in attrs.get("class", "").split():
+            self.current_link = [tag, attrs, ""]
 
     def handle_data(self, data):
         if self.current_link is not None:
-            self.current_link[1] += data
+            self.current_link[2] += data
 
     def handle_endtag(self, tag):
-        if tag == "a" and self.current_link is not None:
-            attrs, text = self.current_link
+        if self.current_link is not None and tag == self.current_link[0]:
+            _, attrs, text = self.current_link
             self.links.append((text.strip(), attrs))
             self.current_link = None
         elif tag == "ul" and self.in_navigation:
@@ -99,8 +102,41 @@ class SqrNavigationTests(SimpleTestCase):
                     "request": request, "active_sqr_tab": active_tab,
                     **self.view_context(request, is_pm=role in (User.Roles.ADMIN, User.Roles.PM_ESG), tab=active_tab),
                 }))
-                current = [name for name, attrs in parser.links if attrs.get("aria-current") == "page"]
-                self.assertEqual(current, [expected])
+                self.assert_only_current_destination_is_inactive(parser, expected)
+
+    def test_current_navigation_preserves_state_on_other_primary_pages(self):
+        for role, route, expected in (
+            (User.Roles.ADMIN, 'dashboard', 'Dashboard'),
+            (User.Roles.ADMIN, 'management', 'Management'),
+            (User.Roles.ADMIN, 'report', 'Reports'),
+            (User.Roles.ENGINEER, 'activity-logs', 'Activity Logs'),
+            (User.Roles.ENGINEER, 'notifications', 'Notifications'),
+        ):
+            with self.subTest(route=route):
+                request = RequestFactory().get(reverse(f'hub:{route}'), {'page': '2'})
+                request.resolver_match = resolve(request.path)
+                request.user = User(username='fixture', role=role, christmas_default_overridden=True)
+                parser = NavigationParser()
+                parser.feed(render_to_string('base.html', {'request': request}))
+                self.assert_only_current_destination_is_inactive(parser, expected)
+                if route == 'dashboard':
+                    self.assertNotIn('href', parser.brand)
+                else:
+                    self.assertEqual(parser.brand.get('href'), reverse('hub:dashboard'))
+
+    def test_management_subpage_keeps_its_parent_destination_available(self):
+        request = RequestFactory().get(reverse('hub:form-editor'))
+        request.resolver_match = resolve(request.path)
+        request.user = User(username='fixture', role=User.Roles.ADMIN, christmas_default_overridden=True)
+        parser = NavigationParser()
+        parser.feed(render_to_string('base.html', {'request': request}))
+        self.assertEqual(dict(parser.links)['Management'].get('href'), reverse('hub:management'))
+
+    def assert_only_current_destination_is_inactive(self, parser, expected):
+        current = [(name, attrs) for name, attrs in parser.links if attrs.get('aria-current') == 'page']
+        self.assertEqual([name for name, _ in current], [expected])
+        self.assertNotIn('href', current[0][1])
+        self.assertTrue(all('href' in attrs for name, attrs in parser.links if name != expected))
 
     def test_performance_moves_out_of_the_sqr_view_selector(self):
         request = self.request_for(User.Roles.PM_ESG)

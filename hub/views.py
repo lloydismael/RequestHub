@@ -3023,6 +3023,9 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         if active_tab in self.PM_ONLY_TABS and not is_pm:
             active_tab = "proposal"
 
+        can_import = is_admin and (
+            user.is_superuser or not SqrSubmission.objects.filter(SqrSubmission.protected_from_deletion()).exists()
+        )
         show_classic = get_tracker_settings().show_classic_sqr_tracker
         requested_view = "tracker" if "focus" in self.request.GET else self.request.GET.get("view")
         active_view, view_notice = resolve_sqr_view(
@@ -3048,7 +3051,10 @@ class SqrListView(LoginRequiredMixin, TemplateView):
         if active_tab != "reports" and not kwargs.get("force_reports"):
             if show_classic:
                 from hub.services.sqr_queries import tracker_page
-                context.update(tracker_page(self.get_queryset(), self.request.GET, user, timezone.localdate()))
+                queryset = self.get_queryset()
+                if not user.is_superuser:
+                    queryset = queryset.annotate(deletion_protected=SqrSubmission.protected_from_deletion())
+                context.update(tracker_page(queryset, self.request.GET, user, timezone.localdate()))
                 for submission in context["proposal_submissions"]:
                     submission.can_review_sqr = _can_review_sqr(user, submission)
                     submission.quote_locked = _sqr_quote_locked(submission)
@@ -3059,7 +3065,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                 "can_create_sqr": can_create, "can_review_sqr": can_review, "is_pm": is_pm,
                 "is_admin": is_admin, "is_pm_esg": user.role == PM_ESG_ROLE,
                 "sqr_current_user_id": user.pk, "sqr_form": form,
-                "sqr_import_form": SqrImportForm() if is_admin else None,
+                "sqr_import_form": SqrImportForm() if can_import else None,
                 "sqr_edit_form": _make_sqr_edit_form(user) if can_create else None,
                 "sqr_form_has_errors": bool(form and form.is_bound and form.errors),
                 "active_sqr_tab": active_tab,
@@ -3445,7 +3451,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                 "default_my_assigned_filter": default_my_assigned_filter,
                 "sqr_current_user_id": user.pk,
                 "sqr_form": form,
-                "sqr_import_form": SqrImportForm() if is_admin else None,
+                "sqr_import_form": SqrImportForm() if can_import else None,
                 "sqr_edit_form": _make_sqr_edit_form(user) if can_create else None,
                 "sqr_form_has_errors": bool(form and form.is_bound and form.errors),
                 "active_sqr_tab": active_tab,
@@ -3702,6 +3708,8 @@ class SqrPrototypeDataView(LoginRequiredMixin, View):
         user = request.user
         is_pm = user.role in ADMIN_PANEL_ROLES
         queryset = _sqr_queryset_for_user(user)
+        if user.role == User.Roles.ADMIN and not user.is_superuser:
+            queryset = queryset.annotate(deletion_protected=SqrSubmission.protected_from_deletion())
         raw_pk = request.GET.get("pk")
         if raw_pk is not None:
             if not raw_pk.isdigit():
@@ -3917,8 +3925,11 @@ class SqrEngineerDeleteView(LoginRequiredMixin, DeleteView):
     template_name = "hub/sqr_confirm_delete.html"
     success_url = reverse_lazy("hub:sqr")
 
+    @transaction.atomic
     def dispatch(self, request, *args, **kwargs):
-        if request.user.role not in ENGINEER_ACCESS_ROLES and request.user.role != User.Roles.ADMIN:
+        if request.user.is_authenticated and not (
+            request.user.is_superuser or request.user.role in ENGINEER_ACCESS_ROLES | {User.Roles.ADMIN}
+        ):
             messages.error(request, "Only engineers or admins can delete SQR submissions.")
             return redirect("hub:sqr")
         try:
@@ -3926,12 +3937,22 @@ class SqrEngineerDeleteView(LoginRequiredMixin, DeleteView):
         except Http404:
             messages.error(request, "That SQR submission no longer exists.")
             return redirect("hub:sqr")
-        return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        if self.request.user.role == User.Roles.ADMIN:
-            return SqrSubmission.objects.all()
-        return SqrSubmission.objects.filter(engineer=self.request.user)
+        queryset = SqrSubmission.objects.all()
+        if not (self.request.user.is_superuser or self.request.user.role == User.Roles.ADMIN):
+            queryset = queryset.filter(engineer=self.request.user)
+        if self.request.method in {"POST", "DELETE"}:
+            queryset = queryset.select_for_update()
+        return queryset
+
+    def get_object(self, queryset=None):
+        submission = super().get_object(queryset)
+        if not self.request.user.is_superuser and SqrSubmission.objects.filter(
+            SqrSubmission.protected_from_deletion(), pk=submission.pk,
+        ).exists():
+            raise PermissionDenied("Only Django superusers can permanently delete protected SQRs.")
+        return submission
 
     def form_valid(self, form):
         reference_code = self.object.reference_code
@@ -5293,12 +5314,14 @@ class RequestUpdateView(LoginRequiredMixin, UpdateView):
         return super().dispatch(request, *args, **kwargs)
 
     def get_queryset(self):
-        return (
-            super()
-            .get_queryset()
-            .filter(requestor=self.request.user)
-            .select_related("account", "engineer")
-        )
+        queryset = super().get_queryset().filter(requestor=self.request.user).select_related("account", "engineer")
+        if self.request.method in {"POST", "PUT"}:
+            queryset = queryset.select_for_update(of=("self",))
+        return queryset
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -5311,6 +5334,7 @@ class RequestUpdateView(LoginRequiredMixin, UpdateView):
         form.instance._actor_source = "Requestor · Edit Request"
         original = Request.objects.get(pk=form.instance.pk)
         previous_engineer_id = original.engineer_id
+        previous_backup_id = original.backup_engineer_id
         changed_fields = normalize_request_form_changed_fields(form.changed_data)
         response = super().form_valid(form)
         lifecycle_result = request_lifecycle.record_assignment_change(
@@ -5391,7 +5415,9 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         except Http404:
             messages.error(request, "You are not allowed to manage this request.")
             return redirect("hub:dashboard")
-        editing_activity_log = self._get_requested_edit_activity_log(request_obj)
+        editing_activity_log = (
+            self._get_requested_edit_activity_log(request_obj) if self._can_edit_request(request_obj) else None
+        )
         context = self.get_context_data(
             request_obj,
             activity_form=None,
@@ -5399,12 +5425,17 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         )
         return render(request, self.template_name, context)
 
+    @transaction.atomic
     def post(self, request, *args, **kwargs):
         try:
             request_obj = self.get_object()
         except Http404:
             messages.error(request, "You are not allowed to manage this request.")
             return redirect("hub:dashboard")
+        if request.user.role in ENGINEER_ACCESS_ROLES:
+            request_obj = get_object_or_404(Request.objects.select_for_update(), pk=request_obj.pk)
+            if not self._can_edit_request(request_obj):
+                raise PermissionDenied("Only current assignees can update this request.")
         form_type = request.POST.get("form_type", "details")
         if form_type == "activity_log":
             return self._handle_activity_log_post(request, request_obj)
@@ -5413,6 +5444,12 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         if form_type == "status":
             return self._handle_status_update(request, request_obj)
         return self._handle_details_update(request, request_obj)
+
+    def _can_edit_request(self, request_obj):
+        user = self.request.user
+        return user.role not in ENGINEER_ACCESS_ROLES or user.pk in {
+            request_obj.engineer_id, request_obj.backup_engineer_id,
+        }
 
     def _actor_prefix(self) -> str:
         return "Requestor" if self.request.user.role in REQUEST_CREATOR_ROLES or self.request.user.role == PM_ESS_ROLE else "Engineer"
@@ -5448,8 +5485,12 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
         return RequestForm(data, instance=request_obj, actor_role=user.role, actor_user=user, collaborative_edit=True)
 
     def get_context_data(self, request_obj, form=None, status_form=None, log_form=None, activity_form=None, editing_activity_log=None):
+        read_only = not self._can_edit_request(request_obj)
         if form is None:
             form = self._details_form(request_obj)
+            if read_only:
+                for field in form.fields.values():
+                    field.disabled = True
         status_allowed = (
             self.request.user.pk == request_obj.engineer_id
             or self.request.user.role in ADMIN_PANEL_ROLES
@@ -5458,7 +5499,7 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             status_form = RequestStatusForm(instance=request_obj, actor_user=self.request.user)
         elif not status_allowed:
             status_form = None
-        if log_form is None:
+        if log_form is None and not read_only:
             log_form = StatusLogForm(request_obj=request_obj, actor_user=self.request.user)
         if editing_activity_log is not None and activity_form is None:
             activity_form = EngineerActivityLogForm(
@@ -5482,7 +5523,8 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
             "form": form,
             "status_form": status_form,
             "log_form": log_form,
-            "mention_people": log_form.mention_people,
+            "mention_people": log_form.mention_people if log_form else (),
+            "request_read_only": read_only,
             "activity_form": activity_form,
             "editing_activity_log": editing_activity_log,
             "status_logs": request_obj.status_logs.select_related("author").order_by("-created_at"),
@@ -5565,13 +5607,6 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
                     changed_fields,
                     source_label,
                 )
-            assignment_email_result = notify_engineer_assignment_email(
-                request_obj,
-                actor_user=request.user,
-                request=request,
-                previous_engineer_id=previous_engineer_id,
-                previous_backup_id=previous_backup_id,
-            )
             notify_engineer_assignment_notification(
                 request_obj,
                 actor_user=request.user,
@@ -5579,7 +5614,18 @@ class RequestCollaborativeManageView(LoginRequiredMixin, View):
                 previous_backup_id=previous_backup_id,
             )
             messages.success(request, "Request details updated.")
-            flash_assignment_email_feedback(request, assignment_email_result, action_label="updated")
+
+            def deliver_assignment_email():
+                result = notify_engineer_assignment_email(
+                    request_obj,
+                    actor_user=request.user,
+                    request=request,
+                    previous_engineer_id=previous_engineer_id,
+                    previous_backup_id=previous_backup_id,
+                )
+                flash_assignment_email_feedback(request, result, action_label="updated")
+
+            transaction.on_commit(deliver_assignment_email)
             return redirect("hub:request-manage-collab", pk=request_obj.pk)
         context = self.get_context_data(request_obj, form=form)
         return render(request, self.template_name, context)
@@ -5673,13 +5719,16 @@ class StatusLogUpdateView(LoginRequiredMixin, UpdateView):
         if user.role in REQUEST_CREATOR_ROLES:
             return queryset.filter(request__requestor=user)
         if user.role in ENGINEER_ACCESS_ROLES:
-            return queryset.filter(
-                Q(request__engineer=user) | Q(request__backup_engineer=user) | Q(request__sqr_links__engineer=user)
-            ).distinct()
+            return queryset.filter(Q(request__engineer=user) | Q(request__backup_engineer=user))
         return queryset.none()
 
     @transaction.atomic
     def form_valid(self, form):
+        user = self.request.user
+        if user.role in ENGINEER_ACCESS_ROLES:
+            current = get_object_or_404(Request.objects.select_for_update(), pk=self.object.request_id)
+            if user.pk not in {current.engineer_id, current.backup_engineer_id}:
+                raise PermissionDenied("Only current assignees can edit this update.")
         previous_message = StatusLog.objects.values_list("message", flat=True).get(pk=self.object.pk)
         response = super().form_valid(form)
         notify_status_update(
@@ -6311,6 +6360,8 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
     ])
 
     def post(self, request, *args, **kwargs):
+        if not request.user.is_superuser and SqrSubmission.objects.filter(SqrSubmission.protected_from_deletion()).exists():
+            return JsonResponse({"ok": False, "errors": ["Only Django superusers can replace protected SQRs."]}, status=403)
         form = SqrImportForm(request.POST, request.FILES)
         if not form.is_valid():
             error_list = form.errors.get("import_file", form.non_field_errors())
@@ -6436,7 +6487,14 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
 
             created_count = 0
             with transaction.atomic():
-                SqrSubmission.objects.all().delete()
+                # Delete only the locked snapshot; a newly inserted row was not checked.
+                existing_ids = list(SqrSubmission.objects.order_by("pk").select_for_update().values_list("pk", flat=True))
+                existing = SqrSubmission.objects.filter(pk__in=existing_ids)
+                if not User.objects.filter(pk=actor.pk, is_superuser=True).exists() and existing.filter(
+                    SqrSubmission.protected_from_deletion(),
+                ).exists():
+                    raise PermissionDenied("Only Django superusers can replace protected SQRs.")
+                existing.delete()
                 for index, payload in enumerate(row_payloads, start=1):
                     submission = SqrSubmission()
                     data = payload["data"].copy()
@@ -7595,6 +7653,10 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
         }
 
 
+def _can_manage_user(actor, target):
+    return actor.is_superuser or not (target.is_superuser or target.is_staff)
+
+
 class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
     template_name = "hub/management.html"
     formset_class = modelformset_factory(User, form=UserManagementForm, extra=0, can_delete=False)
@@ -7683,6 +7745,9 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                 object_id__in=[user.pk for user in users],
             ).values_list("object_id", "answers"))
         for user in users:
+            user.can_manage = _can_manage_user(request.user, user)
+            if not user.can_manage:
+                continue
             form = UserManagementForm(instance=user, _form_editor_skip=True)
             user.editor_form = configure_form(
                 form, definition=editor_definition, answers=editor_answers.get(user.pk, {}),
@@ -7816,6 +7881,10 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                         continue
 
                     is_new = not form.instance.pk
+                    if not is_new:
+                        target = get_object_or_404(User.objects.select_for_update(), pk=form.instance.pk)
+                        if not _can_manage_user(request.user, target):
+                            raise PermissionDenied("Only Django superusers can manage privileged accounts.")
                     form.save()
                     if is_new:
                         created_count += 1
@@ -7937,6 +8006,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         # hundreds of unused names after prune_unused_accounts.
         return
 
+    @transaction.atomic
     def _handle_user_action_request(self, request, action_value):
         action, separator, raw_user_id = (action_value or "").partition(":")
         if not separator:
@@ -7944,11 +8014,13 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             return redirect("hub:management")
 
         try:
-            target_user = User.objects.get(pk=int(raw_user_id))
+            target_user = User.objects.select_for_update().get(pk=int(raw_user_id))
         except (User.DoesNotExist, ValueError):
             messages.error(request, "We could not find the selected user account.")
             return redirect("hub:management")
 
+        if action in {"reset_password", "delete_user"} and not _can_manage_user(request.user, target_user):
+            raise PermissionDenied("Only Django superusers can manage privileged accounts.")
         if action == "reset_password":
             return self._reset_user_password(request, target_user)
         if action == "delete_user":
@@ -8047,8 +8119,11 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
 class UserEditView(AdminRequiredMixin, LoginRequiredMixin, View):
     """Handle the per-user Manage modal: update info and optionally change password."""
 
+    @transaction.atomic
     def post(self, request, pk):
-        target_user = get_object_or_404(User, pk=pk)
+        target_user = get_object_or_404(User.objects.select_for_update(), pk=pk)
+        if not _can_manage_user(request.user, target_user):
+            raise PermissionDenied("Only Django superusers can manage privileged accounts.")
         form = UserManagementForm(request.POST, instance=target_user)
         if form.is_valid():
             form.save()

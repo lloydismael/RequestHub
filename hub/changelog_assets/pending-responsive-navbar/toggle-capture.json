@@ -1,0 +1,93 @@
+{
+  "status": "unreleased",
+  "base_revision": "c369afa4363922e96169d85982f21cd208421fba",
+  "after_revision": null,
+  "capture_note": "Same synthetic dark Reports page, viewport, and chart request held open before and after. Captured after the first click with reduced motion; both stages are working-tree captures, not released revisions.",
+  "comparisons": {
+    "reports-toggle-while-loading": {
+      "title": "Opening the Reports navbar while charts load",
+      "viewport": [
+        792,
+        480
+      ],
+      "before_text": "The menu button receives the click but the drawer stays closed while Chart.js is still loading.",
+      "after_text": "The first click opens the drawer even while Chart.js is still loading.",
+      "before": {
+        "file": "reports-toggle-loading-before.png",
+        "sha256": "fd85ab1ca7ae3c53d87468cf3f1c8b5f2cec4fec70ab899fb05014b7f4887844",
+        "chart_request_pending": true,
+        "ready_state": "loading",
+        "aria_expanded": "false",
+        "drawer_height_px": 0
+      },
+      "after": {
+        "file": "reports-toggle-loading-after.png",
+        "sha256": "c9392607dd2bd93f68f579ee00eabdc380fedad8c4834d9b15a5be36472f0127",
+        "chart_request_pending": true,
+        "ready_state": "loading",
+        "aria_expanded": "true",
+        "drawer_height_px": 286
+      }
+    }
+  },
+  "before_source_sha256": {
+    "static/css/account-themes.css": "4ccdcf8675004accbfdd445f27fe13ff3c0735e6ea71f44da6004b3d7f7b05a0",
+    "static/css/app.css": "ade863a3f1e62f4d837fc2106e52d938530bfd016de9f2034c0dee01e8c51924",
+    "static/css/charts.css": "8f86514aa307750f5a0879b8546d82b3523c4fdbc4d04863598f95ed286cb020",
+    "static/css/christmas-lights.css": "64dde68b39320c7f8142fb853818d267f29ea6e475e637b3766a2f1d6cf7bb85",
+    "static/css/christmas-theme.css": "32da2e8485402a8e8cac25d2d62721df40af0a15276f39790d375b942b5592be",
+    "static/css/liquid-glass-ambient.css": "e91192c55c6646596ad0fe42862edb3b5b52108e0f2836f99837b68dadaba770",
+    "static/css/liquid-glass-dashboard.css": "1291f6962c708bb2fe266720c7219caef43f0c386c6f2fdfa29bd96b6d6d4f84",
+    "static/css/liquid-glass.css": "85e503f5b5e99e34d9ab3a2566de875201e4c1df2fc084ff832cc696d0dd1846",
+    "static/css/mobile.css": "bcadf03c65fc2d6cf04f046de3df6ebdfe43ff13ca604fbff908cd0cde60ce7c",
+    "static/hub/form_runtime.css": "a50a9ae28d0c9bec2d781efecb7c65f4c331f6cc7d530ee2ca6ca8b7715ccbda",
+    "static/hub/form_runtime.js": "6d6bb043b7f72383da300d4c25504681c276d70084498d10a71eb04dcefe44ad",
+    "static/images/christmas-santa-sleigh.svg": "589abff7cc7c8ba65ae60fce38e69223728e5988ad895bbbb85a6c39ac54cf13",
+    "static/js/chart-theme.js": "3e8f3356e590e7ccb9376a77749037d2f39bf91608e35b9aa5a2f09a6bcccffd",
+    "static/js/chart-values.js": "4bedb17db07135b62d0ec39dcbac0ae1aadba43830c99ed8ba6d88cb10c0f79b",
+    "static/js/christmas-lights.js": "287c8237ccd4c80b3fb453f7fce29dd04a5e101f4d28abf4a38cc8a7a0576d2e",
+    "static/js/christmas-theme-snapshot.js": "a9f9b08527ddf56950a218406f28befca78f8fa6f9b6c8e559cd35328bff524e",
+    "static/js/christmas-theme.js": "913d500281ad7ad09375ad1395d61e449951ba2294380b6b7cf07ce4f0534da4",
+    "static/js/liquid-glass.js": "79c1bc0e21c089c22585c94e743cebf273c2ba5edeb65275ea4aa833f7fdec2b",
+    "static/js/login-success.js": "238113a88e74047c64272b2803fe85351874b49ba167d9c2b52232972a020aec",
+    "static/js/navbar-contrast.js": "178b471e4ce0fcd6c476d880956479db2f5421aa80d8674f994781b65445262a",
+    "static/js/notification-toasts.js": "f40dd188afab50b28be5635c0e3baaed690f0530d02e561e418dad1e27c2b2bb",
+    "static/js/page-transitions.js": "7bd46c6fa74ca80a312f3a8dfbd02e9c06100e0e08ba165a9307d347d660535d",
+    "static/js/report-charts.js": "92171b30195c3ce621a88f1951285496a289b15a94eb7eee9343307561c70eeb",
+    "static/js/report-details.js": "353bb534d72c78ae84c3c7adba313d9189aecee18d6a9396b76edec79cc541f0",
+    "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+    "templates/base.html": "c3b554feaa8374b9da918fbd6a0f2ed42e15da8464b0d07ff2f2654a29c91ba9",
+    "templates/hub/report.html": "3e179fde8b57991a8856070e70d15030eac566da8a922442217d32f70c7b98d8",
+    "templates/includes/primary_nav_item.html": "795e4888400eb8b31d125fb851e335212aa570c9610deb29c2cf08d6b0514889"
+  },
+  "after_source_sha256": {
+    "static/css/account-themes.css": "4ccdcf8675004accbfdd445f27fe13ff3c0735e6ea71f44da6004b3d7f7b05a0",
+    "static/css/app.css": "ade863a3f1e62f4d837fc2106e52d938530bfd016de9f2034c0dee01e8c51924",
+    "static/css/charts.css": "8f86514aa307750f5a0879b8546d82b3523c4fdbc4d04863598f95ed286cb020",
+    "static/css/christmas-lights.css": "64dde68b39320c7f8142fb853818d267f29ea6e475e637b3766a2f1d6cf7bb85",
+    "static/css/christmas-theme.css": "32da2e8485402a8e8cac25d2d62721df40af0a15276f39790d375b942b5592be",
+    "static/css/liquid-glass-ambient.css": "e91192c55c6646596ad0fe42862edb3b5b52108e0f2836f99837b68dadaba770",
+    "static/css/liquid-glass-dashboard.css": "1291f6962c708bb2fe266720c7219caef43f0c386c6f2fdfa29bd96b6d6d4f84",
+    "static/css/liquid-glass.css": "85e503f5b5e99e34d9ab3a2566de875201e4c1df2fc084ff832cc696d0dd1846",
+    "static/css/mobile.css": "bcadf03c65fc2d6cf04f046de3df6ebdfe43ff13ca604fbff908cd0cde60ce7c",
+    "static/hub/form_runtime.css": "a50a9ae28d0c9bec2d781efecb7c65f4c331f6cc7d530ee2ca6ca8b7715ccbda",
+    "static/hub/form_runtime.js": "6d6bb043b7f72383da300d4c25504681c276d70084498d10a71eb04dcefe44ad",
+    "static/images/christmas-santa-sleigh.svg": "589abff7cc7c8ba65ae60fce38e69223728e5988ad895bbbb85a6c39ac54cf13",
+    "static/js/chart-theme.js": "3e8f3356e590e7ccb9376a77749037d2f39bf91608e35b9aa5a2f09a6bcccffd",
+    "static/js/chart-values.js": "4bedb17db07135b62d0ec39dcbac0ae1aadba43830c99ed8ba6d88cb10c0f79b",
+    "static/js/christmas-lights.js": "287c8237ccd4c80b3fb453f7fce29dd04a5e101f4d28abf4a38cc8a7a0576d2e",
+    "static/js/christmas-theme-snapshot.js": "a9f9b08527ddf56950a218406f28befca78f8fa6f9b6c8e559cd35328bff524e",
+    "static/js/christmas-theme.js": "913d500281ad7ad09375ad1395d61e449951ba2294380b6b7cf07ce4f0534da4",
+    "static/js/liquid-glass.js": "79c1bc0e21c089c22585c94e743cebf273c2ba5edeb65275ea4aa833f7fdec2b",
+    "static/js/login-success.js": "238113a88e74047c64272b2803fe85351874b49ba167d9c2b52232972a020aec",
+    "static/js/navbar-contrast.js": "178b471e4ce0fcd6c476d880956479db2f5421aa80d8674f994781b65445262a",
+    "static/js/notification-toasts.js": "f40dd188afab50b28be5635c0e3baaed690f0530d02e561e418dad1e27c2b2bb",
+    "static/js/page-transitions.js": "7bd46c6fa74ca80a312f3a8dfbd02e9c06100e0e08ba165a9307d347d660535d",
+    "static/js/report-charts.js": "92171b30195c3ce621a88f1951285496a289b15a94eb7eee9343307561c70eeb",
+    "static/js/report-details.js": "353bb534d72c78ae84c3c7adba313d9189aecee18d6a9396b76edec79cc541f0",
+    "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+    "templates/base.html": "1a34046c86b653abdf0ca80d993f353ee0b5154dbd6e840b85950f9329db4d4a",
+    "templates/hub/report.html": "3e179fde8b57991a8856070e70d15030eac566da8a922442217d32f70c7b98d8",
+    "templates/includes/primary_nav_item.html": "795e4888400eb8b31d125fb851e335212aa570c9610deb29c2cf08d6b0514889"
+  }
+}
