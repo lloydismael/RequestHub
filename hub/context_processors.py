@@ -6,7 +6,6 @@ from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
 
-from accounts.models import User
 from hub.assistant_knowledge import allowed_destinations
 from hub.models import Notification
 from hub.services.notifications import visible_notifications

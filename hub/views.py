@@ -99,7 +99,6 @@ from .models import (
     Notification,
     Request,
     RequestCommunication,
-    SqrProjectPerformance,
     SqrSubmission,
     SqrSubmissionChange,
     SqrSubmissionHistory,
@@ -135,14 +134,6 @@ SQR_APPROVAL_LOGO_URL = "https://raw.githubusercontent.com/lloydismael/request-h
 SQR_APPROVAL_LOGO_PATH = Path(settings.BASE_DIR) / "static" / "img" / "phil-data-full-logo.png"
 SQR_APPROVAL_LOGO_CID = "sqr-approval-logo@request-hub"
 SQR_APPROVAL_MAILTO_BODY_URL_LIMIT = 8000
-SQR_APPROVAL_INCLUDED_SERVICES = [
-    "Proactive System Health Checks",
-    "System/Platform Patching (scheduled)",
-    "Incident Support",
-    "Basic Troubleshooting and Issue Isolation",
-    "Monthly System Status Report",
-    "Advisory Support",
-]
 SQR_APPROVAL_HUB_EMAIL = "ESGRequestHub@phildata.com"
 SQR_ACCOUNT_MANAGER_EMAILS = {
     manager["name"].strip().casefold(): manager["email"]
@@ -206,28 +197,6 @@ def _microsoft_request_draft(request, request_obj, create_draft, return_url):
 def _format_sqr_approval_greeting(requestor_name: str) -> str:
     cleaned_name = (requestor_name or "").strip()
     return f"Hi @{cleaned_name}" if cleaned_name else "Hi"
-
-
-def _split_sqr_scope_items(scope_text: str) -> list[str]:
-    cleaned = (scope_text or "").replace("\r", "").strip()
-    if not cleaned:
-        return list(SQR_APPROVAL_INCLUDED_SERVICES)
-
-    if "•" in cleaned:
-        raw_items = cleaned.split("•")
-    elif "\n" in cleaned:
-        raw_items = cleaned.splitlines()
-    elif ";" in cleaned:
-        raw_items = cleaned.split(";")
-    else:
-        raw_items = [cleaned]
-
-    items: list[str] = []
-    for raw_item in raw_items:
-        item = re.sub(r"^[\-•\s]+", "", raw_item).strip()
-        if item:
-            items.append(item)
-    return items or list(SQR_APPROVAL_INCLUDED_SERVICES)
 
 
 def _get_sqr_service_component(submission: "SqrSubmission") -> str:
@@ -2107,44 +2076,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
     @staticmethod
-    def _filter_requests_by_metric(requests: list[Request], metric_filter: str, today: date) -> list[Request]:
-        if not metric_filter:
-            return requests
-
-        if metric_filter == "open":
-            return [req for req in requests if req.status == Request.Status.ONGOING]
-        if metric_filter == "overdue":
-            return [
-                req
-                for req in requests
-                if req.admin_days_overdue
-            ]
-        if metric_filter == "due_soon":
-            return [
-                req
-                for req in requests
-                if req.status == Request.Status.ONGOING
-                and req.engagement_type not in {
-                    Request.Engagement.DEPLOYMENT, Request.Engagement.CERTIFICATION
-                }
-                and req.due_date
-                and 0 <= (req.due_date - today).days <= 3
-            ]
-        if metric_filter == "completed":
-            return [
-                req
-                for req in requests
-                if req.status == Request.Status.COMPLETED
-            ]
-        if metric_filter == "new_this_week":
-            return [
-                req
-                for req in requests
-                if (today - req.created_at.date()).days <= 7
-            ]
-        return requests
-
-    @staticmethod
     def _format_duration(delta: timedelta) -> str:
         total_seconds = int(delta.total_seconds())
         if total_seconds <= 0:
@@ -2298,37 +2229,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             req.ack_start_iso = start_anchor.isoformat() if start_anchor else ""
             req.ack_first_iso = ack_time.isoformat() if ack_time else ""
             req.is_acknowledged = bool(ack_time)
-
-    @staticmethod
-    def _request_search_haystack(req: Request) -> str:
-        parts = [
-            req.reference_code,
-            req.account.name if req.account_id else "",
-            req.account_manager,
-            req.description,
-            req.teams_chat_topic,
-            req.get_engagement_type_display(),
-            req.get_product_category_display(),
-            req.get_priority_display(),
-            req.get_status_display(),
-        ]
-        for person in (req.requestor, req.engineer, req.backup_engineer):
-            if person:
-                parts.extend([person.get_full_name(), person.username, person.email])
-        return " ".join(str(part) for part in parts if part).casefold()
-
-    @classmethod
-    def _search_requests(cls, requests: list[Request], query: str) -> list[Request]:
-        """Match every whitespace-separated term against the whole request, not just the visible page."""
-        terms = [term for term in query.casefold().split() if term]
-        if not terms:
-            return requests
-        results = []
-        for req in requests:
-            haystack = cls._request_search_haystack(req)
-            if all(term in haystack for term in terms):
-                results.append(req)
-        return results
 
     def _build_admin_dashboard_context(self, user) -> dict:
         """Shared admin/PM-ESG dashboard table + metrics context (full page + live poll)."""
@@ -6697,18 +6597,6 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
                 return users[0]
         return None
 
-    def _parse_user(self, raw_value, lookup, label):
-        normalized = _normalize_import_text(raw_value)
-        if not normalized:
-            return None
-        matches = lookup.get(normalized, [])
-        if not matches:
-            raise ValueError(f"{label} was not found: {raw_value}")
-        unique_matches = {user.pk: user for user in matches}
-        if len(unique_matches) > 1:
-            raise ValueError(f"{label} matches multiple users: {raw_value}")
-        return next(iter(unique_matches.values()))
-
     def _parse_user_lenient(self, raw_value, lookup):
         normalized = _normalize_import_text(raw_value)
         if not normalized:
@@ -6720,16 +6608,6 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
         if len(unique_matches) > 1:
             return None
         return next(iter(unique_matches.values()))
-
-    @staticmethod
-    def _parse_choice(raw_value, mapping, label, default_blank=True):
-        normalized = _normalize_import_text(raw_value)
-        if not normalized:
-            return "" if default_blank else None
-        value = mapping.get(normalized)
-        if value is None:
-            raise ValueError(f"Invalid {label}: {raw_value}")
-        return value
 
     @staticmethod
     def _parse_choice_lenient(raw_value, mapping, default_blank=True):
