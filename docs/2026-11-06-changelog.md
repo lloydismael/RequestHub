@@ -195,7 +195,7 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 - Historical migrations cannot run on SQLite (`django.db.utils.OperationalError: near "EXISTS": syntax error`). Screenshots therefore use a temporary schema built from current models, with a screenshot-only SQLite implementation of the existing PostgreSQL working-days expression. No application source is changed by that adapter.
 - Existing modified Python suites and the full application test suite were not run. Production migration compatibility and email delivery remain unverified.
 
-JavaScript command:
+JavaScript command using the original test paths (available at [revision `bfa645b`](https://github.com/lloydismael/request-hub/tree/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check)). In newer checkouts, use `tests\js\` in place of `scripts_check\`.
 
 ```powershell
 node --test scripts_check\test_christmas_theme.cjs scripts_check\test_christmas_lights.cjs scripts_check\test_christmas_preview.cjs scripts_check\test_update_mentions.cjs scripts_check\test_notification_toasts.cjs
