@@ -200,7 +200,7 @@ class ChristmasLoginStaticFilesTests(SimpleTestCase):
 @skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
 class LoginAnimationScriptTests(SimpleTestCase):
     def test_login_animation_regressions(self):
-        checks = Path(settings.BASE_DIR) / "scripts_check"
+        checks = Path(settings.BASE_DIR) / "tests" / "js"
         result = subprocess.run(
             [
                 shutil.which("node"), "--test",

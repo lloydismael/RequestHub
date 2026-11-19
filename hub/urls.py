@@ -1,16 +1,18 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
+from .notification_views import (
+    NotificationDeleteView,
+    NotificationFollowRedirectView,
+    NotificationListView,
+    NotificationMarkAllReadView,
+    NotificationReadView,
+    NotificationToastDataView,
+)
 from .views import (
     DashboardLiveDataView,
     DashboardView,
     EngineerActivityLogView,
-    NotificationListView,
-    NotificationFollowRedirectView,
-    NotificationReadView,
-    NotificationDeleteView,
-    NotificationMarkAllReadView,
-    NotificationToastDataView,
     RequestAdminUpdateView,
     RequestDeleteView,
     RequestRestoreView,

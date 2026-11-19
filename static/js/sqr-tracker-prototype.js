@@ -199,7 +199,6 @@
 
     /* ── filtering / sorting ─────────────────────────────────────── */
     function needsAction(rec) { return core.needsAttention(rec); }
-    function baseMatches(rec) { return core.matchesRecord(rec, state.filters, state.viewer); }
     function isMine(rec) { return core.isMine(rec, state.viewer); }
     function attentionScore(rec) {
         return rec.attention.reduce(function (sum, flag) { return sum + (flag.tone === 'danger' ? 3 : flag.tone === 'warning' ? 2 : 0); }, 0);

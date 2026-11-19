@@ -192,10 +192,10 @@ def normalize_department(value: str) -> str:
 
 def _destination_registry() -> dict[str, tuple[_Destination, type]]:
     from accounts.views import ProfileUpdateView
+    from hub.notification_views import NotificationListView
     from hub.views import (
         DashboardView,
         EngineerActivityLogView,
-        NotificationListView,
         RequestReportView,
         SqrListView,
         UserManagementView,

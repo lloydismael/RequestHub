@@ -178,7 +178,7 @@ class SqrNavigationTests(SimpleTestCase):
 
     @skipUnless(shutil.which("node"), "Node.js is required for JavaScript regressions")
     def test_ppt_and_sqr_navigation_runs_the_real_view_controller(self):
-        script = Path(settings.BASE_DIR) / "scripts_check" / "test_sqr_navigation.js"
+        script = Path(settings.BASE_DIR) / "tests" / "js" / "test_sqr_navigation.js"
         result = subprocess.run(
             [shutil.which("node"), "--test", str(script)],
             capture_output=True, text=True, encoding="utf-8", timeout=30, check=False,

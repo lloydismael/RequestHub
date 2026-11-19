@@ -1,0 +1,162 @@
+{
+  "version": "next",
+  "revision": "beab08d1bfc37817d6aacdbd46ba0f52e4b17547",
+  "generated_at": "2026-11-19T18:55:19.987273+00:00",
+  "commits": [
+    {
+      "sha": "beab08d1bfc37817d6aacdbd46ba0f52e4b17547",
+      "type": "maintenance",
+      "title": "Remove unused SQR browser helper",
+      "parent_sha": "978408a325dd143998bf3e354bedf4f50bfcfaf1",
+      "requires_comparison": true,
+      "before_text": "The SQR tracker included an unused wrapper around record matching.",
+      "after_text": "Removed the wrapper; the active filter path still uses core.filterRecords.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "The SQR tracker included an unused wrapper around record matching.",
+          "after_text": "Removed the wrapper; the active filter path still uses core.filterRecords.",
+          "before_image": "repository-cleanup/07-before.png",
+          "after_image": "repository-cleanup/07-after.png",
+          "before_revision": "978408a325dd143998bf3e354bedf4f50bfcfaf1",
+          "after_revision": "beab08d1bfc37817d6aacdbd46ba0f52e4b17547",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    },
+    {
+      "sha": "978408a325dd143998bf3e354bedf4f50bfcfaf1",
+      "type": "maintenance",
+      "title": "Remove unused template and static assets",
+      "parent_sha": "0a267d39d5aeaaffe6a1c82975769de5f932c4b8",
+      "requires_comparison": true,
+      "before_text": "An empty acknowledgement template, two empty seasonal sign-in placeholders and four unused decorative assets were tracked.",
+      "after_text": "Removed those unused files. Active acknowledgement delivery and login-christmas assets are unchanged.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "An empty acknowledgement template, two empty seasonal sign-in placeholders and four unused decorative assets were tracked.",
+          "after_text": "Removed those unused files. Active acknowledgement delivery and login-christmas assets are unchanged.",
+          "before_image": "repository-cleanup/06-before.png",
+          "after_image": "repository-cleanup/06-after.png",
+          "before_revision": "0a267d39d5aeaaffe6a1c82975769de5f932c4b8",
+          "after_revision": "978408a325dd143998bf3e354bedf4f50bfcfaf1",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    },
+    {
+      "sha": "0a267d39d5aeaaffe6a1c82975769de5f932c4b8",
+      "type": "maintenance",
+      "title": "Extract notification views",
+      "parent_sha": "eee55c15bbb1f9ae6c66372d76f9b28179563c41",
+      "requires_comparison": true,
+      "before_text": "The general views module owned notification pages, actions and toasts.",
+      "after_text": "Moved six views and shared helpers into focused modules; routes, permissions, payloads and legacy view imports remain.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "repository-cleanup/05-before.png",
+          "after_image": "repository-cleanup/05-after.png",
+          "before_revision": "eee55c15bbb1f9ae6c66372d76f9b28179563c41",
+          "after_revision": "0a267d39d5aeaaffe6a1c82975769de5f932c4b8",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    },
+    {
+      "sha": "eee55c15bbb1f9ae6c66372d76f9b28179563c41",
+      "type": "maintenance",
+      "title": "Organize standalone regression suites",
+      "parent_sha": "0b48b0b11ff668f0d5f2b123fd936a290192c545",
+      "requires_comparison": true,
+      "before_text": "Node and Playwright checks shared a directory with incident scripts.",
+      "after_text": "Moved 18 Node suites and one opt-in Playwright suite; updated fixtures, test launchers, CI and the Docker context.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "repository-cleanup/04-before.png",
+          "after_image": "repository-cleanup/04-after.png",
+          "before_revision": "0b48b0b11ff668f0d5f2b123fd936a290192c545",
+          "after_revision": "eee55c15bbb1f9ae6c66372d76f9b28179563c41",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    },
+    {
+      "sha": "0b48b0b11ff668f0d5f2b123fd936a290192c545",
+      "type": "maintenance",
+      "title": "Remove unused Python helpers",
+      "parent_sha": "76b6e8db8aa7eb19a400470bfe365f268cbfa272",
+      "requires_comparison": true,
+      "before_text": "Unused assistant, dashboard and SQR code remained next to active request paths.",
+      "after_text": "Removed the unused definitions and imports; assistant replies, SQL dashboard filtering and lenient SQR import paths remain.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "repository-cleanup/03-before.png",
+          "after_image": "repository-cleanup/03-after.png",
+          "before_revision": "76b6e8db8aa7eb19a400470bfe365f268cbfa272",
+          "after_revision": "0b48b0b11ff668f0d5f2b123fd936a290192c545",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    },
+    {
+      "sha": "76b6e8db8aa7eb19a400470bfe365f268cbfa272",
+      "type": "maintenance",
+      "title": "Archive historical plans and audits",
+      "parent_sha": "0b52f46446b55860162a3ec84e4e3e5ecdc5afee",
+      "requires_comparison": true,
+      "before_text": "Four plans lived in a top-level folder and two historical audits sat next to active guides.",
+      "after_text": "Archived all six documents under docs/archive and verified their historical links.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "repository-cleanup/02-before.png",
+          "after_image": "repository-cleanup/02-after.png",
+          "before_revision": "0b52f46446b55860162a3ec84e4e3e5ecdc5afee",
+          "after_revision": "76b6e8db8aa7eb19a400470bfe365f268cbfa272",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    },
+    {
+      "sha": "0b52f46446b55860162a3ec84e4e3e5ecdc5afee",
+      "type": "maintenance",
+      "title": "Remove scratch files and empty tests",
+      "parent_sha": "bfa645b6389c1c1babf2b669aece628eec304e57",
+      "requires_comparison": true,
+      "before_text": "Scratch scripts, an old patch, and three zero-byte tests were tracked.",
+      "after_text": "Removed seven scratch artifacts and three empty test files; all nonempty tests remain.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "repository-cleanup/01-before.png",
+          "after_image": "repository-cleanup/01-after.png",
+          "before_revision": "bfa645b6389c1c1babf2b669aece628eec304e57",
+          "after_revision": "0b52f46446b55860162a3ec84e4e3e5ecdc5afee",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

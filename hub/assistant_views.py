@@ -10,7 +10,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponse, JsonResponse
-from django.urls import Resolver404, resolve, reverse
+from django.urls import Resolver404, resolve
 from django.utils import timezone
 from django.views.csrf import csrf_failure as default_csrf_failure
 from django.views.decorators.http import require_GET, require_POST

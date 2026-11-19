@@ -75,7 +75,7 @@ class RedirectSecurityTests(SimpleTestCase):
                 with self.subTest(view=view.__name__, target=target):
                     request = self.make_request(target)
                     notification = Mock()
-                    with patch("hub.views.get_object_or_404", return_value=notification):
+                    with patch("hub.notification_views.get_object_or_404", return_value=notification):
                         kwargs = {} if view is NotificationMarkAllReadView else {"pk": 2}
                         response = view().post(request, **kwargs)
                     expected = target if target == "/notifications/?category=assigned" else reverse("hub:notifications")

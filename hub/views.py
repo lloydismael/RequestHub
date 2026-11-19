@@ -24,7 +24,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
 import requests
 
@@ -51,7 +50,6 @@ from django.utils.cache import patch_cache_control
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html, json_script
 from django.utils.safestring import mark_safe
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.generic import DeleteView, ListView, TemplateView, UpdateView
 from urllib.parse import quote, urlencode
@@ -65,6 +63,15 @@ from accounts.sign_in_log import (
     summarize_sign_ins,
 )
 from .changelog_forms import ChangelogForm
+from .notification_views import (
+    NotificationDeleteView as NotificationDeleteView,
+    NotificationFollowRedirectView as NotificationFollowRedirectView,
+    NotificationListView as NotificationListView,
+    NotificationMarkAllReadView as NotificationMarkAllReadView,
+    NotificationReadView as NotificationReadView,
+    NotificationToastDataView as NotificationToastDataView,
+)
+from .view_helpers import ADMIN_PANEL_ROLES, MANILA_TZ, _safe_return_url
 
 REQUESTOR_ROLES = set(User.REQUESTOR_ROLES)
 REQUEST_CREATOR_ROLES = set(getattr(User, "REQUEST_CREATOR_ROLES", User.REQUESTOR_ROLES))
@@ -72,7 +79,6 @@ ENGINEER_ACCESS_ROLES = set(getattr(User, "ENGINEER_ACCESS_ROLES", (User.Roles.E
 ASSIGNABLE_ENGINEER_ROLES = set(getattr(User, "ASSIGNABLE_ENGINEER_ROLES", (User.Roles.ENGINEER,)))
 PM_ESS_ROLE = User.Roles.PM_ESS
 PM_ESG_ROLE = User.Roles.PM_ESG
-ADMIN_PANEL_ROLES = {User.Roles.ADMIN, PM_ESG_ROLE}
 SQR_ACCESS_ROLES = ENGINEER_ACCESS_ROLES | {User.Roles.ADMIN, PM_ESG_ROLE}
 
 from .forms import (
@@ -99,7 +105,6 @@ from .models import (
     Notification,
     Request,
     RequestCommunication,
-    SqrProjectPerformance,
     SqrSubmission,
     SqrSubmissionChange,
     SqrSubmissionHistory,
@@ -123,11 +128,8 @@ from .services.outlook_drafts import (
 from .services.notifications import (
     queue_assignment_notifications,
     queue_new_request_notifications,
-    notification_summary,
-    visible_notifications,
 )
 
-MANILA_TZ = ZoneInfo("Asia/Manila")
 logger = logging.getLogger(__name__)
 
 SQR_APPROVAL_SERVICE_COMPONENT = "Systems Support & Maintenance Service - 1 Year"
@@ -135,31 +137,12 @@ SQR_APPROVAL_LOGO_URL = "https://raw.githubusercontent.com/lloydismael/request-h
 SQR_APPROVAL_LOGO_PATH = Path(settings.BASE_DIR) / "static" / "img" / "phil-data-full-logo.png"
 SQR_APPROVAL_LOGO_CID = "sqr-approval-logo@request-hub"
 SQR_APPROVAL_MAILTO_BODY_URL_LIMIT = 8000
-SQR_APPROVAL_INCLUDED_SERVICES = [
-    "Proactive System Health Checks",
-    "System/Platform Patching (scheduled)",
-    "Incident Support",
-    "Basic Troubleshooting and Issue Isolation",
-    "Monthly System Status Report",
-    "Advisory Support",
-]
 SQR_APPROVAL_HUB_EMAIL = "ESGRequestHub@phildata.com"
 SQR_ACCOUNT_MANAGER_EMAILS = {
     manager["name"].strip().casefold(): manager["email"]
     for manager in ACCOUNT_MANAGERS
     if manager.get("name") and manager.get("email")
 }
-
-
-def _safe_return_url(request, fallback_name):
-    target = request.META.get("HTTP_REFERER", "").strip()
-    if url_has_allowed_host_and_scheme(
-        target,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        return target
-    return reverse(fallback_name)
 
 
 def _request_connect_url(request_obj, return_url):
@@ -206,28 +189,6 @@ def _microsoft_request_draft(request, request_obj, create_draft, return_url):
 def _format_sqr_approval_greeting(requestor_name: str) -> str:
     cleaned_name = (requestor_name or "").strip()
     return f"Hi @{cleaned_name}" if cleaned_name else "Hi"
-
-
-def _split_sqr_scope_items(scope_text: str) -> list[str]:
-    cleaned = (scope_text or "").replace("\r", "").strip()
-    if not cleaned:
-        return list(SQR_APPROVAL_INCLUDED_SERVICES)
-
-    if "•" in cleaned:
-        raw_items = cleaned.split("•")
-    elif "\n" in cleaned:
-        raw_items = cleaned.splitlines()
-    elif ";" in cleaned:
-        raw_items = cleaned.split(";")
-    else:
-        raw_items = [cleaned]
-
-    items: list[str] = []
-    for raw_item in raw_items:
-        item = re.sub(r"^[\-•\s]+", "", raw_item).strip()
-        if item:
-            items.append(item)
-    return items or list(SQR_APPROVAL_INCLUDED_SERVICES)
 
 
 def _get_sqr_service_component(submission: "SqrSubmission") -> str:
@@ -2107,44 +2068,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
     @staticmethod
-    def _filter_requests_by_metric(requests: list[Request], metric_filter: str, today: date) -> list[Request]:
-        if not metric_filter:
-            return requests
-
-        if metric_filter == "open":
-            return [req for req in requests if req.status == Request.Status.ONGOING]
-        if metric_filter == "overdue":
-            return [
-                req
-                for req in requests
-                if req.admin_days_overdue
-            ]
-        if metric_filter == "due_soon":
-            return [
-                req
-                for req in requests
-                if req.status == Request.Status.ONGOING
-                and req.engagement_type not in {
-                    Request.Engagement.DEPLOYMENT, Request.Engagement.CERTIFICATION
-                }
-                and req.due_date
-                and 0 <= (req.due_date - today).days <= 3
-            ]
-        if metric_filter == "completed":
-            return [
-                req
-                for req in requests
-                if req.status == Request.Status.COMPLETED
-            ]
-        if metric_filter == "new_this_week":
-            return [
-                req
-                for req in requests
-                if (today - req.created_at.date()).days <= 7
-            ]
-        return requests
-
-    @staticmethod
     def _format_duration(delta: timedelta) -> str:
         total_seconds = int(delta.total_seconds())
         if total_seconds <= 0:
@@ -2298,37 +2221,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             req.ack_start_iso = start_anchor.isoformat() if start_anchor else ""
             req.ack_first_iso = ack_time.isoformat() if ack_time else ""
             req.is_acknowledged = bool(ack_time)
-
-    @staticmethod
-    def _request_search_haystack(req: Request) -> str:
-        parts = [
-            req.reference_code,
-            req.account.name if req.account_id else "",
-            req.account_manager,
-            req.description,
-            req.teams_chat_topic,
-            req.get_engagement_type_display(),
-            req.get_product_category_display(),
-            req.get_priority_display(),
-            req.get_status_display(),
-        ]
-        for person in (req.requestor, req.engineer, req.backup_engineer):
-            if person:
-                parts.extend([person.get_full_name(), person.username, person.email])
-        return " ".join(str(part) for part in parts if part).casefold()
-
-    @classmethod
-    def _search_requests(cls, requests: list[Request], query: str) -> list[Request]:
-        """Match every whitespace-separated term against the whole request, not just the visible page."""
-        terms = [term for term in query.casefold().split() if term]
-        if not terms:
-            return requests
-        results = []
-        for req in requests:
-            haystack = cls._request_search_haystack(req)
-            if all(term in haystack for term in terms):
-                results.append(req)
-        return results
 
     def _build_admin_dashboard_context(self, user) -> dict:
         """Shared admin/PM-ESG dashboard table + metrics context (full page + live poll)."""
@@ -3610,61 +3502,6 @@ class DashboardLiveDataView(LoginRequiredMixin, View):
                 "html_rows": html_rows,
                 "html_pagination": render_to_string("hub/partials/pagination.html",
                     {**context, "pagination_id": "dashboard-live-pagination"}, request=request),
-            }
-        )
-
-
-class NotificationToastDataView(LoginRequiredMixin, View):
-    """Return new request/assignment events for the signed-in user's toast queue."""
-
-    PAGE_SIZE = 50
-
-    def get(self, request, *args, **kwargs):
-        queryset = (
-            Notification.objects.filter(
-                recipient=request.user,
-                event_type__in=[
-                    Notification.EventType.NEW_REQUEST,
-                    Notification.EventType.ASSIGNMENT,
-                    Notification.EventType.MENTION,
-                ],
-                related_request__isnull=False,
-            )
-            .select_related("related_request")
-            .order_by("id")
-        )
-        raw_cursor = request.GET.get("cursor")
-        summary = notification_summary(request.user)
-        if raw_cursor in (None, ""):
-            baseline = queryset.aggregate(value=Max("id"))["value"] or 0
-            return JsonResponse({"ok": True, "events": [], "next_cursor": baseline, "has_more": False, **summary})
-        try:
-            cursor = max(int(raw_cursor), 0)
-        except (TypeError, ValueError):
-            return JsonResponse({"ok": False, "error": "Invalid cursor"}, status=400)
-
-        rows = list(queryset.filter(id__gt=cursor, is_read=False)[: self.PAGE_SIZE + 1])
-        has_more = len(rows) > self.PAGE_SIZE
-        rows = rows[: self.PAGE_SIZE]
-        events = [
-            {
-                "id": item.pk,
-                "type": item.event_type,
-                "request_id": item.related_request_id,
-                "reference_code": item.related_request.reference_code,
-                "message": item.message,
-                "created_at": item.created_at.isoformat(),
-                "manage_url": reverse("hub:notification-follow", args=[item.pk]),
-            }
-            for item in rows
-        ]
-        return JsonResponse(
-            {
-                "ok": True,
-                "events": events,
-                "next_cursor": rows[-1].pk if rows else cursor,
-                "has_more": has_more,
-                **summary,
             }
         )
 
@@ -6697,18 +6534,6 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
                 return users[0]
         return None
 
-    def _parse_user(self, raw_value, lookup, label):
-        normalized = _normalize_import_text(raw_value)
-        if not normalized:
-            return None
-        matches = lookup.get(normalized, [])
-        if not matches:
-            raise ValueError(f"{label} was not found: {raw_value}")
-        unique_matches = {user.pk: user for user in matches}
-        if len(unique_matches) > 1:
-            raise ValueError(f"{label} matches multiple users: {raw_value}")
-        return next(iter(unique_matches.values()))
-
     def _parse_user_lenient(self, raw_value, lookup):
         normalized = _normalize_import_text(raw_value)
         if not normalized:
@@ -6720,16 +6545,6 @@ class SqrImportView(AdminRequiredMixin, LoginRequiredMixin, View):
         if len(unique_matches) > 1:
             return None
         return next(iter(unique_matches.values()))
-
-    @staticmethod
-    def _parse_choice(raw_value, mapping, label, default_blank=True):
-        normalized = _normalize_import_text(raw_value)
-        if not normalized:
-            return "" if default_blank else None
-        value = mapping.get(normalized)
-        if value is None:
-            raise ValueError(f"Invalid {label}: {raw_value}")
-        return value
 
     @staticmethod
     def _parse_choice_lenient(raw_value, mapping, default_blank=True):
@@ -8135,169 +7950,6 @@ class UserEditView(AdminRequiredMixin, LoginRequiredMixin, View):
                 for error in field_errors:
                     messages.error(request, f"{label}: {error}")
         return redirect("hub:management")
-
-
-class NotificationListView(LoginRequiredMixin, ListView):
-    model = Notification
-    template_name = "hub/notifications.html"
-    context_object_name = "notifications"
-    paginate_by = 50
-
-    def get(self, request, *args, **kwargs):
-        if request.GET.get("tab") != "changelogs":
-            return super().get(request, *args, **kwargs)
-        base_qs = visible_notifications(request.user)
-        changelog_qs = Changelog.objects.filter(
-            is_published=True, release_date__lte=timezone.localdate(),
-        )
-        page = Paginator(changelog_qs, 10).get_page(request.GET.get("page"))
-        return render(request, self.template_name, {
-            "active_tab": "changelogs", "changelogs": page, "page_obj": page,
-            "is_paginated": page.has_other_pages(),
-            "unread_count": base_qs.filter(is_read=False).count(), "total_count": base_qs.count(),
-            "changelog_count": changelog_qs.count(),
-        })
-
-    def get_queryset(self):
-        queryset = visible_notifications(self.request.user).select_related(
-            "related_request", "related_request__account"
-        ).order_by("-created_at")
-
-        # ── Filter: read/unread (default to unread for the notification dashboard) ──
-        self._filter_read = self.request.GET.get("filter", "unread")
-        if self._filter_read == "unread":
-            queryset = queryset.filter(is_read=False)
-        elif self._filter_read == "read":
-            queryset = queryset.filter(is_read=True)
-
-        # ── Filter: category ──
-        self._filter_category = self.request.GET.get("category", "")
-        if self._filter_category:
-            # We can't directly filter on computed properties, so filter on message/source patterns
-            cat = self._filter_category
-            if cat == "mention":
-                queryset = queryset.filter(event_type=Notification.EventType.MENTION)
-            elif cat == "new_request":
-                queryset = queryset.filter(source__icontains="new request")
-            elif cat == "assignment":
-                queryset = queryset.filter(message__icontains="assigned to request")
-            elif cat == "update":
-                queryset = queryset.filter(
-                    Q(source__icontains="status update") |
-                    Q(message__icontains="posted an update") |
-                    Q(message__icontains=" updated ")
-                )
-            elif cat == "completion":
-                queryset = queryset.filter(
-                    Q(message__icontains="completed") |
-                    Q(message__icontains="closed") |
-                    Q(source__icontains="close")
-                )
-            elif cat == "reminder":
-                queryset = queryset.filter(
-                    Q(source__icontains="nudge") |
-                    Q(message__icontains="reminder")
-                )
-
-        return queryset
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        user = self.request.user
-        base_qs = visible_notifications(user)
-        context["unread_count"] = base_qs.filter(is_read=False).count()
-        context["total_count"] = base_qs.count()
-        context["changelog_count"] = Changelog.objects.filter(
-            is_published=True, release_date__lte=timezone.localdate(),
-        ).count()
-        context["current_filter"] = self._filter_read
-        context["current_category"] = self._filter_category
-
-        # ── Category breakdown for the summary bar ──
-        category_counts = {
-            "new_request": base_qs.filter(source__icontains="new request").count(),
-            "assignment": base_qs.filter(message__icontains="assigned to request").count(),
-            "update": base_qs.filter(
-                Q(source__icontains="status update") |
-                Q(message__icontains="posted an update") |
-                Q(message__icontains=" updated ")
-            ).count(),
-            "completion": base_qs.filter(
-                Q(message__icontains="completed") |
-                Q(message__icontains="closed") |
-                Q(source__icontains="close")
-            ).count(),
-            "reminder": base_qs.filter(
-                Q(source__icontains="nudge") |
-                Q(message__icontains="reminder")
-            ).count(),
-        }
-        context["category_counts"] = category_counts
-
-        # ── Date-grouped notifications for timeline display ──
-        notifications_list = list(context["notifications"])
-        context["grouped_notifications"] = self._group_by_date(notifications_list)
-
-        return context
-
-    def _group_by_date(self, notifications):
-        """Group notifications by Today, Yesterday, This Week, Older."""
-        now = timezone.now().date()
-        groups = {"Today": [], "Yesterday": [], "This Week": [], "Older": []}
-
-        for n in notifications:
-            created_date = timezone.localtime(n.created_at, MANILA_TZ).date()
-            if created_date == now:
-                groups["Today"].append(n)
-            elif created_date == now - timedelta(days=1):
-                groups["Yesterday"].append(n)
-            elif (now - created_date).days < 7:
-                groups["This Week"].append(n)
-            else:
-                groups["Older"].append(n)
-
-        return {k: v for k, v in groups.items() if v}
-
-
-class NotificationReadView(LoginRequiredMixin, View):
-    def post(self, request, pk):
-        notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
-        notification.mark_read()
-        return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))
-
-
-class NotificationFollowRedirectView(LoginRequiredMixin, View):
-    def get(self, request, pk):
-        notification = get_object_or_404(
-            Notification.objects.select_related("related_request"),
-            pk=pk,
-            recipient=request.user,
-        )
-        notification.mark_read()
-        if notification.related_request:
-            req = notification.related_request
-            # Route to manage views instead of read-only detail.
-            route = "hub:request-manage" if request.user.role in ADMIN_PANEL_ROLES else "hub:request-manage-collab"
-            destination = reverse(route, args=[req.pk])
-            if notification.event_type == Notification.EventType.MENTION:
-                match = re.fullmatch(r"update:(\d+):mention:\d+", notification.event_key)
-                if match:
-                    destination += f"#update-{match.group(1)}"
-            return HttpResponseRedirect(destination)
-        return redirect("hub:notifications")
-
-
-class NotificationDeleteView(LoginRequiredMixin, View):
-    def post(self, request, pk):
-        notification = get_object_or_404(Notification, pk=pk, recipient=request.user)
-        notification.delete()
-        return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))
-
-
-class NotificationMarkAllReadView(LoginRequiredMixin, View):
-    def post(self, request):
-        request.user.notifications.filter(is_read=False).update(is_read=True)
-        return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))
 
 
 class RequestNudgeView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, View):
