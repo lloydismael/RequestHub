@@ -343,7 +343,9 @@ request-hub/
 
 +-- hub/                        # Core business logic app
    +-- models.py               #   Request, Account, StatusLog, SQR, ActivityLog
-   +-- views.py                #   Dashboard, Detail, Reports, SQR, ActivityLog
+   +-- views.py                #   Dashboard, requests, reports, SQR, activity logs
+   +-- notification_views.py   #   Notification pages, actions, and toast polling
+   +-- view_helpers.py         #   Shared view helpers and role constants
    +-- forms.py                #   RequestForm, AdminForm, ActivityLogForm
    +-- mixins.py               #   Role-based access mixins
    +-- signals.py              #   Notification triggers
