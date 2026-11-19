@@ -22,6 +22,21 @@ from request_hub.test_html_helpers import extract_scripts, omit_script_elements
 
 
 class MobileTemplateTests(SimpleTestCase):
+    def test_sqr_refresh_script_fixtures_handle_html_tag_variations(self):
+        html = (
+            '<p>Before</p><SCRIPT>window.refreshSqrReports = true;</SCRIPT >'
+            "<script TYPE='application/json'>{\"value\": 1}</script >"
+            '<script type="application/json" src="/external.js"></script><p>After</p>'
+        )
+        self.assertEqual(
+            omit_script_elements(html, keep_json_data=True),
+            '<p>Before</p><script TYPE=\'application/json\'>{"value": 1}</script ><p>After</p>',
+        )
+        self.assertEqual(
+            [script for attrs, script in extract_scripts(html) if not attrs],
+            ['window.refreshSqrReports = true;'],
+        )
+
     def test_mobile_styles_follow_page_specific_styles(self):
         base = (settings.BASE_DIR / 'templates' / 'base.html').read_text(encoding='utf-8')
         self.assertTrue('css/mobile.css' in base, 'Shared mobile stylesheet is missing')
@@ -525,7 +540,7 @@ class MobileBrowserTests(SimpleTestCase):
         page.route(refresh_url, lambda route: route.fulfill(body='<html></html>', content_type='text/html'))
         html = page.content()
         page.goto(refresh_url)
-        html = re.sub(r'<script\b(?![^>]*type="application/json")[^>]*>.*?</script>', '', html, flags=re.S | re.I)
+        html = omit_script_elements(html, keep_json_data=True)
         page.set_content(html)
         updated = render_to_string('hub/partials/sqr_reports.html', {
             **fixture, 'sqr_reports_revenue_chart': {'labels': ['Closed Won'], 'totals': [12345.68]},
@@ -540,7 +555,9 @@ class MobileBrowserTests(SimpleTestCase):
                 page.add_script_tag(content=script.read_text(encoding='utf-8'))
         if not scripts[-1].is_file():
             original = render_to_string('hub/sqr.html', fixture)
-            for script in re.findall(r'<script>(.*?)</script>', original, re.S):
+            for attrs, script in extract_scripts(original):
+                if attrs:
+                    continue
                 if 'window.initSqrReportsCharts =' in script or 'window.refreshSqrReports =' in script:
                     page.add_script_tag(content=script)
         self.assertEqual(page.evaluate("Chart.getChart('sqrMonthlyTrendChart').data.datasets[0].data"), [4, None, 2])
