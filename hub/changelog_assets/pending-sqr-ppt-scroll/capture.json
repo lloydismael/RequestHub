@@ -1,0 +1,38 @@
+{
+  "checkout_head": "30acbaa3190a805c7dd163c381541ae171ce818d",
+  "fixture": "Synthetic PPT with 24 rows per table; real templates and styles. Both captures use the same pointer position and one 160 px wheel input over the Project Status Tracker.",
+  "viewport": [
+    1420,
+    844
+  ],
+  "before": {
+    "sources_sha256": {
+      "templates/base.html": "84e0d8fd53e026c88056a054d4c1159f0d2949ca4e7f940ec26d6b7f460f2a8d",
+      "templates/hub/sqr.html": "d3898f1553fd1db0365d5fc72ba49257d578d48e13741071bb7bb8172f2b57ea",
+      "templates/hub/partials/sqr_performance.html": "a49bdfb6e046a02a4a20bf7bd670c4dc3be287ddc3a8b1f8d1671269f087388a",
+      "static/css/liquid-glass-sqr.css": "65ae403e4922181f8955332d2d0e83bafd33921960ad476e20fdb47a2c1259ba",
+      "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+      "hub/test_mobile_ui.py": "73df20afe2431c8b65e6b7ee718151d2eab09038700b3fec5cbd252b276dbfa6"
+    },
+    "starting_page_scroll_px": 1123,
+    "page_scroll_delta_px": 0,
+    "table_scroll_delta_px": 1,
+    "file": "ppt-wheel-before.png",
+    "sha256": "d8716dc6da6e71ff2b35b07dda611a0656a0f380cda4808bf30229c009611ecd"
+  },
+  "after": {
+    "sources_sha256": {
+      "templates/base.html": "84e0d8fd53e026c88056a054d4c1159f0d2949ca4e7f940ec26d6b7f460f2a8d",
+      "templates/hub/sqr.html": "c07d0480f3c4deb421f99e3d7b2bb3ad13b3e2be88da2f19da2b55bef2e2fa5a",
+      "templates/hub/partials/sqr_performance.html": "a49bdfb6e046a02a4a20bf7bd670c4dc3be287ddc3a8b1f8d1671269f087388a",
+      "static/css/liquid-glass-sqr.css": "a054056414c26894aa882e33d0fe6eb904334591d64eaeef0d59c23d1bbd6a0f",
+      "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+      "hub/test_mobile_ui.py": "73df20afe2431c8b65e6b7ee718151d2eab09038700b3fec5cbd252b276dbfa6"
+    },
+    "starting_page_scroll_px": 1123,
+    "page_scroll_delta_px": 160,
+    "table_scroll_delta_px": 0,
+    "file": "ppt-wheel-after.png",
+    "sha256": "4c221381c2ec6b331c3cab1ecd610123f614a4fe1ae39eefdea77ee402e9ecec"
+  }
+}

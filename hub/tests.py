@@ -3633,6 +3633,20 @@ class SqrPerformanceTrackingTests(TestCase):
         self.assertNotIn('id="sqr-performance-dashboard"', eng_content)
         self.assertNotIn(static("js/sqr-performance.js"), eng_content)
 
+    def test_performance_page_omits_standalone_rating_explanations(self):
+        self.client.force_login(self.pm)
+        response = self.client.get(reverse("hub:sqr"), {"view": "performance"})
+        self.assertContains(response, "Project Performance Tracker")
+        self.assertContains(response, '<summary>View chart values</summary>', count=2, html=True)
+        self.assertContains(response, "OR within each filter; AND across filters.")
+        content = response.content.decode()
+        removed_copy = (
+            "Ratings come only from SQR Delivery",
+            "Assessed shows saved coverage out of three",
+            "How ratings and statuses are calculated",
+        )
+        self.assertEqual([text for text in removed_copy if text in content], [])
+
     def test_performance_endpoint_preserves_saved_assessments_status_and_progress(self):
         other_pm = User.objects.create_user(
             username="perf_pm_other", password="pass12345", role=User.Roles.PM_ESG,

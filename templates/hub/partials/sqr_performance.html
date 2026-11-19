@@ -105,7 +105,6 @@
                     <div id="sqr-pm-rating-queue" class="sqr-pm-attention-list"></div>
                 </section>
             </div>
-            <p class="sqr-pm-note">Ratings come only from SQR Delivery &gt; Progress. Any red assessment needs action; otherwise amber is At Risk. Healthy requires all three green. Missing assessments remain neutral; On Hold attention does not replace the saved rating.</p>
         </section>
 
         <section class="sqr-pm-portfolio-section" aria-labelledby="sqr-pm-performance-tracker-title">
@@ -117,7 +116,6 @@
                     <tbody id="sqr-pm-indicator-rows"></tbody>
                 </table>
             </div>
-            <p class="sqr-pm-note">Assessed shows saved coverage out of three. Dates, progress, lifecycle status and remarks do not fabricate assessments.</p>
         </section>
         <nav class="sqr-pm-pagination" aria-label="Project tracker pages">
             <button type="button" id="sqr-pm-prev" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left me-1" aria-hidden="true"></i>Previous</button>
@@ -126,13 +124,4 @@
         </nav>
 
     </div>
-
-    <details class="sqr-pm-methodology sqr-pm-details">
-        <summary>How ratings and statuses are calculated</summary>
-        <div class="sqr-pm-methodology-grid">
-            <div><h4>Portfolio &amp; status</h4><p>The view includes accessible SQR records. Closed reflects completion; Pipeline means planning or no delivery evidence; Removed means cancelled or lost. PM falls back to the reviewer when unassigned. My Assigned follows the reviewer, not the displayed PM.</p></div>
-            <div><h4>Attention</h4><p>Saved amber or red assessments, open On Hold, and missing or inconsistent delivery data may need attention. Each matching project is counted once. Filters and charts use all matches before table pagination.</p></div>
-            <div><h4>Assessments</h4><p>Schedule, Budget/Effort and Quality use the exact saved choices in SQR Delivery &gt; Progress. Red takes priority over amber; all three must be green for Healthy. Partial coverage is Incomplete assessment; zero coverage is Not assessed. Notes and legacy Health do not supply ratings.</p></div>
-        </div>
-    </details>
 </section>

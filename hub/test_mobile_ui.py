@@ -231,6 +231,47 @@ class MobileBrowserTests(SimpleTestCase):
                     self.assertEqual(len({h for _, h in boxes}), 1)
                     self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
 
+    def ppt_tracker_page(self, width):
+        page = self.page(width, template='hub/sqr.html', dark=True,
+                         fixture={**self.context(), 'is_pm': True},
+                         scripts=self.chart_scripts('smooth-scroll.js', chart=False))
+        page.evaluate('''() => {
+            document.querySelector('#sqr-performance-dashboard').hidden = false;
+            document.querySelector('#sqr-pm-content').hidden = false;
+            for (const body of document.querySelectorAll('#sqr-pm-status-rows, #sqr-pm-indicator-rows')) {
+                const columns = body.parentElement.tHead.rows[0].cells.length;
+                for (let i = 0; i < 24; i++) {
+                    const row = body.insertRow();
+                    for (let j = 0; j < columns; j++) {
+                        row.insertCell().textContent = j === 1 ? `Synthetic project ${i + 1}` : 'Ongoing';
+                    }
+                }
+            }
+        }''')
+        return page
+
+    def test_ppt_vertical_wheel_scrolls_the_page_over_tracker_rows(self):
+        for width in (1420, 390):
+            for name in ('Project status tracker', 'Project performance tracker'):
+                with self.subTest(width=width, table=name):
+                    page = self.ppt_tracker_page(width)
+                    table = page.get_by_role('region', name=name, exact=True)
+                    table.evaluate('el => el.scrollIntoView({block: "start", behavior: "instant"})')
+                    box = table.bounding_box()
+                    page.mouse.move(box['x'] + 80, box['y'] + 220)
+                    start = page.evaluate('scrollY')
+                    page.mouse.wheel(0, 160)
+                    page.wait_for_function('start => scrollY > start', arg=start, timeout=1500)
+                    page.mouse.wheel(0, -160)
+                    page.wait_for_function('start => scrollY <= start', arg=start, timeout=1500)
+                    self.assertEqual(table.evaluate('el => el.scrollTop'), 0)
+                    if width == 390:
+                        table.focus()
+                        page.keyboard.press('ArrowRight')
+                        table.wait_for(state='visible')
+                        page.wait_for_function('el => el.scrollLeft > 0', arg=table.element_handle())
+                        self.assertEqual(page.evaluate('scrollX'), 0)
+
     def report_chart_grid_fixture(self):
         fixture = self.report_fixture()
         fixture.update(engagement_chart_has_data=True, engagement_chart={
@@ -532,6 +573,81 @@ class MobileBrowserTests(SimpleTestCase):
                 'sqr_reports_group_chart': {'labels': ['North', 'Central'], 'totals': [2, 4]},
                 'sqr_reports_monthly_chart': {'labels': ['Jul 2026', 'Sep 2026'], 'totals': [4, 2]},
                 'sqr_reports_revenue_chart': {'labels': ['Closed Won'], 'totals': [12345.67]}}
+
+    def test_sqr_report_breakdowns_match_reports_sizing_without_losing_chart_values(self):
+        scripts = self.chart_scripts('chart-values.js', 'chart-theme.js', 'sqr-report-charts.js')
+        labels = [f'Northern Infrastructure and Shared Operations Division {n}' for n in range(8)]
+        fixture = {**self.sqr_chart_fixture(), 'sqr_reports_group_chart': {'labels': labels, 'totals': list(range(8))},
+                   'sqr_reports_deal_chart': {'labels': [], 'totals': []}}
+        surface_style = '''el => {
+            const { paddingTop, borderRadius } = getComputedStyle(el);
+            return [paddingTop, borderRadius];
+        }'''
+        for width in (1280, 320):
+            with self.subTest(width=width):
+                report = self.page(width, template='hub/report.html', fixture=self.report_chart_grid_fixture(),
+                                   scripts=self.chart_scripts('chart-values.js', 'chart-theme.js', 'report-charts.js'))
+                page = self.page(width, template='hub/sqr.html', fixture=fixture, dark=width == 320, scripts=scripts)
+                charts = page.locator('#sqr-reports-root .rh-chart-card')
+                self.assertEqual(charts.count(), 5)
+                sizes = charts.evaluate_all('els => els.map(el => [el.offsetWidth, el.offsetHeight])')
+                self.assertLessEqual(max(w for w, _ in sizes) - min(w for w, _ in sizes), 1, sizes)
+                self.assertEqual(len({h for _, h in sizes}), 1, sizes)
+                self.assertEqual(charts.first.evaluate(surface_style),
+                                 report.locator('.rpt-chart-grid article').first.evaluate(surface_style))
+                self.assertEqual(page.locator('#sqrFunnelChart').evaluate('el => el.parentElement.clientHeight'),
+                                 report.locator('#engagementChart').evaluate('el => el.parentElement.clientHeight'))
+                self.assertTrue(page.get_by_text('No data available for this chart.', exact=True).is_visible())
+                self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+                ranking = charts.filter(has=page.locator('#sqrGroupDistributionChart'))
+                tick_spacing, max_label_height = ranking.evaluate('''el => {
+                    const axis = Chart.getChart(el.querySelector('canvas')).scales.y;
+                    return [axis.getPixelForTick(1) - axis.getPixelForTick(0),
+                            Math.max(...axis.getLabelItems().map(({label, font}) => label.length * font.lineHeight))];
+                }''')
+                self.assertGreaterEqual(tick_spacing, max_label_height)
+                summary = ranking.locator('summary')
+                summary.focus()
+                page.keyboard.press('Enter')
+                self.assertEqual(ranking.locator('tbody th').all_text_contents(), labels)
+                self.assertAlmostEqual(charts.nth(2).bounding_box()['height'], sizes[2][1], delta=1)
+
+    def test_sqr_report_metric_tiles_use_reports_spacing_and_reflow_at_phone_width(self):
+        fixture = self.sqr_chart_fixture()
+        style = '''el => {
+            const { paddingTop, borderTopWidth, rowGap } = getComputedStyle(el);
+            return [paddingTop, borderTopWidth, rowGap];
+        }'''
+        for width in (1280, 390, 320):
+            with self.subTest(width=width):
+                value = '₱1,234,567,890.00' if width == 320 else '₱1,568,950.00'
+                fixture['sqr_reports_summary']['won_discounted_total_label'] = value
+                page = self.page(width, template='hub/sqr.html', fixture=fixture)
+                report = self.page(width, template='hub/report.html', fixture=self.report_fixture())
+                if width == 320:
+                    for view in (report, page):
+                        view.add_style_tag(content='html { font-size: 20px !important; }')
+                summary = page.get_by_role('region', name='Sales performance')
+                tiles = summary.get_by_text('Won Value', exact=True).locator('..')
+                self.assertEqual(tiles.evaluate(style), report.locator('.rpt2-kpi').first.evaluate(style))
+                for name, count in (('Sales performance', 6), ('Pipeline actions', 4)):
+                    grid = page.get_by_role('region', name=name)
+                    sizes = grid.evaluate('''el => [...el.querySelectorAll('strong')].map(({parentElement: tile}) => {
+                        const { x, y, width, height } = tile.getBoundingClientRect();
+                        return [x, y, Math.round(width), Math.round(height)];
+                    })''')
+                    self.assertEqual(len(sizes), count)
+                    self.assertEqual(len({(w, h) for _, _, w, h in sizes}), 1, sizes)
+                    self.assertEqual(sizes[0][1], sizes[1][1])
+                    if width < 768:
+                        self.assertNotEqual(sizes[1][1], sizes[2][1])
+                self.assertTrue(page.get_by_text('Delivery Watchlist').evaluate('el => el.scrollWidth <= el.clientWidth'))
+                self.assertTrue(page.get_by_text(value, exact=True).evaluate('''(el, singleLine) => {
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    return el.scrollWidth <= el.clientWidth && (!singleLine || range.getClientRects().length === 1);
+                }''', width > 320))
+                self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
 
     def test_sqr_report_live_refresh_preserves_chart_values_focus(self):
         fixture = self.sqr_chart_fixture()

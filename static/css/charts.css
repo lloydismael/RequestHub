@@ -37,7 +37,7 @@ body.pref-large-text { --rh-chart-tick: 14; }
 body .rh-chart-card,
 body:is(.reports-page, .engineer-dashboard, .requestor-dashboard) .rh-chart-card.glass-card,
 body.reports-page #rptChartModal .rh-chart-card,
-body.sqr-page .rh-chart-card.sqr-report-card {
+body .rpt-shell .rh-chart-card {
     background: var(--rh-chart-surface) !important;
     color: var(--rh-chart-ink);
     border: 1px solid var(--rh-chart-grid) !important;

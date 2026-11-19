@@ -4,7 +4,7 @@
 {% block title %}{% if is_pm and active_sqr_tab != 'reports' and request.GET.view == 'performance' %}PPT{% else %}SQR{% endif %} &middot; Request Hub{% endblock %}
 {% block body_class %}sqr-page{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=23">
+<link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=25">
 {% if active_sqr_tab != 'reports' %}
 <link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=5">
 <link rel="stylesheet" href="{% static 'css/sqr-filter-controls.css' %}?v=1">
@@ -13,7 +13,7 @@
 <script src="{% static 'js/sqr-tracker-prototype.js' %}?v=13" defer></script>
 {% endif %}
 {% if is_pm %}
-<link rel="stylesheet" href="{% static 'css/charts.css' %}">
+<link rel="stylesheet" href="{% static 'css/charts.css' %}?v=2">
 {% endif %}
 {% if is_pm and active_sqr_tab != 'reports' %}
 <script src="{% static 'js/chart-values.js' %}" defer></script>
@@ -261,8 +261,8 @@
 
             <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
             <script src="{% static 'js/chart-values.js' %}"></script>
-            <script src="{% static 'js/chart-theme.js' %}"></script>
-            <script src="{% static 'js/sqr-report-charts.js' %}"></script>
+            <script src="{% static 'js/chart-theme.js' %}?v=3"></script>
+            <script src="{% static 'js/sqr-report-charts.js' %}?v=2"></script>
         {% else %}
         {% if show_classic_sqr_tracker %}
         {# ── Main Tracker Table ────────────────────────────────────────────── #}
