@@ -32,8 +32,8 @@ Production adds no animation or screenshot dependency. The browser regression su
 From the repository root, using the existing compatible Python environment:
 
 ```powershell
-node --test scripts_check\test_christmas_theme.cjs scripts_check\test_christmas_snapshot.cjs scripts_check\test_christmas_preview.cjs scripts_check\test_christmas_lights.cjs
-& '.\.venv\Scripts\python.exe' scripts_check\test_christmas_transition_browser.py -v
+node --test tests\js\test_christmas_theme.cjs tests\js\test_christmas_snapshot.cjs tests\js\test_christmas_preview.cjs tests\js\test_christmas_lights.cjs
+& '.\.venv\Scripts\python.exe' tests\browser\test_christmas_transition_browser.py -v
 $env:DJANGO_SETTINGS_MODULE = 'request_hub.settings_ci'
 & '.\.venv\Scripts\python.exe' manage.py collectstatic --noinput
 & '.\.venv\Scripts\python.exe' manage.py test accounts.test_themes accounts.test_christmas_preferences accounts.test_christmas_login --noinput

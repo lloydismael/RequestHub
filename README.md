@@ -136,7 +136,7 @@ For maintenance, keep chart assets scoped to views that use them. Reuse [the cha
 - Enable/disable navbar lights by adding/removing `seasonal-lights` on the navbar. The default `data-seasonal-lights-theme="christmas"` limits them to the Christmas account theme; remove that attribute to use the class flag with any theme. Twinkle respects reduced motion and the existing Festive effects toggle; dark mode has slightly stronger glow. No external libraries are needed.
 - Christmas login page: [CSS](static/css/login-christmas.css) and [JavaScript](static/js/login-christmas.js) give the sign-in page a snowy dusk scene, falling snow, and a frosted card with a snow cap and twinkling C7 lights. The form, CSRF, validation, and light/dark toggle are unchanged. From November 6 through December 31, 2026 (Asia/Manila), the server renders `login-christmas` on `<html>` for every visitor, including anonymous and guest sessions, without requiring browser storage or a previous sign-in. Light/dark mode and saved account theme choices do not disable this temporary public login look; users can still apply any account theme. From January 1, 2027, fresh login visits return to the standard design. A remembered `reqHubLoginTheme=christmas` can still enable Christmas after the deadline: temporary account defaults carry `reqHubLoginThemeExpiresAt`, while explicitly applied Christmas with Festive effects on clears that expiry. Other account themes or Festive effects off clear the remembered Christmas login choice.
   - **Loading performance:** the sign-in view uses a login-only asset profile, excluding dashboard/account-theme styles, table scrolling, notification polling, hub form-runtime assets, and the Bootstrap JavaScript bundle; authenticated and other anonymous templates retain their existing assets. Responsive 384/768-pixel WebP logo variants reserve their 2:1 layout space, and the shared favicon is a compact 32-pixel PNG. The original branding files remain available for other consumers. Run `python manage.py test accounts.test_login_performance accounts.tests.LoginPageTests accounts.test_christmas_login --settings=request_hub.settings_ci` using the disposable PostgreSQL configuration described under CI validation, never a live database.
-  - **Animation performance:** the festive wire and bulb positions use cached numerical samples of the same rounded SVG curves instead of repeated browser path-length queries. Decoration construction starts after the first painted frame, builds detached layers, and coalesces resize/font/load events; unchanged geometry reuses the scene, and theme changes only retint its gradients. Cursor lighting still updates only the lens and sheen, with at most one geometry read per frame; it does not restyle the thousands of decorative SVG nodes. Red, green, and amber glows twinkle on three cached opacity layers while the frosted snow, wire, and glass bulbs stay static. Snow and glows pause while the tab is hidden or the light/dark transition is running; reduced motion keeps the festive scene still. Regression checks run through `accounts.test_christmas_login` or directly with `node --test scripts_check/test_login_christmas.cjs scripts_check/test_liquid_glass.cjs scripts_check/test_christmas_theme.cjs`.
+  - **Animation performance:** the festive wire and bulb positions use cached numerical samples of the same rounded SVG curves instead of repeated browser path-length queries. Decoration construction starts after the first painted frame, builds detached layers, and coalesces resize/font/load events; unchanged geometry reuses the scene, and theme changes only retint its gradients. Cursor lighting still updates only the lens and sheen, with at most one geometry read per frame; it does not restyle the thousands of decorative SVG nodes. Red, green, and amber glows twinkle on three cached opacity layers while the frosted snow, wire, and glass bulbs stay static. Snow and glows pause while the tab is hidden or the light/dark transition is running; reduced motion keeps the festive scene still. Regression checks run through `accounts.test_christmas_login` or directly with `node --test tests/js/test_login_christmas.cjs tests/js/test_liquid_glass.cjs tests/js/test_christmas_theme.cjs`.
   - **Mouse and toggle effects:** an active Christmas login enables the snowflake cursor and short click snowbursts while preserving the native text cursor in the fields. Changing light/dark mode sends Santa and the quilted blanket right into dark mode or left into light mode, dropping gifts while revealing the selected theme. The shared interaction script does not add a second snow canvas, site-wide border, or navbar lights to the login page. Effects respect reduced-motion/reduced-effects preferences and clean up when hidden.
   - **Background image:** `static/img/login-christmas-bg.webp`, shown with `background-size: cover; background-position: center`. To use a different scene, replace the file with a background-only image (no card or toggle) at the same path, ideally 16:9 or 3:2 and at least 1920px wide, then run `collectstatic`. Keep the corner decorations away from the centre, where the card sits.
   - **Turn it off entirely:** set `CHRISTMAS_LOGIN_THEME_ENABLED=false` and restart. The login page then renders without any Christmas markup or assets, including remembered post-season choices. The temporary public default already ends automatically on January 1, 2027.
@@ -335,7 +335,7 @@ request-hub/
 
 +-- accounts/                   # User management app
    +-- models.py               #   User (AbstractUser + roles + profile photo)
-   +-- views.py                #   Login, profile, notifications
+   +-- views.py                #   Login and profile
    +-- backends.py             #   Email-or-username auth backend
    +-- middleware.py           #   Password-change & profile-complete guards
    +-- storage.py              #   DatabaseMediaStorage for profile photos
@@ -343,7 +343,9 @@ request-hub/
 
 +-- hub/                        # Core business logic app
    +-- models.py               #   Request, Account, StatusLog, SQR, ActivityLog
-   +-- views.py                #   Dashboard, Detail, Reports, SQR, ActivityLog
+   +-- views.py                #   Dashboard, requests, reports, SQR, activity logs
+   +-- notification_views.py   #   Notification pages, actions, and toast polling
+   +-- view_helpers.py         #   Shared view helpers and role constants
    +-- forms.py                #   RequestForm, AdminForm, ActivityLogForm
    +-- mixins.py               #   Role-based access mixins
    +-- signals.py              #   Notification triggers
@@ -363,15 +365,23 @@ request-hub/
 +-- templates/
    +-- base.html               # Shared layout (navbar, dark-mode, notifications)
    +-- landing.html
-   +-- accounts/               # Login, profile, notification templates
-   +-- hub/                    # Dashboard, detail, report, SQR templates
+   +-- accounts/               # Login and profile templates
+   +-- hub/                    # Dashboard, notifications, reports, and SQR templates
 
 +-- static/
-   +-- css/app.css             # All custom styles (glass-card, rpt-*, dbd-*, rmf-*)
+   +-- css/                    # Shared and page-specific styles
    +-- js/
    +-- img/
 
++-- tests/
+   +-- js/                     # Node regression tests
+   +-- browser/                # Opt-in Playwright tests
+
++-- scripts/                   # Operational tooling and its tests
++-- scripts_check/             # Incident diagnostics and repair scripts
+
 +-- docs/
+   +-- archive/                # Historical plans and audits
    +-- azure-app-service-deployment.md
 
 +-- Dockerfile
