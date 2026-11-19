@@ -51,7 +51,7 @@ function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas'
         cancelAnimationFrame(id) { frames.delete(id); },
         addEventListener(name, callback) { listeners[name] = callback; },
     };
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'christmas-lights.js'), 'utf8'), {
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'christmas-lights.js'), 'utf8'), {
         document, window, Math,
         MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} },
         ResizeObserver: class { constructor(callback) { resize = callback; } observe() {} },

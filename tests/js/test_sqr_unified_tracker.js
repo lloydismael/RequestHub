@@ -86,7 +86,7 @@ function tracker(records = [fixture(1)], {storage, search = '', viewer = {pk: 8,
         }};
     context.window = {location: {search, reload() {}}, matchMedia: () => ({matches: false}), setTimeout: context.setTimeout};
     vm.createContext(context);
-    const source = name => fs.readFileSync(path.join(__dirname, '..', 'static', 'js', name), 'utf8');
+    const source = name => fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', name), 'utf8');
     vm.runInContext(source('sqr-filter-core.js'), context);
     vm.runInContext(source('sqr-filter-controls.js'), context);
     const script = source('sqr-tracker-prototype.js').replace(/\}\)\(\);\s*$/, `window.__tracker = {state, apply, select, save, refreshRecord, load, visibleRecords, renderAll, filterDimensions, todoItems, renderSummary,

@@ -4,8 +4,8 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const scriptPath = path.join(__dirname, '..', 'static', 'js', 'christmas-theme.js');
-const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'base.html'), 'utf8');
+const scriptPath = path.join(__dirname, '..', '..', 'static', 'js', 'christmas-theme.js');
+const template = fs.readFileSync(path.join(__dirname, '..', '..', 'templates', 'base.html'), 'utf8');
 const themeScriptMarker = template.indexOf("const toggle = document.getElementById('theme-checkbox');");
 const themeScript = template.slice(template.lastIndexOf('<script>', themeScriptMarker) + '<script>'.length, template.indexOf('</script>', themeScriptMarker));
 

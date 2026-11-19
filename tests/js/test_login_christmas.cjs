@@ -163,7 +163,7 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
     };
     const raf = cb => window.requestAnimationFrame(cb);
 
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'login-christmas.js'), 'utf8'), {
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'login-christmas.js'), 'utf8'), {
         document, window, Math, JSON, console,
         requestAnimationFrame: raf, cancelAnimationFrame: id => window.cancelAnimationFrame(id),
         MutationObserver: class {
@@ -285,7 +285,7 @@ function start({ width = 1280, height = 900, mobile = false, dark = false, reduc
 }
 
 function wireGeometry() {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'login-christmas.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'login-christmas.js'), 'utf8');
     const context = { Math, round: value => Math.round(value * 10) / 10 };
     vm.runInNewContext(source.slice(source.indexOf('    function smoothPath('), source.indexOf('    /* ---------- SVG defs:')) + '\nthis.sample = sampleWire;', context);
     return context.sample;

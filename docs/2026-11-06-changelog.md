@@ -175,10 +175,10 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 | [test_christmas_preferences.py](../accounts/test_christmas_preferences.py) | Eleven tests for account defaults, independent preferences, accessible controls, preview/save behavior, legacy forms, and cross-session persistence. |
 | [test_update_mentions.py](../hub/test_update_mentions.py) | Nineteen tests for participant scope, validation, deduplication, edits, email behavior, ACS content, toasts/counts, links, and request-access restrictions. |
 | [test_dashboard_request_links.py](../hub/test_dashboard_request_links.py) | Initial/live requestor-link and PM-ESS presentation subcases. |
-| [test_christmas_theme.cjs](../scripts_check/test_christmas_theme.cjs) | Eighteen tests for decorations, bounded effects, Santa behavior/cleanup, saved preferences, preview reconciliation, and accessibility. |
-| [test_christmas_lights.cjs](../scripts_check/test_christmas_lights.cjs) | Nine tests for bulb/wire geometry, responsive removal, preference gating, and expanded navigation. |
-| [test_christmas_preview.cjs](../scripts_check/test_christmas_preview.cjs) | Five tests for effect-only preview, cancellation, bound forms, cached-page restoration, and preserved individual choices. |
-| [test_update_mentions.cjs](../scripts_check/test_update_mentions.cjs) | Seven tests for stakeholder search, keyboard insertion, dismissal, Unicode/email-style usernames, and safe rendering. |
+| [test_christmas_theme.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_christmas_theme.cjs) | Eighteen tests for decorations, bounded effects, Santa behavior/cleanup, saved preferences, preview reconciliation, and accessibility. |
+| [test_christmas_lights.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_christmas_lights.cjs) | Nine tests for bulb/wire geometry, responsive removal, preference gating, and expanded navigation. |
+| [test_christmas_preview.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_christmas_preview.cjs) | Five tests for effect-only preview, cancellation, bound forms, cached-page restoration, and preserved individual choices. |
+| [test_update_mentions.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_update_mentions.cjs) | Seven tests for stakeholder search, keyboard insertion, dismissal, Unicode/email-style usernames, and safe rendering. |
 
 ### Extended suites
 
@@ -186,7 +186,7 @@ Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
 - [accounts/tests.py](../accounts/tests.py): adds Christmas preview/save smoke coverage.
 - [hub/tests.py](../hub/tests.py): adds activity visibility, access, admin selection, and creation-restriction coverage.
 - [test_redirect_security.py](../hub/test_redirect_security.py): routing-only test bypasses the new transaction wrappers.
-- [test_notification_toasts.cjs](../scripts_check/test_notification_toasts.cjs): extends the mock harness and adds mention, authoritative-badge, filtered-refresh, and follow-up-polling coverage.
+- [test_notification_toasts.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_notification_toasts.cjs): extends the mock harness and adds mention, authoritative-badge, filtered-refresh, and follow-up-polling coverage.
 
 ### Verification performed for this changelog
 
@@ -269,7 +269,7 @@ Desktop captures use a 1440 × 1000 viewport; the mobile login uses 390 × 844. 
 
 ## Implementation notes and limitations
 
-- [christmas-login.css](../static/css/christmas-login.css) and [christmas-login.js](../static/js/christmas-login.js) are empty placeholders, not the active login implementation.
+- [christmas-login.css](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/static/css/christmas-login.css) and [christmas-login.js](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/static/js/christmas-login.js) are empty placeholders, not the active login implementation.
 - [christmas-login-scene.webp](../static/images/christmas-login-scene.webp) and [christmas-login.png](../static/images/christmas-login.png) have no discovered code/template references. They are present in the change set but are not the rendered login background.
 - [request_detail.html](../templates/hub/request_detail.html) changes, but the named detail route redirects to collaborative management rather than rendering that template.
 - [update_composer.html](../templates/hub/update_composer.html) is an included fragment, not a separately routed page.
@@ -304,20 +304,20 @@ Desktop captures use a 1440 × 1000 viewport; the mobile login uses 390 × 844. 
 | Added | [hub/services/update_mentions.py](../hub/services/update_mentions.py) | Scoped mentions, deduplication, and email delivery. |
 | Added | [hub/test_dashboard_request_links.py](../hub/test_dashboard_request_links.py) | Requestor-link coverage. |
 | Added | [hub/test_update_mentions.py](../hub/test_update_mentions.py) | Server-side mention tests. |
-| Modified | [scripts_check/test_notification_toasts.cjs](../scripts_check/test_notification_toasts.cjs) | Notification refresh/badge tests. |
-| Added | [scripts_check/test_christmas_lights.cjs](../scripts_check/test_christmas_lights.cjs) | Navbar-light tests. |
-| Added | [scripts_check/test_christmas_preview.cjs](../scripts_check/test_christmas_preview.cjs) | Preview reconciliation tests. |
-| Added | [scripts_check/test_christmas_theme.cjs](../scripts_check/test_christmas_theme.cjs) | Christmas effects tests. |
-| Added | [scripts_check/test_update_mentions.cjs](../scripts_check/test_update_mentions.cjs) | Mention-composer tests. |
+| Modified | [scripts_check/test_notification_toasts.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_notification_toasts.cjs) | Notification refresh/badge tests. |
+| Added | [scripts_check/test_christmas_lights.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_christmas_lights.cjs) | Navbar-light tests. |
+| Added | [scripts_check/test_christmas_preview.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_christmas_preview.cjs) | Preview reconciliation tests. |
+| Added | [scripts_check/test_christmas_theme.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_christmas_theme.cjs) | Christmas effects tests. |
+| Added | [scripts_check/test_update_mentions.cjs](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/scripts_check/test_update_mentions.cjs) | Mention-composer tests. |
 | Modified | [static/css/account-themes.css](../static/css/account-themes.css) | Christmas theme styling integration. |
 | Added | [static/css/christmas-lights.css](../static/css/christmas-lights.css) | Seasonal navbar overlay styling. |
-| Added | [static/css/christmas-login.css](../static/css/christmas-login.css) | Empty legacy placeholder. |
+| Added | [static/css/christmas-login.css](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/static/css/christmas-login.css) | Empty legacy placeholder. |
 | Added | [static/css/christmas-theme.css](../static/css/christmas-theme.css) | Christmas page surfaces and effects. |
 | Added | [static/css/login-christmas.css](../static/css/login-christmas.css) | Active seasonal login styling. |
 | Added | [static/hub/update_mentions.css](../static/hub/update_mentions.css) | Mention suggestions styling. |
 | Modified | [static/js/notification-toasts.js](../static/js/notification-toasts.js) | Mention toasts, authoritative badges, and page refresh. |
 | Added | [static/js/christmas-lights.js](../static/js/christmas-lights.js) | Responsive wire/bulb layout. |
-| Added | [static/js/christmas-login.js](../static/js/christmas-login.js) | Empty legacy placeholder. |
+| Added | [static/js/christmas-login.js](https://github.com/lloydismael/request-hub/blob/bfa645b6389c1c1babf2b669aece628eec304e57/static/js/christmas-login.js) | Empty legacy placeholder. |
 | Added | [static/js/christmas-theme.js](../static/js/christmas-theme.js) | Preferences, effects, and preview lifecycle. |
 | Added | [static/js/login-christmas.js](../static/js/login-christmas.js) | Active login decoration and snowfall. |
 | Added | [static/js/update-mentions.js](../static/js/update-mentions.js) | Stakeholder suggestions and keyboard interactions. |

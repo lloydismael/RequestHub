@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'accounts', 'profile_form.html'), 'utf8');
+const template = fs.readFileSync(path.join(__dirname, '..', '..', 'templates', 'accounts', 'profile_form.html'), 'utf8');
 const source = template.slice(template.indexOf("    const themeForm = document.getElementById('profile-theme-form');"), template.indexOf('    // Live avatar preview'));
 const defaults = { enabled: true, border: true, snow: true, lights: true, cursor: true, clicks: true, santa: true };
 

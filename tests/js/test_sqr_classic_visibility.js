@@ -5,7 +5,7 @@ const test = require('node:test');
 const vm = require('node:vm');
 
 function load(checked = true) {
-    const file = path.join(__dirname, '..', 'static', 'js', 'sqr-classic-visibility.js');
+    const file = path.join(__dirname, '..', '..', 'static', 'js', 'sqr-classic-visibility.js');
     const checkbox = {checked, disabled: false, events: {}, addEventListener(name, callback) { this.events[name] = callback; }};
     const status = {textContent: ''};
     Object.defineProperty(status, 'innerHTML', {set() { assert.fail('Feedback must not parse HTML'); }});

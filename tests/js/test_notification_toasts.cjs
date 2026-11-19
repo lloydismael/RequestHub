@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'notification-toasts.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'notification-toasts.js'), 'utf8');
 
 function start({ initial = 10, stored = null, storageUnavailable = false, notificationPage = false, immediatePagePoll = false } = {}) {
     const config = { dataset: { url: '/dashboard/toasts/', userId: '1', initialCursor: String(initial) } };

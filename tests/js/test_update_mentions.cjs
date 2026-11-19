@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
-const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'update-mentions.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'update-mentions.js'), 'utf8');
 
 class Element {
     constructor() { this.children = []; this.attributes = {}; this.listeners = {}; this.hidden = true; this.value = ''; this.selectionStart = 0; this.selectionEnd = 0; }

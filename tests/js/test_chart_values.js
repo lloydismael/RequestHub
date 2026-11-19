@@ -8,7 +8,7 @@ function load() {
     const create = (tag) => ({ tag, children: [], setAttribute() {}, append(...nodes) { this.children.push(...nodes); },
         replaceChildren(...nodes) { this.children = nodes; } });
     const context = { window: {}, document: { createElement: create } };
-    const script = path.join(__dirname, '..', 'static', 'js', 'chart-values.js');
+    const script = path.join(__dirname, '..', '..', 'static', 'js', 'chart-values.js');
     if (fs.existsSync(script)) vm.runInNewContext(fs.readFileSync(script, 'utf8'), context);
     return [context.window.rhChartValues, create('div')];
 }

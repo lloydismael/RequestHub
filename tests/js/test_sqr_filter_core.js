@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const keys = ['stage', 'status', 'pm_id', 'sse_id', 'schedule_performance', 'quality_performance', 'linked_request_id'];
 function core() {
-    const file = path.join(__dirname, '..', 'static', 'js', 'sqr-filter-core.js');
+    const file = path.join(__dirname, '..', '..', 'static', 'js', 'sqr-filter-core.js');
     const context = {URLSearchParams};
     vm.createContext(context);
     if (fs.existsSync(file)) {
@@ -14,7 +14,7 @@ function core() {
         return context.SqrFilterCore;
     }
     // Before the shared engine exists, exercise the actual legacy tracker predicate.
-    const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
     vm.runInContext(source.slice(source.indexOf('    function needsAction('), source.indexOf('    /* ── pipeline strip')), context);
     return {
         filterRecords(records, filters, viewerId) {

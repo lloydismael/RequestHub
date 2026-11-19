@@ -42,6 +42,7 @@ docs/
 README.md
 Plan/
 scripts_check/
+tests/
 .copilot-azure/
 .azure/deployment-plan.md
 .github/

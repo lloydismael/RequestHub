@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function idlePage(enabled = true, checkResponse = {status: 401}) {
-    const script = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'idle-timeout.js'), 'utf8');
+    const script = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'idle-timeout.js'), 'utf8');
     let now = 0;
     let nextId = 0;
     const timers = new Map();
@@ -174,7 +174,7 @@ test('only deliberate activity and warning confirmation request an idle renewal'
 
 for (const succeeds of [true, false]) {
     test(`settings save ${succeeds ? 'broadcasts the saved preference' : 'does not broadcast on failure'}`, async () => {
-        const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'accounts', 'profile_form.html'), 'utf8');
+        const template = fs.readFileSync(path.join(__dirname, '..', '..', 'templates', 'accounts', 'profile_form.html'), 'utf8');
         const script = template.slice(template.indexOf('// Settings changes are staged'),
             template.indexOf('// \u2500\u2500 Profile page: inline view-mode toggle'));
         const listeners = {};

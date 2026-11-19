@@ -83,7 +83,7 @@ function snapshotResponse(projects) {
 }
 
 function dashboard(projects, {storage, search = '', responses} = {}) {
-    const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hub', 'partials', 'sqr_performance.html'), 'utf8');
+    const template = fs.readFileSync(path.join(__dirname, '..', '..', 'templates', 'hub', 'partials', 'sqr_performance.html'), 'utf8');
     const events = {};
     const document = {activeElement: null, getElementById: id => elements[id],
         createElement: tag => new Element(tag, document), createDocumentFragment: () => new Element('#fragment', document),
@@ -122,7 +122,7 @@ function dashboard(projects, {storage, search = '', responses} = {}) {
     };
     vm.createContext(context);
     ['chart-values.js', 'sqr-filter-core.js', 'sqr-filter-controls.js', 'sqr-performance.js'].forEach(name => {
-        vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', name), 'utf8'), context);
+        vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', name), 'utf8'), context);
     });
     return {
         elements, metrics, stored, document, template, requests: () => requests,

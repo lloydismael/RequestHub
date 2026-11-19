@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function tracker() {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
     const refresh = source.slice(source.indexOf('    function refreshRecord('), source.indexOf('    function apply('));
     const original = {pk: 1, stage: 'delivery', total: '100', attention: [], values: {}};
     const updated = {pk: 1, stage: 'billing', total: '200', attention: [], values: {}};
@@ -21,7 +21,7 @@ function tracker() {
         fresh: updated, summary: after, requests,
     };
     vm.createContext(context);
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-filter-core.js'), 'utf8'), context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-filter-core.js'), 'utf8'), context);
     context.core = context.SqrFilterCore;
     vm.runInContext(source.slice(source.indexOf('    function needsAction('), source.indexOf('    /* ── pipeline strip')), context);
     const start = source.indexOf('    function pipelineSummary(');
@@ -40,7 +40,7 @@ test('tracker filters the full authorized pool before presentation slicing', () 
 });
 
 test('tracker loader does not request a server-filtered page', async () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
     let requested;
     const context = {inFlight: null, loadController: null, loadVersion: 0, state: {loaded: true, filters: {stage: 'delivery', search: 'test'}}, ENDPOINT: '/data/', PAGE_SIZE: 50,
         AbortController, URLSearchParams, el: {more: {}}, apply: () => {}, api: url => { requested = url; return Promise.resolve({ok: true, data: {records: []}}); }, showToast: () => {}};
@@ -68,12 +68,12 @@ test('edits and undo refresh authoritative pipeline counts and monetary totals',
 });
 
 function filterConsumer(storage = {getItem: () => null, setItem: () => {}}, search = '') {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
+    const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-tracker-prototype.js'), 'utf8');
     const context = {URLSearchParams, sessionStorage: storage, window: {location: {search}}, STORE_KEY: 'filters', PRESENTATION_KEY: 'presentation', TABLE_COLUMNS: [], DATE_COLUMNS: [], preferenceNotices: [],
         state: {records: [], options: {}, specs: {}, schema: {stages: [['delivery', 'Delivery']]}, viewer: {pk: 7}},
         el: {filterNotice: {textContent: '', hidden: true}}};
     vm.createContext(context);
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-filter-core.js'), 'utf8'), context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-filter-core.js'), 'utf8'), context);
     context.core = context.window.SqrFilterCore;
     vm.runInContext(source.slice(source.indexOf('    var FILTER_LABELS'), source.indexOf('    var preferenceNotices')), context);
     context.state.filters = context.core.normalizeFilters({}, context.FILTER_KEYS).state;

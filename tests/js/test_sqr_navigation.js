@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-const template = fs.readFileSync(path.join(__dirname, '..', 'templates', 'hub', 'sqr.html'), 'utf8');
+const template = fs.readFileSync(path.join(__dirname, '..', '..', 'templates', 'hub', 'sqr.html'), 'utf8');
 const start = template.indexOf('// ── SQR table view toggle');
 const end = template.indexOf('</script>', start);
 assert.ok(start >= 0 && end > start, 'SQR view controller exists');

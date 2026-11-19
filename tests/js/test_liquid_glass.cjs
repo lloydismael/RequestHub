@@ -49,7 +49,7 @@ function start({ reducedMotion = false, preference = '' } = {}) {
         matchMedia: query => ({ matches: query.includes('reduced-motion') && reducedMotion }),
         addEventListener() {},
     };
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'liquid-glass.js'), 'utf8'), {
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'liquid-glass.js'), 'utf8'), {
         document, window, console,
         requestAnimationFrame(callback) { const id = nextFrame++; frames.set(id, callback); return id; },
         cancelAnimationFrame(id) { frames.delete(id); },

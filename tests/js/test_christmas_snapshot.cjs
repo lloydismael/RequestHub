@@ -55,7 +55,7 @@ function start() {
     const window = { innerWidth: 375, innerHeight: 800, scrollX: 0, scrollY: 321,
         setTimeout(cb) { timers.set(++id, cb); return id; }, clearTimeout(id) { timers.delete(id); },
     };
-    const filename = path.join(__dirname, '..', 'static', 'js', 'christmas-theme-snapshot.js');
+    const filename = path.join(__dirname, '..', '..', 'static', 'js', 'christmas-theme-snapshot.js');
     if (fs.existsSync(filename)) vm.runInNewContext(fs.readFileSync(filename, 'utf8'), { document, window, URL, Error });
     assert.ok(window.requestHubChristmasSnapshot, 'script-free snapshot API must be available');
     return { api: window.requestHubChristmasSnapshot, document, body, root, timers, scrolls };

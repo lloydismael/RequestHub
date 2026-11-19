@@ -26,13 +26,13 @@ function fixture(raw = {}) {
     const root = document.createElement('div');
     const context = {document};
     vm.createContext(context);
-    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'static', 'js', 'sqr-filter-core.js'), 'utf8'), context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'sqr-filter-core.js'), 'utf8'), context);
     const keys = ['status', 'pm_id'];
     let applied = context.SqrFilterCore.normalizeFilters(raw, keys).state;
     const config = {dimensions: [{key: 'status', label: 'Status', options: [{value: 'reviewed', label: 'Reviewed', count: 2}, {value: 'submitted', label: '<script>pending</script>', count: 1}]},
         {key: 'pm_id', label: 'Project Manager', options: [{value: '8', label: 'Manager Eight', count: 3}]}],
         state: applied, resultCount: 3, onApply: next => { applied = next; }};
-    const file = path.join(__dirname, '..', 'static', 'js', 'sqr-filter-controls.js');
+    const file = path.join(__dirname, '..', '..', 'static', 'js', 'sqr-filter-controls.js');
     let controls;
     if (fs.existsSync(file)) { vm.runInContext(fs.readFileSync(file, 'utf8'), context); controls = context.SqrFilterControls.mount(root, config); }
     function button(text) { const found = all(root, node => node.tagName === 'BUTTON' && node.textContent === text)[0]; assert.ok(found, `Filter control '${text}' must be available`); return found; }
