@@ -1,0 +1,9 @@
+<article class="rpt-chart-card rh-chart-card sqr-report-chart">
+    <div class="rpt-chart-head">
+        <div>
+            <h3 class="rpt-chart-title">{{ title }}</h3>
+            <p class="rpt-chart-sub">{{ unit }}</p>
+        </div>
+    </div>
+    {% include "hub/partials/chart_plot.html" with report_chart=True unit=None %}
+</article>

@@ -41,7 +41,7 @@
             charts.mount(document.getElementById(id), {
                 labels: data.labels, series: series(data.totals), type: trend ? 'line' : 'bar', horizontal: !trend,
                 values: trend ? { labels: source.labels, series: series(source.totals) } : undefined,
-                currency, integer: !currency, format: currency ? window.rhChartValues.pesos : undefined,
+                currency, integer: !currency, fitCategoryLabels: true, format: currency ? window.rhChartValues.pesos : undefined,
                 empty: 'No data available for this chart.'
             });
         });

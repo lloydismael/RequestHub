@@ -1,0 +1,22 @@
+{
+  "baseline_revision": "30acbaa3190a805c7dd163c381541ae171ce818d",
+  "fixture": "Synthetic Project Performance Tracking shell; no database, production data, or client-populated rows.",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "before": {
+    "template_sha256": "0c16eeda82b6ffb869fb1c407c75f47be067d59aef231cecfb309422f7ea8dc2",
+    "file": "ppt-copy-before.png",
+    "image_sha256": "962f403bd7003ceba11f171dd199c99139239c89fe5a36d0b077bb8a8ffaface",
+    "width": 1376,
+    "height": 2028
+  },
+  "after": {
+    "template_sha256": "a49bdfb6e046a02a4a20bf7bd670c4dc3be287ddc3a8b1f8d1671269f087388a",
+    "file": "ppt-copy-after.png",
+    "image_sha256": "403be8627cc6ec6afb42ec94800c8602531f21f418d30aa35a44e410d20b6d14",
+    "width": 1376,
+    "height": 1839
+  }
+}

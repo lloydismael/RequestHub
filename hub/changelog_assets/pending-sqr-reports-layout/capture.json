@@ -1,0 +1,74 @@
+{
+  "baseline_revision": "30acbaa3190a805c7dd163c381541ae171ce818d",
+  "data": "Synthetic pipeline, revenue, stage and account fixtures. No production records.",
+  "captures": {
+    "pipeline-desktop": {
+      "viewport": [
+        1440,
+        1000
+      ],
+      "theme": "light",
+      "before": {
+        "file": "pipeline-desktop-before.png",
+        "sha256": "f8ee504cc79cd284077d66e0c81114fe955646e697f84c819f25aa11d2d2a8a6"
+      },
+      "after": {
+        "file": "pipeline-desktop-after.png",
+        "sha256": "ba69806cda19eff7ae59a508d429d600f1559349679019c28d309e2114fd231e"
+      }
+    },
+    "pipeline-phone": {
+      "viewport": [
+        390,
+        900
+      ],
+      "theme": "dark",
+      "before": {
+        "file": "pipeline-phone-before.png",
+        "sha256": "89a667465e7e4808971662a14bbf3009720b563ea5c5baed31bf80c6cc7cacd5"
+      },
+      "after": {
+        "file": "pipeline-phone-after.png",
+        "sha256": "088a9f1b72e3a364cd0eda3753e10ce08deb4c11918693d2af70c641f1af1238"
+      }
+    },
+    "breakdowns-desktop": {
+      "viewport": [
+        1440,
+        1050
+      ],
+      "theme": "light",
+      "before": {
+        "file": "breakdowns-desktop-before.png",
+        "sha256": "9334b8780aefc6ce5f019e8bc16c919cf06137a07d62950567e7b3a99bd1ae39"
+      },
+      "after": {
+        "file": "breakdowns-desktop-after.png",
+        "sha256": "0abe902335b6bd52198e94de5806e23224292778beb1af7fc9a483ae92e467c5"
+      }
+    }
+  },
+  "before_source_sha256": {
+    "templates/base.html": "76b8ee41cb7a5d8e4f7299684bdb7ff44239088493a1d17da46fb24433ae3616",
+    "templates/hub/sqr.html": "bf3e9385a166a5ebe8815c85732ba0fa854de933662eb3ceb480ee80b9edc977",
+    "templates/hub/partials/sqr_reports.html": "f9da5e27d097b5c8257ccc0df138b3d0638b2e6428f9c661c1862ef9e8ba062f",
+    "templates/hub/partials/chart_plot.html": "e9a3fe8ec0c67a7759cf316c539f9cd9d3f05a1455af1cb6701b86113e7ce6ce",
+    "static/css/liquid-glass-dashboard.css": "1291f6962c708bb2fe266720c7219caef43f0c386c6f2fdfa29bd96b6d6d4f84",
+    "static/css/liquid-glass-sqr.css": "30f263c79539fcb1dcb20978cc4b988567f69c23b567ed5f85c6191ad842d930",
+    "static/css/charts.css": "8f86514aa307750f5a0879b8546d82b3523c4fdbc4d04863598f95ed286cb020",
+    "static/js/chart-theme.js": "3e8f3356e590e7ccb9376a77749037d2f39bf91608e35b9aa5a2f09a6bcccffd",
+    "static/js/sqr-report-charts.js": "db3aa5fdd8299aa1ad64226a7c3e5a610df079f6cde3e3567f0ac9e0dcf8b5bf"
+  },
+  "after_source_sha256": {
+    "templates/base.html": "84e0d8fd53e026c88056a054d4c1159f0d2949ca4e7f940ec26d6b7f460f2a8d",
+    "templates/hub/sqr.html": "d3898f1553fd1db0365d5fc72ba49257d578d48e13741071bb7bb8172f2b57ea",
+    "templates/hub/partials/sqr_reports.html": "99c55b4e97d7fe62fce244b3715ca0391dd4b7118ef85f852946f753aa8c648d",
+    "templates/hub/partials/chart_plot.html": "e9a3fe8ec0c67a7759cf316c539f9cd9d3f05a1455af1cb6701b86113e7ce6ce",
+    "static/css/liquid-glass-dashboard.css": "6b66124fd74ff372a06e50add0cc463d434c2216e4f806e892a59ba73dae96d1",
+    "static/css/liquid-glass-sqr.css": "65ae403e4922181f8955332d2d0e83bafd33921960ad476e20fdb47a2c1259ba",
+    "static/css/charts.css": "5f0afa368cbbc7c2c827bcb0ca2aeb600fc6d59bef163da266722167b6358231",
+    "static/js/chart-theme.js": "15e76aff617defbbe4be16279bb4642554ee5b9c37065efc951bd6c81af13444",
+    "static/js/sqr-report-charts.js": "299f2885703b44bd9a2e5b02a2f1f46ca62bbf8549e86f2be3cb970965929d76",
+    "templates/hub/partials/sqr_report_chart.html": "940ca4bdbcde6342fdadbf4e768e469ad237f27ae1c211b12845b52441eb63ea"
+  }
+}

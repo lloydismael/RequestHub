@@ -1,127 +1,84 @@
 {% load humanize %}
-<div class="sqr-report-shell">
-    <header class="sqr-report-header">
+<div class="rpt-shell sqr-report-shell">
+    <header class="rpt-hero">
         <div>
-            <span class="sqr-report-eyebrow"><i class="bi bi-graph-up-arrow"></i> CRM Overview</span>
-            <h2 class="sqr-report-header__title">Sales Pipeline</h2>
-        </div>
-        <div class="sqr-report-header__snapshot">
-            <span>{{ sqr_reports_summary.total_submissions|default:0 }} SQRs</span>
-            <span>{{ sqr_reports_pipeline.won_count|default:0 }} won</span>
-            <span>{{ sqr_reports_pipeline.billed_count|default:0 }} billed</span>
+            <p class="rpt-eyebrow">CRM overview</p>
+            <h1 class="rpt-page-title">Sales Pipeline</h1>
+            <p class="rpt-page-subtitle">{{ sqr_reports_summary.total_submissions|default:0 }} SQRs · {{ sqr_reports_pipeline.won_count|default:0 }} won · {{ sqr_reports_pipeline.billed_count|default:0 }} billed</p>
         </div>
     </header>
 
-    <section class="sqr-report-kpi-grid" aria-label="Sales performance">
-        <div class="sqr-report-kpi sqr-report-kpi--success">
-            <span class="sqr-report-kpi__label">Won Value</span>
-            <strong class="sqr-report-kpi__value">{{ sqr_reports_summary.won_discounted_total_label|default:"₱0.00" }}</strong>
-        </div>
-        <div class="sqr-report-kpi sqr-report-kpi--violet">
-            <span class="sqr-report-kpi__label">Win Rate</span>
-            <strong class="sqr-report-kpi__value">{{ sqr_reports_summary.win_rate|default:0 }}%</strong>
-        </div>
-        <div class="sqr-report-kpi sqr-report-kpi--blue">
-            <span class="sqr-report-kpi__label">Won Deals</span>
-            <strong class="sqr-report-kpi__value">{{ sqr_reports_pipeline.won_count|default:0 }}</strong>
-        </div>
-        <div class="sqr-report-kpi sqr-report-kpi--cyan">
-            <span class="sqr-report-kpi__label">Average Deal</span>
-            <strong class="sqr-report-kpi__value">{{ sqr_reports_summary.avg_won_value_label|default:"₱0.00" }}</strong>
-        </div>
-        <div class="sqr-report-kpi sqr-report-kpi--amber">
-            <span class="sqr-report-kpi__label">Billed Conversion</span>
-            <strong class="sqr-report-kpi__value">{{ sqr_reports_summary.billed_conversion_rate|default:0 }}%</strong>
-        </div>
-        <div class="sqr-report-kpi sqr-report-kpi--slate">
-            <span class="sqr-report-kpi__label">Approval Rate</span>
-            <strong class="sqr-report-kpi__value">{{ sqr_reports_summary.approval_rate|default:0 }}%</strong>
-        </div>
-    </section>
-
-    <section class="sqr-report-health-grid" aria-label="Pipeline actions">
-        <div class="sqr-report-health sqr-report-health--warning">
-            <span class="sqr-report-health__icon"><i class="bi bi-hourglass-split"></i></span>
-            <span class="sqr-report-health__label">Pending Approval</span>
-            <strong>{{ sqr_reports_pipeline.pending_approval_count|default:0 }}</strong>
-        </div>
-        <div class="sqr-report-health sqr-report-health--primary">
-            <span class="sqr-report-health__icon"><i class="bi bi-receipt-cutoff"></i></span>
-            <span class="sqr-report-health__label">Pending Billing</span>
-            <strong>{{ sqr_reports_pipeline.for_billing_count|default:0 }}</strong>
-        </div>
-        <div class="sqr-report-health sqr-report-health--danger">
-            <span class="sqr-report-health__icon"><i class="bi bi-exclamation-diamond"></i></span>
-            <span class="sqr-report-health__label">Delivery Watchlist</span>
-            <strong>{{ sqr_reports_summary.at_risk_count|default:0|add:sqr_reports_summary.off_track_count|default:0 }}</strong>
-        </div>
-        <div class="sqr-report-health sqr-report-health--success">
-            <span class="sqr-report-health__icon"><i class="bi bi-stopwatch"></i></span>
-            <span class="sqr-report-health__label">Approval Lead</span>
-            <strong>{{ sqr_reports_summary.avg_approval_days|default:0 }}d</strong>
+    <section class="rpt-section" aria-labelledby="sqr-report-sales">
+        <h2 id="sqr-report-sales">Sales performance</h2>
+        <div class="rpt2-kpi-grid sqr-report-metrics">
+            <div class="rpt2-kpi rpt2-kpi--green">
+                <span class="rpt2-kpi-label">Won Value</span>
+                <strong class="rpt2-kpi-value sqr-report-money">{{ sqr_reports_summary.won_discounted_total_label|default:"₱0.00" }}</strong>
+            </div>
+            <div class="rpt2-kpi">
+                <span class="rpt2-kpi-label">Win Rate</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_summary.win_rate|default:0 }}%</strong>
+            </div>
+            <div class="rpt2-kpi rpt2-kpi--green">
+                <span class="rpt2-kpi-label">Won Deals</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_pipeline.won_count|default:0 }}</strong>
+            </div>
+            <div class="rpt2-kpi">
+                <span class="rpt2-kpi-label">Average Deal</span>
+                <strong class="rpt2-kpi-value sqr-report-money">{{ sqr_reports_summary.avg_won_value_label|default:"₱0.00" }}</strong>
+            </div>
+            <div class="rpt2-kpi rpt2-kpi--amber">
+                <span class="rpt2-kpi-label">Billed Conversion</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_summary.billed_conversion_rate|default:0 }}%</strong>
+            </div>
+            <div class="rpt2-kpi rpt2-kpi--neutral">
+                <span class="rpt2-kpi-label">Approval Rate</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_summary.approval_rate|default:0 }}%</strong>
+            </div>
         </div>
     </section>
 
-    <div class="row g-3">
-        <div class="col-12 col-xl-8">
-            <section class="rh-chart-card sqr-report-card sqr-report-card--primary h-100">
-                <div class="sqr-report-card__header">
-                    <span class="sqr-report-card__icon"><i class="bi bi-funnel-fill"></i></span>
-                    <h3 class="sqr-report-card__title">Pipeline Conversion</h3>
-                </div>
-                {% include "hub/partials/chart_plot.html" with chart_id="sqrFunnelChart" title="Pipeline Conversion" unit="Submissions" only %}
-            </section>
+    <section class="rpt-section" aria-labelledby="sqr-report-actions">
+        <h2 id="sqr-report-actions">Pipeline actions</h2>
+        <div class="rpt2-kpi-grid sqr-report-actions">
+            <div class="rpt2-kpi rpt2-kpi--amber">
+                <span class="rpt2-kpi-label">Pending Approval</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_pipeline.pending_approval_count|default:0 }}</strong>
+            </div>
+            <div class="rpt2-kpi">
+                <span class="rpt2-kpi-label">Pending Billing</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_pipeline.for_billing_count|default:0 }}</strong>
+            </div>
+            <div class="rpt2-kpi rpt2-kpi--rose">
+                <span class="rpt2-kpi-label">Delivery Watchlist</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_summary.at_risk_count|default:0|add:sqr_reports_summary.off_track_count|default:0 }}</strong>
+            </div>
+            <div class="rpt2-kpi rpt2-kpi--green">
+                <span class="rpt2-kpi-label">Approval Lead</span>
+                <strong class="rpt2-kpi-value">{{ sqr_reports_summary.avg_approval_days|default:0 }}d</strong>
+            </div>
         </div>
-        <div class="col-12 col-xl-4">
-            <section class="rh-chart-card sqr-report-card h-100">
-                <div class="sqr-report-card__header">
-                    <span class="sqr-report-card__icon"><i class="bi bi-bar-chart-fill"></i></span>
-                    <h3 class="sqr-report-card__title">Deal Stages</h3>
-                </div>
-                {% include "hub/partials/chart_plot.html" with chart_id="sqrDealStageChart" title="Deal Stages" unit="Deals" only %}
-            </section>
-        </div>
-    </div>
-
-    <div class="row g-3">
-        <div class="col-12 col-xl-7">
-            <section class="rh-chart-card sqr-report-card h-100">
-                <div class="sqr-report-card__header">
-                    <span class="sqr-report-card__icon"><i class="bi bi-cash-stack"></i></span>
-                    <h3 class="sqr-report-card__title">Revenue Value</h3>
-                </div>
-                {% include "hub/partials/chart_plot.html" with chart_id="sqrRevenueOverviewChart" title="Revenue Value" unit="Philippine pesos (PHP)" only %}
-            </section>
-        </div>
-        <div class="col-12 col-xl-5">
-            <section class="rh-chart-card sqr-report-card h-100">
-                <div class="sqr-report-card__header">
-                    <span class="sqr-report-card__icon"><i class="bi bi-calendar3"></i></span>
-                    <h3 class="sqr-report-card__title">Monthly Activity</h3>
-                </div>
-                {% include "hub/partials/chart_plot.html" with chart_id="sqrMonthlyTrendChart" title="Monthly Activity" unit="Submissions" only %}
-            </section>
-        </div>
-    </div>
-
-    <section class="rh-chart-card sqr-report-card">
-        <div class="sqr-report-card__header">
-            <span class="sqr-report-card__icon"><i class="bi bi-buildings-fill"></i></span>
-            <h3 class="sqr-report-card__title">Demand by Group</h3>
-        </div>
-        {% include "hub/partials/chart_plot.html" with chart_id="sqrGroupDistributionChart" title="Demand by Group" unit="Submissions" only %}
     </section>
 
-    <div class="row g-3">
-        <div class="col-12 col-xl-6">
-            <section class="sqr-report-card h-100 p-3">
-                <div class="sqr-report-table-heading">
-                    <span class="sqr-report-card__icon"><i class="bi bi-trophy-fill"></i></span>
-                    <h3 class="sqr-report-card__title">Top Won Accounts</h3>
-                </div>
-                <div class="table-responsive">
+    <section class="rpt-section" aria-labelledby="sqr-report-breakdowns">
+        <h2 id="sqr-report-breakdowns">Pipeline breakdowns</h2>
+        <div class="rpt-chart-grid">
+            {% include "hub/partials/sqr_report_chart.html" with chart_id="sqrFunnelChart" title="Pipeline Conversion" unit="Submissions" only %}
+            {% include "hub/partials/sqr_report_chart.html" with chart_id="sqrDealStageChart" title="Deal Stages" unit="Deals" only %}
+            {% include "hub/partials/sqr_report_chart.html" with chart_id="sqrRevenueOverviewChart" title="Revenue Value" unit="Philippine pesos (PHP)" only %}
+            {% include "hub/partials/sqr_report_chart.html" with chart_id="sqrMonthlyTrendChart" title="Monthly Activity" unit="Submissions" only %}
+            {% include "hub/partials/sqr_report_chart.html" with chart_id="sqrGroupDistributionChart" title="Demand by Group" unit="Submissions" only %}
+        </div>
+    </section>
+
+    <section class="rpt-section" aria-labelledby="sqr-report-rankings">
+        <h2 id="sqr-report-rankings">Closed-won rankings</h2>
+        <div class="rpt-table-grid">
+            <article class="rpt-chart-card">
+                <h3 class="rpt-chart-title" id="sqr-won-accounts">Top Won Accounts</h3>
+                <div class="rpt-table-scroll" role="region" aria-labelledby="sqr-won-accounts" tabindex="0" data-no-smooth>
                     <table class="table table-sm sqr-report-table align-middle">
-                        <thead><tr><th>#</th><th>Account</th><th class="text-end">Won</th><th class="text-end">Value</th></tr></thead>
+                        <thead class="rpt-table-head"><tr><th>#</th><th>Account</th><th class="text-end">Won</th><th class="text-end">Value</th></tr></thead>
                         <tbody>
                             {% for row in sqr_reports_top_accounts %}
                                 <tr>
@@ -131,38 +88,33 @@
                                     <td class="text-end fw-semibold">₱{{ row.value|floatformat:2|intcomma }}</td>
                                 </tr>
                             {% empty %}
-                                <tr><td colspan="4" class="text-center text-muted py-4">No won accounts yet.</td></tr>
+                                <tr><td colspan="4" class="text-center py-4">No won accounts yet.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
-            </section>
-        </div>
-        <div class="col-12 col-xl-6">
-            <section class="sqr-report-card h-100 p-3">
-                <div class="sqr-report-table-heading">
-                    <span class="sqr-report-card__icon"><i class="bi bi-gem"></i></span>
-                    <h3 class="sqr-report-card__title">Highest-Value Wins</h3>
-                </div>
-                <div class="table-responsive">
+            </article>
+            <article class="rpt-chart-card">
+                <h3 class="rpt-chart-title" id="sqr-highest-wins">Highest-Value Wins</h3>
+                <div class="rpt-table-scroll" role="region" aria-labelledby="sqr-highest-wins" tabindex="0" data-no-smooth>
                     <table class="table table-sm sqr-report-table align-middle">
-                        <thead><tr><th>SQR</th><th>Account</th><th class="text-end">Value</th></tr></thead>
+                        <thead class="rpt-table-head"><tr><th>SQR</th><th>Account</th><th class="text-end">Value</th></tr></thead>
                         <tbody>
                             {% for row in sqr_reports_top_won %}
                                 <tr>
-                                    <td><div class="fw-semibold">{{ row.reference_code }}</div><div class="small text-muted">{{ row.group_name }}</div></td>
+                                    <td><div class="fw-semibold">{{ row.reference_code }}</div><div class="small">{{ row.group_name }}</div></td>
                                     <td><div>{{ row.customer_name }}</div><span class="sqr-report-badge mt-1 d-inline-block">{{ row.status }}</span></td>
                                     <td class="text-end fw-semibold">₱{{ row.discounted_price|floatformat:2|intcomma }}</td>
                                 </tr>
                             {% empty %}
-                                <tr><td colspan="3" class="text-center text-muted py-4">No closed-won quotations yet.</td></tr>
+                                <tr><td colspan="3" class="text-center py-4">No closed-won quotations yet.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
-            </section>
+            </article>
         </div>
-    </div>
+    </section>
 </div>
 
 {{ sqr_reports_deal_chart|json_script:"sqr-reports-deal-chart-data" }}

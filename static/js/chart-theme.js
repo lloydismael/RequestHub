@@ -70,7 +70,7 @@
         el.hidden = !items.length;
     }
 
-    function wrapped(label, width, ctx) {
+    function wrapped(label, width, ctx, maxLines = 3) {
         const lines = [];
         let current = '';
         for (const word of String(label).split(/\s+/)) {
@@ -82,7 +82,7 @@
             }
         }
         if (current) lines.push(current);
-        if (lines.length > 3) return [lines[0], lines[1], lines[2].slice(0, -1) + '…'];
+        if (lines.length > maxLines) return [...lines.slice(0, maxLines - 1), lines[maxLines - 1].slice(0, -1) + '…'];
         return lines;
     }
 
@@ -112,7 +112,9 @@
                 if (horizontal) {
                     const ctx = this.chart.ctx;
                     ctx.save(); ctx.font = `${font.weight} ${font.size}px ${FONT}`;
-                    const lines = wrapped(label, Math.max(48, Math.min(190, this.chart.width * .34) - 10), ctx);
+                    const maxLines = spec.fitCategoryLabels ? Math.max(1, Math.min(3,
+                        Math.floor((this.chart.height - 2 * font.size) / (spec.labels.length * 1.2 * font.size)))) : 3;
+                    const lines = wrapped(label, Math.max(48, Math.min(190, this.chart.width * .34) - 10), ctx, maxLines);
                     ctx.restore();
                     return lines;
                 }
