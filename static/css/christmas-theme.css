@@ -46,7 +46,6 @@ body.account-themed.authenticated[data-account-theme="christmas"] .navbar[data-n
     --nav-active-bg: rgba(164, 191, 235, 0.3);
     --nav-focus: #1d5aa2;
     border: 1px solid rgba(139, 179, 215, 0.55);
-    border-radius: 999px !important;
     box-shadow: 0 8px 26px rgba(62, 96, 153, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
     padding: 1rem 0.65rem;
 }
@@ -64,12 +63,6 @@ body.account-themed.authenticated[data-account-theme="christmas"] .navbar .nav-a
     background: linear-gradient(145deg, #e6eeff, #c9c3ff);
     color: #334568;
     box-shadow: 0 3px 12px rgba(100, 112, 185, 0.25);
-}
-body.account-themed.authenticated[data-account-theme="christmas"] .navbar .navbar-toggler-icon {
-    filter: none;
-}
-body.account-themed.authenticated.dark-mode[data-account-theme="christmas"] .navbar .navbar-toggler-icon {
-    filter: brightness(0) invert(1);
 }
 body.account-themed.authenticated[data-account-theme="christmas"] .btn-primary {
     --bs-btn-bg: #a51d38;
@@ -381,7 +374,6 @@ body.dark-mode .christmas-santa__art { filter: drop-shadow(0 0 10px rgba(255, 22
     html.login-christmas body.page-login :is(input:not([type="radio"]):not([type="checkbox"]), textarea, [contenteditable="true"]) { cursor: text; }
 }
 @media (max-width: 991px) {
-    body.account-themed.authenticated[data-account-theme="christmas"] .navbar[data-nav-surface] { border-radius: 32px !important; }
     .christmas-frame { border-width: 97px 140px 81px 135px; }
 }
 @media (max-width: 575px) {

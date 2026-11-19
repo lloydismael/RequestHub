@@ -3204,9 +3204,13 @@
         prototypeControls.forEach(function (element) { element.hidden = activeView !== 'prototype'; });
         navLinks.forEach(function (link) {
             var isCurrent = link.dataset.sqrNavView === (activeView === 'performance' ? 'performance' : 'prototype');
-            link.classList.toggle('active', isCurrent);
-            if (isCurrent) link.setAttribute('aria-current', 'page');
-            else link.removeAttribute('aria-current');
+            if (isCurrent) {
+                link.setAttribute('aria-current', 'page');
+                link.removeAttribute('href');
+            } else {
+                link.removeAttribute('aria-current');
+                link.setAttribute('href', link.dataset.sqrNavUrl);
+            }
         });
         trackerLinks.forEach(function (link) {
             if (activeView !== 'performance') link.setAttribute('aria-current', 'page');

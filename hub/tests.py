@@ -372,9 +372,8 @@ class RequestReportViewTests(TestCase):
         response = self.client.get(reverse("hub:report"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, " authenticated")
-        self.assertContains(response, 'class="rpt2-header lg-enter"')
         self.assertContains(response, 'data-navbar-surface="theme"')
+        self.assertContains(response, "Request Hub analytics")
 
     def test_operational_charts_include_all_configured_categories(self):
         self._create_request(
@@ -433,13 +432,9 @@ class RequestReportViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context["report_view"], "activity")
-        self.assertContains(response, 'class="rpt-tab rpt-tab--active"')
-        self.assertContains(response, 'aria-current="page"')
-        self.assertContains(response, 'class="glass-card rpt2-filter rpt2-activity-filter')
-        self.assertContains(response, 'name="start_month" value="2026-08"')
-        self.assertContains(response, 'name="end_month" value="2026-09"')
-        self.assertContains(response, 'class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid"')
-        self.assertContains(response, 'class="glass-card rpt-chart-card rpt2-activity-log-card')
+        self.assertContains(response, "Activity overview")
+        self.assertContains(response, "Hours and utilisation")
+        self.assertContains(response, "Total Hours")
         self.assertContains(response, "Recent Engineer Activity")
         self.assertContains(response, "Activity report regression entry")
         self.assertEqual(response.context["activity_start_month"], "2026-08")
@@ -449,6 +444,22 @@ class RequestReportViewTests(TestCase):
         self.assertContains(response, "August 2026 to September 2026")
         self.assertContains(response, "start_month=2026-08&end_month=2026-09")
         self.assertContains(response, f"edit_activity={activity_log.pk}")
+
+    def test_reversed_month_filter_stays_visible_and_links_use_normalized_range(self):
+        self.client.force_login(self.admin)
+        for view, other, caption in (("operational", "activity", "Created:"), ("activity", "operational", "Dated:")):
+            with self.subTest(view=view):
+                response = self.client.get(reverse("hub:report"), {
+                    "report_view": view, "start_month": "2026-09", "end_month": "2026-08",
+                })
+                self.assertContains(response, '<details class="rpt-filters" open>')
+                self.assertContains(response, f"{caption} August 2026 to September 2026")
+                self.assertContains(response, "Range was reversed")
+                self.assertContains(response, 'name="start_month" value="2026-08"')
+                self.assertContains(response, 'name="end_month" value="2026-09"')
+                range_query = "&start_month=2026-08&end_month=2026-09"
+                self.assertContains(response, f'href="?report_view={other}{range_query}"')
+                self.assertContains(response, f'href="{reverse("hub:report-export")}?report_view={view}{range_query}"')
 
     def test_activity_report_pagination_preserves_month_filters(self):
         for index in range(51):
@@ -465,10 +476,35 @@ class RequestReportViewTests(TestCase):
         )
 
         self.assertEqual(response.context["activity_logs_page_obj"].paginator.num_pages, 2)
-        self.assertContains(
-            response,
-            "?report_view=activity&start_month=2026-08&end_month=2026-08&activity_log_page=2",
-        )
+        page_two_url = "?report_view=activity&start_month=2026-08&end_month=2026-08&activity_log_page=2"
+        self.assertContains(response, page_two_url)
+        page_two = self.client.get(reverse("hub:report") + page_two_url)
+        self.assertEqual(len(page_two.context["activity_logs"]), 1)
+        self.assertEqual(page_two.context["activity_start_month"], "2026-08")
+        self.assertContains(page_two, 'aria-current="page">2</span>')
+
+    def test_report_activity_edit_preserves_errors_and_filtered_return(self):
+        log = self._create_activity_log()
+        self.client.force_login(self.admin)
+        url = reverse("hub:report")
+        filters = {"report_view": "activity", "start_month": "2026-08", "end_month": "2026-09"}
+        return_url = f"{url}?report_view=activity&start_month=2026-08&end_month=2026-09"
+        editing = self.client.get(url, {**filters, "edit_activity": log.pk})
+        self.assertContains(editing, f'href="{return_url}"')
+        data = {
+            **filters, "log_id": log.pk, "account": log.account_id,
+            "request_date": log.request_date.isoformat(), "activity_type": log.activity_type,
+            "details": log.details, "location": log.location, "status": log.status,
+            "is_billable": "true", "actual_hours": "not-a-number",
+        }
+        rejected = self.client.post(url, data)
+        self.assertIn("actual_hours", rejected.context["activity_form"].errors)
+        log.refresh_from_db()
+        self.assertEqual(log.actual_hours, Decimal("2.50"))
+        saved = self.client.post(url, {**data, "actual_hours": "3.50"})
+        self.assertRedirects(saved, return_url)
+        log.refresh_from_db()
+        self.assertEqual(log.actual_hours, Decimal("3.50"))
 
     def test_operational_report_health_metrics_and_attention_list(self):
         today = timezone.localdate()

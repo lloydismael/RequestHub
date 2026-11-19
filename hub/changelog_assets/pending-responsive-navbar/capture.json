@@ -1,0 +1,63 @@
+{
+  "status": "unreleased",
+  "before_revision": "c369afa4363922e96169d85982f21cd208421fba",
+  "after_revision": null,
+  "capture_note": "Same synthetic administrator, unread count, Reports fixture and viewport before and after. Default light mode, local pinned Bootstrap and icon font, reduced motion; no live database or external browser requests. After images represent the working tree.",
+  "before_source_sha256": {
+    "templates/base.html": "6fe9e1c3775227fd586a6747037774bece25cdb458d2d989feb32f20bc2312a4",
+    "templates/hub/report.html": "b5f7ea5cd81c88059a0174279f173cdbebb446b4d7bca01833e502359948965a",
+    "static/css/app.css": "282b8bd3d2dfc18f194f6bcaa29e7f5684a2d7e914fb0ed987bcb3bbf1255595",
+    "static/css/liquid-glass-dashboard.css": "b7bb47e9ca6ed0e8850bff30e7aaf68a928bdcd06f3f7c8b50545de25600ac86",
+    "static/css/mobile.css": "bcadf03c65fc2d6cf04f046de3df6ebdfe43ff13ca604fbff908cd0cde60ce7c",
+    "static/css/christmas-theme.css": "22e7dd4642bae4a13a2feca3e4f326c1d5dbb2eede985dbacf290995f70f7b27"
+  },
+  "comparisons": [
+    {
+      "title": "Phone, expanded navigation",
+      "viewport": {
+        "width": 320,
+        "height": 460
+      },
+      "before_text": "The menu button drops below the brand and account controls.",
+      "after_text": "The brand, menu button, theme toggle, and account button fit on one row.",
+      "before": "phone-before.png",
+      "before_sha256": "45886e5534c3b7bb42f1d415341cde84eff7381544027ba342880d1af105d772",
+      "after": "phone-after.png",
+      "after_sha256": "f6b49e7823f32b4cee9c4a0a4fe7421d6e090476792d797f6471b8d2fa6d97cd"
+    },
+    {
+      "title": "Short landscape, expanded navigation",
+      "viewport": {
+        "width": 640,
+        "height": 280
+      },
+      "before_text": "The sticky menu runs off the bottom of the viewport.",
+      "after_text": "Links scroll within the sticky menu, and the account controls stay in view.",
+      "before": "landscape-before.png",
+      "before_sha256": "9da76f67682e68134fec5c45c68bf40107a07bc266545b7a9b6a3df580dbcd54",
+      "after": "landscape-after.png",
+      "after_sha256": "33334374e77b0ba6ca44bef8dfcd7f1547496be9b25b8e163eb0bc10d228189e"
+    },
+    {
+      "title": "Tablet, default navigation",
+      "viewport": {
+        "width": 992,
+        "height": 460
+      },
+      "before_text": "The desktop layout forces the account button past the navbar edge.",
+      "after_text": "The menu stays collapsed until there is enough space for the desktop row.",
+      "before": "tablet-before.png",
+      "before_sha256": "b0a8352f7e8a77b9de83777612d482c292c0058c76b7d354109cb8196b92f779",
+      "after": "tablet-after.png",
+      "after_sha256": "dc6eccb475ffb9bfc78c001f5309b5f3f1924e380b122ccdbe8a6425298ccece"
+    }
+  ],
+  "after_source_sha256": {
+    "templates/base.html": "bac43859a9c92fa5ef8f7060099088971fbfdbe5617b3a6708502ee27306e941",
+    "templates/hub/report.html": "b5f7ea5cd81c88059a0174279f173cdbebb446b4d7bca01833e502359948965a",
+    "static/css/app.css": "ade863a3f1e62f4d837fc2106e52d938530bfd016de9f2034c0dee01e8c51924",
+    "static/css/liquid-glass-dashboard.css": "8ed973699b56273a864fc0cfd2718044898412c815a9c321c7cd52b5fd04314f",
+    "static/css/mobile.css": "bcadf03c65fc2d6cf04f046de3df6ebdfe43ff13ca604fbff908cd0cde60ce7c",
+    "static/css/christmas-theme.css": "a8fd7d01d117c7af405500e0e9e3a04cc9b8959535500ec0c67e670c47430864"
+  }
+}

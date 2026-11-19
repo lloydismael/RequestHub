@@ -6,108 +6,86 @@
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/charts.css' %}">{% endblock %}
 {% block content %}
 
-<header class="rpt2-header lg-enter" data-lg-delay="0" data-navbar-surface="theme">
-    <div class="rpt2-heading">
-        <h1 class="rpt2-page-title">Reports</h1>
-        <p class="rpt2-page-sub">
-            {% if report_view == 'activity' %}Engineer hours, billable utilisation and account effort.{% else %}Request delivery health, workload and turnaround.{% endif %}
-        </p>
+<div class="rpt-shell" data-navbar-surface="theme" data-report-preview-limit="5">
+<header class="rpt-hero">
+    <div>
+        <p class="rpt-eyebrow">Request Hub analytics</p>
+        <h1 class="rpt-page-title">Reports</h1>
+        <p class="rpt-page-subtitle">{% if report_view == 'activity' %}Engineer hours, billable utilisation and account effort.{% else %}Request delivery health, workload and turnaround.{% endif %}</p>
     </div>
-    <div class="rpt2-header-actions">
-        <div class="rpt-tab-group" role="group" aria-label="Report view toggle">
-            <a href="?report_view=operational{{ period_query }}"
-               class="rpt-tab {% if report_view == 'operational' %}rpt-tab--active{% endif %}"
-               {% if report_view == 'operational' %}aria-current="page"{% endif %}>
-                <i class="bi bi-graph-up-arrow"></i> Operational
-            </a>
-            <a href="?report_view=activity{{ period_query }}"
-               class="rpt-tab {% if report_view == 'activity' %}rpt-tab--active{% endif %}"
-               {% if report_view == 'activity' %}aria-current="page"{% endif %}>
-                <i class="bi bi-clipboard-data-fill"></i> Activity Logs
-            </a>
-        </div>
-        <div class="rpt2-filter-menu" id="rpt-filter-menu">
-            <button type="button"
-                    class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost rpt2-filter-toggle{% if period_start_month or period_end_month %} rpt2-filter-toggle--active{% endif %}"
-                    id="rpt-filter-toggle"
-                    aria-expanded="{% if period_range_swapped %}true{% else %}false{% endif %}"
-                    aria-controls="rpt-filter-popover"
-                    aria-label="Filter by month"
-                    title="Filter by month">
-                <i class="bi bi-funnel{% if period_start_month or period_end_month %}-fill{% endif %}"></i>
-            </button>
-            <div class="rpt2-filter-popover" id="rpt-filter-popover"{% if not period_range_swapped %} hidden{% endif %}>
-                {% if report_view == 'activity' %}
-                    {% include "hub/partials/report_filter.html" with caption="Dated: " %}
-                {% else %}
-                    {% include "hub/partials/report_filter.html" with caption="Created: " %}
-                {% endif %}
-            </div>
-        </div>
-        <a class="btn btn-sm btn-outline-secondary lg-btn lg-btn--ghost"
-           href="{% url 'hub:report-export' %}?report_view={{ report_view }}{{ period_query }}">
-            <i class="bi bi-download me-1"></i>Export CSV
-        </a>
-    </div>
+    <a class="btn rpt-primary" href="{% url 'hub:report-export' %}?report_view={{ report_view }}{{ period_query }}">
+        <i class="bi bi-download" aria-hidden="true"></i> Export CSV
+    </a>
 </header>
+<nav class="rpt-view-nav" aria-label="Report views">
+    <a href="?report_view=operational{{ period_query }}"{% if report_view == 'operational' %} aria-current="page"{% endif %}>
+        <i class="bi bi-graph-up-arrow" aria-hidden="true"></i> Operational
+    </a>
+    <a href="?report_view=activity{{ period_query }}"{% if report_view == 'activity' %} aria-current="page"{% endif %}>
+        <i class="bi bi-clipboard-data" aria-hidden="true"></i> Activity Logs
+    </a>
+</nav>
+{% include "hub/partials/report_filter.html" %}
 
 {% if report_view == 'activity' %}
 
-    {# ── Activity: KPI band ── #}
-    <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid" data-lg-delay="40">
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--green">
+    <section class="rpt-section" aria-labelledby="rpt-overview">
+        <div class="rpt-section-heading">
+            <h2 id="rpt-overview">Activity overview</h2>
+            <p>Hours logged in the selected period</p>
+        </div>
+        <div class="rpt2-kpi-grid">
+            <div class="rpt2-kpi rpt2-kpi--blue">
                 <span class="rpt2-kpi-label">Total Hours</span>
                 <span class="rpt2-kpi-value">{{ activity_totals.total_hours|default:0|floatformat:1 }}</span>
                 <span class="rpt2-kpi-sub">across {{ activity_totals.entries }} entr{{ activity_totals.entries|pluralize:"y,ies" }}</span>
             </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--violet">
+            <div class="rpt2-kpi rpt2-kpi--green">
                 <span class="rpt2-kpi-label">Billable Hrs</span>
                 <span class="rpt2-kpi-value">{{ activity_totals.billable_hours|default:0|floatformat:1 }}</span>
                 <span class="rpt2-kpi-sub">{% if activity_totals.billable_rate is not None %}{{ activity_totals.billable_rate }}% utilisation{% else %}No hours logged{% endif %}</span>
             </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--cyan">
+            <div class="rpt2-kpi rpt2-kpi--neutral">
                 <span class="rpt2-kpi-label">Non-Billable</span>
                 <span class="rpt2-kpi-value">{{ activity_totals.non_billable_hours|default:0|floatformat:1 }}</span>
                 <span class="rpt2-kpi-sub">internal &amp; support effort</span>
             </div>
-        </div>
-        <div class="col">
             <div class="rpt2-kpi rpt2-kpi--blue">
                 <span class="rpt2-kpi-label">Log Entries</span>
                 <span class="rpt2-kpi-value">{{ activity_totals.entries }}</span>
                 <span class="rpt2-kpi-sub">{{ activity_engineer_table|length }} engineer{{ activity_engineer_table|length|pluralize }}</span>
             </div>
-        </div>
-        <div class="col">
             <div class="rpt2-kpi rpt2-kpi--amber">
                 <span class="rpt2-kpi-label">Accounts</span>
                 <span class="rpt2-kpi-value">{{ activity_totals.unique_accounts }}</span>
                 <span class="rpt2-kpi-sub">with logged effort</span>
             </div>
         </div>
-    </div>
-
-    <section class="rpt-chart-grid" aria-label="Activity charts">
-        {% include "hub/partials/report_chart.html" with chart_id="activityMonthlyChart" title="Monthly Hours Trend" subtitle="Billable and non-billable hours per month" has_data=activity_monthly_chart.labels wide=True description="Billable and non-billable logged hours per month. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
-        {% include "hub/partials/report_chart.html" with chart_id="activityBillableChart" title="Billable Hour Share" subtitle="Share of total logged hours" has_data=activity_totals.entries donut=True description="Billable versus non-billable share of logged hours. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
-        {% include "hub/partials/report_chart.html" with chart_id="activityLocationChart" title="Work Location Mix" subtitle="Share of logged hours by location" has_data=activity_location_chart.labels donut=True description="Logged hours by work location. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
-        {% include "hub/partials/report_chart.html" with chart_id="activityEngineerChart" title="Hours by Engineer" subtitle="Billable and non-billable logged hours" has_data=activity_engineer_chart.labels description="Hours by engineer. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
-        {% include "hub/partials/report_chart.html" with chart_id="activityAccountChart" title="Top Accounts by Hours" subtitle="Ten accounts with the most logged effort" has_data=activity_account_chart.labels description="Top ten accounts by logged hours. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
-        {% include "hub/partials/report_chart.html" with chart_id="activityTypeChart" title="Hours by Activity Type" subtitle="Billable and non-billable logged hours" has_data=activity_type_chart.labels wide=True description="Hours by activity type. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
     </section>
 
-    {# ── Activity: breakdown tables ── #}
-    <div class="row g-4 mb-4">
-        <div class="col-12 col-xl-4">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head"><div><h3 class="rpt-chart-title">Engineer Hour Breakdown</h3></div></div>
+    <section class="rpt-section" aria-labelledby="rpt-activity-trend">
+        <h2 id="rpt-activity-trend">Hours and utilisation</h2>
+        {% include "hub/partials/report_chart.html" with chart_id="activityMonthlyChart" title="Monthly Hours Trend" subtitle="Billable and non-billable hours per month" has_data=activity_monthly_chart.labels description="Billable and non-billable logged hours per month. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
+    </section>
+
+    <section class="rpt-section" aria-labelledby="rpt-activity-charts">
+        <h2 id="rpt-activity-charts">Activity breakdowns</h2>
+        <div class="rpt-chart-grid">
+            {% include "hub/partials/report_chart.html" with chart_id="activityBillableChart" title="Billable Hour Share" subtitle="Share of total logged hours" has_data=activity_totals.entries donut=True description="Billable versus non-billable share of logged hours. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
+            {% include "hub/partials/report_chart.html" with chart_id="activityLocationChart" title="Work Location Mix" subtitle="Share of logged hours by location" has_data=activity_location_chart.labels donut=True description="Logged hours by work location. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
+            {% include "hub/partials/report_chart.html" with chart_id="activityEngineerChart" title="Hours by Engineer" subtitle="Billable and non-billable logged hours" has_data=activity_engineer_chart.labels description="Hours by engineer. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
+            {% include "hub/partials/report_chart.html" with chart_id="activityAccountChart" title="Top Accounts by Hours" subtitle="Ten accounts with the most logged effort" has_data=activity_account_chart.labels description="Top ten accounts by logged hours. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
+            {% include "hub/partials/report_chart.html" with chart_id="activityTypeChart" title="Hours by Activity Type" subtitle="Billable and non-billable logged hours" has_data=activity_type_chart.labels description="Hours by activity type. Exact values available in View chart values." empty_message="No hours logged in the selected period." %}
+        </div>
+    </section>
+
+    <section class="rpt-section" aria-labelledby="rpt-hours-tables">
+        <h2 id="rpt-hours-tables">Hours by engineer, account, and activity</h2>
+        <div class="rpt-table-grid rpt-table-grid--three">
+            <div class="glass-card rpt-chart-card">
+                <h3 class="rpt-chart-title" id="rpt-engineer-hours">Engineer Hour Breakdown</h3>
                 {% if activity_engineer_table %}
-                    <div class="table-responsive dashboard-table-wrapper">
+                    <div class="rpt-table-scroll" data-report-preview role="region" aria-labelledby="rpt-engineer-hours" tabindex="0" data-no-smooth>
                         <table class="table table-sm align-middle mb-0">
                             <thead class="rpt-table-head">
                                 <tr><th>Engineer</th><th class="text-end">Total</th><th class="text-end">Billable</th><th class="text-end">Not Billable</th></tr>
@@ -128,12 +106,10 @@
                     <div class="rpt-empty"><i class="bi bi-table"></i><p>No engineer hours to summarise yet.</p></div>
                 {% endif %}
             </div>
-        </div>
-        <div class="col-12 col-xl-4">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head"><div><h3 class="rpt-chart-title">Account Hour Breakdown</h3></div></div>
+            <div class="glass-card rpt-chart-card">
+                <h3 class="rpt-chart-title" id="rpt-account-hours">Account Hour Breakdown</h3>
                 {% if activity_account_table %}
-                    <div class="table-responsive dashboard-table-wrapper">
+                    <div class="rpt-table-scroll" data-report-preview role="region" aria-labelledby="rpt-account-hours" tabindex="0" data-no-smooth>
                         <table class="table table-sm align-middle mb-0">
                             <thead class="rpt-table-head">
                                 <tr><th>Account</th><th class="text-end">Entries</th><th class="text-end">Total</th><th class="text-end">Billable</th></tr>
@@ -154,12 +130,10 @@
                     <div class="rpt-empty"><i class="bi bi-table"></i><p>No account hours to summarise yet.</p></div>
                 {% endif %}
             </div>
-        </div>
-        <div class="col-12 col-xl-4">
-            <div class="glass-card rpt-chart-card h-100">
-                <div class="rpt-chart-head"><div><h3 class="rpt-chart-title">Activity Type Breakdown</h3></div></div>
+            <div class="glass-card rpt-chart-card">
+                <h3 class="rpt-chart-title" id="rpt-activity-type-hours">Activity Type Breakdown</h3>
                 {% if activity_type_table %}
-                    <div class="table-responsive dashboard-table-wrapper">
+                    <div class="rpt-table-scroll" data-report-preview role="region" aria-labelledby="rpt-activity-type-hours" tabindex="0" data-no-smooth>
                         <table class="table table-sm align-middle mb-0">
                             <thead class="rpt-table-head">
                                 <tr><th>Activity</th><th class="text-end">Total</th><th class="text-end">Billable</th><th class="text-end">Not Billable</th></tr>
@@ -181,7 +155,7 @@
                 {% endif %}
             </div>
         </div>
-    </div>
+    </section>
 
     {% include "hub/partials/report_activity_log.html" %}
 
@@ -194,72 +168,63 @@
 
 {% else %}
 
-    {# ── Operational: KPI band ── #}
-    <div class="row row-cols-2 row-cols-md-3 row-cols-xl-5 g-3 mb-4 lg-enter rpt2-kpi-grid" data-lg-delay="40">
-        <div class="col">
+    <section class="rpt-section" aria-labelledby="rpt-overview">
+        <div class="rpt-section-heading">
+            <h2 id="rpt-overview">Delivery overview</h2>
+            <p>Requests created in the selected period</p>
+        </div>
+        <div class="rpt2-kpi-grid">
             <div class="rpt2-kpi rpt2-kpi--blue">
                 <span class="rpt2-kpi-label">Active Requests</span>
                 <span class="rpt2-kpi-value">{{ totals.ongoing }}</span>
                 <span class="rpt2-kpi-sub">of {{ totals.requests }} in period</span>
             </div>
-        </div>
-        <div class="col">
             <div class="rpt2-kpi rpt2-kpi--green">
                 <span class="rpt2-kpi-label">Completed</span>
                 <span class="rpt2-kpi-value">{{ totals.completed }}</span>
                 <span class="rpt2-kpi-sub">{% if health.avg_turnaround_days is not None %}avg {{ health.avg_turnaround_days }} days to close{% else %}No closures yet{% endif %}</span>
             </div>
-        </div>
-        <div class="col">
             <div class="rpt2-kpi rpt2-kpi--rose">
                 <span class="rpt2-kpi-label">Overdue</span>
                 <span class="rpt2-kpi-value">{{ health.overdue }}</span>
                 <span class="rpt2-kpi-sub">{{ health.due_soon }} due within 7 days</span>
             </div>
-        </div>
-        <div class="col">
             <div class="rpt2-kpi rpt2-kpi--amber">
                 <span class="rpt2-kpi-label">Unassigned</span>
                 <span class="rpt2-kpi-value">{{ health.unassigned }}</span>
                 <span class="rpt2-kpi-sub">active, no engineer</span>
             </div>
-        </div>
-        <div class="col">
-            <div class="rpt2-kpi rpt2-kpi--violet">
+            <div class="rpt2-kpi rpt2-kpi--neutral">
                 <span class="rpt2-kpi-label">On-Time Rate</span>
                 <span class="rpt2-kpi-value">{% if health.on_time_rate is not None %}{{ health.on_time_rate }}%{% else %}&ndash;{% endif %}</span>
                 <span class="rpt2-kpi-sub">completed by due date</span>
             </div>
         </div>
-    </div>
+    </section>
 
-    {# ── Operational: needs attention ── #}
-    <section class="glass-card rpt-chart-card rpt2-attention-card mb-4" aria-labelledby="rpt-attention-title">
-        <div class="rpt-chart-head flex-wrap gap-2">
-            <div class="flex-grow-1">
+    <section class="rpt-section" aria-labelledby="rpt-delivery-health">
+        <h2 id="rpt-delivery-health">Delivery health</h2>
+        <div class="rpt-delivery-grid">
+            {% include "hub/partials/report_chart.html" with chart_id="requestTrendChart" title="Requests Created vs Completed" subtitle="Monthly intake against closures" has_data=request_trend_has_data description="Requests created and completed per month. Exact values available in View chart values." empty_message="No requests in the selected period." %}
+            <article class="glass-card rpt-chart-card rpt-attention-card" aria-labelledby="rpt-attention-title">
                 <h3 class="rpt-chart-title" id="rpt-attention-title">Needs Attention</h3>
                 <p class="rpt-chart-sub">The ten most urgent active requests that are overdue or due within 7 days.</p>
-            </div>
-            {% if health.overdue or health.due_soon %}
-                <span class="rpt-log-count-badge"><i class="bi bi-exclamation-triangle me-1"></i>{{ health.overdue }} overdue &middot; {{ health.due_soon }} due soon</span>
-            {% endif %}
-        </div>
-        {% if attention_requests %}
-            <div class="table-responsive dashboard-table-wrapper">
-                <table class="table table-sm align-middle mb-0">
-                    <caption class="visually-hidden">Requests that are overdue or due within seven days</caption>
-                    <thead class="rpt-table-head">
-                        <tr><th>Request</th><th>Account</th><th>Engineer</th><th>Priority</th><th>Due</th><th class="text-end">Status</th></tr>
-                    </thead>
-                    <tbody>
+                {% if health.overdue or health.due_soon %}
+                    <div class="rpt-attention-summary">
+                        <span class="badge rpt-badge--rose">{{ health.overdue }} overdue</span>
+                        <span class="badge rpt-badge--amber">{{ health.due_soon }} due soon</span>
+                    </div>
+                {% endif %}
+                {% if attention_requests %}
+                    <ul class="rpt-attention-list" data-report-preview aria-labelledby="rpt-attention-title">
                         {% for item in attention_requests %}
-                            <tr>
-                                <td><a class="rpt-ref-link" href="{{ item.url }}">{{ item.reference }}</a></td>
-                                <td>{{ item.account }}</td>
-                                <td>{{ item.engineer }}</td>
-                                <td>{% if item.is_high %}<span class="badge rpt-badge--rose">High</span>{% else %}<span class="badge rpt-badge--gray">{{ item.priority }}</span>{% endif %}</td>
-                                <td class="text-nowrap">{{ item.due_date|date:"M d, Y" }}</td>
-                                <td class="text-end">
+                            <li>
+                                <div>
+                                    <a class="rpt-ref-link" href="{{ item.url }}">{{ item.reference }}</a>
+                                    <span>{{ item.account }} &middot; {{ item.engineer }}</span>
+                                    <span>{{ item.priority }} priority</span>
+                                </div>
+                                <div class="rpt-attention-deadline">
                                     {% if item.is_overdue %}
                                         <span class="badge rpt-badge--rose">{{ item.days }} day{{ item.days|pluralize }} overdue</span>
                                     {% elif item.days == 0 %}
@@ -267,37 +232,40 @@
                                     {% else %}
                                         <span class="badge rpt-badge--amber">Due in {{ item.days }} day{{ item.days|pluralize }}</span>
                                     {% endif %}
-                                </td>
-                            </tr>
+                                    <time datetime="{{ item.due_date|date:'Y-m-d' }}">{{ item.due_date|date:'M d, Y' }}</time>
+                                </div>
+                            </li>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="rpt-empty"><i class="bi bi-check2-circle"></i><p>Nothing overdue or due soon in this period.</p></div>
-        {% endif %}
+                    </ul>
+                {% else %}
+                    <div class="rpt-empty"><i class="bi bi-check2-circle" aria-hidden="true"></i><p>Nothing overdue or due soon in this period.</p></div>
+                {% endif %}
+            </article>
+        </div>
     </section>
 
-    <section class="rpt-chart-grid" aria-label="Operational charts">
-        {% include "hub/partials/report_chart.html" with chart_id="requestTrendChart" title="Requests Created vs Completed" subtitle="Monthly intake against closures" has_data=request_trend_has_data wide=True description="Requests created and completed per month. Exact values available in View chart values." empty_message="No requests in the selected period." %}
-        {% include "hub/partials/report_chart.html" with chart_id="engagementChart" title="Requests by Engagement Type" subtitle="Completed and ongoing requests" has_data=engagement_chart_has_data description="Requests by engagement type. Exact values available in View chart values." %}
-        {% include "hub/partials/report_chart.html" with chart_id="productChart" title="Requests by Product Category" subtitle="Completed and ongoing requests" has_data=product_chart_has_data description="Requests by product category. Exact values available in View chart values." %}
-        {% include "hub/partials/report_chart.html" with chart_id="engineerChart" title="Top 10 Engineers + Others" subtitle="Requests by engineer - expand for all engineers" has_data=engineer_stats description="Top 10 engineers plus others. Exact values available in View chart values." %}
-        {% include "hub/partials/report_chart.html" with chart_id="accountManagerChart" title="Top 10 Account Managers + Others" subtitle="Requests by account manager - expand for all managers" has_data=account_manager_stats description="Top 10 account managers plus others. Exact values available in View chart values." %}
+    <section class="rpt-section" aria-labelledby="rpt-request-charts">
+        <h2 id="rpt-request-charts">Request breakdowns</h2>
+        <div class="rpt-chart-grid">
+            {% include "hub/partials/report_chart.html" with chart_id="engagementChart" title="Requests by Engagement Type" subtitle="Completed and ongoing requests" has_data=engagement_chart_has_data description="Requests by engagement type. Exact values available in View chart values." %}
+            {% include "hub/partials/report_chart.html" with chart_id="productChart" title="Requests by Product Category" subtitle="Completed and ongoing requests" has_data=product_chart_has_data description="Requests by product category. Exact values available in View chart values." %}
+            {% include "hub/partials/report_chart.html" with chart_id="engineerChart" title="Requests by Engineer" subtitle="Completed and ongoing requests by engineer" has_data=engineer_stats description="Engineer rankings. Exact values available in View chart values." %}
+            {% include "hub/partials/report_chart.html" with chart_id="accountManagerChart" title="Requests by Account Manager" subtitle="Completed and ongoing requests by account manager" has_data=account_manager_stats description="Account manager rankings. Exact values available in View chart values." %}
+        </div>
     </section>
 
-    {# ── Operational: breakdown tables ── #}
-    <div class="row g-4 mb-4">
-        <div class="col-12 col-xl-6">
-            <div class="glass-card rpt-chart-card h-100">
+    <section class="rpt-section" aria-labelledby="rpt-assignments">
+        <h2 id="rpt-assignments">Assignments</h2>
+        <div class="rpt-table-grid">
+            <div class="glass-card rpt-chart-card">
                 <div class="rpt-chart-head">
                     <div>
-                        <h3 class="rpt-chart-title">Account Manager Breakdown</h3>
+                        <h3 class="rpt-chart-title" id="rpt-manager-breakdown">Account Manager Breakdown</h3>
                         <p class="rpt-chart-sub">{{ totals.account_managers }} account manager{{ totals.account_managers|pluralize }}</p>
                     </div>
                 </div>
                 {% if account_manager_stats %}
-                    <div class="table-responsive dashboard-table-wrapper">
+                    <div class="rpt-table-scroll" data-report-preview role="region" aria-labelledby="rpt-manager-breakdown" tabindex="0" data-no-smooth>
                         <table class="table table-sm align-middle mb-0">
                             <thead class="rpt-table-head">
                                 <tr><th>Account Manager</th><th class="text-end">Total</th><th class="text-end">Completed</th><th class="text-end">Ongoing</th></tr>
@@ -318,17 +286,15 @@
                     <div class="rpt-empty"><i class="bi bi-table"></i><p>No account manager workload is available yet.</p></div>
                 {% endif %}
             </div>
-        </div>
-        <div class="col-12 col-xl-6">
-            <div class="glass-card rpt-chart-card h-100">
+            <div class="glass-card rpt-chart-card">
                 <div class="rpt-chart-head">
                     <div>
-                        <h3 class="rpt-chart-title">Engineer Allocation</h3>
+                        <h3 class="rpt-chart-title" id="rpt-engineer-allocation">Engineer Allocation</h3>
                         <p class="rpt-chart-sub">{{ totals.engineers }} engineer{{ totals.engineers|pluralize }} assigned</p>
                     </div>
                 </div>
                 {% if engineer_stats %}
-                    <div class="table-responsive dashboard-table-wrapper">
+                    <div class="rpt-table-scroll" data-report-preview role="region" aria-labelledby="rpt-engineer-allocation" tabindex="0" data-no-smooth>
                         <table class="table table-sm align-middle mb-0">
                             <thead class="rpt-table-head">
                                 <tr><th>Engineer</th><th class="text-end">Total</th><th class="text-end">Completed</th><th class="text-end">Ongoing</th></tr>
@@ -350,7 +316,7 @@
                 {% endif %}
             </div>
         </div>
-    </div>
+    </section>
 
     {{ request_trend_chart|json_script:"requestTrendChart-data" }}
     {{ engagement_chart|json_script:"engagementChart-data" }}
@@ -361,6 +327,23 @@
     {{ account_manager_chart_full|json_script:"accountManagerChart-full-data" }}
 
 {% endif %}
+
+<dialog class="rpt-detail-dialog" id="rptDetailDialog" aria-labelledby="rptDetailTitle">
+    <header class="rpt-detail-header">
+        <h2 id="rptDetailTitle" class="rpt-chart-title"></h2>
+        <form method="dialog">
+            <button type="submit" class="btn btn-outline-secondary rpt-detail-close" autofocus>Close</button>
+        </form>
+    </header>
+    <div class="rpt-detail-content" data-report-detail-content data-no-smooth></div>
+</dialog>
+<template id="rptLoadMoreTemplate">
+    <div class="rpt-card-more">
+        <button type="button" class="btn btn-outline-secondary" aria-haspopup="dialog" aria-controls="rptDetailDialog">Load more</button>
+        <span class="rpt-preview-count"></span>
+    </div>
+</template>
+</div>
 
 {# ── Chart expand modal ── #}
 <div class="rpt-chart-modal" id="rptChartModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="rptChartModalTitle" inert>
@@ -376,8 +359,9 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="{% static 'js/chart-values.js' %}"></script>
-<script src="{% static 'js/chart-theme.js' %}"></script>
-<script src="{% static 'js/report-charts.js' %}"></script>
+<script src="{% static 'js/chart-theme.js' %}?v=2"></script>
+<script src="{% static 'js/report-charts.js' %}?v=3"></script>
+<script src="{% static 'js/report-details.js' %}"></script>
 <script>
 (function () {
     var modal = document.getElementById('activity-edit-modal');
@@ -418,28 +402,6 @@
     });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && modal.classList.contains('requestor-modal--visible')) closeModal();
-    });
-})();
-</script>
-<script>
-(function () {
-    var menu = document.getElementById('rpt-filter-menu');
-    if (!menu) return;
-    var toggle = document.getElementById('rpt-filter-toggle');
-    var popover = document.getElementById('rpt-filter-popover');
-    function setOpen(open) {
-        popover.hidden = !open;
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    }
-    toggle.addEventListener('click', function () { setOpen(popover.hidden); });
-    document.addEventListener('click', function (e) {
-        if (!popover.hidden && !menu.contains(e.target)) setOpen(false);
-    });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape' && !popover.hidden) {
-            setOpen(false);
-            toggle.focus();
-        }
     });
 })();
 </script>

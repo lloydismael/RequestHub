@@ -114,9 +114,17 @@ test('theme and preference class changes never rebuild the overlay', () => {
         wires,
     );
     assert.equal(app.bulbs.length, 36);
-    // A real size change must still rebuild.
+    // Geometry changes when height changes, but the existing lights keep twinkling.
+    const overlay = app.overlay;
+    const firstBulb = app.bulbs[0];
+    const before = firstBulb.attributes.transform;
     app.resize(1280, 120, 1440);
-    assert.ok(app.stats().builds > 0);
+    assert.equal(app.overlay, overlay);
+    assert.equal(app.bulbs[0], firstBulb);
+    assert.notEqual(firstBulb.attributes.transform, before);
+    assert.equal(app.overlay.attributes.viewBox, '0 0 1280 120');
+    assert.notEqual(app.overlay.children[0].attributes.d, wires[0]);
+    assert.deepEqual(app.stats(), { builds: 0, removals: 0 });
 });
 test('desktop overlay reproduces the 36-bulb reference sequence with two closed twisted wires', () => {
     const app = start();

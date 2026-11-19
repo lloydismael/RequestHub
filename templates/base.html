@@ -47,16 +47,16 @@
     {% endif %}
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=29">
+    <link rel="stylesheet" href="{% static 'css/app.css' %}?v=30">
     {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'hub/form_runtime.css' %}">{% endif %}
     <link rel="stylesheet" href="{% static 'css/liquid-glass.css' %}?v=16">
-    {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'css/liquid-glass-dashboard.css' %}?v=56">{% endif %}
+    {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'css/liquid-glass-dashboard.css' %}?v=61">{% endif %}
     <!-- Ambient background layer renders below content; defer so it doesn't block first paint -->
     <link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=4" media="print" onload="this.media='all'">
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=4"></noscript>
     {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">{% endif %}
     {% if request.user.is_authenticated %}
-    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=13">
+    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=15">
     <link rel="stylesheet" href="{% static 'css/christmas-lights.css' %}?v=2">
     <link rel="preload" as="image" href="{% static 'images/christmas-santa-sleigh.svg' %}">
     {% endif %}
@@ -90,15 +90,14 @@
         <span class="ambient-mesh__orb ambient-mesh__orb--7"></span>
         <span class="ambient-mesh__grain"></span>
     </div>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-gradient-primary shadow-sm{% if request.user.is_authenticated %} seasonal-lights{% endif %}" data-nav-surface="light" data-nav-default-surface="light" data-seasonal-lights-theme="christmas">
+    {% with nav_route=request.resolver_match.view_name %}
+    <nav class="navbar navbar-dark bg-gradient-primary shadow-sm{% if request.user.is_authenticated %} rh-primary-nav seasonal-lights{% endif %}" data-nav-surface="light" data-nav-default-surface="light" data-seasonal-lights-theme="christmas" aria-label="Main navigation">
         <div class="container-fluid">
-            <a class="navbar-brand fw-semibold" href="{% if request.user.is_authenticated %}{% url 'hub:dashboard' %}{% else %}{% url 'landing' %}{% endif %}">
-                <i class="bi bi-hexagon-half me-1"></i>Request Hub
+            <a class="navbar-brand fw-semibold"{% if not request.user.is_authenticated %} href="{% url 'landing' %}"{% elif nav_route != 'hub:dashboard' %} href="{% url 'hub:dashboard' %}"{% endif %}>
+                <i class="bi bi-hexagon-half me-1" aria-hidden="true"></i><span>Request Hub</span>
             </a>
             {% if request.user.is_authenticated %}
-                <!-- Always-visible controls: theme toggle + avatar.
-                     order-lg-2 → on desktop appears after nav links; on mobile sits between brand and toggler -->
-                <div class="d-flex align-items-center gap-2 ms-auto me-1 order-lg-2">
+                <div class="rh-primary-nav__controls">
                     <div class="theme-toggle-wrapper">
                         <input type="checkbox" class="checkbox" id="theme-checkbox" aria-label="Use dark mode">
                         <label for="theme-checkbox" class="checkbox-label" title="Toggle Dark/Light Mode" aria-label="Toggle Dark Mode">
@@ -109,64 +108,56 @@
                     </div>
                     <!-- Avatar dropdown -->
                     <div class="nav-avatar-wrap" id="nav-avatar-wrap">
-                        {% if request.user.profile_photo %}
-                            <img src="{{ request.user.profile_photo.url }}" alt="Profile photo" class="nav-avatar" id="nav-avatar-trigger" width="40" height="40" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-controls="nav-avatar-menu">
-                        {% else %}
-                            {% with display_name=request.user.get_full_name|default:request.user.username %}
-                                <span class="nav-avatar nav-avatar--placeholder" id="nav-avatar-trigger" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-controls="nav-avatar-menu">{{ display_name|slice:":1"|upper }}</span>
-                            {% endwith %}
-                        {% endif %}
-                        <div class="nav-avatar-menu" id="nav-avatar-menu" role="menu" aria-hidden="true">
+                        <button class="nav-avatar-trigger" id="nav-avatar-trigger" type="button" aria-label="Account options" aria-expanded="false" aria-controls="nav-avatar-menu">
+                            {% if request.user.profile_photo %}
+                                <img src="{{ request.user.profile_photo.url }}" alt="" class="nav-avatar" width="44" height="44">
+                            {% else %}
+                                {% with display_name=request.user.get_full_name|default:request.user.username %}
+                                    <span class="nav-avatar nav-avatar--placeholder" aria-hidden="true">{{ display_name|slice:":1"|upper }}</span>
+                                {% endwith %}
+                            {% endif %}
+                        </button>
+                        <div class="nav-avatar-menu" id="nav-avatar-menu" aria-hidden="true" inert data-no-smooth>
                             <div class="nav-avatar-menu__header">
                                 <span class="nav-avatar-menu__name">{{ request.user.get_full_name|default:request.user.username }}</span>
                                 <span class="nav-avatar-menu__role text-muted small">{{ request.user.get_role_display|default:request.user.role }}</span>
                             </div>
                             <div class="nav-avatar-menu__divider"></div>
-                            <a class="nav-avatar-menu__item" href="{% url 'accounts:update' %}" role="menuitem">
+                            <a class="nav-avatar-menu__item" href="{% url 'accounts:update' %}">
                                 <i class="bi bi-person-fill nav-avatar-menu__icon"></i>Settings
                             </a>
                             <div class="nav-avatar-menu__divider"></div>
                             <form action="{% url 'logout' %}" method="post" class="nav-avatar-menu__logout-form">
                                 {% csrf_token %}
-                                <button type="submit" class="nav-avatar-menu__item nav-avatar-menu__item--danger" role="menuitem">
+                                <button type="submit" class="nav-avatar-menu__item nav-avatar-menu__item--danger">
                                     <i class="bi bi-box-arrow-right nav-avatar-menu__icon"></i>Log Out
                                 </button>
                             </form>
                         </div>
                     </div>
+                    <button class="navbar-toggler" type="button" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                        <span class="rh-primary-nav__menu-icon" aria-hidden="true"></span>
+                    </button>
                 </div>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <!-- Nav links: order-lg-1 → on desktop appears before the always-visible controls -->
-                <div class="collapse navbar-collapse order-lg-1" id="navbarNav">
-                    <ul class="navbar-nav me-auto">
-                        <li class="nav-item"><a class="nav-link" href="{% url 'hub:dashboard' %}"><i class="bi bi-grid-fill nav-icon"></i>Dashboard</a></li>
+                <div class="rh-primary-nav__drawer" id="navbarNav">
+                    <ul class="navbar-nav" data-no-smooth>
+                        {% include 'includes/primary_nav_item.html' with destination_route='hub:dashboard' label='Dashboard' icon='grid-fill' %}
                         {% if request.user.role == 'admin' or request.user.role == 'pm_esg' %}
-                            <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'sqr' and active_sqr_view == 'performance' and active_sqr_tab != 'reports' %} active{% endif %}" href="{% url 'hub:sqr' %}?view=performance" data-sqr-nav-view="performance" title="Project Performance Tracking"{% if request.resolver_match.url_name == 'sqr' and active_sqr_view == 'performance' and active_sqr_tab != 'reports' %} aria-current="page"{% endif %}><i class="bi bi-speedometer2 nav-icon" aria-hidden="true"></i>PPT</a></li>
+                            {% include 'includes/primary_nav_item.html' with destination_route='hub:sqr' nav_view='performance' label='PPT' icon='speedometer2' tooltip='Project Performance Tracking' %}
                         {% endif %}
                         {% if request.user.is_engineer_access_role %}
-                            <li class="nav-item"><a class="nav-link" href="{% url 'hub:activity-logs' %}"><i class="bi bi-activity nav-icon"></i>Activity Logs</a></li>
+                            {% include 'includes/primary_nav_item.html' with destination_route='hub:activity-logs' label='Activity Logs' icon='activity' %}
                         {% endif %}
                         {% if request.user.role == 'admin' or request.user.is_engineer_access_role or request.user.role == 'pm_esg' %}
-                            <li class="nav-item"><a class="nav-link{% if request.resolver_match.url_name == 'sqr' and active_sqr_view != 'performance' %} active{% endif %}" href="{% url 'hub:sqr' %}?view=prototype" data-sqr-nav-view="prototype"{% if request.resolver_match.url_name == 'sqr' and active_sqr_view != 'performance' %} aria-current="page"{% endif %}><i class="bi bi-clipboard-data-fill nav-icon"></i>SQR</a></li>
+                            {% include 'includes/primary_nav_item.html' with destination_route='hub:sqr' nav_view='prototype' label='SQR' icon='clipboard-data-fill' %}
                         {% endif %}
                         {% if request.user.role == 'admin' %}
-                            <li class="nav-item"><a class="nav-link" href="{% url 'hub:management' %}"><i class="bi bi-gear-fill nav-icon"></i>Management</a></li>
+                            {% include 'includes/primary_nav_item.html' with destination_route='hub:management' label='Management' icon='gear-fill' %}
                         {% endif %}
                         {% if request.user.role == 'admin' or request.user.role == 'pm_esg' %}
-                            <li class="nav-item"><a class="nav-link" href="{% url 'hub:report' %}"><i class="bi bi-bar-chart-fill nav-icon"></i>Reports</a></li>
+                            {% include 'includes/primary_nav_item.html' with destination_route='hub:report' label='Reports' icon='bar-chart-fill' %}
                         {% endif %}
-                        <li class="nav-item position-relative">
-                            <a class="nav-link {% if new_ticket_count %}nav-link-with-dot{% endif %}" href="{% url 'hub:notifications' %}" data-notification-link>
-                                <i class="bi bi-bell-fill nav-icon"></i>Notifications
-                                {% if new_ticket_count %}
-                                    <span class="notification-dot notification-dot--nav" title="Unread notifications" aria-label="{{ new_ticket_count }} new items" data-notification-badge role="status">
-                                        <span class="notification-dot__count" data-notification-count>{{ new_ticket_count }}</span>
-                                    </span>
-                                {% endif %}
-                            </a>
-                        </li>
+                        {% include 'includes/primary_nav_item.html' with destination_route='hub:notifications' label='Notifications' icon='bell-fill' notification=True %}
                     </ul>
                 </div>
             {% else %}
@@ -186,6 +177,7 @@
             {% endif %}
         </div>
     </nav>
+    {% endwith %}
     <script>
         (function () {
             var navbar = document.querySelector('.navbar[data-nav-surface]');
@@ -395,7 +387,93 @@
             }
         })();
     </script>
+    <script>
+        // Nav avatar dropdown
+        // Bind before page content so slow page scripts cannot block the menu.
+        (function () {
+            const wrap = document.getElementById('nav-avatar-wrap');
+            const trigger = document.getElementById('nav-avatar-trigger');
+            const menu = document.getElementById('nav-avatar-menu');
+            if (!wrap || !trigger || !menu) return;
 
+            const navLinks = document.getElementById('navbarNav');
+            const navToggle = document.querySelector('[aria-controls="navbarNav"]');
+            const nav = wrap.closest('.rh-primary-nav');
+            const controls = wrap.parentElement;
+            const brand = nav.querySelector('.navbar-brand');
+            const isOpen = () => trigger.getAttribute('aria-expanded') === 'true';
+            const fitMenu = () => {
+                const top = wrap.getBoundingClientRect().bottom;
+                menu.style.setProperty('--nav-avatar-anchor', `${Math.ceil(top)}px`);
+            };
+            const open = () => {
+                fitMenu();
+                menu.classList.add('nav-avatar-menu--open');
+                trigger.setAttribute('aria-expanded', 'true');
+                menu.setAttribute('aria-hidden', 'false');
+                menu.inert = false;
+                menu.scrollTop = 0;
+            };
+            const close = () => {
+                if (!isOpen()) return;
+                menu.classList.remove('nav-avatar-menu--open');
+                trigger.setAttribute('aria-expanded', 'false');
+                menu.setAttribute('aria-hidden', 'true');
+                menu.inert = true;
+            };
+            const navIsOpen = () => navToggle.getAttribute('aria-expanded') === 'true';
+            const setNavOpen = (open) => {
+                if (!open && navLinks.contains(document.activeElement)) navToggle.focus({ preventScroll: true });
+                navToggle.setAttribute('aria-expanded', String(open));
+                navLinks.classList.toggle('show', open);
+                navLinks.inert = !open;
+            };
+            const syncNavigation = () => {
+                const compact = navToggle.getClientRects().length > 0;
+                if (compact) {
+                    const style = getComputedStyle(nav);
+                    const containerStyle = getComputedStyle(navLinks.parentElement);
+                    const controlsHeight = Math.max(brand.offsetHeight, controls.offsetHeight);
+                    const chrome = controlsHeight + parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) +
+                        parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth) +
+                        parseFloat(containerStyle.paddingTop) + parseFloat(containerStyle.paddingBottom);
+                    const size = `${chrome}px`;
+                    if (navLinks.style.getPropertyValue('--nav-chrome') !== size) {
+                        navLinks.style.setProperty('--nav-chrome', size);
+                    }
+                    setNavOpen(navIsOpen());
+                } else {
+                    navLinks.inert = false;
+                }
+                if (isOpen()) fitMenu();
+            };
+            syncNavigation();
+            if ('ResizeObserver' in window) {
+                const observer = new ResizeObserver(syncNavigation);
+                observer.observe(controls);
+                observer.observe(brand);
+            }
+            new MutationObserver(syncNavigation).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+            window.addEventListener('resize', syncNavigation);
+            window.addEventListener('pageshow', syncNavigation);
+            window.addEventListener('scroll', () => { if (isOpen()) fitMenu(); }, { passive: true });
+
+            navToggle.addEventListener('click', () => setNavOpen(!navIsOpen()));
+            trigger.addEventListener('click', () => isOpen() ? close() : open());
+            wrap.addEventListener('focusout', (e) => { if (e.relatedTarget && !wrap.contains(e.relatedTarget)) close(); });
+            document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Escape' || e.defaultPrevented) return;
+                if (isOpen()) {
+                    if (menu.contains(document.activeElement)) trigger.focus({ preventScroll: true });
+                    close();
+                } else if (navToggle.offsetWidth && navIsOpen() &&
+                        (document.activeElement === navToggle || navLinks.contains(document.activeElement))) {
+                    setNavOpen(false);
+                }
+            });
+        }());
+    </script>
 
         <main class="container py-4">
             <div id="request-hub-page" class="request-hub-page">
@@ -459,41 +537,15 @@
     {% if request.user.is_authenticated %}
     <script src="{% static 'js/christmas-theme-snapshot.js' %}?v=2" defer></script>
     <script src="{% static 'js/christmas-theme.js' %}?v=17" defer></script>
-    <script src="{% static 'js/christmas-lights.js' %}?v=5" defer></script>
+    <script src="{% static 'js/christmas-lights.js' %}?v=6" defer></script>
     {% endif %}
     <script src="{% static 'js/liquid-glass.js' %}?v=7" defer></script>
     {% if not login_asset_profile %}
-    <script src="{% static 'js/smooth-scroll.js' %}?v=11" defer></script>
+    <script src="{% static 'js/smooth-scroll.js' %}?v=12" defer></script>
     <script src="{% static 'js/notification-toasts.js' %}?v=6" defer></script>
     {% endif %}
     <script src="{% static 'js/login-success.js' %}" defer></script>
     {% if not login_asset_profile %}<script src="{% static 'hub/form_runtime.js' %}" defer></script>{% endif %}
-    <script>
-        // Nav avatar dropdown
-        (function () {
-            const wrap = document.getElementById('nav-avatar-wrap');
-            const trigger = document.getElementById('nav-avatar-trigger');
-            const menu = document.getElementById('nav-avatar-menu');
-            if (!wrap || !trigger || !menu) return;
-
-            const open = () => {
-                menu.classList.add('nav-avatar-menu--open');
-                trigger.setAttribute('aria-expanded', 'true');
-                menu.setAttribute('aria-hidden', 'false');
-            };
-            const close = () => {
-                menu.classList.remove('nav-avatar-menu--open');
-                trigger.setAttribute('aria-expanded', 'false');
-                menu.setAttribute('aria-hidden', 'true');
-            };
-            const toggle = () => menu.classList.contains('nav-avatar-menu--open') ? close() : open();
-
-            trigger.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
-            trigger.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
-            document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-        }());
-    </script>
     <script>
         (function () {
             function enhanceSelect(select) {

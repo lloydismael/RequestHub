@@ -44,7 +44,7 @@
 
     function state(canvas, text) {
         const plot = canvas.parentElement;
-        const msg = plot.parentElement.querySelector('.rh-chart-state');
+        const msg = canvas.closest('.rh-chart-card')?.querySelector('.rh-chart-state');
         plot.hidden = !!text;
         if (msg) { msg.hidden = !text; msg.textContent = text || ''; }
     }
@@ -55,8 +55,7 @@
     }
 
     function legend(canvas, spec) {
-        const parent = canvas.parentElement.parentElement;
-        const el = parent.querySelector('.rh-chart-legend');
+        const el = canvas.closest('.rh-chart-card')?.querySelector('.rh-chart-legend');
         if (!el) return;
         const items = spec.type === 'doughnut' ? spec.labels.map((label, i) => ({
             label: `${label}: ${(spec.format || fmt)(spec.series[0].values[i])} h`, color: spec.colors[i]

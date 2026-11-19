@@ -1,0 +1,189 @@
+{
+  "base_revision": "c369afa4363922e96169d85982f21cd208421fba",
+  "after_revision": null,
+  "note": "Actual Django Reports template renders with synthetic data and local pinned assets. The before stage includes the pending navbar changes; rebind or recapture at release revisions.",
+  "captures": {
+    "operational-desktop": {
+      "viewport": [
+        1440,
+        1080
+      ],
+      "theme": "light",
+      "before": {
+        "file": "operational-desktop-before.png",
+        "sha256": "867acbac834ff77d1110f9f69009e061a80841d1d6d31b4a02e1d744de15b987"
+      },
+      "after": {
+        "file": "operational-desktop-after.png",
+        "sha256": "1c6ac88b5f7f7e6b96a42a091d9a8c026146f85e259de3357956a222f4047c0e"
+      }
+    },
+    "activity-desktop": {
+      "viewport": [
+        1440,
+        1030
+      ],
+      "theme": "dark",
+      "before": {
+        "file": "activity-desktop-before.png",
+        "sha256": "8077aeb98577c172eacb14bc10aae7b81b4585d02a8fe1ac2565ffd2e2a309e9"
+      },
+      "after": {
+        "file": "activity-desktop-after.png",
+        "sha256": "af791b0b38dddb851dd7d6c0d9fc11e38d647fb08c8e20c7758e91e49b375c07"
+      }
+    },
+    "operational-phone": {
+      "viewport": [
+        390,
+        1070
+      ],
+      "theme": "light",
+      "before": {
+        "file": "operational-phone-before.png",
+        "sha256": "a874f682686a73c2e0d861fce53eb98ce380fd73902525bf7aa28bc427b192a7"
+      },
+      "after": {
+        "file": "operational-phone-after.png",
+        "sha256": "1d4ebe91002fecd0a6c83c1343631d393aed06b23ecdb1a04b97ee52127890be"
+      }
+    },
+    "operational-breakdowns": {
+      "viewport": [
+        1440,
+        1080
+      ],
+      "theme": "light",
+      "baseline": "Local working tree before sizing and scroll changes",
+      "before": {
+        "file": "operational-breakdowns-before.png",
+        "sha256": "ec76bce53da3bbb2866b77801adf17607496f335d5dd3130370a36f1e626d8a0"
+      },
+      "after": {
+        "file": "operational-breakdowns-after.png",
+        "sha256": "f6359995fe6944fd001c87a04a7fb7871dc1a046faafa4206ae73b12af6fce24"
+      }
+    },
+    "activity-breakdowns": {
+      "viewport": [
+        1440,
+        1080
+      ],
+      "theme": "dark",
+      "baseline": "Local working tree before sizing and scroll changes",
+      "before": {
+        "file": "activity-breakdowns-before.png",
+        "sha256": "8c26897c126a16bf8f847ec7614d23191edb98986b431df251101acf656a931e"
+      },
+      "after": {
+        "file": "activity-breakdowns-after.png",
+        "sha256": "6be857510b1bc04ab317e1be917377e6982a329da86c42550fb5070c183101c6"
+      }
+    },
+    "activity-table-limit": {
+      "viewport": [
+        1440,
+        800
+      ],
+      "theme": "dark",
+      "baseline": "Local working tree before the five-item previews",
+      "before": {
+        "file": "activity-table-limit-before.png",
+        "sha256": "8b104ad418881acdb3d6bf4c0384920929ff1651f22183cc4e13941bbb056011"
+      },
+      "after": {
+        "file": "activity-table-limit-after.png",
+        "sha256": "a21495fa4f77e5fcc954c3525835fe8e1b5bb3840b7c705c11d80d0e335781d2"
+      }
+    },
+    "operational-breakdowns-load-more": {
+      "viewport": [
+        1440,
+        1080
+      ],
+      "theme": "light",
+      "baseline": "Local Reports layout with scrollable charts before the five-item previews",
+      "before": {
+        "file": "operational-breakdowns-load-more-before.png",
+        "sha256": "f6359995fe6944fd001c87a04a7fb7871dc1a046faafa4206ae73b12af6fce24"
+      },
+      "after": {
+        "file": "operational-breakdowns-load-more-after.png",
+        "sha256": "f16aec9df222e31564bc3c789248ef39dbd44c28dd29a6bc7846a418123be69b"
+      }
+    },
+    "activity-breakdowns-load-more": {
+      "viewport": [
+        1440,
+        1080
+      ],
+      "theme": "dark",
+      "baseline": "Local Reports layout with scrollable charts before the five-item previews",
+      "before": {
+        "file": "activity-breakdowns-load-more-before.png",
+        "sha256": "6be857510b1bc04ab317e1be917377e6982a329da86c42550fb5070c183101c6"
+      },
+      "after": {
+        "file": "activity-breakdowns-load-more-after.png",
+        "sha256": "881d71786a9130f128caf3f09ef531793f8ea3a428eef46d10465cd1ef301336"
+      }
+    }
+  },
+  "before_source_sha256": {
+    "templates/base.html": "bac43859a9c92fa5ef8f7060099088971fbfdbe5617b3a6708502ee27306e941",
+    "templates/hub/report.html": "b5f7ea5cd81c88059a0174279f173cdbebb446b4d7bca01833e502359948965a",
+    "templates/hub/partials/report_chart.html": "20e5944eb48e271495915dff6b3056e64f76ecc0a3fed7459053e06643db3b5e",
+    "templates/hub/partials/report_filter.html": "b6b487fdaa95e716595dfbfff70d1689f4397ccc1632c257d24be051b552af8c",
+    "templates/hub/partials/report_activity_log.html": "96bd385d3eecc1891ace4471a5ef6796c7eee8d5f58fbf624cd354a8905abaaa",
+    "static/css/liquid-glass-dashboard.css": "8ed973699b56273a864fc0cfd2718044898412c815a9c321c7cd52b5fd04314f",
+    "static/js/report-charts.js": "5ccfe59679dae7dd076bed31e7b8a50166dbfa0feb83e99f713b8edcb30016a3"
+  },
+  "after_source_sha256": {
+    "templates/base.html": "f4db4bd588c6e20842bec50169ccd00719f9e666aabefc4537fee0702ec771aa",
+    "templates/hub/report.html": "3e179fde8b57991a8856070e70d15030eac566da8a922442217d32f70c7b98d8",
+    "templates/hub/partials/report_chart.html": "0292283cbc47473adbaa72f12a58bf15d9c2069db4661f52302bd643f8536bc3",
+    "templates/hub/partials/report_filter.html": "799da34a3b2546deddc965982c16517f068b2a204d9ede2e1306d751d3329009",
+    "templates/hub/partials/report_activity_log.html": "4dc5e7551d69cf0ba03f7ef7b334d4dbc8d0973317670afc26b6f6c014b8de70",
+    "static/css/liquid-glass-dashboard.css": "1291f6962c708bb2fe266720c7219caef43f0c386c6f2fdfa29bd96b6d6d4f84",
+    "static/js/report-charts.js": "92171b30195c3ce621a88f1951285496a289b15a94eb7eee9343307561c70eeb"
+  },
+  "sizing_before_source_sha256": {
+    "templates/base.html": "8837255e27900475a855d831a89f6bd5c7d0d209e8685031bef7f7d2c15e6e53",
+    "templates/hub/report.html": "16c95f02955b842e938ffe7779c4028938b4653f7d414081d11e7aaa91b819be",
+    "templates/hub/partials/report_chart.html": "20e5944eb48e271495915dff6b3056e64f76ecc0a3fed7459053e06643db3b5e",
+    "templates/hub/partials/report_filter.html": "799da34a3b2546deddc965982c16517f068b2a204d9ede2e1306d751d3329009",
+    "templates/hub/partials/report_activity_log.html": "4dc5e7551d69cf0ba03f7ef7b334d4dbc8d0973317670afc26b6f6c014b8de70",
+    "static/css/liquid-glass-dashboard.css": "e09f6c2770fbf5728ae0c75d6e29cec6a8c7ae5ab7295045e9acafdf52b45be5",
+    "static/js/report-charts.js": "5ccfe59679dae7dd076bed31e7b8a50166dbfa0feb83e99f713b8edcb30016a3",
+    "templates/hub/partials/chart_plot.html": "6db024723d8d2964c67dc345cdb680a6d44adecf4ca8654c7a6ff3a091df6c24",
+    "static/js/chart-theme.js": "f99ba710cc761dd3dfcc5bf3a0ac5090c488103c544bfc79a4d0670ac3925c30",
+    "static/js/smooth-scroll.js": "ce9ec40939c116aeb212c4a175fa848e9f8f0caa40ed4e1c50661aa61294a150"
+  },
+  "sizing_after_source_sha256": {
+    "templates/base.html": "8417b0cbe32bce10cfb92bf8cde3d848001ba252be6d99babeaf4e952f44e021",
+    "templates/hub/report.html": "f275a337d0b6e60db36351fd7b34b8204b82d95a98eaa6ddf93f8e58755d9498",
+    "templates/hub/partials/report_chart.html": "20e5944eb48e271495915dff6b3056e64f76ecc0a3fed7459053e06643db3b5e",
+    "templates/hub/partials/report_filter.html": "799da34a3b2546deddc965982c16517f068b2a204d9ede2e1306d751d3329009",
+    "templates/hub/partials/report_activity_log.html": "4dc5e7551d69cf0ba03f7ef7b334d4dbc8d0973317670afc26b6f6c014b8de70",
+    "static/css/liquid-glass-dashboard.css": "909b94fb54173f96a3f142e443cf2c78e38e9a9c79b70683abbc5f231d5632a0",
+    "static/js/report-charts.js": "93c893783bbeb1e1299cbcf9f6debfeee6ca5a11d84524f29814856d18351c1b",
+    "templates/hub/partials/chart_plot.html": "07b1a07aee7ac478852b67237aeefc380dd3744a38c663fc8b6018d688fd0184",
+    "static/js/chart-theme.js": "3e8f3356e590e7ccb9376a77749037d2f39bf91608e35b9aa5a2f09a6bcccffd",
+    "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778"
+  },
+  "load_more_after_source_sha256": {
+    "templates/base.html": "f4db4bd588c6e20842bec50169ccd00719f9e666aabefc4537fee0702ec771aa",
+    "templates/hub/report.html": "3e179fde8b57991a8856070e70d15030eac566da8a922442217d32f70c7b98d8",
+    "templates/hub/partials/report_chart.html": "0292283cbc47473adbaa72f12a58bf15d9c2069db4661f52302bd643f8536bc3",
+    "templates/hub/partials/report_filter.html": "799da34a3b2546deddc965982c16517f068b2a204d9ede2e1306d751d3329009",
+    "templates/hub/partials/report_activity_log.html": "4dc5e7551d69cf0ba03f7ef7b334d4dbc8d0973317670afc26b6f6c014b8de70",
+    "static/css/liquid-glass-dashboard.css": "1291f6962c708bb2fe266720c7219caef43f0c386c6f2fdfa29bd96b6d6d4f84",
+    "static/js/report-charts.js": "92171b30195c3ce621a88f1951285496a289b15a94eb7eee9343307561c70eeb",
+    "templates/hub/partials/chart_plot.html": "e9a3fe8ec0c67a7759cf316c539f9cd9d3f05a1455af1cb6701b86113e7ce6ce",
+    "static/js/chart-theme.js": "3e8f3356e590e7ccb9376a77749037d2f39bf91608e35b9aa5a2f09a6bcccffd",
+    "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+    "static/js/report-details.js": "353bb534d72c78ae84c3c7adba313d9189aecee18d6a9396b76edec79cc541f0",
+    "static/css/charts.css": "8f86514aa307750f5a0879b8546d82b3523c4fdbc4d04863598f95ed286cb020",
+    "static/js/chart-values.js": "4bedb17db07135b62d0ec39dcbac0ae1aadba43830c99ed8ba6d88cb10c0f79b"
+  }
+}

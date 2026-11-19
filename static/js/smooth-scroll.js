@@ -562,7 +562,7 @@
         if (!pageScrollAttached) {
             // Dense table pages are paint-heavy. Keep their vertical wheel
             // scrolling native so sticky cells can use compositor scrolling.
-            if (!document.body.matches('.sqr-page, .admin-dashboard, .requestor-dashboard, .engineer-dashboard')) {
+            if (!document.body.matches('.sqr-page, .reports-page, .admin-dashboard, .requestor-dashboard, .engineer-dashboard')) {
                 attachPageScroll();
             }
             pageScrollAttached = true;

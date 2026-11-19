@@ -6970,31 +6970,6 @@ body.view-mobile .nav-avatar-menu {
     min-width: min(200px, calc(100vw - 2rem));
 }
 
-/* ── 4. Force hamburger so the desktop mock still collapses (viewport still ≥ lg) ── */
-body.view-mobile .navbar-expand-lg {
-    flex-wrap: wrap !important;
-    justify-content: space-between !important;
-}
-body.view-mobile .navbar-expand-lg .navbar-toggler {
-    display: inline-flex !important;
-    min-width: 44px;
-    min-height: 44px;
-    align-items: center;
-    justify-content: center;
-}
-body.view-mobile .navbar-expand-lg .navbar-collapse:not(.show):not(.collapsing) {
-    display: none !important;
-    flex-basis: 100% !important;
-}
-body.view-mobile .navbar-expand-lg .navbar-collapse.show,
-body.view-mobile .navbar-expand-lg .navbar-collapse.collapsing {
-    display: block !important;
-    flex-basis: 100% !important;
-}
-body.view-mobile .navbar-expand-lg .navbar-nav {
-    flex-direction: column !important;
-}
-
 /* ── 5. Collapse ALL columns to full-width (fixes Bootstrap row-cols-* bare .col bug) ── */
 body.view-mobile .row {
     flex-direction: column;
