@@ -129,6 +129,94 @@ class MobileBrowserTests(SimpleTestCase):
                 page.add_script_tag(content=script.read_text(encoding='utf-8'))
         return page
 
+    def admin_profile_page(self, *, dark=False, native_dialog=True):
+        fixture = {**self.context(), 'show_classic_sqr_tracker': True, 'backup_max_bytes': 25 * 1024 * 1024}
+        template = 'accounts/profile_form.html'
+        page = self.page(width=320, template=template, dark=dark, fixture=fixture, scripts=())
+        if not native_dialog:
+            page.evaluate('HTMLDialogElement.prototype.showModal = undefined')
+        script = next(script for attrs, script in extract_scripts(render_to_string(template, fixture))
+                      if not attrs and '// Tab switching' in script)
+        page.add_script_tag(content=script)
+        page.add_script_tag(path=settings.BASE_DIR / 'static' / 'js' / 'sqr-classic-visibility.js')
+        page.get_by_role('button', name='Personalization').click()
+        return page
+
+    def test_admin_recovery_keeps_warnings_visible_and_secondary_actions_collapsed(self):
+        from playwright.sync_api import expect
+
+        page = self.admin_profile_page(dark=True)
+        recovery = page.locator('#profile-panel-backup')
+        expect(recovery.locator('summary').filter(has_text='Keep an off-host copy')).to_be_visible()
+        expect(recovery.locator('#backup_file')).to_be_hidden()
+        expect(recovery.locator('#deleted-search')).to_be_hidden()
+        for label in ('Backup history', 'Deleted requests', 'Recovery activity'):
+            expect(recovery.locator('summary').get_by_text(label, exact=True)).to_be_visible()
+        preview = recovery.locator('summary').filter(has_text='Restore preview')
+        preview.focus()
+        page.keyboard.press('Enter')
+        expect(recovery.locator('#backup_file')).to_be_visible()
+        self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= innerWidth'))
+
+        page.get_by_role('button', name='Personal Info').click()
+        page.evaluate('location.hash = "#backup"')
+        expect(recovery).to_be_visible()
+
+    def test_admin_create_backup_dialog_restores_keyboard_focus(self):
+        from playwright.sync_api import expect
+
+        page = self.admin_profile_page()
+        opener = page.get_by_role('button', name=re.compile('^create backup$', re.I))
+        opener.press('Enter')
+        dialog = page.get_by_role('dialog', name='Create backup')
+        note = dialog.get_by_role('textbox', name=re.compile('note', re.I))
+        expect(dialog).to_be_visible()
+        expect(note).to_be_focused()
+        note.fill('Before import')
+        self.assertEqual(dialog.locator('form').get_attribute('method'), 'post')
+        page.keyboard.press('Escape')
+        expect(dialog).to_be_hidden()
+        expect(opener).to_be_focused()
+
+    def test_admin_can_open_backup_form_without_native_dialog(self):
+        from playwright.sync_api import expect
+
+        page = self.admin_profile_page(native_dialog=False)
+        recovery = page.locator('#profile-panel-backup')
+        note = recovery.locator('#backup-reason')
+        expect(note).to_be_hidden()
+        recovery.locator('summary').filter(has_text='Create backup').click()
+        expect(note).to_be_visible()
+        expect(recovery.get_by_role('button', name='Create backup')).to_be_visible()
+
+    def test_admin_sqr_badge_tracks_saved_visibility_and_failed_save(self):
+        from playwright.sync_api import expect
+
+        page = self.admin_profile_page()
+        page.evaluate('''() => {
+            window.fetch = () => new Promise(resolve => {
+                window.finishSave = (payload, status) => resolve(new Response(JSON.stringify(payload), {status}));
+            });
+        }''')
+        root = page.locator('#sqr-classic-setting')
+        switch = root.get_by_role('switch', name='Show SQR Tracker (Classic)')
+        visible = root.get_by_text('Visible', exact=True)
+        hidden = root.get_by_text('Hidden', exact=True)
+        expect(visible).to_be_visible()
+        switch.click()
+        expect(switch).to_be_disabled()
+        expect(visible).to_be_visible()
+        page.evaluate('finishSave({ok: true, show_classic_sqr_tracker: false}, 200)')
+        expect(hidden).to_be_visible()
+        expect(switch).not_to_be_checked()
+
+        switch.click()
+        page.evaluate('finishSave({ok: false}, 500)')
+        expect(switch).to_be_enabled()
+        expect(switch).not_to_be_checked()
+        expect(hidden).to_be_visible()
+        expect(root.get_by_role('status')).to_contain_text('Try again', ignore_case=True)
+
     def test_monitoring_renders_metrics_and_stops_when_session_ends(self):
         from datetime import datetime, timedelta, timezone
 

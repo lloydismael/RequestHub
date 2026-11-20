@@ -173,16 +173,39 @@ def _ui(snapshot, fixture):
             # Older templates applied this same preference via localStorage and inline JS.
             document = re.sub(r"<html\b[^>]*>", lambda match: _seasonal_root(match[0]), document, count=1)
         return document
-    if fixture == "profile":
+    if fixture in {"profile", "admin_profile"}:
         from accounts.forms import ProfileForm, ThemeForm
         from accounts.models import User
 
-        user = User(username="demo-viewer", first_name="Demo", last_name="Viewer", role="engineer")
+        admin = fixture == "admin_profile"
+        user = User(username="demo-viewer", first_name="Demo", last_name="Viewer", role="admin" if admin else "engineer")
         request.user = user
+        if admin:
+            from accounts.models import BackupSnapshot
+            from accounts.recovery import EXCLUSIONS
+
+            snapshot = BackupSnapshot(
+                pk=1, created_by=user, created_at=datetime(2026, 11, 20, 2, tzinfo=timezone.utc),
+                reason="Before an import", size=141_312,
+            )
+            context.update(show_classic_sqr_tracker=True, backup_snapshots=[snapshot], latest_backup=snapshot,
+                           backup_max_bytes=25 * 1024 * 1024, backup_exclusions=EXCLUSIONS)
         with patch("hub.form_editor.get_definition", return_value=None):
+            form = ProfileForm(instance=user, is_admin=True) if admin else ProfileForm(instance=user)
             document = render_to_string("accounts/profile_form.html", {
-                **context, "user": user, "form": ProfileForm(instance=user), "theme_form": ThemeForm(instance=user),
+                **context, "user": user, "form": form, "theme_form": ThemeForm(instance=user),
             }, request=request)
+        if admin:
+            # Match the active Personalization tab without running the page scripts.
+            for class_name, attribute, info, selected in (
+                ('profile-tab', 'data-profile-tab', 'info', 'settings'),
+                ('profile-panel', 'id', 'profile-panel-info', 'profile-panel-settings'),
+            ):
+                inactive = f'class="{class_name}"'
+                active = f'class="{class_name} {class_name}--active"'
+                document = document.replace(f'{active} {attribute}="{info}"', f'{inactive} {attribute}="{info}"', 1)
+                document = document.replace(f'{inactive} {attribute}="{selected}"', f'{active} {attribute}="{selected}"', 1)
+            return document
         return document.replace('class="profile-panel" id="profile-panel-avatar"',
                                 'class="profile-panel profile-panel--active" id="profile-panel-avatar"', 1)
     if fixture == "sqr_tracker":

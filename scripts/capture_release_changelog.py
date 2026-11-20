@@ -96,7 +96,7 @@ def load_recipes(path):
                 if source.suffix.lower() not in {".md", ".txt", ".rst"} or not isinstance(scene.get("heading"), str) or not scene["heading"].strip():
                     raise CaptureError("Documentation capture needs a selected text section.")
             elif scene.get("fixture") not in ({
-                "login", "seasonal_login", "profile", "changelog", "changelog_editor",
+                "login", "seasonal_login", "profile", "admin_profile", "changelog", "changelog_editor",
                 "changelog_history", "changelog_feed", "management_monitoring", "sqr_tracker", "sqr_performance",
             } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
@@ -273,7 +273,9 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         ".lg-enter{opacity:1!important;transform:none!important}</style>"
     )
     fixture = scene.get("fixture")
-    if fixture in {"changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring"}:
+    if fixture in {
+        "admin_profile", "changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring",
+    }:
         document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []
     context = browser.new_context(
@@ -343,6 +345,7 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         selector = {
             "login": ".login-hero", "seasonal_login": ".login-hero",
             "profile": "#profile-panel-avatar .profile-card, .profile-avatar-block",
+            "admin_profile": ".settings-admin-wrap",
             "changelog": ".cl-entry", "changelog_editor": ".cl-editor",
             "changelog_history": ".cl-history-entry", "changelog_feed": ".cl-technical-evidence",
             "management_monitoring": "main", "sqr_tracker": "#sqr-proto", "sqr_performance": "#sqr-performance-dashboard",

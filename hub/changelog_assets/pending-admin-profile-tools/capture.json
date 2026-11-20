@@ -1,0 +1,73 @@
+{
+  "recipe": "admin-profile-tools",
+  "before_revision": "44dca4de58103850ad6db726399e755daa3f8198",
+  "after_source": "Uncommitted working-tree files over the same baseline. Not exact-release evidence.",
+  "fixture": "Same synthetic Admin and ready snapshot on both sides; no users or data from a live app.",
+  "capture": "Offline Chromium 156.0.8078.4; scripts and external network disabled. The create disclosure is visible without scripts. Sticky navigation is kept outside the isolated crop on both sides.",
+  "after_file_sha256": {
+    "templates/accounts/profile_form.html": "382c6f3ebf2f1375b0967caf63e3ceeafecaf6283a118adbefe191b0228aeec2",
+    "templates/accounts/_recovery_center.html": "83acb99cc5a8fdaf858872765aa1fafcbc1cca448d219f2379306c62d46b2058",
+    "templates/base.html": "daf695ea96ecfee2e2f3af3ede3780fe6bc8c7432e8c5d49242fe0f717191b94",
+    "static/css/recovery.css": "c8dd1215dec4ff485c6f06486046f868d4fa3c99b562d50bae1863a5b16162bf",
+    "static/js/sqr-classic-visibility.js": "3d9aca74d61ec9ae4ae4144f6e698cf44c54c0774b81b13579c51bc9d8149f2a",
+    "accounts/recovery_views.py": "d33d47d382e1d05371002c51f8549e4064d8df77bb34fffffed3070a0e8a7443",
+    "hub/views.py": "e5a8ea18dfbd987e0569306781f150124e2754f3bd69c378cc9f48e1b9739d32",
+    "scripts/capture_release_changelog.py": "f823fb14b5240415c344766619bb99c5613539f7de9da0a0d021299ea2114563",
+    "scripts/changelog_capture_scenes.py": "550f84bbde317a1f805ac7c50c23bcca7cd1bd468a40505f71d82c642a117ef1",
+    "hub/changelog_capture_recipes.json": "05e42a8ce2a20ea323f27c9c029be6ab26f38b06165dbcc24bfcf152d5394e21"
+  },
+  "images": [
+    {
+      "file": "desktop-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 1280,
+        "height": 960
+      },
+      "image_size": [
+        860,
+        1698
+      ],
+      "sha256": "960533c261f4e8fadae13b3e55df679c65a03e4af351d1d5bcae19aa2dada129"
+    },
+    {
+      "file": "desktop-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 1280,
+        "height": 960
+      },
+      "image_size": [
+        860,
+        580
+      ],
+      "sha256": "a1e28df28e466a071606d5cac20a593e4fb8837194590600f23475caff29c793"
+    },
+    {
+      "file": "mobile-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        327,
+        2187
+      ],
+      "sha256": "593d576f4dddbb2ca957da4fe2cbf3fd2293404f9e73cfb19a0d6dc5b1ddeb1a"
+    },
+    {
+      "file": "mobile-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        327,
+        669
+      ],
+      "sha256": "d3e4d289a7514e9f6f07e0c9ca0a686a1fc6e8120be70f273bb776e5214424af"
+    }
+  ]
+}

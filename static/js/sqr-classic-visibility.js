@@ -3,15 +3,16 @@
     var root = document.getElementById('sqr-classic-setting');
     var checkbox = document.getElementById('sqr-classic-visibility');
     var status = document.getElementById('sqr-classic-status');
-    if (!root || !checkbox || !status) return;
+    var badge = document.getElementById('sqr-classic-badge');
+    if (!root || !checkbox || !status || !badge) return;
     var persisted = checkbox.checked;
     var pending = false;
     checkbox.addEventListener('change', async function () {
         if (pending) return;
         pending = true;
         checkbox.disabled = true;
-        root.setAttribute('aria-busy', 'true');
-        status.textContent = 'Saving global visibility…';
+        status.classList.remove('settings-save-error');
+        status.textContent = 'Saving…';
         var controller = new AbortController();
         var timeout = setTimeout(function () { controller.abort(); }, 20000);
         try {
@@ -27,15 +28,17 @@
             }
             persisted = payload.show_classic_sqr_tracker;
             checkbox.checked = persisted;
-            status.textContent = 'Global visibility saved. Users will see the change after reloading SQR.';
+            badge.textContent = persisted ? 'Visible' : 'Hidden';
+            badge.dataset.visible = String(persisted);
+            status.textContent = 'Saved.';
         } catch (error) {
             checkbox.checked = persisted;
-            status.textContent = 'Could not save global visibility. Previous setting restored. Please try again.';
+            status.classList.add('settings-save-error');
+            status.textContent = 'Could not save. Previous setting restored. Try again.';
         } finally {
             clearTimeout(timeout);
             pending = false;
             checkbox.disabled = false;
-            root.removeAttribute('aria-busy');
         }
     });
 })();

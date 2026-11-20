@@ -1,10 +1,6 @@
 .recovery-header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
 .recovery-header h2 { margin-bottom: .5rem; }
 .recovery-muted { color: var(--rh-text-secondary); font-size: .85rem; }
-.recovery-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 1.25rem 0; }
-.recovery-stat { padding: 1rem; border: 1px solid var(--rh-border); border-radius: .75rem; background: var(--rh-surface-sunken); min-width: 0; }
-.recovery-stat span { display: block; font-size: .75rem; color: var(--rh-text-secondary); margin-bottom: .35rem; }
-.recovery-stat strong { font-size: .9rem; overflow-wrap: anywhere; }
 .recovery-section { border-top: 1px solid var(--rh-divider); padding-top: 1.25rem; margin-top: 1.25rem; }
 .recovery-section h3 { font-size: 1rem; font-weight: 650; margin-bottom: .5rem; }
 .recovery-actions { display: flex; align-items: flex-end; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
@@ -21,4 +17,84 @@
 .recovery-panel .btn, .recovery-panel summary { min-height: 44px; }
 .recovery-panel input:focus-visible, .recovery-panel a:focus-visible, .recovery-panel button:focus-visible { outline: 3px solid var(--lg-accent); outline-offset: 3px; }
 .recovery-progress { color: var(--rh-text-secondary); font-size: .85rem; }
-@media (max-width: 600px) { .recovery-overview { grid-template-columns: minmax(0, 1fr); } .recovery-panel { padding: 1rem; } .recovery-actions { align-items: stretch; } .recovery-actions .btn { width: 100%; } }
+@media (max-width: 600px) { .recovery-panel { padding: 1rem; } .recovery-actions { align-items: stretch; } .recovery-actions .btn { width: 100%; } }
+
+.settings-admin-wrap { display: grid; gap: .85rem; margin: .65rem 0 1rem; }
+.settings-admin-wrap .admin-tools-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem .85rem; }
+.settings-admin-wrap .admin-tools-heading, .settings-admin-wrap .admin-tools-controls { display: flex; align-items: center; gap: .65rem; }
+.settings-admin-wrap .profile-card__title { font-size: 1.05rem; margin: 0; }
+.settings-admin-wrap .admin-tools-icon {
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: .65rem;
+    flex: none;
+    background: color-mix(in srgb, var(--lg-accent) 15%, var(--rh-surface-solid));
+    color: var(--rh-text-primary);
+}
+.settings-admin-wrap .admin-tools-badge {
+    border: 1px solid var(--rh-border);
+    border-radius: 99rem;
+    padding: .2rem .55rem;
+    font-size: .75rem;
+    font-weight: 650;
+    background: var(--rh-surface-sunken);
+}
+.settings-admin-wrap .admin-tools-badge[data-visible="true"] {
+    background: color-mix(in srgb, #16a34a 16%, var(--rh-surface-solid));
+    border-color: color-mix(in srgb, #16a34a 48%, var(--rh-border));
+}
+.settings-admin-wrap .admin-tools-status { margin: .3rem 0 0; }
+.settings-admin-wrap .admin-tools-status:empty { margin: 0; }
+.settings-admin-wrap .recovery-panel { scroll-margin-top: 5rem; }
+.settings-admin-wrap .recovery-feedback { margin: .85rem 0 0; }
+.settings-admin-wrap .recovery-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: .55rem;
+    margin: .85rem 0;
+}
+.settings-admin-wrap .recovery-stat { padding: .65rem .75rem; border: 1px solid var(--rh-border); border-radius: .65rem; background: var(--rh-surface-sunken); }
+.settings-admin-wrap .recovery-stat dt { display: flex; justify-content: space-between; gap: .25rem; font-size: .75rem; color: var(--rh-text-secondary); }
+.settings-admin-wrap .recovery-stat dd { margin: .2rem 0 0; font-size: .9rem; font-weight: 650; overflow-wrap: anywhere; }
+.settings-admin-wrap .recovery-download { display: inline-flex; align-items: center; gap: .4rem; margin-bottom: .65rem; }
+.settings-admin-wrap .recovery-limits, .settings-admin-wrap .recovery-tools { border: 1px solid var(--rh-border); border-radius: .65rem; }
+.settings-admin-wrap .recovery-limits { margin-bottom: .65rem; background: var(--rh-surface-sunken); }
+.settings-admin-wrap .recovery-tools > details + details { border-top: 1px solid var(--rh-divider); }
+.settings-admin-wrap .recovery-panel summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .55rem;
+    padding: .55rem .75rem;
+    list-style: none;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: .85rem;
+}
+.settings-admin-wrap .recovery-panel summary::-webkit-details-marker { display: none; }
+.settings-admin-wrap .recovery-panel :is(summary, .table-responsive):focus-visible { outline: 3px solid var(--lg-accent); outline-offset: -3px; border-radius: .4rem; }
+.settings-admin-wrap .recovery-chevron { color: var(--rh-text-secondary); }
+.settings-admin-wrap details[open] > summary .recovery-chevron { transform: rotate(180deg); }
+.settings-admin-wrap .recovery-detail { min-width: 0; padding: .25rem .75rem .85rem; }
+.settings-admin-wrap .recovery-detail .recovery-actions:first-child { margin-top: 0; }
+.settings-admin-wrap .recovery-detail .recovery-table { overflow-wrap: anywhere; }
+.settings-admin-wrap .recovery-create-button { align-content: center; }
+.settings-admin-wrap .recovery-panel summary.recovery-create-button { display: inline-block; }
+.settings-admin-wrap .recovery-create-fallback[open] { flex-basis: 100%; }
+.settings-admin-wrap .recovery-create-fallback form { margin-top: .65rem; }
+.settings-admin-wrap .recovery-create-dialog:not([open]) { display: none; }
+.settings-admin-wrap .recovery-create-dialog {
+    width: min(27rem, calc(100% - 2rem));
+    max-height: calc(100% - 2rem);
+    overflow: auto;
+    padding: 1.25rem;
+    border: 1px solid var(--rh-border);
+    border-radius: .85rem;
+    background: var(--rh-surface-solid);
+    color: var(--rh-text-primary);
+}
+.settings-admin-wrap .recovery-create-dialog::backdrop { background: rgba(15, 23, 42, .62); }
+.settings-admin-wrap .recovery-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; margin-top: .85rem; }
+.settings-admin-wrap form > .recovery-progress { flex-basis: 100%; margin: .45rem 0 0; }

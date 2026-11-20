@@ -5637,7 +5637,7 @@ class RequestDeleteView(LoginRequiredMixin, DeleteView):
         if updated:
             messages.success(
                 self.request,
-                f"Request {self.object.reference_code} deleted. An administrator can restore it from Profile → Backup & Restore.",
+                f"Request {self.object.reference_code} deleted. An administrator can recover it in Profile → Personalization → Deleted requests.",
             )
         return redirect(success_url)
 
@@ -5657,9 +5657,9 @@ class RequestRestoreView(LoginRequiredMixin, View):
         )
         if updated:
             ref = Request.all_objects.filter(pk=pk).values_list("reference_code", flat=True).first()
-            messages.success(request, f"Request {ref} has been restored.")
+            messages.success(request, f"Request {ref} has been restored.", extra_tags="recovery-feedback")
         else:
-            messages.error(request, "Request not found or already active.")
+            messages.error(request, "Request not found or already active.", extra_tags="recovery-feedback")
         return redirect(str(reverse_lazy("accounts:update")) + "#backup")
 
 

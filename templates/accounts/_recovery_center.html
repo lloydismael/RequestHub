@@ -1,51 +1,159 @@
-<div class="glass-card profile-card settings-admin-card recovery-panel" id="profile-panel-backup">
-    <div class="recovery-header">
-        <div><h2 class="profile-card__title"><i class="bi bi-archive" aria-hidden="true"></i>Recovery Center</h2><p class="recovery-muted">Create verified snapshots, preview recovery, and recover deleted requests.</p></div>
-        <span class="recovery-badge">Administrators only</span>
-    </div>
-    <div class="recovery-overview">
-        <div class="recovery-stat"><span>Last successful snapshot</span><strong>{{ latest_backup.created_at|date:"M d, Y H:i"|default:"No snapshots yet" }}</strong></div>
-        <div class="recovery-stat"><span>Snapshot size</span><strong>{% if latest_backup %}{{ latest_backup.size|filesizeformat }}{% else %}—{% endif %}</strong></div>
-        <div class="recovery-stat"><span>Coverage</span><strong>Hub records, including deleted requests</strong></div>
-    </div>
-    <p class="recovery-notice">These are application-data snapshots, not full database backups. User accounts, credentials, and media file contents are excluded. Keep an off-host copy; snapshots stored here cannot protect against loss of this database.</p>
-    <section class="recovery-section" aria-labelledby="backup-history-title">
-        <h3 id="backup-history-title">Backups</h3>
-        <form method="post" action="{% url 'accounts:backup-create' %}" class="recovery-actions" data-recovery-submit>
-            {% csrf_token %}
-            <div><label for="backup-reason" class="form-label">Snapshot note (optional)</label><input class="form-control" id="backup-reason" name="reason" maxlength="200" placeholder="Before a data import"></div>
-            <button class="btn btn-primary" type="submit"><i class="bi bi-plus-circle" aria-hidden="true"></i> Create Backup</button>
-        </form>
-        <div class="table-responsive">
-            <table class="recovery-table"><caption>Recent snapshots. Checksums detect corruption, not authenticity.</caption><thead><tr><th scope="col">Created</th><th scope="col">By / note</th><th scope="col">Size / status</th><th scope="col">Download</th></tr></thead><tbody>
-                {% for snapshot in backup_snapshots %}<tr><td>{{ snapshot.created_at|date:"M d, Y H:i" }}</td><td>{{ snapshot.created_by.get_full_name|default:snapshot.created_by.username|default:"System" }}<br>{{ snapshot.reason|default:"Manual snapshot" }}</td><td>{{ snapshot.size|filesizeformat }}<br><span class="recovery-badge">{{ snapshot.status }}</span></td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:backup-download' snapshot.pk %}" aria-label="Download snapshot from {{ snapshot.created_at|date:'M d, Y H:i' }}">Download</a><form method="post" action="{% url 'accounts:backup-preview' snapshot.pk %}" class="mt-2" data-recovery-submit>{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" type="submit" aria-label="Preview snapshot from {{ snapshot.created_at|date:'M d, Y H:i' }}">Preview Restore</button></form></td></tr>{% empty %}<tr><td colspan="4">No saved snapshots. Create your first backup above.</td></tr>{% endfor %}
-            </tbody></table>
+<section class="glass-card settings-card recovery-panel" id="profile-panel-backup" aria-labelledby="backup">
+    <div class="admin-tools-bar">
+        <div class="admin-tools-heading">
+            <span class="admin-tools-icon" aria-hidden="true"><i class="bi bi-archive"></i></span>
+            <h2 class="profile-card__title" id="backup" tabindex="-1">Recovery Center</h2>
         </div>
-    </section>
-    <section class="recovery-section" aria-labelledby="restore-preview-title">
-        <h3 id="restore-preview-title">Validate &amp; Preview</h3>
-        <p class="recovery-muted">Upload a backup to check its format, integrity, and relationships. Validation does not change hub data. Replacement is available only after reviewing the impact and confirming.</p>
-        <form method="post" enctype="multipart/form-data" action="{% url 'accounts:backup-validate' %}" id="restore-form" class="recovery-actions" data-recovery-submit>
-            {% csrf_token %}
-            <div><label for="backup_file" class="form-label">Request Hub backup (.json)</label><input type="file" class="form-control" id="backup_file" name="backup_file" accept=".json,application/json" required aria-describedby="backup-upload-help"><span id="backup-upload-help" class="recovery-muted">Maximum upload: {{ backup_max_bytes|filesizeformat }}.</span></div>
-            <button type="submit" class="btn btn-outline-primary">Validate &amp; Preview</button>
-        </form>
-    </section>
-    <section class="recovery-section" aria-labelledby="deleted-recovery-title">
-        <h3 id="deleted-recovery-title">Deleted Requests</h3>
-        <p class="recovery-muted">Recover individual requests without replacing other hub data.</p>
-        <form method="get" action="{% url 'accounts:update' %}#backup" class="recovery-actions">
-            <div><label for="deleted-search" class="form-label">Search deleted requests</label><input type="search" class="form-control" id="deleted-search" name="deleted_query" value="{{ deleted_query }}" placeholder="Reference or customer"></div><button type="submit" class="btn btn-outline-secondary">Search</button>
-        </form>
-        <form method="post" action="{% url 'accounts:requests-recover' %}" data-recovery-submit>
-            {% csrf_token %}
-            <div class="table-responsive"><table class="recovery-table"><thead><tr><th scope="col">Select</th><th scope="col">Reference / customer</th><th scope="col">Deleted</th><th scope="col">Engineer</th></tr></thead><tbody>
-                {% for req in deleted_requests %}<tr><td><input class="form-check-input" type="checkbox" name="request_ids" value="{{ req.pk }}" id="recover-request-{{ req.pk }}"><label class="visually-hidden" for="recover-request-{{ req.pk }}">Recover {{ req.reference_code }}</label></td><td>{{ req.reference_code }}<br>{{ req.account }}</td><td>{{ req.deleted_at|date:"M d, Y H:i"|default:"Unknown" }}<br>{{ req.deleted_by.get_full_name|default:req.deleted_by.username|default:"—" }}</td><td>{{ req.engineer.get_full_name|default:req.engineer.username|default:"—" }}</td></tr>{% empty %}<tr><td colspan="4">No deleted requests match this search.</td></tr>{% endfor %}
-            </tbody></table></div>
-            {% if deleted_requests %}<div class="form-check mt-3"><input type="checkbox" class="form-check-input" name="confirm_recover" value="1" id="confirm-recover" required><label class="form-check-label" for="confirm-recover">Recover the selected requests to the active dashboard.</label></div><button class="btn btn-outline-primary mt-3" type="submit">Recover Selected</button>{% endif %}
-        </form>
-        {% if deleted_requests.paginator.num_pages > 1 %}<nav class="recovery-pagination" aria-label="Deleted requests pages">{% if deleted_requests.has_previous %}<a href="?deleted_query={{ deleted_query|urlencode }}&amp;deleted_page={{ deleted_requests.previous_page_number }}#backup">Previous</a>{% endif %}<span>Page {{ deleted_requests.number }} of {{ deleted_requests.paginator.num_pages }}</span>{% if deleted_requests.has_next %}<a href="?deleted_query={{ deleted_query|urlencode }}&amp;deleted_page={{ deleted_requests.next_page_number }}#backup">Next</a>{% endif %}</nav>{% endif %}
-    </section>
-    <section class="recovery-section" aria-labelledby="recovery-events-title"><h3 id="recovery-events-title">Recovery Activity</h3><div class="table-responsive"><table class="recovery-table"><thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action / result</th></tr></thead><tbody>{% for event in recovery_events %}<tr><td>{{ event.created_at|date:"M d, Y H:i" }}</td><td>{{ event.actor.get_full_name|default:event.actor.username|default:"System" }}</td><td>{{ event.action }} · {{ event.outcome }}<br>{{ event.details.error|default:"" }}</td></tr>{% empty %}<tr><td colspan="3">No recovery activity yet.</td></tr>{% endfor %}</tbody></table></div></section>
-    <p class="recovery-progress mt-3" role="status" id="recovery-progress" hidden>Processing… Keep this page open.</p>
-</div>
+        <button class="btn btn-primary recovery-create-button" type="button" id="backup-create-button" aria-haspopup="dialog" hidden><i class="bi bi-plus-circle" aria-hidden="true"></i> Create backup</button>
+        <details class="recovery-create-fallback" id="backup-create-fallback">
+            <summary class="btn btn-primary recovery-create-button"><i class="bi bi-plus-circle" aria-hidden="true"></i> Create backup</summary>
+            <form method="post" action="{% url 'accounts:backup-create' %}" data-recovery-submit>
+                {% csrf_token %}
+                <label for="backup-reason" class="form-label">Note (optional)</label>
+                <input class="form-control" id="backup-reason" name="reason" maxlength="200" placeholder="Before a data import">
+                <div class="recovery-dialog-actions">
+                    <button class="btn btn-outline-secondary" type="button" id="backup-create-cancel" hidden>Cancel</button>
+                    <button class="btn btn-primary" type="submit">Create backup</button>
+                </div>
+            </form>
+        </details>
+    </div>
+    {% for message in messages %}
+        {% if message.extra_tags == 'recovery-feedback' %}
+            <p class="recovery-feedback alert {% if message.level_tag == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="{% if message.level_tag == 'error' %}alert{% else %}status{% endif %}" tabindex="-1">{{ message }}</p>
+        {% endif %}
+    {% endfor %}
+    <dl class="recovery-overview">
+        <div class="recovery-stat">
+            <dt>Latest backup <i class="bi bi-clock-history" aria-hidden="true"></i></dt>
+            <dd>{% if latest_backup %}<time datetime="{{ latest_backup.created_at|date:'c' }}">{{ latest_backup.created_at|date:'M d, Y H:i' }}</time>{% else %}None yet{% endif %}</dd>
+        </div>
+        <div class="recovery-stat">
+            <dt>Size <i class="bi bi-hdd" aria-hidden="true"></i></dt>
+            <dd>{% if latest_backup %}{{ latest_backup.size|filesizeformat }}{% else %}<span aria-hidden="true">—</span><span class="visually-hidden">Not available</span>{% endif %}</dd>
+        </div>
+    </dl>
+    {% if latest_backup %}
+        <a class="btn btn-sm btn-outline-primary recovery-download" href="{% url 'accounts:backup-download' latest_backup.pk %}"><i class="bi bi-download" aria-hidden="true"></i> Download latest</a>
+    {% endif %}
+    <details class="recovery-limits">
+        <summary><i class="bi bi-info-circle" aria-hidden="true"></i><span><strong>Hub records only.</strong> Keep an off-host copy.</span><i class="bi bi-chevron-down recovery-chevron" aria-hidden="true"></i></summary>
+        <div class="recovery-detail recovery-muted">
+            <p>Includes deleted requests. This is not a full database backup. Snapshots stored here cannot protect against loss of this database.</p>
+            <p class="mb-1">Excluded:</p>
+            <ul class="mb-0">{% for exclusion in backup_exclusions %}<li>{{ exclusion }}</li>{% endfor %}</ul>
+        </div>
+    </details>
+    <div class="recovery-tools">
+        <details>
+            <summary><i class="bi bi-clock-history" aria-hidden="true"></i> <span>Backup history</span><i class="bi bi-chevron-down recovery-chevron" aria-hidden="true"></i></summary>
+            <div class="recovery-detail">
+                {% if backup_snapshots %}
+                    <div class="table-responsive" tabindex="0" role="region" aria-label="Backup history table">
+                        <table class="recovery-table">
+                            <caption>Recent snapshots. Checksums detect corruption, not authenticity.</caption>
+                            <thead><tr><th scope="col">Created</th><th scope="col">By / note</th><th scope="col">Size / status</th><th scope="col">Actions</th></tr></thead>
+                            <tbody>
+                                {% for snapshot in backup_snapshots %}
+                                    <tr>
+                                        <td>{{ snapshot.created_at|date:"M d, Y H:i" }}</td>
+                                        <td>{% if snapshot.created_by %}{{ snapshot.created_by.get_full_name|default:snapshot.created_by.username }}{% else %}System{% endif %}<br>{{ snapshot.reason|default:"Manual snapshot" }}</td>
+                                        <td>{{ snapshot.size|filesizeformat }}<br><span class="recovery-badge">{{ snapshot.status }}</span></td>
+                                        <td>
+                                            {% if snapshot.status == 'ready' %}
+                                                <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:backup-download' snapshot.pk %}" aria-label="Download snapshot from {{ snapshot.created_at|date:'M d, Y H:i' }}">Download</a>
+                                                <form method="post" action="{% url 'accounts:backup-preview' snapshot.pk %}" class="mt-2" data-recovery-submit>
+                                                    {% csrf_token %}
+                                                    <button class="btn btn-sm btn-outline-secondary" type="submit" aria-label="Preview snapshot from {{ snapshot.created_at|date:'M d, Y H:i' }}">Preview restore</button>
+                                                </form>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}<p class="recovery-muted mb-0">No backups yet.</p>{% endif %}
+            </div>
+        </details>
+        <details>
+            <summary><i class="bi bi-file-earmark-check" aria-hidden="true"></i> <span>Restore preview</span><i class="bi bi-chevron-down recovery-chevron" aria-hidden="true"></i></summary>
+            <div class="recovery-detail">
+                <form method="post" enctype="multipart/form-data" action="{% url 'accounts:backup-validate' %}" id="restore-form" class="recovery-actions" data-recovery-submit>
+                    {% csrf_token %}
+                    <div>
+                        <label for="backup_file" class="form-label">Request Hub backup (.json)</label>
+                        <input type="file" class="form-control" id="backup_file" name="backup_file" accept=".json,application/json" required aria-describedby="backup-upload-help">
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary">Validate &amp; Preview</button>
+                </form>
+                <p id="backup-upload-help" class="recovery-muted mb-0">Up to {{ backup_max_bytes|filesizeformat }}. Preview does not change records; replacement requires confirmation.</p>
+            </div>
+        </details>
+        <details id="recovery-deleted"{% if deleted_results_open %} open{% endif %}>
+            <summary><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> <span>Deleted requests</span><i class="bi bi-chevron-down recovery-chevron" aria-hidden="true"></i></summary>
+            <div class="recovery-detail">
+                <form method="get" action="{% url 'accounts:update' %}#backup" class="recovery-actions">
+                    <div><label for="deleted-search" class="form-label">Search deleted requests</label><input type="search" class="form-control" id="deleted-search" name="deleted_query" value="{{ deleted_query }}" placeholder="Reference or customer"></div>
+                    <button type="submit" class="btn btn-outline-secondary">Search</button>
+                </form>
+                {% if deleted_requests %}
+                    <form method="post" action="{% url 'accounts:requests-recover' %}" data-recovery-submit>
+                        {% csrf_token %}
+                        <div class="table-responsive" tabindex="0" role="region" aria-label="Deleted requests results">
+                            <table class="recovery-table">
+                                <thead><tr><th scope="col">Select</th><th scope="col">Reference / customer</th><th scope="col">Deleted</th><th scope="col">Engineer</th></tr></thead>
+                                <tbody>
+                                    {% for req in deleted_requests %}
+                                        <tr>
+                                            <td><input class="form-check-input" type="checkbox" name="request_ids" value="{{ req.pk }}" id="recover-request-{{ req.pk }}"><label class="visually-hidden" for="recover-request-{{ req.pk }}">Recover {{ req.reference_code }}</label></td>
+                                            <td>{{ req.reference_code }}<br>{{ req.account }}</td>
+                                            <td>{{ req.deleted_at|date:"M d, Y H:i"|default:"Unknown" }}</td>
+                                            <td>{% if req.engineer %}{{ req.engineer.get_full_name|default:req.engineer.username }}{% else %}—{% endif %}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="form-check mt-3"><input type="checkbox" class="form-check-input" name="confirm_recover" value="1" id="confirm-recover" required><label class="form-check-label" for="confirm-recover">Recover the selected requests to the active dashboard.</label></div>
+                        <button class="btn btn-outline-primary mt-3" type="submit">Recover selected</button>
+                    </form>
+                {% elif deleted_query %}<p class="recovery-muted mt-3 mb-0">No deleted requests match this search.</p>
+                {% else %}<p class="recovery-muted mt-3 mb-0">No deleted requests.</p>{% endif %}
+                {% if deleted_requests.paginator.num_pages > 1 %}
+                    <nav class="recovery-pagination" aria-label="Deleted requests pages">
+                        {% if deleted_requests.has_previous %}<a href="?deleted_query={{ deleted_query|urlencode }}&amp;deleted_page={{ deleted_requests.previous_page_number }}#backup">Previous</a>{% endif %}
+                        <span>Page {{ deleted_requests.number }} of {{ deleted_requests.paginator.num_pages }}</span>
+                        {% if deleted_requests.has_next %}<a href="?deleted_query={{ deleted_query|urlencode }}&amp;deleted_page={{ deleted_requests.next_page_number }}#backup">Next</a>{% endif %}
+                    </nav>
+                {% endif %}
+            </div>
+        </details>
+        <details>
+            <summary><i class="bi bi-list-check" aria-hidden="true"></i> <span>Recovery activity</span><i class="bi bi-chevron-down recovery-chevron" aria-hidden="true"></i></summary>
+            <div class="recovery-detail">
+                {% if recovery_events %}
+                    <div class="table-responsive" tabindex="0" role="region" aria-label="Recovery activity table">
+                        <table class="recovery-table">
+                            <thead><tr><th scope="col">When</th><th scope="col">Who</th><th scope="col">Action / result</th></tr></thead>
+                            <tbody>
+                                {% for event in recovery_events %}
+                                    <tr>
+                                        <td>{{ event.created_at|date:"M d, Y H:i" }}</td>
+                                        <td>{% if event.actor %}{{ event.actor.get_full_name|default:event.actor.username }}{% else %}System{% endif %}</td>
+                                        <td>{{ event.action }} · {{ event.outcome }}{% if event.details.error %}<br>{{ event.details.error }}{% endif %}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}<p class="recovery-muted mb-0">No recovery activity yet.</p>{% endif %}
+            </div>
+        </details>
+    </div>
+    <dialog class="recovery-create-dialog" id="backup-create-dialog" aria-labelledby="backup-create-title">
+        <h2 class="profile-card__title mb-2" id="backup-create-title">Create backup</h2>
+        <p class="recovery-muted">Hub records only. Keep an off-host copy.</p>
+    </dialog>
+    <p class="recovery-progress" role="status" id="recovery-progress" hidden>Processing… Keep this page open.</p>
+</section>

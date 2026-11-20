@@ -27,19 +27,20 @@ def recovery_context(request):
         deleted = deleted.filter(Q(reference_code__icontains=query) | Q(account__name__icontains=query) |
                                  Q(description__icontains=query) | Q(requestor__username__icontains=query))
     snapshots = list(BackupSnapshot.objects.select_related("created_by").defer("payload").all()[:10])
-    return {"backup_snapshots": snapshots, "latest_backup": snapshots[0] if snapshots else None,
+    return {"backup_snapshots": snapshots, "latest_backup": next((item for item in snapshots if item.status == "ready"), None),
             "recovery_events": RecoveryEvent.objects.select_related("actor", "snapshot").defer("snapshot__payload").all()[:20],
             "deleted_requests": Paginator(deleted, 20).get_page(request.GET.get("deleted_page")),
             "deleted_query": query, "deleted_requests_query": query,
+            "deleted_results_open": any(key in request.GET for key in ("deleted_q", "deleted_query", "deleted_page")),
             "recovery_confirmation_phrase": recovery.CONFIRMATION_PHRASE,
             "backup_exclusions": recovery.EXCLUSIONS, "backup_max_bytes": recovery.max_bytes()}
 
 
 def back(request, error=None, success=None):
     if error:
-        messages.error(request, error)
+        messages.error(request, error, extra_tags="recovery-feedback")
     if success:
-        messages.success(request, success)
+        messages.success(request, success, extra_tags="recovery-feedback")
     return redirect(reverse("accounts:update") + "#backup")
 
 
@@ -55,7 +56,7 @@ class BackupDataView(RecoveryAdminView):
             snapshot = recovery.create_snapshot(request.user, request.POST.get("reason", "Manual backup"))
         except Exception:
             return back(request, error="Backup failed. No ready snapshot was created; see recovery audit history.")
-        return back(request, success=f"Snapshot #{snapshot.pk} created. Download it from the backup history.")
+        return back(request, success=f"Snapshot #{snapshot.pk} created. Download a copy to keep off-host.")
 
 
 class SnapshotDownloadView(RecoveryAdminView):

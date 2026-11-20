@@ -479,6 +479,38 @@ class HistoricalSceneTests(unittest.TestCase):
                 scene = next(scene for scene in recipe["scenes"] if scene["fixture"] == fixture)
                 self.assertIn(fallback, _render(ROOT, scene))
 
+    def test_admin_profile_recipe_renders_personalization_without_scripts(self):
+        recipes = load_recipes(ROOT / 'hub' / 'changelog_capture_recipes.json')
+        recipe = next((recipe for recipe in recipes if recipe['id'] == 'admin-profile-tools'), None)
+        self.assertIsNotNone(recipe, 'Admin profile changes need desktop and mobile evidence')
+        scene = recipe['scenes'][0]
+        html = _render(ROOT, scene)
+        self.assertIn('class="profile-panel profile-panel--active" id="profile-panel-settings"', html)
+        self.assertIn('id="sqr-classic-visibility"', html)
+        self.assertIn('id="profile-panel-backup"', html)
+        self.assertIn('Download latest', html)
+
+    def test_admin_capture_keeps_sticky_navigation_outside_the_panel(self):
+        from playwright.sync_api import sync_playwright
+
+        document = """<style>
+            body { margin: 0; }
+            .navbar { position: sticky; top: 0; height: 60px; background: red; }
+            .settings-admin-wrap { height: 1800px; background: white; }
+            </style><nav class="navbar"></nav><main class="settings-admin-wrap"></main>"""
+        scene = {"kind": "ui", "fixture": "admin_profile", "viewport": {"width": 375, "height": 844}}
+        with tempfile.TemporaryDirectory() as temporary, sync_playwright() as playwright:
+            directory = Path(temporary)
+            output = directory / "admin-profile.png"
+            browser = playwright.chromium.launch()
+            try:
+                with patch("capture_release_changelog._render", return_value=document):
+                    _screenshot(browser, directory, scene, output, directory)
+            finally:
+                browser.close()
+            with Image.open(output) as image:
+                self.assertEqual([color for _, color in image.convert("RGB").getcolors()], [(255, 255, 255)])
+
     def test_monitoring_recipe_shows_the_actual_management_shell(self):
         path = ROOT / "hub" / "changelog_capture_recipes.json"
         recipe = next((recipe for recipe in load_recipes(path) if recipe["id"] == "management-monitoring"), None)
