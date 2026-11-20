@@ -126,6 +126,43 @@ To disable tracing, set `AZURE_TELEMETRY_ENABLED=false` and restart the app.
 Verify requests and database dependencies arrive in the intended workspace after
 the approved deployment; workspace relinking alone does not instrument Django.
 
+### Optional Azure metrics for Management → Monitoring
+
+The Admin-only **Monitoring** tab displays Django and PostgreSQL diagnostics
+without Azure configuration. It polls every five seconds while visible. Django
+counts, average latency and estimated p95 describe the worker that answered the
+poll, not all instances. The five-minute chart starts over when a different
+worker responds. Values above the p95 histogram limit are shown as `>10,000 ms`.
+PostgreSQL's logical database size is not the server's disk usage. Connection
+and lock visibility follow existing PostgreSQL permissions. Transaction rates
+are estimated from consecutive database samples. The PostgreSQL client uses a
+five-second connection timeout and TCP dead-peer detection where supported.
+The probe SQL uses a server-side statement timeout, not a guaranteed network
+deadline. If the database is completely unavailable, database-backed session
+authentication may prevent even the live endpoint from answering.
+
+To enable platform metrics after operational approval:
+
+1. Enable a **system-assigned managed identity** on the App Service. Grant it
+   **Monitoring Reader** on each monitored resource, not subscription-wide.
+2. Set either or both App Service settings to full Azure resource IDs:
+   - `AZURE_MONITOR_POSTGRES_RESOURCE_ID`: `/subscriptions/<subscription>/resourceGroups/<group>/providers/Microsoft.DBforPostgreSQL/flexibleServers/<server>`
+   - `AZURE_MONITOR_WEB_APP_RESOURCE_ID`: `/subscriptions/<subscription>/resourceGroups/<group>/providers/Microsoft.Web/sites/<app>`
+3. Sign in as a Request Hub Admin and open **Management → Monitoring**. Check that
+   reported timestamps and values match the Azure portal for both resources. If
+   one source is unavailable, check the resource ID, role assignment and outbound
+   HTTPS access to `management.azure.com`. Removing an ID disables only that source.
+
+The dashboard checks Azure about once a minute. Azure emits one-minute samples
+that can arrive late. Missing samples are not zero. Temporary refresh failures
+can leave readings visible as delayed within the 15-minute sample window.
+Denied or disabled sources are cleared. App Service HTTP metrics include
+Monitoring traffic, and App Service CPU time is in CPU-seconds, not CPU
+percentage. Each worker allows one Azure refresh at a time across both
+resources. Manual refresh does not bypass the cache or error backoff. The
+feature does not depend on Application Insights, modify either resource, or
+require a database migration or elevated PostgreSQL permissions.
+
 ## 5. Restart and Verify
 
 ```powershell

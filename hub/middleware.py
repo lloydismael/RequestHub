@@ -1,11 +1,37 @@
 import logging
 from contextlib import ExitStack
-from time import perf_counter
+from time import monotonic, perf_counter
 
 from django.conf import settings
 from django.db import connections
+from django.utils.cache import add_never_cache_headers
+
+from .monitoring import request_window
 
 logger = logging.getLogger('hub.performance')
+
+
+class MonitoringMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        path = request.path_info.rstrip("/")
+        if path.startswith("/management/monitoring/"):
+            response = self.get_response(request)
+            add_never_cache_headers(response)
+            return response
+        if path in {"/healthz", "/readyz"}:
+            return self.get_response(request)
+
+        start = perf_counter()
+        status = 500
+        try:
+            response = self.get_response(request)
+            status = response.status_code
+            return response
+        finally:
+            request_window.record(monotonic(), (perf_counter() - start) * 1000, status)
 
 
 class PagePerformanceMiddleware:

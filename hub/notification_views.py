@@ -11,8 +11,10 @@ from django.utils import timezone
 from django.views import View
 from django.views.generic import ListView
 
-from .models import Changelog, Notification
-from .services.notifications import notification_summary, visible_notifications
+from .changelog_views import published_changelogs
+from .context_processors import request_notification_summary
+from .models import Notification
+from .services.notifications import TOAST_EVENT_TYPES, notification_summary, visible_notifications
 from .view_helpers import ADMIN_PANEL_ROLES, MANILA_TZ, _safe_return_url
 
 
@@ -25,11 +27,7 @@ class NotificationToastDataView(LoginRequiredMixin, View):
         queryset = (
             Notification.objects.filter(
                 recipient=request.user,
-                event_type__in=[
-                    Notification.EventType.NEW_REQUEST,
-                    Notification.EventType.ASSIGNMENT,
-                    Notification.EventType.MENTION,
-                ],
+                event_type__in=TOAST_EVENT_TYPES,
                 related_request__isnull=False,
             )
             .select_related("related_request")
@@ -80,16 +78,12 @@ class NotificationListView(LoginRequiredMixin, ListView):
     def get(self, request, *args, **kwargs):
         if request.GET.get("tab") != "changelogs":
             return super().get(request, *args, **kwargs)
-        base_qs = visible_notifications(request.user)
-        changelog_qs = Changelog.objects.filter(
-            is_published=True, release_date__lte=timezone.localdate(),
-        )
-        page = Paginator(changelog_qs, 10).get_page(request.GET.get("page"))
+        page = Paginator(published_changelogs(), 10).get_page(request.GET.get("page"))
         return render(request, self.template_name, {
             "active_tab": "changelogs", "changelogs": page, "page_obj": page,
             "is_paginated": page.has_other_pages(),
-            "unread_count": base_qs.filter(is_read=False).count(), "total_count": base_qs.count(),
-            "changelog_count": changelog_qs.count(),
+            "unread_count": request_notification_summary(request)["unread_count"],
+            "changelog_count": page.paginator.count,
         })
 
     def get_queryset(self):
@@ -136,37 +130,15 @@ class NotificationListView(LoginRequiredMixin, ListView):
         return queryset
 
     def get_context_data(self, **kwargs):
+        # A change during pagination must not make an older page look current to the poller.
+        summary = request_notification_summary(self.request)
         context = super().get_context_data(**kwargs)
-        user = self.request.user
-        base_qs = visible_notifications(user)
-        context["unread_count"] = base_qs.filter(is_read=False).count()
-        context["total_count"] = base_qs.count()
-        context["changelog_count"] = Changelog.objects.filter(
-            is_published=True, release_date__lte=timezone.localdate(),
-        ).count()
+        context["unread_count"] = summary["unread_count"]
+        context["total_count"] = summary["total_count"]
+        context["notification_state"] = ":".join(str(summary[key]) for key in ("latest_id", "total_count", "unread_count"))
+        context["changelog_count"] = published_changelogs().count()
         context["current_filter"] = self._filter_read
         context["current_category"] = self._filter_category
-
-        # ── Category breakdown for the summary bar ──
-        category_counts = {
-            "new_request": base_qs.filter(source__icontains="new request").count(),
-            "assignment": base_qs.filter(message__icontains="assigned to request").count(),
-            "update": base_qs.filter(
-                Q(source__icontains="status update") |
-                Q(message__icontains="posted an update") |
-                Q(message__icontains=" updated ")
-            ).count(),
-            "completion": base_qs.filter(
-                Q(message__icontains="completed") |
-                Q(message__icontains="closed") |
-                Q(source__icontains="close")
-            ).count(),
-            "reminder": base_qs.filter(
-                Q(source__icontains="nudge") |
-                Q(message__icontains="reminder")
-            ).count(),
-        }
-        context["category_counts"] = category_counts
 
         # ── Date-grouped notifications for timeline display ──
         notifications_list = list(context["notifications"])

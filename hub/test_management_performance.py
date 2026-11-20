@@ -9,7 +9,7 @@ from django.urls import reverse
 from accounts.forms import UserManagementForm
 from accounts.models import User
 from .form_editor import baseline_schema, publish, save_draft
-from .models import FormAnswerSet, FormDefinition
+from .models import Account, FormAnswerSet, FormDefinition
 from .views import UserManagementView
 
 
@@ -84,3 +84,75 @@ class ManagementEditorPerformanceTests(TestCase):
         self.assertEqual(form.fields["custom_notes"].label, "Updated management notes")
         self.assertEqual(form.initial["custom_notes"], "Saved management notes")
         self.assertEqual(form.editor_version.pk, definition.published_version_id)
+
+    def test_each_management_page_only_renders_its_selected_pane(self):
+        self.client.force_login(self.admin)
+        tabs = ("users", "accounts", "activity", "forms", "changelogs", "monitoring")
+        url = reverse("hub:management")
+        for selected in tabs:
+            with self.subTest(tab=selected):
+                response = self.client.get(url, {"tab": selected})
+                self.assertContains(response, f'id="{selected}-pane"')
+                for other in tabs:
+                    if other != selected:
+                        self.assertNotContains(response, f'id="{other}-pane"')
+                    self.assertContains(response, f'href="{url}?tab={other}"')
+
+    def test_user_search_fragment_keeps_editor_fields_without_the_page_shell(self):
+        self.client.force_login(self.admin)
+        url = reverse("hub:management")
+        params = {"user_q": self.saved_user.username}
+        fragment = self.client.get(url, params, headers={"X-Requested-With": "XMLHttpRequest"})
+        self.assertContains(fragment, 'id="users-tbody"')
+        self.assertContains(fragment, "Saved management notes")
+        self.assertContains(fragment, 'name="_form_version"')
+        self.assertNotContains(fragment, self.other_user.username)
+        self.assertNotContains(fragment, 'id="create-user-modal"')
+        self.assertNotContains(fragment, 'id="user-search"')
+        self.assertIn("X-Requested-With", fragment.headers["Vary"])
+        full_page = self.client.get(url, params)
+        self.assertContains(full_page, 'id="user-search"')
+        self.assertIn("X-Requested-With", full_page.headers["Vary"])
+
+    def test_accounts_get_does_not_query_user_editors_or_sign_in_logs(self):
+        Account.objects.create(name="Existing account")
+        self.client.force_login(self.admin)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse("hub:management"), {"tab": "accounts"})
+        self.assertContains(response, 'value="Existing account"')
+        for query in queries:
+            sql = query["sql"].lower()
+            self.assertNotIn(FormAnswerSet._meta.db_table, sql)
+            self.assertNotIn("accounts_signinlog", sql)
+
+    def test_invalid_account_post_retains_other_edits_in_accounts_pane(self):
+        self.client.force_login(self.admin)
+        url = reverse("hub:management")
+        account = Account.objects.create(name="Existing account")
+        response = self.client.post(url, {
+            "active_tab": "accounts",
+            "form-TOTAL_FORMS": "2",
+            "form-INITIAL_FORMS": "1",
+            "form-0-id": account.pk,
+            "form-0-name": "",
+            "form-1-name": "Unsaved new account",
+        })
+        self.assertContains(response, 'id="accounts-pane"')
+        self.assertContains(response, 'value="Unsaved new account"')
+        self.assertTrue(response.context["account_formset"][0].errors["name"])
+        save_button = response.content.decode().split('id="accounts-save-btn"', 1)[1].split('>', 1)[0]
+        self.assertNotIn('display:none', save_button)
+        self.assertNotContains(response, 'id="users-pane"')
+        account.refresh_from_db()
+        self.assertEqual(account.name, "Existing account")
+
+    def test_invalid_user_creation_keeps_bound_modal_and_working_manage_rows(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("hub:management"), {
+            "active_tab": "users", "create_user_submit": "1", "create_user-username": "retry-create-user",
+        })
+        self.assertContains(response, 'value="retry-create-user"')
+        self.assertContains(response, 'data-open-on-load="true"')
+        self.assertContains(response, f'data-user-pk="{self.saved_user.pk}"')
+        self.assertNotContains(response, 'id="accounts-pane"')
+        self.assertFalse(User.objects.filter(username="retry-create-user").exists())

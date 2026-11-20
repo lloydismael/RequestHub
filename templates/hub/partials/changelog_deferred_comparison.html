@@ -1,0 +1,5 @@
+<div class="mt-3" data-changelog-preview>
+    <a href="{% url 'hub:changelog-comparison' entry.pk section comparison_index %}?revision={{ entry.updated_at|date:'Uu' }}{% if page_obj.number > 1 %}&amp;page={{ page_obj.number|stringformat:'d' }}{% endif %}" data-no-page-transition
+       data-changelog-preview-link>{% if section == 'technical' %}View full report{% else %}View comparison{% endif %}<span class="visually-hidden">: {{ comparison.title }}</span></a>
+    <p class="text-muted small mb-2" role="status" data-changelog-preview-status hidden></p>
+</div>

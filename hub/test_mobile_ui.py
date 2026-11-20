@@ -129,6 +129,135 @@ class MobileBrowserTests(SimpleTestCase):
                 page.add_script_tag(content=script.read_text(encoding='utf-8'))
         return page
 
+    def test_monitoring_renders_metrics_and_stops_when_session_ends(self):
+        from datetime import datetime, timedelta, timezone
+
+        current = datetime.now(timezone.utc).replace(microsecond=0)
+        older = (current - timedelta(minutes=2)).isoformat()
+        tick = current.isoformat()
+        fixture = {**self.context(), 'active_tab': 'monitoring', 'total_users': 5, 'total_accounts': 3}
+        page = self.page(width=375, template='hub/management.html', dark=True, fixture=fixture)
+        page.evaluate('''({live, platform}) => {
+            let fetchCount = {live: 0, platform: 0};
+            window.monitoringTest = {fetchCount, live, platform, deny: false};
+            window.fetch = async url => {
+                const name = url.endsWith('/live/') ? 'live' : 'platform';
+                fetchCount[name] += 1;
+                const test = window.monitoringTest;
+                return {status: test.deny ? 401 : 200, ok: !test.deny, json: async () => test[name]};
+            };
+        }''', {
+            'live': {
+                'app': {'worker': 'fixture', 'sampled_at': tick, 'p95_ms': 35, 'average_ms': 17, 'requests': 56, 'errors': 0},
+                'database': {'status': 'reachable', 'sampled_at': tick, 'latency_ms': 3, 'size_bytes': 1024,
+                             'connections': 3, 'transactions': 90, 'lock_waits': 0, 'cache_hit_percent': 96},
+            },
+            'platform': {
+                'postgres': {'status': 'partial', 'metrics': {
+                    'cpu_percent': {'value': 0, 'sampled_at': older, 'history': [[older, 0]], 'status': 'current'},
+                    'storage_free': {'value': 1073741824, 'sampled_at': older, 'status': 'current'},
+                }},
+                'web_app': {'status': 'unconfigured', 'metrics': {}},
+            },
+        })
+        script = settings.BASE_DIR / 'static' / 'hub' / 'monitoring.js'
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        errors = []
+        page.add_script_tag(content=script.read_text(encoding='utf-8'))
+        self.assertEqual(page.locator('[data-mon="app-p95"]').text_content(), '35 ms')
+        self.assertEqual(page.locator('[data-mon="cpu_percent"]').text_content(), '0%')
+        self.assertIn('1 GiB free', page.locator('[data-mon="storage-details"]').text_content())
+        self.assertEqual(page.locator('[data-mon="site-status"]').text_content(), 'Not configured')
+        summary = page.get_by_text('View utilization readings')
+        summary.focus()
+        page.keyboard.press('Enter')
+        self.assertIn('0%', page.get_by_role('table', name='Database utilization samples in percent').inner_text())
+        self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 375)
+        page.get_by_role('button', name='Pause updates').click()
+        page.evaluate('''() => {
+            window.monitoringTest.live.database.status = 'unreachable';
+            window.monitoringTest.live.database.latency_ms = null;
+        }''')
+        page.get_by_role('button', name='Refresh now').click()
+        self.assertEqual(page.locator('[data-mon="poll-status"]').text_content(), 'Updates paused')
+        self.assertEqual(page.locator('[data-mon="db-status"]').text_content(), 'Unreachable')
+        self.assertEqual(page.locator('[data-mon="db-latency"]').text_content(), '—')
+        page.evaluate('window.monitoringTest.deny = true')
+        page.get_by_role('button', name='Resume updates').click()
+        self.assertTrue(page.get_by_role('button', name='Refresh now').is_disabled())
+        self.assertEqual(page.locator('[data-mon="poll-status"]').text_content(), 'Session ended or access changed')
+        self.assertNotIn('35 ms', page.locator('#monitoring-pane').inner_text())
+        self.assertEqual(errors, [])
+
+    def test_monitoring_keeps_sample_times_and_values_during_refresh_failures(self):
+        fixture = {**self.context(), 'active_tab': 'monitoring', 'total_users': 5, 'total_accounts': 3}
+        page = self.page(template='hub/management.html', fixture=fixture)
+        page.evaluate('''() => {
+            const sampled_at = new Date().toISOString();
+            window.monitorTest = {liveAvailable: false, platformStatus: 'partial'};
+            window.fetch = async url => {
+                if (url.endsWith('/live/')) {
+                    if (!window.monitorTest.liveAvailable) return {status: 503, ok: false};
+                    return {status: 200, ok: true, json: async () => ({
+                        app: {worker: 'fixture', sampled_at, requests: 100, p95_ms: 10000,
+                              p95_is_lower_bound: true, average_ms: 10250, errors: 0},
+                        database: {status: 'reachable', sampled_at, latency_ms: 3},
+                    })};
+                }
+                const status = window.monitorTest.platformStatus;
+                const metrics = status === 'partial' ? {
+                    cpu_percent: {value: 0, status: 'current', sampled_at, history: [[sampled_at, 0]]},
+                } : {};
+                return {status: 200, ok: true, json: async () => ({
+                    postgres: {status, metrics}, web_app: {status: 'unconfigured', metrics: {}},
+                })};
+            };
+        }''')
+        page.add_script_tag(content=(settings.BASE_DIR / 'static' / 'hub' / 'monitoring.js').read_text(encoding='utf-8'))
+        app_sample = page.locator('[data-mon="app-sample"]')
+        db_sample = page.locator('[data-mon="db-sample"]')
+        self.assertEqual(app_sample.text_content(), 'No sample yet')
+        self.assertEqual(db_sample.text_content(), 'No sample yet')
+        page.get_by_role('button', name='Pause updates').click()
+        refresh = page.get_by_role('button', name='Refresh now')
+        page.evaluate('window.monitorTest.liveAvailable = true')
+        refresh.click()
+        last_app_time = app_sample.text_content().removeprefix('Sampled ')
+        last_db_time = db_sample.text_content().removeprefix('Reachable · checked ')
+        self.assertRegex(last_app_time, r'\d+:\d+')
+        self.assertRegex(last_db_time, r'\d+:\d+')
+        self.assertRegex(page.locator('[data-mon="app-p95"]').text_content(), r'^>10[,. ]?000 ms$')
+        page.get_by_text('View latency readings').click()
+        self.assertIn('>', page.get_by_role('table', name='Worker latency samples in milliseconds').inner_text())
+        page.evaluate('''() => {
+            window.monitorTest.liveAvailable = false;
+            window.monitorTest.platformStatus = 'unavailable';
+        }''')
+        refresh.click()
+        self.assertEqual(app_sample.text_content(), 'Last sampled ' + last_app_time)
+        self.assertEqual(db_sample.text_content(), 'Last checked ' + last_db_time)
+        cpu = page.locator('[data-mon="cpu_percent"]')
+        self.assertEqual(cpu.text_content(), '0%')
+        self.assertTrue(page.locator('[data-mon="cpu_percent-sample"]').text_content().startswith('Delayed '))
+        for status in ('access_denied', 'unconfigured'):
+            with self.subTest(status=status):
+                page.evaluate("window.monitorTest.platformStatus = 'partial'")
+                refresh.click()
+                self.assertEqual(cpu.text_content(), '0%')
+                page.evaluate('status => { window.monitorTest.platformStatus = status; }', status)
+                refresh.click()
+                self.assertEqual(cpu.text_content(), '—')
+        page.evaluate("window.monitorTest.platformStatus = 'partial'")
+        refresh.click()
+        self.assertEqual(cpu.text_content(), '0%')
+        page.evaluate('''() => {
+            window.monitorTest.platformStatus = 'unavailable';
+            const future = Date.now() + 16 * 60 * 1000;
+            Date.now = () => future;
+        }''')
+        refresh.click()
+        self.assertEqual(page.locator('[data-mon="cpu_percent"]').text_content(), '—')
+
     def test_fixture_retains_only_opted_in_chart_data(self):
         fixture = (
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -841,6 +970,120 @@ class MobileBrowserTests(SimpleTestCase):
         finally:
             for route in pending:
                 route.abort()
+
+    def management_page(self, tab, **fixture):
+        html = render_to_string('hub/management.html', {**self.context(), 'active_tab': tab, **fixture})
+        page = self.browser.new_page(viewport={'width': 375, 'height': 844}, reduced_motion='reduce')
+        self.addCleanup(page.close)
+        page.route('**/*', lambda route: route.abort())
+        url = f'http://request-hub.test/management/?tab={tab}'
+        page.route(url, lambda route: route.fulfill(body=html, content_type='text/html'))
+        page.goto(url)
+        return page
+
+    def test_failed_user_search_explains_stale_results_and_clears_on_recovery(self):
+        from playwright.sync_api import expect
+
+        def results(username):
+            users = [User(pk=2, username=username, role=User.Roles.ENGINEER)]
+            return {'users': users, 'users_page_obj': Paginator(users, 50).page(1)}
+
+        page = self.management_page('users', **results('previous-user'))
+        search = page.get_by_role('textbox', name='Search users')
+        rows = page.locator('#users-tbody')
+        status = page.locator('#users-pane').get_by_role('status')
+        page.route('**/*user_q=offline-user', lambda route: route.fulfill(status=503))
+        search.fill('offline-user')
+        expect(status).to_contain_text('Showing previous results', timeout=3000)
+        expect(rows).to_contain_text('previous-user')
+
+        fragment = render_to_string('hub/management.html#user-results', {
+            **results('recovered-user'), 'user_search_query': 'recovered-user',
+        })
+        page.route('**/*user_q=recovered-user', lambda route: route.fulfill(body=fragment, content_type='text/html'))
+        search.fill('recovered-user')
+        expect(rows).to_contain_text('recovered-user')
+        expect(status).to_be_empty()
+
+    def test_account_tab_navigation_only_warns_for_unsaved_edits(self):
+        from playwright.sync_api import expect
+
+        from hub.models import Account
+        from hub.views import UserManagementView
+
+        page = self.management_page('accounts', account_formset=UserManagementView.account_form_class(
+            queryset=Account.objects.none(),
+        ))
+        accounts_url = page.url
+        users = page.locator('#users-tab')
+        save = page.get_by_role('button', name='Save Changes', include_hidden=True)
+        dialogs = []
+
+        def dismiss(dialog):
+            dialogs.append(dialog.type)
+            dialog.dismiss()
+
+        page.on('dialog', dismiss)
+        page.route('**/management/?tab=users', lambda route: route.fulfill(body='<h1>Users</h1>', content_type='text/html'))
+        with self.subTest(state='filter only'):
+            page.locator('#account-search').fill('name filter')
+            expect(save).to_be_hidden(timeout=1000)
+            users.click()
+            page.get_by_role('heading', name='Users').wait_for(timeout=3000)
+            self.assertEqual(dialogs, [])
+
+        with self.subTest(state='unsaved edit'):
+            page.goto(accounts_url)
+            name = page.locator('#id_form-0-name')
+            name.click()
+            name.fill('Unsaved account')
+            expect(save).to_be_visible(timeout=3000)
+            users.click()
+            self.assertEqual(dialogs, ['beforeunload'])
+            expect(name).to_have_value('Unsaved account')
+
+            page.route(accounts_url, lambda route: route.fulfill(body='<h1>Accounts saved</h1>', content_type='text/html'))
+            with page.expect_request(lambda request: request.method == 'POST' and request.url == accounts_url):
+                save.click()
+            page.get_by_role('heading', name='Accounts saved').wait_for(timeout=3000)
+            self.assertEqual(dialogs, ['beforeunload'])
+
+    def test_stale_changelog_refresh_reloads_the_feed_at_the_release_heading(self):
+        from django.urls import reverse
+        from django.utils import timezone
+        from playwright.sync_api import expect
+
+        origin = 'http://request-hub.test'
+        feed = f"{origin}{reverse('hub:notifications')}?tab=changelogs&page=2"
+        back_url = f'{feed}#changelog-7-title'
+        disclosure = render_to_string('hub/partials/changelog_deferred_comparison.html', {
+            'entry': SimpleNamespace(pk=7, updated_at=timezone.now()),
+            'section': 'visual', 'comparison_index': 2, 'comparison': {'title': 'Previous comparison'},
+            'page_obj': SimpleNamespace(number=2),
+        })
+        stale = render_to_string('hub/changelog_preview.html#preview', {'stale': True, 'back_url': back_url})
+        page = self.browser.new_page(viewport={'width': 375, 'height': 844})
+        self.addCleanup(page.close)
+        page.route('**/*', lambda route: route.abort())
+        page.route(feed, lambda route: route.fulfill(
+            body=f'<details><summary>Previous comparison</summary>{disclosure}</details>', content_type='text/html',
+        ))
+        page.goto(feed)
+        detail = page.get_by_role('link', name='View comparison: Previous comparison', include_hidden=True)
+        page.route(origin + detail.get_attribute('href'), lambda route: route.fulfill(
+            status=409, body=stale, content_type='text/html',
+        ))
+        script = settings.BASE_DIR / 'static' / 'hub' / 'changelog-previews.js'
+        page.add_script_tag(content=script.read_text(encoding='utf-8'))
+        page.route(feed, lambda route: route.fulfill(
+            body='<h1 id="changelog-7-title">Refreshed releases</h1>', content_type='text/html',
+        ))
+
+        page.locator('summary').click()
+        expect(page.get_by_role('status')).to_contain_text('comparisons have changed', timeout=3000)
+        page.get_by_role('link', name='Refresh published updates').click()
+        expect(page.get_by_role('heading', name='Refreshed releases')).to_be_visible(timeout=3000)
+        expect(page).to_have_url(back_url)
 
     def navigation_page(self, width, height=844, *, dark=False, seasonal=False, font_size=16, reduce_motion=True):
         fixture = {**self.report_fixture(), 'new_ticket_count': 128, 'csrf_token': '0' * 32}

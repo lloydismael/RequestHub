@@ -510,6 +510,7 @@
                         </div>
                     </div>
                 </div>
+                <script src="{% static 'js/login-success.js' %}" defer></script>
             {% else %}
                 <div class="alert alert-{{ message.tags }} glass-card" role="alert">{{ message }}</div>
             {% endif %}
@@ -542,9 +543,8 @@
     <script src="{% static 'js/liquid-glass.js' %}?v=7" defer></script>
     {% if not login_asset_profile %}
     <script src="{% static 'js/smooth-scroll.js' %}?v=12" defer></script>
-    <script src="{% static 'js/notification-toasts.js' %}?v=6" defer></script>
+    <script src="{% static 'js/notification-toasts.js' %}?v=7" defer></script>
     {% endif %}
-    <script src="{% static 'js/login-success.js' %}" defer></script>
     {% if not login_asset_profile %}<script src="{% static 'hub/form_runtime.js' %}" defer></script>{% endif %}
     <script>
         (function () {

@@ -2,9 +2,13 @@
 {% load tz static %}
 {% block title %}Notifications · Request Hub{% endblock %}
 {% block body_class %}notifications-page{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}?v=20261106-evidence">{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}?v=20261106-evidence">
+{% if active_tab == 'changelogs' %}<script src="{% static 'hub/changelog-previews.js' %}" defer></script>{% endif %}
+{% endblock %}
 {% block content %}
-<div class="nq-page" data-notification-page>
+<div class="nq-page" data-notification-page="{{ active_tab|default:'activity' }}"
+     {% if notification_state %}data-notification-state="{{ notification_state }}"{% endif %}>
 
     <header class="nq-head" aria-labelledby="notifications-heading" data-navbar-surface="theme">
         <div class="nq-head__title">
@@ -39,7 +43,7 @@
            {% if active_tab != 'changelogs' %}aria-current="page"{% endif %}>
             <i class="bi bi-bell" aria-hidden="true"></i> Activity
             <span class="cl-tab__count{% if unread_count %} cl-tab__count--unread{% endif %}"
-                  aria-label="{{ unread_count }} unread">{{ unread_count }}</span>
+                  data-notification-activity-count aria-label="{{ unread_count }} unread">{{ unread_count }}</span>
         </a>
         <a href="?tab=changelogs" class="cl-tab{% if active_tab == 'changelogs' %} is-active{% endif %}"
            {% if active_tab == 'changelogs' %}aria-current="page"{% endif %}>
@@ -59,7 +63,7 @@
                 <span class="cl-version">{{ page_obj.paginator.count }} update{{ page_obj.paginator.count|pluralize }}</span>
             </div>
             {% for entry in changelogs %}
-                {% include 'hub/partials/changelog_entry.html' %}
+                {% include 'hub/partials/changelog_entry.html' with defer_comparisons=True %}
             {% empty %}
                 <div class="glass-card cl-empty">
                     <i class="bi bi-journal-richtext fs-1" aria-hidden="true"></i>

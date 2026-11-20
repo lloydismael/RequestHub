@@ -121,8 +121,6 @@
         scheduleDismiss(toast);
     }
 
-    var lastPageState = null;
-
     function updateNotificationCount(count) {
         if (!Number.isInteger(count) || count < 0) return;
         var link = document.querySelector('[data-notification-link]');
@@ -150,9 +148,19 @@
 
     function refreshNotificationPage(data) {
         var page = document.querySelector('[data-notification-page]');
-        if (!page || !Number.isInteger(data.unread_count)) return;
+        if (!page || !Number.isInteger(data.unread_count) || data.unread_count < 0) return;
+        if (page.dataset.notificationPage === 'changelogs') {
+            var activityBadge = page.querySelector('[data-notification-activity-count]');
+            if (activityBadge && activityBadge.textContent !== String(data.unread_count)) {
+                activityBadge.textContent = String(data.unread_count);
+                activityBadge.setAttribute('aria-label', data.unread_count + ' unread');
+                if (data.unread_count) activityBadge.classList.add('cl-tab__count--unread');
+                else activityBadge.classList.remove('cl-tab__count--unread');
+            }
+            return;
+        }
         var state = [data.latest_id, data.total_count, data.unread_count].join(':');
-        if (state === lastPageState) return;
+        if (state === page.dataset.notificationState) return;
         // Do not replace a notification action while someone is using the keyboard.
         if (document.activeElement && page.contains(document.activeElement)) return;
         return fetch(window.location.href, {
@@ -164,9 +172,8 @@
             return response.text();
         }).then(function (html) {
             var replacement = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-notification-page]');
-            if (replacement && document.querySelector('[data-notification-page]') === page) {
+            if (replacement && document.querySelector('[data-notification-page]') === page && !page.contains(document.activeElement)) {
                 page.replaceWith(replacement);
-                lastPageState = state;
             }
         });
     }

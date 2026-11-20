@@ -467,6 +467,31 @@ class HistoricalSceneTests(unittest.TestCase):
         self.assertIn('class="login-christmas"', root)
         self.assertIn("<title>Login &middot; Request Hub</title>", document)
 
+    def test_changelog_loading_recipe_renders_both_disclosure_fallbacks(self):
+        recipe = next(
+            (recipe for recipe in load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+             if recipe["id"] == "changelog-loading"),
+            None,
+        )
+        self.assertIsNotNone(recipe, "Deferred changelog previews need a usable visual capture recipe")
+        for fixture, fallback in (("changelog_history", "Open preview"), ("changelog_feed", "View full report")):
+            with self.subTest(fixture=fixture):
+                scene = next(scene for scene in recipe["scenes"] if scene["fixture"] == fixture)
+                self.assertIn(fallback, _render(ROOT, scene))
+
+    def test_monitoring_recipe_shows_the_actual_management_shell(self):
+        path = ROOT / "hub" / "changelog_capture_recipes.json"
+        recipe = next((recipe for recipe in load_recipes(path) if recipe["id"] == "management-monitoring"), None)
+        self.assertIsNotNone(recipe)
+        scene = recipe["scenes"][0]
+        before = _render(ROOT, {**scene, "fixture": "changelog_history"})
+        after = _render(ROOT, scene)
+        self.assertNotIn('id="monitoring-pane"', before)
+        self.assertIn('id="monitoring-pane"', after)
+        self.assertIn('id="monitoring-tab"', after)
+        self.assertIn("Database server utilization", after)
+        self.assertIn("Waiting for live data", after)
+
     @unittest.skipUnless(os.environ.get("CHANGELOG_CAPTURE_VENDOR_DIR"), "Prepare offline vendor assets to exercise UI scenes.")
     def test_historical_ui_fixtures_render_without_application_database(self):
         from playwright.sync_api import sync_playwright
@@ -477,7 +502,10 @@ class HistoricalSceneTests(unittest.TestCase):
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
                 try:
-                    for fixture in ("login", "seasonal_login", "profile", "changelog", "changelog_editor", "sqr_tracker", "sqr_performance"):
+                    for fixture in (
+                        "login", "seasonal_login", "profile", "changelog", "changelog_editor",
+                        "changelog_history", "changelog_feed", "sqr_tracker", "sqr_performance",
+                    ):
                         with self.subTest(fixture=fixture):
                             output = Path(temporary) / f"{fixture}.png"
                             _screenshot(browser, snapshot, {"kind": "ui", "fixture": fixture}, output,

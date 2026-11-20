@@ -76,6 +76,8 @@ telemetry_enabled = os.getenv("AZURE_TELEMETRY_ENABLED", "false").lower()
 if telemetry_enabled not in ("true", "false"):
     raise ImproperlyConfigured("AZURE_TELEMETRY_ENABLED must be true or false.")
 AZURE_TELEMETRY_ENABLED = telemetry_enabled == "true"
+AZURE_MONITOR_POSTGRES_RESOURCE_ID = os.getenv("AZURE_MONITOR_POSTGRES_RESOURCE_ID", "").strip()
+AZURE_MONITOR_WEB_APP_RESOURCE_ID = os.getenv("AZURE_MONITOR_WEB_APP_RESOURCE_ID", "").strip()
 
 PAGE_PERFORMANCE_ENABLED = (
     os.getenv("DJANGO_PAGE_PERFORMANCE_ENABLED", "false").lower() == "true"
@@ -93,6 +95,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "hub.middleware.PagePerformanceMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "hub.middleware.MonitoringMiddleware",
     "accounts.middleware.IdleAwareSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -140,7 +143,13 @@ DB_CONN_MAX_AGE = int(os.getenv("DB_CONN_MAX_AGE", "60"))
 if not DEBUG and (not DB_HOST or not DB_USER or not DB_PASSWORD):
     raise ImproperlyConfigured("DB_HOST, DB_USER, and DB_PASSWORD are required when DJANGO_DEBUG is False.")
 
-db_options = {}
+db_options = {
+    "connect_timeout": 5,
+    "keepalives_idle": 15,
+    "keepalives_interval": 5,
+    "keepalives_count": 3,
+    "tcp_user_timeout": 15000,
+}
 if DB_SSLMODE:
     db_options["sslmode"] = DB_SSLMODE
 if DB_SSLROOTCERT:
@@ -158,9 +167,6 @@ DATABASES = {
         "OPTIONS": db_options,
     }
 }
-
-if not db_options:
-    DATABASES["default"].pop("OPTIONS")
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

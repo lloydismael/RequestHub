@@ -42,11 +42,12 @@ from django.db.models.deletion import ProtectedError
 from django.db.models.functions import TruncMonth
 from django.forms import modelformset_factory
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.utils.cache import patch_cache_control
+from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.crypto import get_random_string
 from django.utils.html import format_html, json_script
 from django.utils.safestring import mark_safe
@@ -7515,42 +7516,47 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
         active_tab = request.GET.get("tab", "users")
         if self.kwargs.get("changelog_editor"):
             active_tab = "changelogs"
-        if active_tab not in {"users", "accounts", "activity", "forms", "changelogs"}:
+        if active_tab not in {"users", "accounts", "activity", "forms", "changelogs", "monitoring"}:
             active_tab = "users"
+        if active_tab == "users":
+            users_context = self._build_users_context(request)
+            if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+                response = render(None, f"{self.template_name}#user-results", {
+                    **users_context, "request": request, "csrf_token": get_token(request),
+                })
+                patch_cache_control(response, private=True, no_store=True)
+            else:
+                response = self._render_users(request, users_context=users_context)
+            patch_vary_headers(response, ("X-Requested-With",))
+            return response
+
+        context = self._tab_context(active_tab)
         if active_tab == "changelogs":
-            entry = None
-            if self.kwargs.get("pk"):
-                entry = get_object_or_404(Changelog, pk=self.kwargs["pk"])
-            context = {
-                "active_tab": active_tab,
-                "total_users": User.objects.count(),
-                "total_accounts": Account.objects.count(),
-                "changelog_form": getattr(self, "changelog_form", None) or ChangelogForm(
+            entry = get_object_or_404(Changelog, pk=self.kwargs["pk"]) if self.kwargs.get("pk") else None
+            context.update(
+                changelog_form=getattr(self, "changelog_form", None) or ChangelogForm(
                     instance=entry, comparison_page=request.GET.get("comparison_page"),
                 ),
-                "changelog_entry": entry,
-                "changelog_page": Paginator(Changelog.objects.all(), 10).get_page(request.GET.get("changelog_page")),
-            }
-            return render(request, self.template_name, context)
+                changelog_entry=entry,
+                changelog_page=Paginator(Changelog.objects.all(), 10).get_page(request.GET.get("changelog_page")),
+            )
+        elif active_tab == "accounts":
+            account_formset = self.account_form_class(queryset=Account.objects.order_by("name"))
+            self._prepare_account_formset(account_formset)
+            context["account_formset"] = account_formset
+        elif active_tab == "activity":
+            context.update(self._build_activity_context())
+        elif active_tab == "forms":
+            from .form_editor_views import catalog
 
+            context["form_catalog"] = catalog()
+        return render(request, self.template_name, context)
+
+    def _build_users_context(self, request):
         from .form_editor import get_definition
-        from .form_editor_views import catalog
 
-        self._sync_account_baseline()
         users_page_obj, user_search_query = self._paginate_users(request)
-        account_formset = self.account_form_class(queryset=Account.objects.order_by("name"))
-        create_user_form = UserManagementForm(prefix="create_user")
-        self._prepare_account_formset(account_formset)
-        context = self._build_context(
-            None,
-            account_formset,
-            create_user_form=create_user_form,
-            users_page_obj=users_page_obj,
-            user_search_query=user_search_query,
-        )
-        context["active_tab"] = active_tab
-        context["form_catalog"] = catalog()
-        users = list(context["users"])
+        users = list(users_page_obj)
         editor_definition = get_definition("user_management")
         editor_answers = {}
         if editor_definition.pk:
@@ -7567,6 +7573,16 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             user.editor_form = configure_form(
                 form, definition=editor_definition, answers=editor_answers.get(user.pk, {}),
             )
+        return {"users": users, "users_page_obj": users_page_obj, "user_search_query": user_search_query}
+
+    def _render_users(self, request, *, users_context=None, create_user_form=None):
+        context = self._tab_context("users")
+        context.update(self._build_users_context(request) if users_context is None else users_context)
+        context.update(
+            create_user_form=UserManagementForm(prefix="create_user") if create_user_form is None else create_user_form,
+            show_create_user_modal=create_user_form is not None,
+            role_choices=User.Roles.choices,
+        )
         return render(request, self.template_name, context)
 
     def post(self, request, *args, **kwargs):
@@ -7588,45 +7604,26 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                 return redirect(reverse("hub:management") + "?tab=changelogs")
             messages.error(request, "Please correct the changelog errors below.")
             return self.get(request, *args, **kwargs)
-        active_tab = request.POST.get("active_tab", "users")
-        self._sync_account_baseline()
-        if active_tab != "accounts":
-            user_action_value = request.POST.get("user_action")
-            if user_action_value:
-                action_response = self._handle_user_action_request(request, user_action_value)
-                if action_response:
-                    return action_response
+        if request.POST.get("active_tab") == "accounts":
+            account_formset = self.account_form_class(request.POST, queryset=Account.objects.order_by("name"))
+            self._prepare_account_formset(account_formset)
+            return self._handle_account_submission(request, account_formset)
 
-            if request.POST.get("create_user_submit") == "1":
-                create_user_form = UserManagementForm(request.POST, prefix="create_user")
-                formset = self.formset_class(queryset=self.get_queryset())
-                account_formset = self.account_form_class(queryset=Account.objects.order_by("name"))
-                self._prepare_formset(formset)
-                self._prepare_account_formset(account_formset)
-                if create_user_form.is_valid():
-                    new_user = create_user_form.save()
-                    display_name = new_user.get_full_name() or new_user.username
-                    messages.success(request, f"Created new user account for {display_name}.")
-                    return redirect("hub:management")
-                return render(
-                    request,
-                    self.template_name,
-                    self._build_context(
-                        formset,
-                        account_formset,
-                        create_user_form=create_user_form,
-                        show_create_user_modal=True,
-                    ),
-                )
+        user_action_value = request.POST.get("user_action")
+        if user_action_value:
+            return self._handle_user_action_request(request, user_action_value)
+
+        if request.POST.get("create_user_submit") == "1":
+            create_user_form = UserManagementForm(request.POST, prefix="create_user")
+            if create_user_form.is_valid():
+                new_user = create_user_form.save()
+                display_name = new_user.get_full_name() or new_user.username
+                messages.success(request, f"Created new user account for {display_name}.")
+                return redirect("hub:management")
+            return self._render_users(request, create_user_form=create_user_form)
 
         formset = self.formset_class(request.POST, queryset=self.get_queryset())
-        account_formset = self.account_form_class(request.POST, queryset=Account.objects.order_by("name"))
-        create_user_form = UserManagementForm(prefix="create_user")
         self._prepare_formset(formset)
-        self._prepare_account_formset(account_formset)
-
-        if active_tab == "accounts":
-            return self._handle_account_submission(request, account_formset, formset)
 
         if formset.is_valid():
             current_admins = User.objects.filter(role=User.Roles.ADMIN).count()
@@ -7670,7 +7667,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                         admin_delta += 1
 
             if pending_error:
-                return render(request, self.template_name, self._build_context(formset, account_formset, create_user_form=create_user_form))
+                return self._render_users(request)
 
             if current_admins + admin_delta <= 0:
                 if admin_removal_candidates:
@@ -7681,7 +7678,7 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                         form.add_error("role", "At least one administrator must remain.")
                 else:
                     messages.error(request, "At least one administrator must remain.")
-                return render(request, self.template_name, self._build_context(formset, account_formset, create_user_form=create_user_form))
+                return self._render_users(request)
 
             created_count = 0
             updated_count = 0
@@ -7719,9 +7716,9 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
                 messages.info(request, "No changes detected.")
             return redirect("hub:management")
 
-        return render(request, self.template_name, self._build_context(formset, account_formset, create_user_form=create_user_form))
+        return self._render_users(request)
 
-    def _handle_account_submission(self, request, account_formset, user_formset):
+    def _handle_account_submission(self, request, account_formset):
         if account_formset.is_valid():
             created = updated = deleted = 0
             with transaction.atomic():
@@ -7753,27 +7750,16 @@ class UserManagementView(AdminRequiredMixin, LoginRequiredMixin, View):
             else:
                 messages.info(request, "No account changes detected.")
             return redirect("hub:management")
-        return render(request, self.template_name, self._build_context(user_formset, account_formset, active_tab="accounts"))
+        return render(request, self.template_name, {
+            **self._tab_context("accounts"), "account_formset": account_formset,
+        })
 
-    def _build_context(self, formset, account_formset, active_tab="users", create_user_form=None, show_create_user_modal=False, users_page_obj=None, user_search_query=""):
-        if create_user_form is None:
-            create_user_form = UserManagementForm(prefix="create_user")
-        # Fall back to the full (unpaginated) list for POST re-renders and any
-        # path that doesn't pass a page object, preserving prior behavior.
-        users_value = users_page_obj if users_page_obj is not None else User.objects.select_related().order_by("date_joined", "username")
+    @staticmethod
+    def _tab_context(active_tab):
         return {
-            "formset": formset,
-            "account_formset": account_formset,
-            "create_user_form": create_user_form,
-            "show_create_user_modal": show_create_user_modal,
+            "active_tab": active_tab,
             "total_users": User.objects.count(),
             "total_accounts": Account.objects.count(),
-            "active_tab": active_tab,
-            "users": users_value,
-            "users_page_obj": users_page_obj,
-            "user_search_query": user_search_query,
-            "role_choices": User.Roles.choices,
-            **self._build_activity_context(),
         }
 
     def _build_activity_context(self):

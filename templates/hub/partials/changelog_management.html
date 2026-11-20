@@ -96,7 +96,10 @@
                 </div>
                 <details class="mt-3">
                     <summary class="cl-preview-toggle">Preview comparison</summary>
-                    <div class="mt-3">{% include 'hub/partials/changelog_entry.html' %}</div>
+                    <div class="mt-3" data-changelog-preview>
+                        <a href="{% url 'hub:changelog-preview' entry.pk %}{% if changelog_page.number > 1 %}?page={{ changelog_page.number|stringformat:'d' }}{% endif %}" data-changelog-preview-link data-no-page-transition>Open preview</a>
+                        <p class="text-muted small mb-2" role="status" data-changelog-preview-status hidden></p>
+                    </div>
                 </details>
             </div>
         {% empty %}

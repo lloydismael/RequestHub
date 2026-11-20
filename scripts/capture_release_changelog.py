@@ -95,8 +95,13 @@ def load_recipes(path):
                 source = safe_relative(scene.get("path"))
                 if source.suffix.lower() not in {".md", ".txt", ".rst"} or not isinstance(scene.get("heading"), str) or not scene["heading"].strip():
                     raise CaptureError("Documentation capture needs a selected text section.")
-            elif scene.get("fixture") not in ({"login", "seasonal_login", "profile", "changelog", "changelog_editor", "sqr_tracker", "sqr_performance"} if scene["kind"] == "ui" else {"changelog_contract"}):
+            elif scene.get("fixture") not in ({
+                "login", "seasonal_login", "profile", "changelog", "changelog_editor",
+                "changelog_history", "changelog_feed", "management_monitoring", "sqr_tracker", "sqr_performance",
+            } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
+            if scene.get("fixture") == "repository_change" and {"paths", "omitted_files", "revision"} & scene.keys():
+                raise CaptureError("Repository report inputs must be derived from the captured change.")
             viewport = scene.get("viewport", {"width": 1200, "height": 900})
             if not isinstance(viewport, dict) or set(viewport) != {"width", "height"}:
                 raise CaptureError("Capture viewport needs width and height.")
@@ -178,51 +183,69 @@ def _cached(item, assets, recipe=None):
     return True
 
 
+def _public_paths(changed):
+    paths = []
+    for name in changed:
+        try:
+            safe_relative(name)
+        except CaptureError:
+            continue
+        paths.append(name)
+    return paths
+
+
+def _with_report_paths(recipe, changed):
+    if not any(scene.get("fixture") == "repository_change" for scene in recipe["scenes"]):
+        return recipe
+    public_paths = _public_paths(changed)
+    return {**recipe, "scenes": [
+        {**scene, "paths": public_paths, "omitted_files": len(changed) - len(public_paths)}
+        if scene.get("fixture") == "repository_change" else scene for scene in recipe["scenes"]
+    ]}
+
+
 def _select_recipe(repo, item, recipes):
     exact = [recipe for recipe in recipes if recipe.get("commit") == item["sha"]]
     if exact:
         if len(exact) != 1:
             raise CaptureError("Ambiguous capture recipes; declare one exact change recipe.")
-        return exact[0]
+        if not any(scene.get("fixture") == "repository_change" for scene in exact[0]["scenes"]):
+            return exact[0]
 
+    revisions = [item["parent_sha"], item["sha"]] if item.get("parent_sha") else [item["sha"]]
     changed = [name for name in _git(
-        repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", item["sha"],
+        repo, "diff-tree", "--no-commit-id", "--name-only", "-r", "-z", *revisions,
     ).decode("utf-8").split("\0") if name]
+    if exact:
+        return _with_report_paths(exact[0], changed)
+
     by_path = [recipe for recipe in recipes if not recipe.get("commit")]
     screens = [recipe for recipe in by_path if any(scene["kind"] == "ui" for scene in recipe["scenes"])
                and any(fnmatchcase(name, pattern) for name in changed for pattern in recipe["paths"])]
-    if len(screens) == 1:
-        return screens[0]
     if screens:
         scenes = [scene for recipe in screens for scene in recipe["scenes"]]
+        if len(screens) == 1:
+            return _with_report_paths(screens[0], changed)
         if len(scenes) > MAX_COMPARISONS or len({scene["title"] for scene in scenes}) != len(scenes):
             raise CaptureError("Overlapping or too many UI scenes; declare one exact change recipe.")
-        return {"id": "affected-screens", "recipes": [recipe["id"] for recipe in screens], "scenes": scenes}
+        return _with_report_paths({"id": "affected-screens", "recipes": [recipe["id"] for recipe in screens], "scenes": scenes}, changed)
 
     matches = [recipe for recipe in by_path if changed and
                all(any(fnmatchcase(name, pattern) for pattern in recipe["paths"]) for name in changed)]
     if not matches:
         if any(name.startswith(("templates/", "static/css/", "static/js/", "static/hub/")) for name in changed):
             raise CaptureError("No UI capture recipe covers the changed screens. Add a recipe or supply actual before/after screenshots.")
-        public_paths = []
-        for name in changed:
-            try:
-                safe_relative(name)
-            except CaptureError:
-                continue
-            public_paths.append(name)
-        return {
+        return _with_report_paths({
             "id": "repository-change",
             "scenes": [{
                 "kind": "report", "fixture": "repository_change", "title": "Repository change report",
                 "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
                 "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
-                "paths": public_paths, "omitted_files": len(changed) - len(public_paths),
             }],
-        }
+        }, changed)
     if len(matches) != 1:
         raise CaptureError("Ambiguous capture recipes; declare one exact change recipe.")
-    return matches[0]
+    return _with_report_paths(matches[0], changed)
 
 
 def _render(snapshot, scene):
@@ -249,7 +272,8 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         "<style>*,*::before,*::after{animation:none!important;transition:none!important}"
         ".lg-enter{opacity:1!important;transform:none!important}</style>"
     )
-    if scene.get("fixture") in {"changelog", "changelog_editor"}:
+    fixture = scene.get("fixture")
+    if fixture in {"changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring"}:
         document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []
     context = browser.new_context(
@@ -320,9 +344,17 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
             "login": ".login-hero", "seasonal_login": ".login-hero",
             "profile": "#profile-panel-avatar .profile-card, .profile-avatar-block",
             "changelog": ".cl-entry", "changelog_editor": ".cl-editor",
-            "sqr_tracker": "#sqr-proto", "sqr_performance": "#sqr-performance-dashboard",
-        }.get(scene.get("fixture"), "body")
-        page.locator(selector).screenshot(path=str(output), animations="disabled", timeout=15000)
+            "changelog_history": ".cl-history-entry", "changelog_feed": ".cl-technical-evidence",
+            "management_monitoring": "main", "sqr_tracker": "#sqr-proto", "sqr_performance": "#sqr-performance-dashboard",
+        }.get(fixture, "body")
+        component = page.locator(selector)
+        # Native disclosures work with page scripts disabled at both revisions.
+        if fixture == "changelog_history":
+            component.locator("details > summary").first.click()
+        elif fixture == "changelog_feed":
+            component.locator(":scope > summary").click()
+            component.locator("details > summary").first.click()
+        component.screenshot(path=str(output), animations="disabled", timeout=15000)
     finally:
         context.close()
 
