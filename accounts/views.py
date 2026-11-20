@@ -47,6 +47,7 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs["is_admin"] = self.request.user.role == "admin"
+        kwargs["request"] = self.request
         return kwargs
 
     def get_context_data(self, **kwargs):
