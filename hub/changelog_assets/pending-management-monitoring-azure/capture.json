@@ -1,0 +1,62 @@
+{
+  "before_revision": "818e2c7e2494801a0313706de05c9cff254eeca1",
+  "after_revision": null,
+  "fixture": "Same synthetic Admin and direct/Azure response fixtures against the actual Management templates, CSS, and Monitoring JavaScript. Only the Monitoring page script ran. Browser requests were fulfilled locally; no live Azure or user data. After images are from the unreleased working tree.",
+  "source_fingerprints": "SHA-256 of the rendered input files as read from disk. Before sources were checked out with Windows CRLF line endings; after sources use their working-tree line endings.",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "scenarios": {
+    "unconfigured": {
+      "before": {
+        "file": "unconfigured-before.png",
+        "sha256": "21f15b65871fb5e9548f2f68a2f78f8a9610ef7033b787cbefa2fca81b30fce6",
+        "size_px": [
+          1440,
+          1654
+        ]
+      },
+      "after": {
+        "file": "unconfigured-after.png",
+        "sha256": "ef0e4812b8753a5d41d6295c85e6ddf1ca6c9a5ba137199d87853832f8b8e244",
+        "size_px": [
+          1440,
+          1490
+        ]
+      }
+    },
+    "connected": {
+      "before": {
+        "file": "connected-before.png",
+        "sha256": "4d97a84151b1133b0d04790312f14b9bc8ee11ac0139a0e5925d387cf0ca3ee4",
+        "size_px": [
+          1440,
+          1664
+        ]
+      },
+      "after": {
+        "file": "connected-after.png",
+        "sha256": "ac0bb0c94d487ce5bd676d8f779bd161d80ee72a8f790b2ab3ac4104370c5f30",
+        "size_px": [
+          1440,
+          1827
+        ]
+      }
+    }
+  },
+  "before_sources_sha256": {
+    "templates/base.html": "93f204c0c94b5d564a74bf37d0af05394df98098fc3e02925edcf610471e730e",
+    "templates/hub/management.html": "15d76d2af6dab5532e369a48e1831ca5c3f2b60edd604a0df3a4089a451f5570",
+    "templates/hub/partials/monitoring.html": "0cb72fcd6a897ed6734e9e38f7369200a225efeb0748a0c7ebcf7092f6a95ef9",
+    "static/hub/monitoring.css": "08c453d4dda073ab716a77f135d1e8c327ec1cd24ac0b0d752f571454f150dbb",
+    "static/hub/monitoring.js": "c50508457e065e36794c579f2c568d6a3bc53b60fbb6d863011a2eeaac557fd5"
+  },
+  "after_sources_sha256": {
+    "templates/base.html": "a3a0b5228acd8ee38d736629f0372cfdb2747b495984a746ddc1fdc632297caa",
+    "templates/hub/management.html": "15d76d2af6dab5532e369a48e1831ca5c3f2b60edd604a0df3a4089a451f5570",
+    "templates/hub/partials/monitoring.html": "5a4344be9ddcc8190bbe8a774dff60f49f69256ea89cac084fff89464f85cabd",
+    "static/hub/monitoring.css": "df33663f90347eec04d1419582df304712fa2bd442e59d91e2b032d6e395f3d2",
+    "static/hub/monitoring.js": "b2eaff3c09fd0f430824aa69d63fa49f1dabbf2f9cee1f072cf31b2afba37198"
+  }
+}

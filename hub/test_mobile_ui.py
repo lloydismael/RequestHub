@@ -134,6 +134,7 @@ class MobileBrowserTests(SimpleTestCase):
 
         current = datetime.now(timezone.utc).replace(microsecond=0)
         older = (current - timedelta(minutes=2)).isoformat()
+        latest = (current - timedelta(minutes=1)).isoformat()
         tick = current.isoformat()
         fixture = {**self.context(), 'active_tab': 'monitoring', 'total_users': 5, 'total_accounts': 3}
         page = self.page(width=375, template='hub/management.html', dark=True, fixture=fixture)
@@ -155,7 +156,10 @@ class MobileBrowserTests(SimpleTestCase):
             'platform': {
                 'postgres': {'status': 'partial', 'metrics': {
                     'cpu_percent': {'value': 0, 'sampled_at': older, 'history': [[older, 0]], 'status': 'current'},
-                    'storage_free': {'value': 1073741824, 'sampled_at': older, 'status': 'current'},
+                    'storage_used': {'value': 1073741824, 'sampled_at': older, 'status': 'current'},
+                    'storage_free': {'value': 0, 'sampled_at': latest, 'status': 'current'},
+                    'storage_percent': {'value': 100, 'sampled_at': latest, 'status': 'current'},
+                    'memory_percent': {'value': 41, 'sampled_at': older, 'status': 'current'},
                 }},
                 'web_app': {'status': 'unconfigured', 'metrics': {}},
             },
@@ -166,8 +170,24 @@ class MobileBrowserTests(SimpleTestCase):
         page.add_script_tag(content=script.read_text(encoding='utf-8'))
         self.assertEqual(page.locator('[data-mon="app-p95"]').text_content(), '35 ms')
         self.assertEqual(page.locator('[data-mon="cpu_percent"]').text_content(), '0%')
-        self.assertIn('1 GiB free', page.locator('[data-mon="storage-details"]').text_content())
-        self.assertEqual(page.locator('[data-mon="site-status"]').text_content(), 'Not configured')
+        app_service = page.get_by_role('region', name='App Service', exact=True)
+        server = page.get_by_role('region', name='PostgreSQL Flexible Server')
+        storage = page.get_by_role('article', name='Database server storage')
+        self.assertEqual(app_service.locator('[data-mon="site-status"]').text_content(), 'Not configured')
+        self.assertTrue(app_service.get_by_text('AZURE_MONITOR_WEB_APP_RESOURCE_ID', exact=True).is_visible())
+        self.assertFalse(app_service.get_by_text('Memory working set').is_visible())
+        self.assertTrue(server.get_by_text('41%', exact=True).is_visible())
+        self.assertTrue(storage.get_by_text('1 GiB', exact=True).is_visible())
+        self.assertTrue(storage.get_by_text('0 B', exact=True).is_visible())
+        self.assertTrue(storage.get_by_text('100%', exact=True).is_visible())
+        self.assertIn('logical database size', storage.inner_text().lower())
+        self.assertTrue(storage.get_by_text('1 KiB', exact=True).is_visible())
+        self.assertNotEqual(storage.locator('[data-mon="storage_used-sample"]').text_content(),
+                            storage.locator('[data-mon="storage_free-sample"]').text_content())
+        self.assertEqual(storage.get_by_role('meter').get_attribute('value'), '100')
+        page.get_by_role('link', name='Connection setup').click()
+        self.assertTrue(page.get_by_text('az login', exact=True).is_visible())
+        self.assertTrue(page.get_by_text('System assigned', exact=True).is_visible())
         summary = page.get_by_text('View utilization readings')
         summary.focus()
         page.keyboard.press('Enter')
@@ -207,9 +227,11 @@ class MobileBrowserTests(SimpleTestCase):
                 const status = window.monitorTest.platformStatus;
                 const metrics = status === 'partial' ? {
                     cpu_percent: {value: 0, status: 'current', sampled_at, history: [[sampled_at, 0]]},
+                    storage_used: {value: 536870912, status: 'current', sampled_at},
                 } : {};
                 return {status: 200, ok: true, json: async () => ({
-                    postgres: {status, metrics}, web_app: {status: 'unconfigured', metrics: {}},
+                    postgres: {status, metrics},
+                    web_app: {status: 'partial', metrics: {Requests: {value: 29, status: 'current', sampled_at}}},
                 })};
             };
         }''')
@@ -239,7 +261,17 @@ class MobileBrowserTests(SimpleTestCase):
         cpu = page.locator('[data-mon="cpu_percent"]')
         self.assertEqual(cpu.text_content(), '0%')
         self.assertTrue(page.locator('[data-mon="cpu_percent-sample"]').text_content().startswith('Delayed '))
-        for status in ('access_denied', 'unconfigured'):
+        storage = page.get_by_role('article', name='Database server storage')
+        self.assertTrue(storage.get_by_text('512 MiB', exact=True).is_visible())
+        self.assertFalse(storage.get_by_role('meter').is_visible())
+        self.assertIn('No samples', storage.locator('[data-mon="storage_free-sample"]').text_content())
+        server = page.get_by_role('region', name='PostgreSQL Flexible Server')
+        app_service = page.get_by_role('region', name='App Service', exact=True)
+        for status, guidance in (
+            ('access_denied', 'Monitoring Reader'),
+            ('credential_unavailable', 'az login'),
+            ('unconfigured', 'AZURE_MONITOR_POSTGRES_RESOURCE_ID'),
+        ):
             with self.subTest(status=status):
                 page.evaluate("window.monitorTest.platformStatus = 'partial'")
                 refresh.click()
@@ -247,6 +279,10 @@ class MobileBrowserTests(SimpleTestCase):
                 page.evaluate('status => { window.monitorTest.platformStatus = status; }', status)
                 refresh.click()
                 self.assertEqual(cpu.text_content(), '—')
+                self.assertFalse(storage.get_by_text('512 MiB', exact=True).is_visible())
+                self.assertTrue(server.get_by_text(guidance, exact=False).is_visible())
+                self.assertFalse(server.get_by_text('Backup storage used').is_visible())
+                self.assertTrue(app_service.get_by_text('29', exact=True).is_visible())
         page.evaluate("window.monitorTest.platformStatus = 'partial'")
         refresh.click()
         self.assertEqual(cpu.text_content(), '0%')

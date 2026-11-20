@@ -81,6 +81,13 @@
     const pauseButton = root.querySelector('[data-monitor-pause]');
     const refreshButton = root.querySelector('[data-monitor-refresh]');
     const storageMeter = root.querySelector('[data-storage-meter]');
+    const storageReadings = root.querySelector('[data-storage-readings]');
+    const setup = root.querySelector('#monitor-connection-setup');
+    const platformNotice = root.querySelector('.monitor-platform-notice');
+    root.querySelector('[data-monitor-setup-link]').addEventListener('click', () => {
+        setup.open = true;
+        setup.querySelector('summary').focus({preventScroll: true});
+    });
     const empty = '—';
     const timeFormat = new Intl.DateTimeFormat(undefined, {hour: '2-digit', minute: '2-digit', second: '2-digit'});
     const numbers = new Intl.NumberFormat(undefined, {maximumFractionDigits: 2});
@@ -212,11 +219,25 @@
     }
 
     const platformWindowMs = 15 * 60 * 1000;
-    const inactivePlatformStatuses = new Set(['unconfigured', 'invalid_configuration', 'access_denied']);
+    const inactivePlatformStatuses = new Set([
+        'unconfigured', 'invalid_configuration', 'invalid_auth_configuration', 'credential_unavailable', 'access_denied',
+    ]);
     const azureLabels = {
-        unconfigured: 'Not configured', invalid_configuration: 'Check resource ID', loading: 'Fetching samples',
-        current: 'Azure Monitor', partial: 'Partial data', delayed: 'Delayed data',
-        no_data: 'No samples', unavailable: 'Azure unavailable', access_denied: 'Azure access denied',
+        unconfigured: 'Not configured', invalid_configuration: 'Check resource ID',
+        invalid_auth_configuration: 'Check authentication mode', credential_unavailable: 'Sign-in unavailable',
+        loading: 'Fetching samples', current: 'Reporting', partial: 'Partial data', delayed: 'Delayed data',
+        no_data: 'No samples', missing: 'No samples', unavailable: 'Azure unavailable', access_denied: 'Azure access denied',
+    };
+    const sourceNotes = {
+        unconfigured: 'Set the full Azure resource ID to connect this source.',
+        invalid_configuration: 'Use the full Azure resource ID for this resource type.',
+        invalid_auth_configuration: 'Check AZURE_MONITOR_AUTH_MODE. Use azure_cli only for local development and managed_identity on App Service.',
+        credential_unavailable: 'Azure sign-in failed. Run az login on the local app host, or enable the system-assigned identity on App Service.',
+        access_denied: 'Check that the signed-in account or app identity has Monitoring Reader on this resource.',
+        loading: 'Fetching one-minute samples from Azure Monitor.',
+        no_data: 'Azure Monitor has no samples in the last 15 minutes. Verify the resource ID and check Metrics in the Azure portal.',
+        unavailable: 'Could not load samples. Check the resource ID and outbound access to Azure Monitor if this persists.',
+        delayed: 'Showing the last available Azure samples. Check their timestamps.',
     };
 
     function platformSource(incoming, previous, now) {
@@ -237,12 +258,16 @@
         }
         return {status: fallback && retained ? 'delayed' : source.status, metrics};
     }
-    const azureFormats = {
-        cpu_percent: percent, memory_percent: percent, storage_used: bytes, backup_storage_used: bytes,
-        iops: value => number(value, ' IOPS'), active_connections: number, connections_failed: number,
+    const serverFormats = {
+        memory_percent: percent, iops: value => number(value, ' IOPS'), active_connections: number,
+        connections_failed: number, backup_storage_used: bytes,
+    };
+    const siteFormats = {
         Requests: number, Http5xx: number, HttpResponseTime: value => ms(finite(value) ? value * 1000 : null),
         AverageMemoryWorkingSet: bytes, CpuTime: value => number(value, ' CPU-s'),
     };
+    const storageFormats = {storage_used: bytes, storage_free: bytes, storage_percent: percent};
+    const hasReading = (metrics, formats) => Object.keys(formats).some(name => finite(metrics[name]?.value));
 
     function metricText(metric, fallback, stale) {
         if (!metric?.sampled_at) return fallback;
@@ -252,33 +277,53 @@
         return `${sampled(metric.sampled_at, prefix)}${age !== null ? ` · ${age < 1 ? '<1 min' : `${age} min`} old` : ''}`;
     }
 
+    function renderAzureReadings(source, formats, stale) {
+        const metrics = source?.metrics || {};
+        for (const [name, format] of Object.entries(formats)) {
+            const metric = metrics[name];
+            set(name, format(metric?.value));
+            const status = metric?.status || source?.status;
+            const fallback = blocked ? 'Access unavailable' : inactivePlatformStatuses.has(status) || ['loading', 'unavailable'].includes(status)
+                ? azureLabels[status] : 'No samples';
+            set(`${name}-sample`, metricText(metric, fallback, stale));
+        }
+    }
+
+    function renderSource(key, source, formats, stale) {
+        const status = source?.status || 'unavailable';
+        const metrics = source?.metrics || {};
+        const hasReadings = hasReading(metrics, formats);
+        const label = blocked ? 'Access unavailable' : stale && !inactivePlatformStatuses.has(status)
+            ? 'Refresh failed' : azureLabels[status];
+        badge(`${key}-status`, label || 'Unknown', status === 'current' && !stale ? 'good' : 'warning');
+        root.querySelector(`[data-monitor-readings="${key}"]`).hidden = !hasReadings;
+        root.querySelector(`[data-monitor-setting="${key}"]`).hidden = !['unconfigured', 'invalid_configuration'].includes(status);
+        const anyDenied = Object.values(metrics).some(metric => metric.status === 'access_denied');
+        const note = blocked ? 'Reopen Monitoring after signing in.' : sourceNotes[status] || (anyDenied
+            ? 'Some readings are denied. Verify Monitoring Reader access on this resource.'
+            : 'No samples for the metrics in this panel.');
+        fields[`${key}-note`].hidden = hasReadings && !sourceNotes[status] && !anyDenied;
+        set(`${key}-note`, note);
+        renderAzureReadings(source, formats, stale);
+    }
+
     function renderPlatform(data, stale = false) {
         const postgres = data?.postgres;
         const site = data?.web_app;
-        for (const [key, source] of [['server-status', postgres], ['site-status', site]]) {
-            const status = source?.status || 'unavailable';
-            const label = stale && !inactivePlatformStatuses.has(status) ? 'Refresh failed' : azureLabels[status];
-            badge(key, label || 'Unknown', status === 'current' && !stale ? 'good' : 'warning');
-        }
-        const metrics = {...postgres?.metrics, ...site?.metrics};
-        for (const [name, format] of Object.entries(azureFormats)) {
-            const metric = metrics[name];
-            const source = Object.hasOwn(site?.metrics || {}, name) || /^[A-Z]/.test(name) ? site : postgres;
-            set(name, format(metric?.value));
-            const fallback = azureLabels[metric?.status] || azureLabels[source?.status] || 'No sample';
-            set(`${name}-sample`, metricText(metric, fallback, stale));
-        }
+        const status = postgres?.status || 'unavailable';
+        renderSource('server', postgres, serverFormats, stale);
+        renderSource('site', site, siteFormats, stale);
+        renderAzureReadings(postgres, {cpu_percent: percent, ...storageFormats}, stale);
 
-        const used = metrics.storage_used;
-        const free = metrics.storage_free;
-        const usage = metrics.storage_percent;
-        const details = [];
-        if (finite(free?.value)) details.push(`${bytes(free.value)} free (${metricText(free, 'No sample', stale)})`);
-        if (finite(usage?.value)) details.push(`${percent(usage.value)} used (${metricText(usage, 'No sample', stale)})`);
-        if (finite(used?.value) && !finite(free?.value)) details.push('Free space not reported');
-        set('storage-details', details.join(' · ') || 'Used and free server space');
-        storageMeter.hidden = !finite(usage?.value);
-        if (!storageMeter.hidden) storageMeter.value = usage.value;
+        const metrics = postgres?.metrics || {};
+        const usage = metrics.storage_percent?.value;
+        storageReadings.hidden = !hasReading(metrics, storageFormats);
+        storageMeter.hidden = !finite(usage);
+        if (storageMeter.hidden) storageMeter.removeAttribute('value');
+        else storageMeter.value = usage;
+        fields['storage-note'].hidden = !storageReadings.hidden;
+        set('storage-note', blocked ? 'Access unavailable' : inactivePlatformStatuses.has(status) || ['loading', 'unavailable'].includes(status)
+            ? azureLabels[status] : 'No disk samples reported by Azure Monitor');
 
         const points = new Map();
         for (const [name, key] of [['cpu_percent', 'a'], ['storage_percent', 'b']]) {
@@ -291,18 +336,16 @@
         }
         const end = Date.now();
         const history = [...points.values()].filter(point => end - platformWindowMs <= point.time && point.time <= end).sort((a, b) => a.time - b.time);
-        chart('platform', history, end, platformWindowMs, 100, percent, 90000, azureLabels[postgres?.status] || 'Azure samples unavailable');
+        chart('platform', history, end, platformWindowMs, 100, percent, 90000, blocked ? 'Reopen Monitoring after signing in'
+            : azureLabels[status] || 'Azure samples unavailable');
 
-        const notes = [];
-        if (stale) notes.push('Azure refresh failed. Any displayed readings are from the last successful response.');
-        if ([postgres, site].some(source => source?.status === 'unconfigured')) notes.push('Azure metrics are optional and must be configured on the server.');
-        if ([postgres, site].some(source => source?.status === 'invalid_configuration')) notes.push('An Azure resource ID is invalid. Check the App Service settings.');
-        if ([postgres, site].some(source => ['unavailable', 'access_denied'].includes(source?.status)
-            || Object.values(source?.metrics || {}).some(metric => metric.status === 'access_denied'))) {
-            notes.push('Check the app’s managed identity and Monitoring Reader access if this persists.');
-        }
-        fields['platform-note'].hidden = !notes.length;
-        set('platform-note', notes.join(' '));
+        const needsSetup = [postgres, site].some(source => inactivePlatformStatuses.has(source?.status));
+        const note = blocked ? 'Reopen Monitoring after signing in.'
+            : stale ? 'Azure refresh failed. Any readings shown are from an earlier sample.'
+            : needsSetup ? 'An Azure source needs attention. Direct diagnostics continue independently.'
+            : 'App Service and PostgreSQL report independently of live diagnostics.';
+        platformNotice.toggleAttribute('data-attention', needsSetup || stale || blocked);
+        set('platform-note', note);
     }
 
     function update(name, result) {

@@ -141,22 +141,46 @@ The probe SQL uses a server-side statement timeout, not a guaranteed network
 deadline. If the database is completely unavailable, database-backed session
 authentication may prevent even the live endpoint from answering.
 
-To enable platform metrics after operational approval:
+Set either or both full Azure resource IDs. The sources report independently;
+leaving an ID unset disables only that source.
 
-1. Enable a **system-assigned managed identity** on the App Service. Grant it
-   **Monitoring Reader** on each monitored resource, not subscription-wide.
-2. Set either or both App Service settings to full Azure resource IDs:
-   - `AZURE_MONITOR_POSTGRES_RESOURCE_ID`: `/subscriptions/<subscription>/resourceGroups/<group>/providers/Microsoft.DBforPostgreSQL/flexibleServers/<server>`
-   - `AZURE_MONITOR_WEB_APP_RESOURCE_ID`: `/subscriptions/<subscription>/resourceGroups/<group>/providers/Microsoft.Web/sites/<app>`
-3. Sign in as a Request Hub Admin and open **Management → Monitoring**. Check that
-   reported timestamps and values match the Azure portal for both resources. If
-   one source is unavailable, check the resource ID, role assignment and outbound
-   HTTPS access to `management.azure.com`. Removing an ID disables only that source.
+| Setting | Full resource ID |
+| --- | --- |
+| `AZURE_MONITOR_POSTGRES_RESOURCE_ID` | `/subscriptions/<subscription>/resourceGroups/<group>/providers/Microsoft.DBforPostgreSQL/flexibleServers/<server>` |
+| `AZURE_MONITOR_WEB_APP_RESOURCE_ID` | `/subscriptions/<subscription>/resourceGroups/<group>/providers/Microsoft.Web/sites/<app>` |
+
+**Local development:** Install Azure CLI on the machine running Django and run
+`az login` as the same OS user. The signed-in account needs **Monitoring Reader**
+on each monitored resource. Set `AZURE_MONITOR_AUTH_MODE=azure_cli` and the
+corresponding IDs in your local `.env`, then restart Django. Request Hub uses
+the subscription in each resource ID to request a CLI token, without changing
+the CLI's default subscription. The Azure account is separate from the Request
+Hub Admin login. If Django runs in a container or remote environment, signing
+in on the browser's machine is not enough.
+
+**Deployed App Service:** Deploy a release with the Azure metric reader fix
+first. After operational approval, enable the web app's **system-assigned
+managed identity**. Grant it **Monitoring Reader** on each monitored resource,
+not the subscription. Add the resource IDs in App Service settings and leave
+`AZURE_MONITOR_AUTH_MODE` unset (defaults to `managed_identity`) or set it to
+`managed_identity`. `azure_cli` is rejected on App Service; there is no
+fallback between auth modes. Apply the settings during an approved window:
+App Service restarts when app settings change.
+
+Sign in to Request Hub as an Admin and open **Management → Monitoring**. Compare
+each reported minute with **Metrics** on the corresponding resource in the
+Azure portal. **Sign-in unavailable** means Request Hub could not obtain an Azure
+token: check the local CLI sign-in or the app's identity. **Azure access denied**
+means Azure Monitor rejected the resource or metric request: check the scoped
+role and the resource ID. For other failures, verify outbound HTTPS access to
+`management.azure.com` and that the resource is reporting on the portal.
 
 The dashboard checks Azure about once a minute. Azure emits one-minute samples
-that can arrive late. Missing samples are not zero. Temporary refresh failures
-can leave readings visible as delayed within the 15-minute sample window.
-Denied or disabled sources are cleared. App Service HTTP metrics include
+that can arrive late. Disk used, free and percent used are distinct readings;
+none is derived from logical database size. Missing samples are not zero.
+Temporary refresh failures can leave readings visible as delayed within the
+15-minute sample window. Disabled sources, identity failures and access denials
+clear the affected readings. App Service HTTP metrics include
 Monitoring traffic, and App Service CPU time is in CPU-seconds, not CPU
 percentage. Each worker allows one Azure refresh at a time across both
 resources. Manual refresh does not bypass the cache or error backoff. The

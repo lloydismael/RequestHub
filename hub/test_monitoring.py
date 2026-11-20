@@ -5,6 +5,8 @@ from threading import Event
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from azure.core.exceptions import ClientAuthenticationError
+from azure.identity import CredentialUnavailableError
 from django.db import OperationalError
 from requests import Response, Timeout
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -104,6 +106,115 @@ class PlatformMetricsTests(SimpleTestCase):
             "timeseries": [{"data": [{"timeStamp": time, aggregation: value} for time, value in samples.items()]}],
         }
 
+    @override_settings(AZURE_MONITOR_ON_APP_SERVICE=False)
+    def test_only_explicit_cli_mode_uses_the_cli_identity(self):
+        from hub.monitoring_azure import POSTGRES, AzureMetrics, _credential
+
+        self.addCleanup(_credential.cache_clear)
+        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        provider = AzureMetrics(POSTGRES)
+
+        def metrics_response(_url, *, headers, **_kwargs):
+            value = {"Bearer managed-test": 12, "Bearer cli-test": 23}[headers["Authorization"]]
+            response = Response()
+            response.status_code = 200
+            response._content = json.dumps({"value": [
+                self.metric("cpu_percent", "average", **{now.isoformat(): value}),
+            ]}).encode()
+            return response
+
+        _credential.cache_clear()
+        with (
+            patch("hub.monitoring_azure.ManagedIdentityCredential") as managed,
+            patch("hub.monitoring_azure.AzureCliCredential") as cli,
+            patch("hub.monitoring_azure.requests.get", side_effect=metrics_response),
+        ):
+            managed.return_value.get_token.return_value = SimpleNamespace(token="managed-test")
+            cli.return_value.get_token.return_value = SimpleNamespace(token="cli-test")
+            with override_settings(AZURE_MONITOR_AUTH_MODE="managed_identity"):
+                initial = provider.snapshot(POSTGRES_ID, now=now, tick=0)
+            cli.assert_not_called()
+            with override_settings(AZURE_MONITOR_AUTH_MODE="azure_cli"):
+                local = provider.snapshot(POSTGRES_ID, now=now, tick=1)
+        self.assertEqual(initial["metrics"]["cpu_percent"]["value"], 12)
+        self.assertEqual(local["metrics"]["cpu_percent"]["value"], 23)
+
+    @override_settings(AZURE_MONITOR_AUTH_MODE="azure_cli", AZURE_MONITOR_ON_APP_SERVICE=False)
+    def test_cli_metrics_use_each_resources_subscription(self):
+        from hub.monitoring_azure import POSTGRES, AzureMetrics, _credential
+
+        first = "00000000-0000-0000-0000-000000000000"
+        second = "11111111-1111-1111-1111-111111111111"
+        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+
+        def cli_identity(*, subscription=None, **_kwargs):
+            return SimpleNamespace(get_token=lambda _scope: SimpleNamespace(token=subscription or "default-tenant"))
+
+        def metrics_response(url, *, headers, params, **_kwargs):
+            scope, value = (second, 23) if f"/subscriptions/{second}/" in url else (first, 12)
+            response = Response()
+            allowed = headers["Authorization"] == f"Bearer {scope}"
+            response.status_code = 200 if allowed else 403
+            response._content = json.dumps({"value": [
+                self.metric("cpu_percent", "average", **{now.isoformat(): value}),
+            ] if params["aggregation"] == "Average" else []}).encode()
+            response._content_consumed = True
+            return response
+
+        _credential.cache_clear()
+        self.addCleanup(_credential.cache_clear)
+        provider = AzureMetrics(POSTGRES)
+        with (
+            patch("hub.monitoring_azure.AzureCliCredential", side_effect=cli_identity),
+            patch("hub.monitoring_azure.requests.get", side_effect=metrics_response),
+        ):
+            results = [provider.snapshot(resource_id, now=now, tick=0) for resource_id in (
+                POSTGRES_ID, POSTGRES_ID.replace(first, second, 1),
+            )]
+        self.assertEqual([result["metrics"]["cpu_percent"]["value"] for result in results], [12, 23])
+
+    def test_invalid_auth_configuration_does_not_request_a_token(self):
+        from hub.monitoring_azure import POSTGRES, AzureMetrics
+
+        for mode, is_hosted in (("azure_cli", True), ("azure-cll", False)):
+            with (
+                self.subTest(mode=mode, is_hosted=is_hosted),
+                override_settings(AZURE_MONITOR_AUTH_MODE=mode, AZURE_MONITOR_ON_APP_SERVICE=is_hosted),
+                patch("hub.monitoring_azure._credential") as credential,
+            ):
+                result = AzureMetrics(POSTGRES).snapshot(POSTGRES_ID)
+                self.assertEqual(result, {"status": "invalid_auth_configuration", "metrics": {}})
+                credential.assert_not_called()
+
+    @override_settings(AZURE_MONITOR_AUTH_MODE="managed_identity")
+    def test_credential_errors_are_not_resource_denials_and_drop_cached_readings(self):
+        from hub.monitoring_azure import POSTGRES, AzureMetrics
+
+        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        response = Response()
+        response.status_code = 200
+        response._content = json.dumps({"value": [
+            self.metric("cpu_percent", "average", **{now.isoformat(): 23}),
+        ]}).encode()
+        provider = AzureMetrics(POSTGRES)
+        with (
+            patch("hub.monitoring_azure._credential") as credential,
+            patch("hub.monitoring_azure.requests.get", return_value=response) as get,
+        ):
+            credential.return_value.get_token.side_effect = [
+                SimpleNamespace(token="test-token"), CredentialUnavailableError("private CLI details"),
+                ClientAuthenticationError("private identity details"),
+            ]
+            provider.snapshot(POSTGRES_ID, now=now, tick=0)
+            for seconds in (60, 180):
+                with self.subTest(seconds=seconds):
+                    result = provider.snapshot(POSTGRES_ID, now=now + timedelta(seconds=seconds), tick=seconds)
+                    self.assertEqual(result["status"], "credential_unavailable")
+                    self.assertIsNone(result["metrics"]["cpu_percent"]["value"])
+                    self.assertEqual(result["metrics"]["cpu_percent"]["history"], [])
+                    self.assertNotIn("private", json.dumps(result))
+            self.assertEqual(get.call_count, 2)
+
     def test_missing_and_stale_samples_do_not_hide_a_reported_zero(self):
         from hub.monitoring_azure import POSTGRES, NORMAL_REFRESH_SECONDS, AzureMetrics
 
@@ -140,7 +251,7 @@ class PlatformMetricsTests(SimpleTestCase):
 
         entered, release = Event(), Event()
 
-        def read(resource_id, resource, now):
+        def read(resource_id, resource, now, auth_mode):
             if resource is POSTGRES:
                 entered.set()
                 if not release.wait(5):
@@ -231,19 +342,20 @@ class PlatformMetricsTests(SimpleTestCase):
         response = Response()
         response.status_code = 200
         response._content = b'{"value": []}'
-        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 1, 3, 5, 26, 123456, tzinfo=timezone(timedelta(hours=2)))
         with (
             patch("hub.monitoring_azure._credential") as credential,
             patch("hub.monitoring_azure.requests.get", return_value=response) as get,
         ):
             credential.return_value.get_token.return_value = SimpleNamespace(token="test-token")
-            self.assertEqual(read_metrics(POSTGRES_ID, POSTGRES, now), ([], {}))
+            self.assertEqual(read_metrics(POSTGRES_ID, POSTGRES, now, "managed_identity"), ([], {}))
         credential.return_value.get_token.assert_called_once_with("https://management.azure.com/.default")
         groups = {}
         for args, kwargs in (call for call in get.call_args_list):
             self.assertEqual(args[0], "https://management.azure.com" + POSTGRES_ID + "/providers/Microsoft.Insights/metrics")
             self.assertFalse(kwargs["allow_redirects"])
             self.assertEqual(kwargs["params"]["interval"], "PT1M")
+            self.assertEqual(kwargs["params"]["timespan"], "2025-01-01T00:50:26Z/2025-01-01T01:05:26Z")
             groups[kwargs["params"]["aggregation"]] = kwargs["params"]["metricnames"].split(",")
         self.assertIn("storage_free", groups["Average"])
         self.assertNotIn("connections_failed", groups["Average"])
