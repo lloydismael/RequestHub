@@ -1,5 +1,6 @@
 import re
 from datetime import timedelta
+from html import unescape
 from io import BytesIO
 
 from PIL import Image
@@ -560,6 +561,117 @@ class ChangelogTests(TestCase):
             self.assertEqual(image_response.status_code, 200)
             self.assertEqual(image_response["Content-Type"], "image/webp")
             self.assertIn("no-store", image_response["Cache-Control"])
+
+    def test_management_history_loads_a_draft_preview_only_on_request(self):
+        entry = self.entry(title="Private draft", summary="Private draft summary")
+        url = f"{self.management}changelogs/{entry.pk}/preview/"
+        history = self.client.get(self.management, {"tab": "changelogs"})
+        self.assertNotContains(history, "Private draft summary")
+        self.assertContains(history, f'href="{url}"')
+        for headers in ({}, {"X-Requested-With": "XMLHttpRequest"}):
+            with self.subTest(headers=headers):
+                preview = self.client.get(url, headers=headers)
+                self.assertContains(preview, "Private draft summary")
+                self.assertIn("private", preview.headers["Cache-Control"])
+                self.assertIn("no-store", preview.headers["Cache-Control"])
+                if headers:
+                    self.assertNotContains(preview, "<!DOCTYPE html>")
+        self.client.force_login(self.reader)
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_closed_visual_comparison_has_accessible_detail_without_eager_images(self):
+        entry = self.visual_entry(is_published=True)
+        pairs = entry.changes["commits"][0]["comparisons"]
+        pairs.append({**pairs[0], "title": "Second screen", "after_text": "Deferred change description."})
+        entry.save()
+        url = f"{self.notifications}changelogs/{entry.pk}/visual/2/"
+        self.client.force_login(self.reader)
+        feed = self.feed()
+        self.assertContains(feed, 'alt="Before: Request composer')
+        self.assertNotContains(feed, "Deferred change description.")
+        link = self.preview_link(feed, url)
+        detail = self.client.get(link)
+        self.assertContains(detail, "Deferred change description.")
+        self.assertContains(detail, 'alt="Before: Second screen')
+        self.assertContains(detail, 'alt="After: Second screen')
+        self.assertIn("no-store", detail.headers["Cache-Control"])
+        fragment = self.client.get(link, headers={"X-Requested-With": "XMLHttpRequest"})
+        self.assertContains(fragment, "Deferred change description.")
+        self.assertNotContains(fragment, 'id="request-hub-page"')
+        self.assertEqual(self.client.get(url.replace("/visual/2/", "/visual/0/")).status_code, 404)
+
+    def preview_link(self, response, path):
+        match = re.search(r'href="(' + re.escape(path) + r'(?:\?[^\"]*)?)"', response.content.decode())
+        self.assertIsNotNone(match)
+        return unescape(match[1])
+
+    def test_open_feed_link_does_not_show_different_evidence_after_reclassification(self):
+        entry = self.visual_entry(is_published=True)
+        pairs = entry.changes["commits"][0]["comparisons"]
+        pairs.insert(0, {**pairs[0], "title": "Older technical report", "evidence_kind": "report"})
+        pairs.append({**pairs[1], "title": "Second visual", "after_text": "The intended pair"})
+        entry.save()
+        self.client.force_login(self.reader)
+        url = f"{self.notifications}changelogs/{entry.pk}/visual/2/"
+        link = self.preview_link(self.feed(), url)
+        self.assertContains(self.client.get(link), "The intended pair")
+
+        pairs[0]["evidence_kind"] = "ui"
+        entry.save()
+        for headers in ({}, {"X-Requested-With": "XMLHttpRequest"}):
+            with self.subTest(headers=headers):
+                stale = self.client.get(link, headers=headers)
+                self.assertContains(stale, "This release's comparisons have changed", status_code=409)
+                self.assertContains(stale, f'href="{self.notifications}?tab=changelogs#changelog-{entry.pk}-title"', status_code=409)
+                self.assertNotContains(stale, 'alt="After: Request composer', status_code=409)
+                self.assertIn("no-store", stale.headers["Cache-Control"])
+        current_link = self.preview_link(self.feed(), url)
+        self.assertContains(self.client.get(current_link), 'alt="After: Request composer')
+        self.assertEqual(self.client.get(url).status_code, 409)
+
+    def test_preview_links_return_to_the_original_release_page(self):
+        for index in range(10):
+            self.entry(title=f"Newer release {index}", is_published=True, new_version=f"v{50 + index}")
+        entry = self.visual_entry(is_published=True, new_version="v1")
+        pairs = entry.changes["commits"][0]["comparisons"]
+        pairs.append({**pairs[0], "title": "Older release comparison"})
+        entry.save()
+
+        history = self.client.get(self.management, {"tab": "changelogs", "changelog_page": 2})
+        preview_url = f"{self.management}changelogs/{entry.pk}/preview/"
+        management_link = self.preview_link(history, preview_url)
+        self.assertContains(self.client.get(management_link), f'href="{self.management}?tab=changelogs&amp;changelog_page=2"')
+
+        self.client.force_login(self.reader)
+        feed = self.client.get(self.notifications, {"tab": "changelogs", "page": 2})
+        detail_url = f"{self.notifications}changelogs/{entry.pk}/visual/2/"
+        reader_link = self.preview_link(feed, detail_url)
+        self.assertContains(self.client.get(reader_link), f'href="{self.notifications}?tab=changelogs&amp;page=2#changelog-{entry.pk}-title"')
+
+    def test_preview_does_not_use_an_arbitrary_return_url(self):
+        entry = self.entry()
+        url = reverse("hub:changelog-preview", args=[entry.pk])
+        detail = self.client.get(url, {"page": "//outside.invalid/"})
+        self.assertContains(detail, f'href="{self.management}?tab=changelogs"')
+        self.assertNotContains(detail, "outside.invalid")
+
+    def test_notification_comparison_never_exposes_unpublished_releases(self):
+        entry = self.visual_entry(is_published=True)
+        pairs = entry.changes["commits"][0]["comparisons"]
+        pairs.append({**pairs[0], "title": "Deferred public comparison"})
+        entry.save()
+        path = f"{self.notifications}changelogs/{entry.pk}/visual/2/"
+        url = self.preview_link(self.feed(), path)
+        self.assertContains(self.client.get(url), 'alt="After: Deferred public comparison')
+        hidden_states = [(False, timezone.localdate()), (True, timezone.localdate() + timedelta(days=1))]
+        for published, date in hidden_states:
+            entry.is_published = published
+            entry.release_date = date
+            entry.save()
+            for user in (self.admin, self.reader):
+                with self.subTest(user=user.username, published=published):
+                    self.client.force_login(user)
+                    self.assertEqual(self.client.get(url).status_code, 404)
 
     def test_notifications_separates_legacy_reports_from_screen_comparisons(self):
         entry = self.visual_entry(is_published=True)

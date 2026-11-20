@@ -1,9 +1,23 @@
 {% extends "base.html" %}
 {% load tz form_customization static %}
 
+{% partialdef user-results %}
+    <span id="user-count-badge">{% partial user-count %}</span>
+    <table><tbody id="users-tbody">{% partial user-rows %}</tbody></table>
+    {% partial user-pager %}
+{% endpartialdef %}
+
 {% block title %}Management · Request Hub{% endblock %}
 {% block body_class %}management-page{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}?v=20261106-evidence">{% endblock %}
+{% block extra_head %}
+{% if active_tab == 'changelogs' %}
+<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}?v=20261106-evidence">
+<script src="{% static 'hub/changelog-previews.js' %}" defer></script>
+{% elif active_tab == 'monitoring' %}
+<link rel="stylesheet" href="{% static 'hub/monitoring.css' %}">
+<script src="{% static 'hub/monitoring.js' %}" defer></script>
+{% endif %}
+{% endblock %}
 
 {% block content %}
 
@@ -16,70 +30,46 @@
         </h1>
     </div>
     <div class="d-flex gap-2 flex-wrap align-items-center">
-        <ul class="nav nav-pills mgmt-tabs gap-1 mb-0" {% if active_tab != 'changelogs' %}role="tablist"{% endif %}>
-            {% if active_tab == 'changelogs' %}
-            <li class="nav-item">
-                <a class="nav-link" id="users-tab" href="{% url 'hub:management' %}?tab=users">
+        {% url 'hub:management' as management_url %}
+        <nav class="nav nav-pills mgmt-tabs gap-1 mb-0" aria-label="Management sections">
+            <div class="nav-item">
+                <a class="nav-link{% if active_tab == 'users' %} active{% endif %}" id="users-tab"
+                   href="{{ management_url }}?tab=users" {% if active_tab == 'users' %}aria-current="page"{% endif %}>
                     <i class="bi bi-people-fill me-1" aria-hidden="true"></i>Users
                 </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" id="accounts-tab" href="{% url 'hub:management' %}?tab=accounts">
+            </div>
+            <div class="nav-item">
+                <a class="nav-link{% if active_tab == 'accounts' %} active{% endif %}" id="accounts-tab"
+                   href="{{ management_url }}?tab=accounts" {% if active_tab == 'accounts' %}aria-current="page"{% endif %}>
                     <i class="bi bi-building me-1" aria-hidden="true"></i>Accounts
                 </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" id="activity-tab" href="{% url 'hub:management' %}?tab=activity">
+            </div>
+            <div class="nav-item">
+                <a class="nav-link{% if active_tab == 'activity' %} active{% endif %}" id="activity-tab"
+                   href="{{ management_url }}?tab=activity" {% if active_tab == 'activity' %}aria-current="page"{% endif %}>
                     <i class="bi bi-clock-history me-1" aria-hidden="true"></i>Sign-In Logs
                 </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" id="forms-tab" href="{% url 'hub:management' %}?tab=forms">
+            </div>
+            <div class="nav-item">
+                <a class="nav-link{% if active_tab == 'forms' %} active{% endif %}" id="forms-tab"
+                   href="{{ management_url }}?tab=forms" {% if active_tab == 'forms' %}aria-current="page"{% endif %}>
                     <i class="bi bi-ui-checks me-1" aria-hidden="true"></i>Forms
                 </a>
-            </li>
-            {% else %}
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'users' %}active{% endif %}"
-                        id="users-tab" data-bs-toggle="tab" data-bs-target="#users-pane"
-                        type="button" role="tab" aria-controls="users-pane"
-                        aria-selected="{% if active_tab == 'users' %}true{% else %}false{% endif %}">
-                    <i class="bi bi-people-fill me-1"></i>Users
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'accounts' %}active{% endif %}"
-                        id="accounts-tab" data-bs-toggle="tab" data-bs-target="#accounts-pane"
-                        type="button" role="tab" aria-controls="accounts-pane"
-                        aria-selected="{% if active_tab == 'accounts' %}true{% else %}false{% endif %}">
-                    <i class="bi bi-building me-1"></i>Accounts
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link {% if active_tab == 'activity' %}active{% endif %}"
-                        id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity-pane"
-                        type="button" role="tab" aria-controls="activity-pane"
-                        aria-selected="{% if active_tab == 'activity' %}true{% else %}false{% endif %}">
-                    <i class="bi bi-clock-history me-1"></i>Sign-In Logs
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <a class="nav-link {% if active_tab == 'forms' %}active{% endif %}" id="forms-tab"
-                   href="{% url 'hub:management' %}?tab=forms" data-bs-toggle="tab" data-bs-target="#forms-pane"
-                   role="tab" aria-controls="forms-pane"
-                   aria-selected="{% if active_tab == 'forms' %}true{% else %}false{% endif %}">
-                    <i class="bi bi-ui-checks me-1"></i>Forms
-                </a>
-            </li>
-            {% endif %}
-            <li class="nav-item" role="presentation">
-                <a class="nav-link {% if active_tab == 'changelogs' %}active{% endif %}"
-                   id="changelogs-tab" href="{% url 'hub:management' %}?tab=changelogs" data-bs-target="#changelogs-pane"
+            </div>
+            <div class="nav-item">
+                <a class="nav-link{% if active_tab == 'changelogs' %} active{% endif %}" id="changelogs-tab"
+                   href="{{ management_url }}?tab=changelogs" data-bs-target="#changelogs-pane"
                    {% if active_tab == 'changelogs' %}aria-current="page"{% endif %}>
                     <i class="bi bi-journal-richtext me-1" aria-hidden="true"></i>Changelogs
                 </a>
-            </li>
-        </ul>
+            </div>
+            <div class="nav-item">
+                <a class="nav-link{% if active_tab == 'monitoring' %} active{% endif %}" id="monitoring-tab"
+                   href="{{ management_url }}?tab=monitoring" {% if active_tab == 'monitoring' %}aria-current="page"{% endif %}>
+                    <i class="bi bi-activity me-1" aria-hidden="true"></i>Monitoring
+                </a>
+            </div>
+        </nav>
         <span class="mgmt-stat-chip mgmt-stat-chip--users">
             <i class="bi bi-people-fill me-1"></i>{{ total_users }} Users
         </span>
@@ -92,10 +82,9 @@
 
 {# ── Tab Content ── #}
 <div class="tab-content">
-    {% if active_tab != 'changelogs' %}
+    {% if active_tab == 'users' %}
     {# ══════════════════ USERS PANE ══════════════════ #}
-    <div class="tab-pane {% if active_tab == 'users' %}show active{% endif %}"
-         id="users-pane" role="tabpanel" aria-labelledby="users-tab" tabindex="0">
+    <section class="tab-pane show active" id="users-pane" aria-labelledby="users-tab">
 
         {# Toolbar: search + New User button #}
         <div class="glass-card overflow-hidden p-0 lg-enter" data-lg-delay="40">
@@ -104,12 +93,13 @@
                     <i class="bi bi-search mgmt-search-icon"></i>
                     <input type="text" id="user-search" name="user_q" class="mgmt-search-input"
                            value="{{ user_search_query }}" placeholder="Search users..." autocomplete="off" aria-label="Search users">
-                    <span class="mgmt-result-badge" id="user-count-badge" aria-live="polite">{% if users_page_obj %}{{ users_page_obj.paginator.count }} {% if user_search_query %}match{{ users_page_obj.paginator.count|pluralize:"es" }}{% else %}total{% endif %}{% endif %}</span>
+                    <span class="mgmt-result-badge" id="user-count-badge" aria-live="polite">{% partialdef user-count inline %}{{ users_page_obj.paginator.count }} {% if user_search_query %}match{{ users_page_obj.paginator.count|pluralize:"es" }}{% else %}total{% endif %}{% endpartialdef %}</span>
                 </form>
                 <button type="button" class="btn btn-primary btn-sm lg-btn lg-btn--accent" id="new-user-btn">
                     <i class="bi bi-person-plus-fill me-1"></i>New User
                 </button>
             </div>
+            <div id="user-search-status" class="small text-body-secondary px-3" role="status"></div>
 
             {# Users table #}
             <div class="table-responsive dashboard-table-wrapper mgmt-table-wrapper">
@@ -126,6 +116,7 @@
                         </tr>
                     </thead>
                     <tbody id="users-tbody">
+                        {% partialdef user-rows inline %}
                         {% for user in users %}
                             <tr class="mgmt-row align-middle"
                                 data-search-text="{{ user.get_full_name|lower }} {{ user.username|lower }} {{ user.email|lower }} {{ user.department|lower }} {{ user.role|lower }}">
@@ -225,11 +216,13 @@
                                 </td>
                             </tr>
                         {% endfor %}
+                        {% endpartialdef %}
                     </tbody>
                 </table>
             </div>
 
             {# Card footer — server-side pager for users #}
+            {% partialdef user-pager inline %}
             <div class="mgmt-card-footer">
                 <span class="mgmt-limit-note" id="user-limit-note">{% if users_page_obj %}{% if users_page_obj.paginator.num_pages > 1 %}Showing {{ users_page_obj.start_index }}–{{ users_page_obj.end_index }} of {{ users_page_obj.paginator.count }}{% endif %}{% endif %}</span>
                 <div class="mgmt-pagination" id="user-pagination">
@@ -252,6 +245,7 @@
                     {% endif %}
                 </div>
             </div>
+            {% endpartialdef %}
         </div>
 
         {# ── Create User Modal ── #}
@@ -458,13 +452,13 @@
             <input type="hidden" id="mu-reset-pk" name="user_action" value="">
         </form>
 
-    </div>
+    </section>
 
+    {% elif active_tab == 'accounts' %}
     {# ══════════════════ ACCOUNTS PANE ══════════════════ #}
-    <div class="tab-pane {% if active_tab == 'accounts' %}show active{% endif %}"
-         id="accounts-pane" role="tabpanel" aria-labelledby="accounts-tab" tabindex="0">
+    <section class="tab-pane show active" id="accounts-pane" aria-labelledby="accounts-tab">
 
-        <form method="post" class="glass-card overflow-hidden p-0 lg-enter" data-lg-delay="40" novalidate>
+        <form method="post" class="glass-card overflow-hidden p-0 lg-enter" data-lg-delay="40"{% if account_formset.is_bound %} data-unsaved-accounts{% endif %} novalidate>
             {% csrf_token %}
             <input type="hidden" name="active_tab" value="accounts">
             {% for hidden in account_formset.management_form %}{{ hidden }}{% endfor %}
@@ -483,7 +477,7 @@
                            placeholder="Search accounts by name…" autocomplete="off">
                     <span class="mgmt-result-badge" id="account-count-badge"></span>
                 </div>
-                <button type="submit" class="btn btn-success btn-sm lg-btn lg-btn--ok" id="accounts-save-btn" style="display:none">
+                <button type="submit" class="btn btn-success btn-sm lg-btn lg-btn--ok" id="accounts-save-btn"{% if not account_formset.is_bound %} style="display:none"{% endif %}>
                     <i class="bi bi-floppy-fill me-1"></i>Save Changes
                 </button>
             </div>
@@ -575,11 +569,11 @@
                 <div class="mgmt-pagination" id="account-pagination"></div>
             </div>
         </form>
-    </div>
+    </section>
 
+    {% elif active_tab == 'activity' %}
     {# ══════════════════ ACTIVITY LOGS PANE ══════════════════ #}
-    <div class="tab-pane {% if active_tab == 'activity' %}show active{% endif %}"
-         id="activity-pane" role="tabpanel" aria-labelledby="activity-tab" tabindex="0">
+    <section class="tab-pane show active" id="activity-pane" aria-labelledby="activity-tab">
 
         {# Summary #}
         <div class="row g-3 mb-3">
@@ -727,23 +721,24 @@
                 </div>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div class="tab-pane {% if active_tab == 'forms' %}show active{% endif %}"
-         id="forms-pane" role="tabpanel" aria-labelledby="forms-tab" tabindex="0">
+    {% elif active_tab == 'forms' %}
+    <section class="tab-pane show active" id="forms-pane" aria-labelledby="forms-tab">
         <h2 class="h5 mb-3">Form Editor</h2>
         <p class="text-muted">Customize presentation and custom fields without changing business permissions. Drafts are private until published.</p>
         {% include 'hub/form_editor_catalog_items.html' %}
-    </div>
-    {% endif %}
-    {% if active_tab == 'changelogs' %}
-        <div class="tab-pane show active" id="changelogs-pane" aria-labelledby="changelogs-tab">
-            {% include 'hub/partials/changelog_management.html' %}
-        </div>
+    </section>
+    {% elif active_tab == 'changelogs' %}
+    <section class="tab-pane show active" id="changelogs-pane" aria-labelledby="changelogs-tab">
+        {% include 'hub/partials/changelog_management.html' %}
+    </section>
+    {% elif active_tab == 'monitoring' %}
+    {% include 'hub/partials/monitoring.html' %}
     {% endif %}
 </div>
 
-{% if active_tab != 'changelogs' %}
+{% if active_tab == 'users' or active_tab == 'accounts' or active_tab == 'activity' %}
 {# ── Search + pagination + Manage modal JS ── #}
 <script>
 (function () {
@@ -830,9 +825,23 @@
         if (saveBtn && formSelector) {
             var form = document.querySelector(formSelector);
             if (form) {
-                function markDirty() { saveBtn.style.display = ''; }
-                form.addEventListener('input',  markDirty);
+                function warnBeforeLeaving(event) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                }
+
+                function markDirty(event) {
+                    if (event && event.target === searchInput) return;
+                    saveBtn.style.display = '';
+                    window.addEventListener('beforeunload', warnBeforeLeaving);
+                }
+
+                form.addEventListener('input', markDirty);
                 form.addEventListener('change', markDirty);
+                form.addEventListener('submit', function () {
+                    window.removeEventListener('beforeunload', warnBeforeLeaving);
+                });
+                if (form.hasAttribute('data-unsaved-accounts')) markDirty();
             }
         }
 
@@ -844,21 +853,26 @@
         var searchInput = document.getElementById('user-search');
         var tbody = document.getElementById('users-tbody');
         var badge = document.getElementById('user-count-badge');
+        var status = document.getElementById('user-search-status');
         var limitNote = document.getElementById('user-limit-note');
         var pagination = document.getElementById('user-pagination');
-        if (!searchInput || !tbody) return;
+        if (!form || !searchInput || !tbody) return;
 
         var timer = 0;
         var controller = null;
 
-        // Query the server so the search spans every user, not only the page currently rendered.
-        function runSearch() {
+        function cancelSearch() {
+            clearTimeout(timer);
+            if (controller) controller.abort();
+            controller = null;
+        }
+
+        function runSearch(submitted) {
             var url = new URL(window.location.href);
             var q = searchInput.value.trim();
             if (q) url.searchParams.set('user_q', q); else url.searchParams.delete('user_q');
             url.searchParams.delete('user_page');
 
-            if (controller) controller.abort();
             var current = new AbortController();
             controller = current;
             fetch(url.toString(), {
@@ -869,34 +883,38 @@
                 if (!response.ok) throw new Error('search failed');
                 return response.text();
             }).then(function (html) {
+                if (controller !== current) return;
                 var doc = new DOMParser().parseFromString(html, 'text/html');
                 var nextBody = doc.getElementById('users-tbody');
                 if (!nextBody) throw new Error('unexpected response');
-                tbody.innerHTML = nextBody.innerHTML;
+                tbody.replaceChildren(...nextBody.childNodes);
                 [[badge, 'user-count-badge'], [limitNote, 'user-limit-note']].forEach(function (pair) {
                     var next = doc.getElementById(pair[1]);
                     if (pair[0] && next) pair[0].textContent = next.textContent;
                 });
                 var nextPagination = doc.getElementById('user-pagination');
-                if (pagination && nextPagination) pagination.innerHTML = nextPagination.innerHTML;
+                if (pagination && nextPagination) pagination.replaceChildren(...nextPagination.childNodes);
                 window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-            }).catch(function (error) {
-                if (error && error.name === 'AbortError') return;
-                if (form) form.submit();
+                status.textContent = '';
+            }).catch(function () {
+                if (controller !== current) return;
+                if (submitted) {
+                    form.submit();
+                } else {
+                    status.textContent = 'Showing previous results. Press Enter to retry the search.';
+                }
             });
         }
 
         searchInput.addEventListener('input', function () {
-            clearTimeout(timer);
+            cancelSearch();
             timer = setTimeout(runSearch, 250);
         });
-        if (form) {
-            form.addEventListener('submit', function (event) {
-                event.preventDefault();
-                clearTimeout(timer);
-                runSearch();
-            });
-        }
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            cancelSearch();
+            runSearch(true);
+        });
     }
 
     /* ── Shared requestor-modal open/close (same as Create Request) ── */

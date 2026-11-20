@@ -179,6 +179,20 @@ class LoginRoutingTests(TestCase):
                 if path == "/accounts/login/":
                     self.assertEqual(response.redirect_chain[0], ("/?next=%2Faccounts%2Fprofile%2F", 307))
 
+    def test_login_animation_script_only_loads_with_welcome_overlay(self):
+        self.user.show_login_banner = True
+        self.user.save(update_fields=["show_login_banner"])
+        destination = reverse("accounts:update")
+        result = self.client.post(
+            reverse("login"), {"username": self.user.username, "password": "routing-test-password", "next": destination},
+            follow=True,
+        )
+        self.assertContains(result, "data-login-success-overlay")
+        self.assertContains(result, static("js/login-success.js"))
+        ordinary = self.client.get(destination)
+        self.assertNotContains(ordinary, "data-login-success-overlay")
+        self.assertNotContains(ordinary, static("js/login-success.js"))
+
     def test_legacy_invalid_credentials_render_validation_at_root(self):
         response = self.client.post(
             "/accounts/login/", {"username": self.user.username, "password": "incorrect-password"},

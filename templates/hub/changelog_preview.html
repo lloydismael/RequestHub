@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}{{ entry.title }} · Request Hub{% endblock %}
+{% block body_class %}{% if admin_preview %}management-page{% else %}notifications-page{% endif %}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'hub/changelogs.css' %}?v=20261120-preview">{% endblock %}
+
+{% partialdef preview %}
+{% if stale %}
+    <div class="my-2">
+        <p class="mb-1">This release's comparisons have changed.</p>
+        <a href="{{ back_url }}" data-changelog-preview-refresh>Refresh published updates</a> and reopen the comparison.
+    </div>
+{% else %}
+    <div data-changelog-preview-content>
+        {% if admin_preview %}
+            {% include 'hub/partials/changelog_entry.html' %}
+        {% else %}
+            {% include 'hub/partials/changelog_comparison.html' %}
+        {% endif %}
+    </div>
+{% endif %}
+{% endpartialdef %}
+
+{% block content %}
+{% if admin_preview %}
+    <a class="btn btn-outline-primary mb-3" href="{{ back_url }}">Back to release history</a>
+    {% partial preview %}
+{% else %}
+    {% if not stale %}<a class="btn btn-outline-primary mb-3" href="{{ back_url }}">Back to published updates</a>{% endif %}
+    <article class="glass-card cl-entry" aria-labelledby="comparison-heading">
+        <p class="cl-eyebrow">{{ entry.title }}</p>
+        <h1 class="h4 mb-3" id="comparison-heading">{% if stale %}Comparison changed{% else %}{{ comparison.title }}{% endif %}</h1>
+        {% partial preview %}
+    </article>
+{% endif %}
+{% endblock %}

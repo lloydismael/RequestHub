@@ -1,0 +1,142 @@
+{% partialdef metric %}<div><dt>{{ label }}</dt><dd><span data-mon="{{ key }}">—</span>{% if platform %}<small data-mon="{{ key }}-sample">No sample yet</small>{% endif %}</dd></div>{% endpartialdef %}
+
+<section class="tab-pane show active monitor" id="monitoring-pane" aria-labelledby="monitoring-tab"
+         data-live-url="{% url 'hub:monitoring-live' %}" data-platform-url="{% url 'hub:monitoring-platform' %}">
+    <div class="monitor-panel monitor-hero">
+        <div>
+            <p class="monitor-eyebrow">System health</p>
+            <h2>Monitoring</h2>
+            <p>Web app performance, PostgreSQL health, and Azure resource usage.</p>
+        </div>
+        <div class="monitor-actions">
+            <span class="monitor-badge" data-mon="poll-status" role="status">Waiting for live data</span>
+            <button type="button" class="btn monitor-button" data-monitor-pause disabled>Pause updates</button>
+            <button type="button" class="btn monitor-button monitor-button--accent" data-monitor-refresh disabled>
+                <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>Refresh now
+            </button>
+        </div>
+        <noscript><p>Live readings require JavaScript.</p></noscript>
+    </div>
+
+    <div class="monitor-grid monitor-overview">
+        <article class="monitor-panel monitor-stat">
+            <h3>Web app p95 latency <i class="bi bi-activity" aria-hidden="true"></i></h3>
+            <p class="monitor-number" data-mon="app-p95">—</p>
+            <p>Responding Django worker · last 60 s</p>
+            <p class="monitor-sample" data-mon="app-sample">No sample yet</p>
+        </article>
+        <article class="monitor-panel monitor-stat">
+            <h3>Database query latency <i class="bi bi-database" aria-hidden="true"></i></h3>
+            <p class="monitor-number" data-mon="db-latency">—</p>
+            <p>Direct PostgreSQL probe</p>
+            <p class="monitor-sample" data-mon="db-sample">No sample yet</p>
+        </article>
+        <article class="monitor-panel monitor-stat">
+            <h3>Database CPU usage <i class="bi bi-cpu" aria-hidden="true"></i></h3>
+            <p class="monitor-number" data-mon="cpu_percent">—</p>
+            <p>PostgreSQL server · Azure Monitor</p>
+            <p class="monitor-sample" data-mon="cpu_percent-sample">No sample yet</p>
+        </article>
+        <article class="monitor-panel monitor-stat">
+            <h3>Database storage <i class="bi bi-device-ssd" aria-hidden="true"></i></h3>
+            <p class="monitor-number" data-mon="storage_used">—</p>
+            <meter max="100" aria-label="Database storage used, percent" data-storage-meter hidden></meter>
+            <p data-mon="storage-details">Used and free server space</p>
+            <p class="monitor-sample" data-mon="storage_used-sample">No sample yet</p>
+        </article>
+    </div>
+
+    <div class="monitor-grid">
+        <section class="monitor-panel" aria-labelledby="monitor-latency-title">
+            <h3 id="monitor-latency-title">Web app latency</h3>
+            <p>Last 5 minutes · responding worker · milliseconds</p>
+            <p class="monitor-legend"><span>p95</span><span>Average</span></p>
+            <div class="monitor-chart">
+                <svg viewBox="0 0 600 175" aria-hidden="true" data-monitor-chart="app"></svg>
+                <p data-mon="app-chart-empty">Waiting for latency readings</p>
+            </div>
+            <p class="monitor-range"><span>5 min ago</span><span data-mon="app-chart-end">—</span></p>
+            <details>
+                <summary>View latency readings</summary>
+                <table class="monitor-table" aria-label="Worker latency samples in milliseconds">
+                    <thead><tr><th scope="col">Sample time</th><th scope="col">p95</th><th scope="col">Average</th></tr></thead>
+                    <tbody data-monitor-table="app"></tbody>
+                </table>
+            </details>
+        </section>
+        <section class="monitor-panel" aria-labelledby="monitor-utilization-title">
+            <h3 id="monitor-utilization-title">Database server utilization</h3>
+            <p>Last 15 minutes · Azure Monitor · percent</p>
+            <p class="monitor-legend"><span>CPU usage</span><span>Storage used</span></p>
+            <div class="monitor-chart">
+                <svg viewBox="0 0 600 175" aria-hidden="true" data-monitor-chart="platform"></svg>
+                <p data-mon="platform-chart-empty">Waiting for Azure samples</p>
+            </div>
+            <p class="monitor-range"><span>15 min ago</span><span data-mon="platform-chart-end">—</span></p>
+            <details>
+                <summary>View utilization readings</summary>
+                <table class="monitor-table" aria-label="Database utilization samples in percent">
+                    <thead><tr><th scope="col">Sample time</th><th scope="col">CPU usage</th><th scope="col">Storage used</th></tr></thead>
+                    <tbody data-monitor-table="platform"></tbody>
+                </table>
+            </details>
+        </section>
+    </div>
+
+    <h3 class="monitor-section-title">Live diagnostics <small>Checked every 5 seconds while visible</small></h3>
+    <div class="monitor-grid">
+        <section class="monitor-panel" aria-labelledby="monitor-app-title">
+            <span class="monitor-badge monitor-source" data-mon="app-status">Waiting</span>
+            <h4 id="monitor-app-title">Django web app</h4>
+            <p>Responding worker · last 60 s unless noted</p>
+            <dl class="monitor-metrics">
+                {% with label='Completed requests' key='app-requests' %}{% partial metric %}{% endwith %}
+                {% with label='Average response time' key='app-average' %}{% partial metric %}{% endwith %}
+                {% with label='5xx errors' key='app-errors' %}{% partial metric %}{% endwith %}
+                {% with label='Browser-to-app round trip (last)' key='app-roundtrip' %}{% partial metric %}{% endwith %}
+            </dl>
+        </section>
+        <section class="monitor-panel" aria-labelledby="monitor-db-title">
+            <span class="monitor-badge monitor-source" data-mon="db-status">Waiting</span>
+            <h4 id="monitor-db-title">PostgreSQL</h4>
+            <p>Request Hub database · direct probe</p>
+            <dl class="monitor-metrics">
+                {% with label='Logical database size' key='db-size' %}{% partial metric %}{% endwith %}
+                {% with label='Open connections' key='db-connections' %}{% partial metric %}{% endwith %}
+                {% with label='Transactions per second' key='db-transactions' %}{% partial metric %}{% endwith %}
+                {% with label='Sessions waiting for locks' key='db-locks' %}{% partial metric %}{% endwith %}
+                {% with label='Buffer cache hit rate' key='db-cache' %}{% partial metric %}{% endwith %}
+            </dl>
+        </section>
+    </div>
+
+    <h3 class="monitor-section-title">Azure platform metrics <small>One-minute samples · delivery can lag</small></h3>
+    <p class="monitor-platform-note" data-mon="platform-note" hidden></p>
+    <div class="monitor-grid">
+        <section class="monitor-panel" aria-labelledby="monitor-site-title">
+            <span class="monitor-badge monitor-source" data-mon="site-status">Waiting</span>
+            <h4 id="monitor-site-title">App Service</h4>
+            <p>All instances · most recent reported minute · includes Monitoring traffic</p>
+            <dl class="monitor-metrics">
+                {% with label='Requests' key='Requests' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Average response time' key='HttpResponseTime' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='5xx errors' key='Http5xx' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Memory working set' key='AverageMemoryWorkingSet' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='CPU time' key='CpuTime' platform=True %}{% partial metric %}{% endwith %}
+            </dl>
+        </section>
+        <section class="monitor-panel" aria-labelledby="monitor-server-title">
+            <span class="monitor-badge monitor-source" data-mon="server-status">Waiting</span>
+            <h4 id="monitor-server-title">PostgreSQL Flexible Server</h4>
+            <p>Server-wide · most recent reported minute</p>
+            <dl class="monitor-metrics">
+                {% with label='Memory usage' key='memory_percent' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Disk I/O' key='iops' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Server connections' key='active_connections' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Failed connections' key='connections_failed' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Backup storage used' key='backup_storage_used' platform=True %}{% partial metric %}{% endwith %}
+            </dl>
+        </section>
+    </div>
+    <p class="monitor-footnote">Times are shown in your local timezone. Django request metrics exclude health probes and Monitoring polls. p95 above 10,000 ms is shown as a lower bound, not plotted.</p>
+</section>

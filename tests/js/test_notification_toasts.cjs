@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'notification-toasts.js'), 'utf8');
 
-function start({ initial = 10, stored = null, storageUnavailable = false, notificationPage = false, immediatePagePoll = false } = {}) {
+function start({ initial = 10, stored = null, storageUnavailable = false, notificationPage = null, immediatePagePoll = false } = {}) {
     const config = { dataset: { url: '/dashboard/toasts/', userId: '1', initialCursor: String(initial) } };
     const region = {
         children: [],
@@ -34,7 +34,17 @@ function start({ initial = 10, stored = null, storageUnavailable = false, notifi
         };
     }
     const navLink = element();
-    let page = notificationPage ? { content: 'old notifications', contains() { return false; }, replaceWith(next) { page = next; } } : null;
+    const activityBadge = element();
+    function makePage(content, dataset) {
+        return {
+            content, dataset,
+            contains() { return false; },
+            querySelector(selector) { return selector === '[data-notification-activity-count]' ? activityBadge : null; },
+            replaceWith(next) { page = next; },
+        };
+    }
+    let page = notificationPage ? makePage('old notifications', notificationPage) : null;
+    let refreshedState = '';
     const document = {
         hidden: false,
         activeElement: null,
@@ -53,17 +63,21 @@ function start({ initial = 10, stored = null, storageUnavailable = false, notifi
             getItem() { if (storageUnavailable) throw new Error('Storage unavailable'); return value; },
             setItem(key, next) { if (storageUnavailable) throw new Error('Storage unavailable'); value = next; },
         },
-        location: { origin: 'http://localhost', href: 'http://localhost/notifications/?category=mention&filter=unread' },
-                setTimeout(callback, delay) { if (immediatePagePoll && delay === 0) callback(); return 0; },
-                clearTimeout() {},
-                setInterval() {},
-                addEventListener() {},
-            };
+        location: {
+            origin: 'http://localhost',
+            href: 'http://localhost/notifications/' + (notificationPage?.notificationPage === 'changelogs'
+                ? '?tab=changelogs' : '?category=mention&filter=unread'),
+        },
+        setTimeout(callback, delay) { if (immediatePagePoll && delay === 0) callback(); return 0; },
+        clearTimeout() {},
+        setInterval() {},
+        addEventListener() {},
+    };
     vm.runInNewContext(source, {
         document, window, URL, Set,
         DOMParser: class {
             parseFromString(content) {
-                return { querySelector: () => ({ content, contains() { return false; }, replaceWith(next) { page = next; } }) };
+                return { querySelector: () => makePage(content, { notificationPage: 'activity', notificationState: refreshedState }) };
             }
         },
         fetch(url) {
@@ -75,10 +89,11 @@ function start({ initial = 10, stored = null, storageUnavailable = false, notifi
         },
     });
     return {
-        region, requests, navLink,
+        region, requests, navLink, activityBadge,
         get page() { return page; },
         async poll(payload) {
             await new Promise(setImmediate);
+            refreshedState = [payload.latest_id, payload.total_count, payload.unread_count].join(':');
             responses.push(payload);
             listeners.visibilitychange();
             await new Promise(setImmediate);
@@ -138,8 +153,25 @@ test('authoritative mention counts update the badge and clear it after reading',
     assert.equal(app.navLink.querySelector('[data-notification-badge]'), null);
 });
 
+test('an unchanged initial poll does not fetch the Activity page again', async () => {
+    const app = start({ notificationPage: { notificationPage: 'activity', notificationState: '11:2:1' } });
+    await app.poll({ ok: true, events: [], next_cursor: 11, latest_id: 11, total_count: 2, unread_count: 1 });
+    assert.equal(app.page.content, 'old notifications');
+    assert.ok(app.requests.every(url => url.pathname !== '/notifications/'));
+});
+
+test('new activity updates the unread badge without reloading open changelog evidence', async () => {
+    const app = start({ notificationPage: { notificationPage: 'changelogs' } });
+    await app.poll({ ok: true, events: [], next_cursor: 11, latest_id: 11, total_count: 2, unread_count: 2 });
+    assert.ok(app.requests.every(url => url.pathname !== '/notifications/'));
+    assert.equal(app.page.content, 'old notifications');
+    assert.equal(app.activityBadge.textContent, '2');
+    assert.equal(app.activityBadge.attributes['aria-label'], '2 unread');
+    assert.equal(app.activityBadge.classList.contains('cl-tab__count--unread'), true);
+});
+
 test('notification page refreshes without losing category or read filters', async () => {
-    const app = start({ notificationPage: true });
+    const app = start({ notificationPage: { notificationPage: 'activity', notificationState: '10:0:0' } });
     const state = { ok: true, events: [{ id: 11, type: 'mention' }], next_cursor: 11, unread_count: 1, total_count: 1, latest_id: 11 };
     await app.poll(state);
     assert.equal(app.page.content, 'fresh notifications');
@@ -152,7 +184,7 @@ test('notification page refreshes without losing category or read filters', asyn
 });
 
 test('more toast events are polled after the notification page refresh completes', async () => {
-    const app = start({ notificationPage: true, immediatePagePoll: true });
+    const app = start({ notificationPage: { notificationPage: 'activity', notificationState: '10:0:0' }, immediatePagePoll: true });
     await app.poll({ ok: true, events: [{ id: 11, type: 'mention' }], next_cursor: 11, has_more: true, unread_count: 1, total_count: 1, latest_id: 11 });
     assert.equal(app.requests.filter(url => url.pathname === '/dashboard/toasts/').length, 3);
 });

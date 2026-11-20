@@ -145,9 +145,9 @@ Recipes in `hub/changelog_capture_recipes.json` use schema 1, a unique `id`, and
 
 When an uncovered change touches templates, stylesheets, or browser scripts, it needs an explicit recipe or manual screenshots. Other uncovered changes can use a `repository_change` report from the exact parent and change snapshots. Reports show public paths, presence, byte counts, and fingerprints, but not file contents. Existing packaged reports remain usable as technical evidence when the UI cannot be recovered. The Notifications feed keeps reports and documentation under **Technical evidence** and screenshots under **Visual changes**. Each scene declares a bounded `title`, `before_text`, `after_text`, and optional `viewport` (`width` 320-1920; `height` 240-1600):
 
-- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, changelog display or editor, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app.
+- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, changelog display, editor, history preview or Notifications feed, Management Monitoring, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app. The `changelog-loading` recipe opens native disclosures with scripts disabled to capture the server-rendered fallback in Management and the mobile Notifications feed. These screenshots document the fallback, not load times. Monitoring captures show the shell before readings load.
 - `kind: "document"` selects a repository-relative text `path` and Markdown `heading`. Code blocks and private configuration/credential paths are rejected.
-- `kind: "report"` selects the allowlisted `changelog_contract` deterministic report. It observes historical release-manifest behavior with synthetic inputs, not live provider calls.
+- `kind: "report"` selects the allowlisted `changelog_contract` behavior report or `repository_change` file fingerprint report. Fingerprints cover safe paths changed from the first parent and can accompany a UI scene to document related backend, configuration, documentation, and test changes. Neither report calls a live provider.
 
 All configured scenes must render successfully. A UI recipe must produce at least one visually different UI pair; pixel-identical UI pairs are omitted. A changed technical report cannot satisfy that check. Source revisions, recipes, fixture/runner implementation and pinned dependencies determine the automatic-cache fingerprint. Verified screen evidence can replace generic repository reports during CI import and database sync; older reports cannot displace screen evidence or admin uploads.
 
@@ -184,6 +184,26 @@ Each annotated commit retains its `sha`, `type` and `title`, and can add `before
 ```
 
 Paths are relative to `hub/changelog_assets/`; absolute paths, traversal and unsupported formats are rejected. Capture revisions and notes are shown alongside the comparisons instead of implying that every pre-change snapshot came from the preceding numbered release. Replacing screenshot files in the editor clears their old capture provenance. Run `python manage.py sync_release_changelog` to import packaged evidence locally. Screenshots inherit the release's visibility: signed-in readers can view only published, non-future releases, admins can preview drafts, and responses use `no-store`.
+
+### Unreleased: page load performance
+
+- **Management:** Previously, Users, Accounts, Sign-In Logs and Forms rendered together. Each now renders only its own data and pane, and only Forms initializes the people directory. Users search returns just the rows, count and pager, ignores superseded responses, and keeps the previous results with a retry message on failure. Invalid user creation and account saves retain entered values and errors. Accounts keeps its bulk editor and warns before leaving with unsaved edits.
+- **Changelogs:** Management release history loads full previews only when opened. Notifications loads the first visual pair and any release-wide comparison with the page, and defers other visual and technical pairs. Direct links work without scripts and return to the originating page. If a release was edited, an outdated link offers to refresh the feed at the release rather than showing a different comparison. Admin previews remain restricted, readers cannot fetch drafts or future releases, and preview responses are private and not cached.
+- **Shared pages:** The navigation badge and Notifications reuse counts within each request without changing who can see Activity or toast events. Activity does not reload after an unchanged poll; it snapshots the feed before pagination so concurrent arrivals still trigger a refresh. Polling on Changelogs updates only the unread badge. The welcome animation script loads only when its post-login overlay is shown.
+- **Regression coverage and evidence:** Added Django and Chromium checks for pane isolation, search recovery, Accounts edits, paginated return links, stale comparison recovery, preview visibility and caching, and login asset scoping. Notification tests cover scoped queries and refreshes. The `changelog-loading` recipe captures before and after Management history and mobile Notifications disclosures with scripts disabled. Live Chromium also loaded both sides of comparisons, checked that polling preserves open evidence, and verified that a test release became visible to a non-admin in Notifications only after an admin published it in the disposable database.
+
+Local comparison against `b61e6ab` used the same synthetic PostgreSQL fixture and two alternating rounds of seven warm requests per route. The ranges are server-side medians, not browser navigation or production timings. Payloads are uncompressed HTML.
+
+| Route | Median before → after | HTML before → after | SQL queries before → after |
+| --- | --- | --- | --- |
+| Management → Users | 924–937 ms → 208–222 ms | 1.11 MB → 337 KB | 18 → 10 |
+| Management → Users search | 896–947 ms → 138–180 ms | 1.11 MB → 264 KB | 18 → 6 |
+| Management → Changelogs | 125–146 ms → 41–53 ms | 381 KB → 59 KB | 8 → 7 |
+| Notifications → Changelogs | 179–184 ms → 69–102 ms | 367 KB → 216 KB | 9 → 5 |
+
+Management Sign-In Logs and Forms also served less HTML (about 176 KB and 59 KB, respectively, down from 1.11 MB each). Activity dropped from 14 queries to 6 and no longer makes an immediate duplicate page request. Dashboard, Reports, PPT, and Profile each used one fewer query; these runs did not establish a consistent speedup on those pages. Accounts dropped to 694 KB but still renders the full 350-row bulk formset, and its timing ranges overlapped.
+
+The after screenshots are working-tree captures, not exact Git revision evidence. Run trusted CI against the actual release revision and its first parent before packaging. Verify the numbered release and both sides of its comparisons in **Notifications → Changelogs** as a non-admin after authorized publication.
 
 ## Release speed and timing
 

@@ -119,9 +119,8 @@ class FormEditorViewTests(TestCase):
         self.assertEqual(response.context["active_tab"], "forms")
         self.assertInHTML(
             '<a class="nav-link active" id="forms-tab" '
-            'href="%s?tab=forms" data-bs-toggle="tab" data-bs-target="#forms-pane" '
-            'role="tab" aria-controls="forms-pane" aria-selected="true">'
-            '<i class="bi bi-ui-checks me-1"></i>Forms</a>' % reverse("hub:management"),
+            'href="%s?tab=forms" aria-current="page">'
+            '<i class="bi bi-ui-checks me-1" aria-hidden="true"></i>Forms</a>' % reverse("hub:management"),
             response.content.decode(),
         )
 

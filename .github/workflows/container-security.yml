@@ -292,7 +292,7 @@ jobs:
           python -m unittest discover -s scripts -p test_changelog_capture_workflow.py
           python -m unittest discover -s scripts -p test_release_evidence.py
           python -m unittest discover -s scripts -p test_container_smoke.py
-          node --test tests/js/test_notification_toasts.cjs
+          node --test tests/js/test_notification_toasts.cjs tests/js/test_monitoring.cjs
           bash scripts/test-deploy-production.sh
           bash scripts/test-ci-routing.sh
           bash scripts/test-release-preflight.sh

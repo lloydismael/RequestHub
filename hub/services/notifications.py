@@ -8,23 +8,35 @@ from hub.models import Notification, Request
 
 
 ADMIN_NOTIFICATION_ROLES = {User.Roles.ADMIN, User.Roles.PM_ESG}
+TOAST_EVENT_TYPES = (Notification.EventType.NEW_REQUEST, Notification.EventType.ASSIGNMENT, Notification.EventType.MENTION)
+
+
+def _activity_scope(user: User):
+    if user.role in ADMIN_NOTIFICATION_ROLES:
+        return Q(source__icontains="new request") | Q(event_type=Notification.EventType.MENTION)
+    return Q()
 
 
 def visible_notifications(user: User):
+    return user.notifications.filter(_activity_scope(user))
+
+
+def notification_summary(user: User, *, include_toast_cursor: bool = False) -> dict[str, int]:
     queryset = user.notifications.all()
-    if user.role in ADMIN_NOTIFICATION_ROLES:
-        queryset = queryset.filter(Q(source__icontains="new request") | Q(event_type=Notification.EventType.MENTION))
-    return queryset
-
-
-def notification_summary(user: User) -> dict:
-    summary = visible_notifications(user).aggregate(
-        unread_count=Count("pk", filter=Q(is_read=False)),
-        total_count=Count("pk"),
-        latest_id=Max("pk"),
+    activity = _activity_scope(user)
+    aggregates = {}
+    if include_toast_cursor:
+        # Toast events aren't restricted to the role's Activity feed.
+        aggregates["toast_cursor"] = Max("pk", filter=Q(event_type__in=TOAST_EVENT_TYPES), default=0)
+    else:
+        queryset = queryset.filter(activity)
+        activity = Q()
+    return queryset.aggregate(
+        unread_count=Count("pk", filter=activity & Q(is_read=False)),
+        total_count=Count("pk", filter=activity),
+        latest_id=Max("pk", filter=activity, default=0),
+        **aggregates,
     )
-    summary["latest_id"] = summary["latest_id"] or 0
-    return summary
 
 
 def _user_label(user: User) -> str:

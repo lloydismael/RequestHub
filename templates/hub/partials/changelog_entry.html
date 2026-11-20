@@ -42,7 +42,11 @@
         {% for comparison in evidence.visual %}
         <details class="cl-visual-change"{% if forloop.first %} open{% endif %}>
             <summary>{{ comparison.title }} <span class="cl-version">Before &amp; after</span></summary>
-            <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter %}</div>
+            {% if defer_comparisons and not forloop.first %}
+                {% include 'hub/partials/changelog_deferred_comparison.html' with section='visual' comparison_index=forloop.counter %}
+            {% else %}
+                <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter %}</div>
+            {% endif %}
         </details>
         {% endfor %}
     </section>
@@ -54,7 +58,11 @@
         {% for comparison in evidence.technical %}
         <details class="cl-visual-change">
             <summary>{{ comparison.title }}</summary>
-            <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter technical=True %}</div>
+            {% if defer_comparisons %}
+                {% include 'hub/partials/changelog_deferred_comparison.html' with section='technical' comparison_index=forloop.counter %}
+            {% else %}
+                <div class="mt-3">{% include 'hub/partials/changelog_comparison.html' with comparison_index=forloop.counter technical=True %}</div>
+            {% endif %}
         </details>
         {% endfor %}
     </details>

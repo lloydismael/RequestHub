@@ -1,0 +1,36 @@
+{
+  "checkout_head": "b61e6ab732984cfe1c0450edf63bdebf7e744c95",
+  "fixture": "Same synthetic administrator, offline vendor assets and desktop viewport. Real Management templates with page scripts disabled. Before uses the saved pre-feature Management template over the working tree; after uses the implemented working tree. These are not exact revision or live metric captures.",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "after": {
+    "file": "management-monitoring-after.png",
+    "sha256": "d47ae311f27026cac7e99dde958f862326bb60e134bbe0888055224c908444b8",
+    "size_px": [
+      1440,
+      1630
+    ],
+    "sources_sha256": {
+      "templates/base.html": "a3a0b5228acd8ee38d736629f0372cfdb2747b495984a746ddc1fdc632297caa",
+      "templates/hub/management.html": "15d76d2af6dab5532e369a48e1831ca5c3f2b60edd604a0df3a4089a451f5570",
+      "templates/hub/partials/changelog_management.html": "7935d4469a74b9495f8d1457db978c4b505dd62a0a164a8220725b9d8316d377",
+      "templates/hub/partials/monitoring.html": "0cb72fcd6a897ed6734e9e38f7369200a225efeb0748a0c7ebcf7092f6a95ef9",
+      "static/hub/monitoring.css": "08c453d4dda073ab716a77f135d1e8c327ec1cd24ac0b0d752f571454f150dbb"
+    }
+  },
+  "before": {
+    "file": "management-monitoring-before.png",
+    "sha256": "a65ccbcc2bb1a69fa9cb3cb15484e9811a40a16d1bd3f0cab0a8c8306622c774",
+    "size_px": [
+      1440,
+      1579
+    ],
+    "sources_sha256": {
+      "templates/base.html": "a3a0b5228acd8ee38d736629f0372cfdb2747b495984a746ddc1fdc632297caa",
+      "templates/hub/management.html": "94a31bd6abdd8b8111003ce0d8d3312612e0f58fcd686ccb3a90f4914db20791",
+      "templates/hub/partials/changelog_management.html": "7935d4469a74b9495f8d1457db978c4b505dd62a0a164a8220725b9d8316d377"
+    }
+  }
+}

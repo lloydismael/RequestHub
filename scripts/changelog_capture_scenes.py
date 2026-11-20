@@ -215,7 +215,7 @@ def _ui(snapshot, fixture):
     from hub.models import Changelog
     entry = Changelog(
         pk=1, title="Synthetic release fixture", previous_version="v0", new_version="v1",
-        release_date=date(2026, 11, 6),
+        release_date=date(2026, 11, 6), updated_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
         summary="The same unsaved release fixture is rendered at both source revisions.",
         release_sha="1" * 40,
         changes={"commits": [
@@ -228,15 +228,34 @@ def _ui(snapshot, fixture):
             }]},
         ]},
     )
-    if fixture == "changelog_editor":
+    if fixture == "management_monitoring":
+        from django.core.paginator import Paginator
+        from accounts.models import User
         from hub.changelog_forms import ChangelogForm
 
-        entry.changes["commits"].append({"sha": "4" * 40, "type": "fixed", "title": "Synthetic form update"})
-        for change in entry.changes["commits"]:
-            change["requires_comparison"] = True
-        context["capture_component"] = render_to_string("hub/partials/changelog_management.html", {
-            "changelog_entry": entry, "changelog_form": ChangelogForm(instance=entry),
+        request.user = User(pk=1, username="demo-admin", first_name="Demo", last_name="Admin", role=User.Roles.ADMIN)
+        monitoring = (snapshot / "templates" / "hub" / "partials" / "monitoring.html").is_file()
+        context.update(active_tab="monitoring" if monitoring else "changelogs", total_users=5, total_accounts=3)
+        if not monitoring:
+            context.update(changelog_page=Paginator([entry], 10).page(1), changelog_form=ChangelogForm())
+        return render_to_string("hub/management.html", context, request=request)
+    if fixture == "changelog_feed":
+        return render_to_string("hub/notifications.html", {
+            **context, "active_tab": "changelogs", "changelog_count": 1, "unread_count": 0,
+            "changelogs": [entry],
         }, request=request)
+    if fixture in {"changelog_editor", "changelog_history"}:
+        from django.core.paginator import Paginator
+        from hub.changelog_forms import ChangelogForm
+
+        if fixture == "changelog_editor":
+            entry.changes["commits"].append({"sha": "4" * 40, "type": "fixed", "title": "Synthetic form update"})
+            for change in entry.changes["commits"]:
+                change["requires_comparison"] = True
+            history = {"changelog_entry": entry, "changelog_form": ChangelogForm(instance=entry)}
+        else:
+            history = {"changelog_page": Paginator([entry], 10).page(1), "changelog_form": ChangelogForm()}
+        context["capture_component"] = render_to_string("hub/partials/changelog_management.html", history, request=request)
     else:
         context["capture_component"] = render_to_string("hub/partials/changelog_entry.html", {"entry": entry})
     template = engines["django"].from_string(

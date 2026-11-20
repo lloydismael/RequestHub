@@ -1,6 +1,8 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
+from .changelog_views import ChangelogAdminPreviewView, ChangelogComparisonView
+from .monitoring_views import MonitoringLiveView, MonitoringPlatformView
 from .notification_views import (
     NotificationDeleteView,
     NotificationFollowRedirectView,
@@ -82,6 +84,7 @@ urlpatterns = [
     path("assistant/conversation/reset/", assistant_conversation_reset, name="assistant-reset"),
     path("management/changelogs/new/", UserManagementView.as_view(), {"changelog_editor": True}, name="changelog-create"),
     path("management/changelogs/<int:pk>/edit/", UserManagementView.as_view(), {"changelog_editor": True}, name="changelog-edit"),
+    path("management/changelogs/<int:pk>/preview/", ChangelogAdminPreviewView.as_view(), name="changelog-preview"),
     path("dashboard/", DashboardView.as_view(), name="dashboard"),
     path("dashboard/live/", DashboardLiveDataView.as_view(), name="dashboard-live"),
     path("dashboard/toasts/", NotificationToastDataView.as_view(), name="notification-toast-data"),
@@ -103,6 +106,7 @@ urlpatterns = [
     path("requests/<int:pk>/delete/", RequestDeleteView.as_view(), name="request-delete"),
     path("requests/<int:pk>/restore/", RequestRestoreView.as_view(), name="request-restore"),
     path("notifications/", NotificationListView.as_view(), name="notifications"),
+    path("notifications/changelogs/<int:pk>/<slug:section>/<int:index>/", ChangelogComparisonView.as_view(), name="changelog-comparison"),
     path("notifications/<int:pk>/read/", NotificationReadView.as_view(), name="notification-read"),
     path("notifications/<int:pk>/follow/", NotificationFollowRedirectView.as_view(), name="notification-follow"),
     path("notifications/<int:pk>/delete/", NotificationDeleteView.as_view(), name="notification-delete"),
@@ -135,6 +139,8 @@ urlpatterns = [
     path("sqr/outlook/callback/", OutlookCallbackView.as_view(), name="sqr-outlook-callback"),
     path("sqr/<int:pk>/review/", SqrReviewUpdateView.as_view(), name="sqr-review"),
     path("management/", UserManagementView.as_view(), name="management"),
+    path("management/monitoring/live/", MonitoringLiveView.as_view(), name="monitoring-live"),
+    path("management/monitoring/platform/", MonitoringPlatformView.as_view(), name="monitoring-platform"),
     path("management/forms/", FormEditorCatalogView.as_view(), name="form-editor"),
     path("management/forms/<slug:key>/", FormEditorDetailView.as_view(), name="form-editor-detail"),
     path("management/forms/<slug:key>/history/", FormEditorHistoryView.as_view(), name="form-editor-history"),

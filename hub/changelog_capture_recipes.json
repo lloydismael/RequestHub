@@ -56,6 +56,40 @@
       }]
     },
     {
+      "id": "changelog-loading",
+      "paths": ["hub/changelog_views.py", "static/hub/changelog-previews.js", "templates/hub/changelog_preview.html", "templates/hub/partials/changelog_deferred_comparison.html"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "changelog_history", "title": "Management release preview — without scripts",
+          "before_text": "Opening a release preview reveals a comparison already present in the page.",
+          "after_text": "Opening the same preview without scripts shows a direct preview link. With scripts enabled, the comparison loads on demand."
+        },
+        {
+          "kind": "ui", "fixture": "changelog_feed", "title": "Notifications technical evidence — mobile, without scripts",
+          "before_text": "Opening a technical report reveals the before and after comparison embedded in the feed.",
+          "after_text": "Opening the same report without scripts shows a direct report link. With scripts enabled, the comparison loads on demand.",
+          "viewport": {"width": 375, "height": 844}
+        }
+      ]
+    },
+    {
+      "id": "management-monitoring",
+      "paths": ["templates/hub/partials/monitoring.html", "static/hub/monitoring.css", "static/hub/monitoring.js"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "management_monitoring", "title": "Management Monitoring",
+          "before_text": "Management did not include a Monitoring tab.",
+          "after_text": "Monitoring adds web app, database and Azure health panels. The offline capture shows the dashboard before any readings load.",
+          "viewport": {"width": 1440, "height": 1000}
+        },
+        {
+          "kind": "report", "fixture": "repository_change", "title": "Monitoring implementation and configuration",
+          "before_text": "File fingerprints before this change, including absent Monitoring modules and test files.",
+          "after_text": "Updated code, configuration, documentation and test fingerprints. No live data is captured."
+        }
+      ]
+    },
+    {
       "id": "sqr-tracker-shell",
       "paths": ["templates/hub/partials/sqr_prototype.html", "static/css/sqr-tracker-prototype.css"],
       "scenes": [{
