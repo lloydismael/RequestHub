@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from math import isfinite
 from threading import Lock
@@ -8,7 +8,7 @@ from time import monotonic
 
 import requests
 from azure.core.exceptions import AzureError, ClientAuthenticationError
-from azure.identity import ManagedIdentityCredential
+from azure.identity import AzureCliCredential, ManagedIdentityCredential
 from django.conf import settings
 from django.utils import timezone
 
@@ -58,19 +58,24 @@ WEB_APP = Resource(
 )
 
 
-@lru_cache(maxsize=1)
-def _credential():
+@lru_cache(maxsize=3)
+def _credential(auth_mode, subscription=None):
+    if auth_mode == "azure_cli":
+        return AzureCliCredential(subscription=subscription, process_timeout=5)
     return ManagedIdentityCredential(
         connection_timeout=2, read_timeout=2, retry_total=0, redirect_max=0, logging_enable=False,
     )
 
 
-def read_metrics(resource_id, resource, now):
-    token = _credential().get_token(f"{ARM_ORIGIN}/.default").token
+def read_metrics(resource_id, resource, now, auth_mode):
+    subscription = resource_id.split("/", 3)[2].lower() if auth_mode == "azure_cli" else None
+    token = _credential(auth_mode, subscription).get_token(f"{ARM_ORIGIN}/.default").token
     url = f"{ARM_ORIGIN}{resource_id}/providers/Microsoft.Insights/metrics"
+    end = now.astimezone(UTC)
+    start = end - timedelta(minutes=HISTORY_MINUTES)
     params = {
         "api-version": "2023-10-01", "metricnamespace": resource.namespace, "interval": "PT1M",
-        "timespan": f"{(now - timedelta(minutes=HISTORY_MINUTES)).isoformat()}/{now.isoformat()}",
+        "timespan": f"{start:%Y-%m-%dT%H:%M:%SZ}/{end:%Y-%m-%dT%H:%M:%SZ}",
     }
     records, failed = [], {}
     for aggregation, names in resource.groups():
@@ -131,6 +136,7 @@ def _series(records, resource, now):
 @dataclass(frozen=True)
 class Reading:
     resource_id: str
+    auth_mode: str
     next_check: float
     history: dict
     failed: dict
@@ -148,40 +154,51 @@ class AzureMetrics:
         if not self.resource.valid_id(resource_id):
             self._reading = None
             return {"status": "invalid_configuration", "metrics": {}}
+        auth_mode = settings.AZURE_MONITOR_AUTH_MODE
+        if auth_mode != "managed_identity" and (auth_mode != "azure_cli" or settings.AZURE_MONITOR_ON_APP_SERVICE):
+            self._reading = None
+            return {"status": "invalid_auth_configuration", "metrics": {}}
         now = timezone.now() if now is None else now
         tick = monotonic() if tick is None else tick
-        reading = self._reading
-        if reading is None or reading.resource_id != resource_id or tick >= reading.next_check:
+
+        def matching_reading():
+            reading = self._reading
+            if reading is not None and (reading.resource_id, reading.auth_mode) == (resource_id, auth_mode):
+                return reading
+            return None
+
+        reading = matching_reading()
+        if reading is None or tick >= reading.next_check:
             if _refresh_slot.acquire(blocking=False):
                 try:
-                    reading = self._reading
-                    if reading is None or reading.resource_id != resource_id or tick >= reading.next_check:
-                        reading = self._read(resource_id, now, tick, reading)
+                    reading = matching_reading()
+                    if reading is None or tick >= reading.next_check:
+                        reading = self._read(resource_id, auth_mode, now, tick, reading)
                         self._reading = reading
                 finally:
                     _refresh_slot.release()
             else:
-                reading = self._reading
-        if reading is None or reading.resource_id != resource_id:
+                reading = matching_reading()
+        if reading is None:
             return {"status": "loading", "metrics": {}}
         return self._present(reading, now)
 
-    def _read(self, resource_id, now, tick, previous):
+    def _read(self, resource_id, auth_mode, now, tick, previous):
         names = self.resource.average + self.resource.total
         try:
-            raw, failed = read_metrics(resource_id, self.resource, now)
+            raw, failed = read_metrics(resource_id, self.resource, now, auth_mode)
             history, metric_failures = _series(raw, self.resource, now)
             failed = {**metric_failures, **failed}
         except ClientAuthenticationError:
-            history, failed = {}, dict.fromkeys(names, "access_denied")
+            history, failed = {}, dict.fromkeys(names, "credential_unavailable")
         except (*IO_ERRORS, AttributeError, TypeError, OverflowError):
             history, failed = {}, dict.fromkeys(names, "unavailable")
-        if previous is not None and previous.resource_id == resource_id:
+        if previous is not None:
             for key, status in failed.items():
                 if status == "unavailable" and key in previous.history:
                     history[key] = previous.history[key]
         wait = FAILED_REFRESH_SECONDS if failed else NORMAL_REFRESH_SECONDS
-        return Reading(resource_id, tick + wait, history, failed)
+        return Reading(resource_id, auth_mode, tick + wait, history, failed)
 
     def _present(self, reading, now):
         metrics = {}
@@ -206,6 +223,8 @@ class AzureMetrics:
             status = "partial"
         elif "stale" in statuses:
             status = "delayed"
+        elif statuses == {"credential_unavailable"}:
+            status = "credential_unavailable"
         elif "access_denied" in statuses and "unavailable" not in statuses:
             status = "access_denied"
         else:

@@ -1,0 +1,81 @@
+{
+  "before_revision": null,
+  "after_revision": null,
+  "fixture": "Offline Chromium using the same working-tree Management templates, CSS, and JavaScript for both sides. The saved pre-fix reader and fixed reader each run against synthetic Azure credentials and responses. The browser renders each reader output with the same synthetic Admin, direct diagnostics and clock. All external requests are blocked. These are not live readings or exact release revisions.",
+  "clock_utc": "2026-11-20T16:03:27.987654+00:00",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "reader_sources_sha256": {
+    "before": "1bf43396ccb55c7a497c7b3fb818c22fda7fad760841de05692064c57e2734f0",
+    "after": "b9b6189155c879954b2cb4761c02b90f7ca7a5f515b99a864731f4e48ca9a602"
+  },
+  "shared_ui_sources_sha256": {
+    "templates/base.html": "a3a0b5228acd8ee38d736629f0372cfdb2747b495984a746ddc1fdc632297caa",
+    "templates/hub/management.html": "15d76d2af6dab5532e369a48e1831ca5c3f2b60edd604a0df3a4089a451f5570",
+    "templates/hub/partials/monitoring.html": "5a4344be9ddcc8190bbe8a774dff60f49f69256ea89cac084fff89464f85cabd",
+    "static/hub/monitoring.css": "df33663f90347eec04d1419582df304712fa2bd442e59d91e2b032d6e395f3d2",
+    "static/hub/monitoring.js": "b2eaff3c09fd0f430824aa69d63fa49f1dabbf2f9cee1f072cf31b2afba37198"
+  },
+  "scenarios": {
+    "cli-subscription": {
+      "before": {
+        "file": "cli-subscription-before.png",
+        "sha256": "3b45257c71817649d4e1f397c4268df46b71e49109d1fb1cd51c21c4add40a99",
+        "size_px": [
+          1440,
+          1554
+        ],
+        "arm_http_statuses": [
+          403,
+          403
+        ]
+      },
+      "after": {
+        "file": "cli-subscription-after.png",
+        "sha256": "1507ed952deff6808bf251dcf3619cdf6252772869a0aacf88089c1f4b485495",
+        "size_px": [
+          1440,
+          1917
+        ],
+        "arm_http_statuses": [
+          200,
+          200,
+          200,
+          200
+        ]
+      }
+    },
+    "utc-timespan": {
+      "before": {
+        "file": "utc-timespan-before.png",
+        "sha256": "b38a387ad0ceb48bf28c9d6d5828e185478570b2d9c1dd98d1e5349748e659d6",
+        "size_px": [
+          1440,
+          1554
+        ],
+        "arm_http_statuses": [
+          400,
+          400,
+          400,
+          400
+        ]
+      },
+      "after": {
+        "file": "utc-timespan-after.png",
+        "sha256": "3ce3131491e59749714b94c378a28545cb8f9274bb9d4e14b8b405a7c52778d2",
+        "size_px": [
+          1440,
+          1917
+        ],
+        "arm_http_statuses": [
+          200,
+          200,
+          200,
+          200
+        ]
+      }
+    }
+  }
+}

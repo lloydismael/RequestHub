@@ -61,7 +61,7 @@ body.dark-mode #monitoring-pane {
     color: var(--mon-accent);
     border-color: var(--mon-accent);
 }
-.monitor :is(button, summary):focus-visible { outline: 2px solid var(--mon-accent); outline-offset: 3px; }
+.monitor :is(button, summary, a):focus-visible { outline: 2px solid var(--mon-accent); outline-offset: 3px; }
 .monitor .monitor-badge {
     display: inline-flex;
     align-items: baseline;
@@ -114,7 +114,40 @@ body.dark-mode #monitoring-pane {
 .monitor .monitor-metrics dt { color: var(--mon-muted); font-weight: 500; }
 .monitor .monitor-metrics dd { margin: 0; text-align: right; font-weight: 700; overflow-wrap: anywhere; }
 .monitor .monitor-metrics small { display: block; color: var(--mon-muted); font-size: .72rem; font-weight: 500; }
-.monitor .monitor-platform-note { color: var(--mon-warning); }
+.monitor .monitor-storage-readings { margin: .5rem 0 .35rem; }
+.monitor .monitor-storage-readings div {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .5rem;
+    align-items: baseline;
+    border-bottom: 1px solid var(--mon-border);
+    padding: .25rem 0;
+}
+.monitor .monitor-storage-readings dt { color: var(--mon-muted); font-size: .8rem; }
+.monitor .monitor-storage-readings dd { margin: 0; text-align: right; font-weight: 700; overflow-wrap: anywhere; }
+.monitor .monitor-storage-readings small { display: block; color: var(--mon-muted); font-size: .72rem; font-weight: 500; }
+.monitor .monitor-logical-size { margin-top: .65rem; font-size: .78rem; }
+.monitor .monitor-logical-size strong { color: var(--mon-text); }
+.monitor .monitor-platform-notice {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .3rem .8rem;
+    margin-top: .55rem;
+    padding: .55rem .85rem;
+    border: 1px solid var(--mon-border);
+    border-radius: .65rem;
+    background: var(--mon-chart);
+}
+.monitor .monitor-platform-notice p { margin: 0; }
+.monitor .monitor-platform-notice[data-attention] { border-inline-start: 3px solid var(--mon-warning); }
+.monitor .monitor-platform-notice a { color: var(--mon-accent); font-size: .855rem; font-weight: 680; }
+.monitor .monitor-setup { margin: .85rem 0; scroll-margin-top: 5rem; }
+.monitor .monitor-setup summary { padding: 0; }
+.monitor .monitor-setup ol { color: var(--mon-muted); margin: .4rem 0; padding-inline-start: 1.4rem; font-size: .855rem; }
+.monitor .monitor-setup li + li { margin-top: .35rem; }
+.monitor code { color: var(--mon-text); overflow-wrap: anywhere; }
 .monitor .monitor-footnote { margin-top: 1rem; font-size: .77rem; }
 
 @media (max-width: 1000px) { .monitor .monitor-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -125,3 +158,5 @@ body.dark-mode #monitoring-pane {
     .monitor .monitor-stat h3 i { display: none; }
     .monitor .monitor-actions .monitor-badge { margin-right: auto; }
 }
+@media (max-width: 510px) { .monitor .monitor-stat--azure { grid-column: 1 / -1; } }
+@media (max-width: 340px) { .monitor .monitor-overview { grid-template-columns: minmax(0, 1fr); } }

@@ -1,4 +1,8 @@
 {% partialdef metric %}<div><dt>{{ label }}</dt><dd><span data-mon="{{ key }}">—</span>{% if platform %}<small data-mon="{{ key }}-sample">No sample yet</small>{% endif %}</dd></div>{% endpartialdef %}
+{% partialdef source_note %}
+    <p data-mon="{{ source }}-note">Waiting for Azure Monitor samples.</p>
+    <p data-monitor-setting="{{ source }}" hidden>Setting: <code>{{ setting }}</code></p>
+{% endpartialdef %}
 
 <section class="tab-pane show active monitor" id="monitoring-pane" aria-labelledby="monitoring-tab"
          data-live-url="{% url 'hub:monitoring-live' %}" data-platform-url="{% url 'hub:monitoring-platform' %}">
@@ -31,20 +35,78 @@
             <p>Direct PostgreSQL probe</p>
             <p class="monitor-sample" data-mon="db-sample">No sample yet</p>
         </article>
-        <article class="monitor-panel monitor-stat">
+        <article class="monitor-panel monitor-stat monitor-stat--azure">
             <h3>Database CPU usage <i class="bi bi-cpu" aria-hidden="true"></i></h3>
             <p class="monitor-number" data-mon="cpu_percent">—</p>
             <p>PostgreSQL server · Azure Monitor</p>
             <p class="monitor-sample" data-mon="cpu_percent-sample">No sample yet</p>
         </article>
-        <article class="monitor-panel monitor-stat">
-            <h3>Database storage <i class="bi bi-device-ssd" aria-hidden="true"></i></h3>
-            <p class="monitor-number" data-mon="storage_used">—</p>
+        <article class="monitor-panel monitor-stat monitor-stat--azure" aria-labelledby="monitor-storage-title">
+            <h3 id="monitor-storage-title">Database server storage <i class="bi bi-device-ssd" aria-hidden="true"></i></h3>
+            <dl class="monitor-storage-readings" data-storage-readings hidden>
+                {% with label='Used' key='storage_used' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Free' key='storage_free' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Used %' key='storage_percent' platform=True %}{% partial metric %}{% endwith %}
+            </dl>
             <meter max="100" aria-label="Database storage used, percent" data-storage-meter hidden></meter>
-            <p data-mon="storage-details">Used and free server space</p>
-            <p class="monitor-sample" data-mon="storage_used-sample">No sample yet</p>
+            <p class="monitor-sample" data-mon="storage-note">Waiting for Azure Monitor samples.</p>
+            <p class="monitor-logical-size"><strong data-mon="db-size">—</strong> logical database size<br>Direct SQL · not server disk usage</p>
         </article>
     </div>
+
+    <h3 class="monitor-section-title">Azure platform metrics <small>One-minute samples · delivery can lag</small></h3>
+    <div class="monitor-platform-notice">
+        <p data-mon="platform-note" role="status">App Service and PostgreSQL report independently of live diagnostics.</p>
+        <a href="#monitor-connection-setup" data-monitor-setup-link>Connection setup</a>
+    </div>
+    <div class="monitor-grid">
+        <section class="monitor-panel" aria-labelledby="monitor-site-title">
+            <span class="monitor-badge monitor-source" data-mon="site-status">Waiting</span>
+            <h4 id="monitor-site-title">App Service</h4>
+            <p>All instances · most recent reported minute · includes Monitoring traffic</p>
+            {% with source='site' setting='AZURE_MONITOR_WEB_APP_RESOURCE_ID' %}{% partial source_note %}{% endwith %}
+            <dl class="monitor-metrics" data-monitor-readings="site" hidden>
+                {% with label='Requests' key='Requests' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Average response time' key='HttpResponseTime' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='5xx errors' key='Http5xx' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Memory working set' key='AverageMemoryWorkingSet' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='CPU time' key='CpuTime' platform=True %}{% partial metric %}{% endwith %}
+            </dl>
+        </section>
+        <section class="monitor-panel" aria-labelledby="monitor-server-title">
+            <span class="monitor-badge monitor-source" data-mon="server-status">Waiting</span>
+            <h4 id="monitor-server-title">PostgreSQL Flexible Server</h4>
+            <p>Server-wide · most recent reported minute</p>
+            {% with source='server' setting='AZURE_MONITOR_POSTGRES_RESOURCE_ID' %}{% partial source_note %}{% endwith %}
+            <dl class="monitor-metrics" data-monitor-readings="server" hidden>
+                {% with label='Memory usage' key='memory_percent' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Disk I/O' key='iops' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Server connections' key='active_connections' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Failed connections' key='connections_failed' platform=True %}{% partial metric %}{% endwith %}
+                {% with label='Backup storage used' key='backup_storage_used' platform=True %}{% partial metric %}{% endwith %}
+            </dl>
+        </section>
+    </div>
+    <details class="monitor-panel monitor-setup" id="monitor-connection-setup">
+        <summary>Connection setup</summary>
+        <div class="monitor-grid">
+            <div>
+                <h4>Local development</h4>
+                <ol>
+                    <li>Sign in with <code>az login</code> on the machine running Request Hub. Use an account with <strong>Monitoring Reader</strong> on each resource you want to monitor.</li>
+                    <li>Set <code>AZURE_MONITOR_AUTH_MODE=azure_cli</code> and the corresponding full Azure resource IDs in your local <code>.env</code>.</li>
+                </ol>
+            </div>
+            <div>
+                <h4>Azure App Service</h4>
+                <ol>
+                    <li>In App Service → Identity, turn on <strong>System assigned</strong>. Grant that identity <strong>Monitoring Reader</strong> on each monitored resource.</li>
+                    <li>Use the default <code>managed_identity</code> mode and set the full resource IDs in App Service settings.</li>
+                </ol>
+            </div>
+        </div>
+        <p>Restart Request Hub after updating settings. Compare the reported sample times and values with Azure Monitor. A SQL connection alone cannot provide server CPU or disk metrics.</p>
+    </details>
 
     <div class="monitor-grid">
         <section class="monitor-panel" aria-labelledby="monitor-latency-title">
@@ -101,7 +163,6 @@
             <h4 id="monitor-db-title">PostgreSQL</h4>
             <p>Request Hub database · direct probe</p>
             <dl class="monitor-metrics">
-                {% with label='Logical database size' key='db-size' %}{% partial metric %}{% endwith %}
                 {% with label='Open connections' key='db-connections' %}{% partial metric %}{% endwith %}
                 {% with label='Transactions per second' key='db-transactions' %}{% partial metric %}{% endwith %}
                 {% with label='Sessions waiting for locks' key='db-locks' %}{% partial metric %}{% endwith %}
@@ -110,33 +171,5 @@
         </section>
     </div>
 
-    <h3 class="monitor-section-title">Azure platform metrics <small>One-minute samples · delivery can lag</small></h3>
-    <p class="monitor-platform-note" data-mon="platform-note" hidden></p>
-    <div class="monitor-grid">
-        <section class="monitor-panel" aria-labelledby="monitor-site-title">
-            <span class="monitor-badge monitor-source" data-mon="site-status">Waiting</span>
-            <h4 id="monitor-site-title">App Service</h4>
-            <p>All instances · most recent reported minute · includes Monitoring traffic</p>
-            <dl class="monitor-metrics">
-                {% with label='Requests' key='Requests' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='Average response time' key='HttpResponseTime' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='5xx errors' key='Http5xx' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='Memory working set' key='AverageMemoryWorkingSet' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='CPU time' key='CpuTime' platform=True %}{% partial metric %}{% endwith %}
-            </dl>
-        </section>
-        <section class="monitor-panel" aria-labelledby="monitor-server-title">
-            <span class="monitor-badge monitor-source" data-mon="server-status">Waiting</span>
-            <h4 id="monitor-server-title">PostgreSQL Flexible Server</h4>
-            <p>Server-wide · most recent reported minute</p>
-            <dl class="monitor-metrics">
-                {% with label='Memory usage' key='memory_percent' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='Disk I/O' key='iops' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='Server connections' key='active_connections' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='Failed connections' key='connections_failed' platform=True %}{% partial metric %}{% endwith %}
-                {% with label='Backup storage used' key='backup_storage_used' platform=True %}{% partial metric %}{% endwith %}
-            </dl>
-        </section>
-    </div>
     <p class="monitor-footnote">Times are shown in your local timezone. Django request metrics exclude health probes and Monitoring polls. p95 above 10,000 ms is shown as a lower bound, not plotted.</p>
 </section>

@@ -76,6 +76,8 @@ telemetry_enabled = os.getenv("AZURE_TELEMETRY_ENABLED", "false").lower()
 if telemetry_enabled not in ("true", "false"):
     raise ImproperlyConfigured("AZURE_TELEMETRY_ENABLED must be true or false.")
 AZURE_TELEMETRY_ENABLED = telemetry_enabled == "true"
+AZURE_MONITOR_AUTH_MODE = os.getenv("AZURE_MONITOR_AUTH_MODE", "managed_identity").strip().lower()
+AZURE_MONITOR_ON_APP_SERVICE = bool(website_hostname or os.getenv("WEBSITE_SITE_NAME"))
 AZURE_MONITOR_POSTGRES_RESOURCE_ID = os.getenv("AZURE_MONITOR_POSTGRES_RESOURCE_ID", "").strip()
 AZURE_MONITOR_WEB_APP_RESOURCE_ID = os.getenv("AZURE_MONITOR_WEB_APP_RESOURCE_ID", "").strip()
 

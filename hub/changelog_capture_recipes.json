@@ -78,14 +78,14 @@
       "scenes": [
         {
           "kind": "ui", "fixture": "management_monitoring", "title": "Management Monitoring",
-          "before_text": "Management did not include a Monitoring tab.",
-          "after_text": "Monitoring adds web app, database and Azure health panels. The offline capture shows the dashboard before any readings load.",
+          "before_text": "Management at the first-parent revision, including the Monitoring layout if present. No live readings are captured.",
+          "after_text": "The Monitoring layout and source information at the updated revision, before readings load.",
           "viewport": {"width": 1440, "height": 1000}
         },
         {
           "kind": "report", "fixture": "repository_change", "title": "Monitoring implementation and configuration",
-          "before_text": "File fingerprints before this change, including absent Monitoring modules and test files.",
-          "after_text": "Updated code, configuration, documentation and test fingerprints. No live data is captured."
+          "before_text": "File fingerprints for this change at the first-parent revision.",
+          "after_text": "File fingerprints at the updated revision. No live data is captured."
         }
       ]
     },
