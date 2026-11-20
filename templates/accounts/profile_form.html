@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load form_customization static %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=2"><link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/profile-settings.css' %}?v=2"><link rel="stylesheet" href="{% static 'css/recovery.css' %}?v=2">{% if request.user.role == 'admin' %}<noscript><style>#profile-panel-settings { display: block; }</style></noscript>{% endif %}{% endblock %}
 {% block title %}Settings · Request Hub{% endblock %}
 {% block body_class %}profile-page-shell{% endblock %}
 {% block content %}
@@ -353,23 +353,32 @@
                 </div>
             </div>
         </form>
+        {% if request.user.role == 'admin' %}
         <div class="settings-admin-wrap">
-            {# ── Backup & Restore settings (admin only) ─────────────────────────── #}
-            {% if request.user.role == 'admin' %}
-            <section class="glass-card settings-card mb-3" id="sqr-classic-setting" data-settings-url="{% url 'hub:sqr-tracker-settings' %}" aria-labelledby="sqr-classic-setting-title">
+            <section class="glass-card settings-card" id="sqr-classic-setting" data-settings-url="{% url 'hub:sqr-tracker-settings' %}" aria-labelledby="sqr-classic-setting-title">
                 {% csrf_token %}
-                <h3 id="sqr-classic-setting-title">SQR tracker visibility</h3>
-                <p class="settings-card__intro">Global admin setting for all users. Saves immediately, separately from your personal settings.</p>
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" role="switch" id="sqr-classic-visibility" aria-describedby="sqr-classic-status"{% if show_classic_sqr_tracker %} checked{% endif %}>
-                    <label class="form-check-label" for="sqr-classic-visibility">Show SQR Tracker (Classic)</label>
+                <div class="admin-tools-bar">
+                    <div class="admin-tools-heading">
+                        <span class="admin-tools-icon" aria-hidden="true"><i class="bi bi-layout-text-window"></i></span>
+                        <div>
+                            <h2 id="sqr-classic-setting-title" class="profile-card__title">Classic SQR tracker</h2>
+                            <p id="sqr-classic-scope" class="recovery-muted mb-0">All users · Applies after SQR reload</p>
+                        </div>
+                    </div>
+                    <div class="admin-tools-controls">
+                        <span class="admin-tools-badge" id="sqr-classic-badge" data-visible="{{ show_classic_sqr_tracker|yesno:'true,false' }}">{{ show_classic_sqr_tracker|yesno:'Visible,Hidden' }}</span>
+                        <label class="settings-switch form-check form-switch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="sqr-classic-visibility" aria-label="Show SQR Tracker (Classic)" aria-describedby="sqr-classic-scope sqr-classic-help"{% if show_classic_sqr_tracker %} checked{% endif %}>
+                        </label>
+                    </div>
                 </div>
-                <p class="small text-muted mt-2 mb-0" id="sqr-classic-status" role="status" aria-live="polite">Saved visibility applies when users reload SQR. Records are not deleted.</p>
+                <span class="visually-hidden" id="sqr-classic-help">Saves immediately. No records are deleted.</span>
+                <p class="small admin-tools-status" id="sqr-classic-status" role="status"></p>
             </section>
             <script src="{% static 'js/sqr-classic-visibility.js' %}"></script>
             {% include "accounts/_recovery_center.html" %}
-            {% endif %}
         </div>
+        {% endif %}
 
         App Version {{ app_version }}
     </div>
@@ -399,18 +408,57 @@
     if (['#banner', '#themes', '#christmas'].includes(window.location.hash)) activate('themes');
     if (document.getElementById('theme-errors')) activate('themes');
     if (window.location.hash === '#settings') activate('settings');
-    if (window.location.hash === '#backup') {
-        activate('settings');
-        const backupSection = document.getElementById('profile-panel-backup');
-        if (backupSection) backupSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
 
-    document.querySelectorAll('[data-recovery-submit]').forEach(form => {
-        form.addEventListener('submit', () => {
-            form.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = true; });
-            document.getElementById('recovery-progress').hidden = false;
+    const backupSection = document.getElementById('profile-panel-backup');
+    if (backupSection) {
+        const openRecovery = () => {
+            if (window.location.hash !== '#backup') return;
+            activate('settings');
+            (backupSection.querySelector('.recovery-feedback') || document.getElementById('backup')).focus({ preventScroll: true });
+            backupSection.scrollIntoView({ block: 'start' });
+        };
+        openRecovery();
+        window.addEventListener('hashchange', openRecovery);
+
+        const dialog = document.getElementById('backup-create-dialog');
+        if (typeof dialog.showModal === 'function') {
+            const opener = document.getElementById('backup-create-button');
+            const fallback = document.getElementById('backup-create-fallback');
+            const cancel = document.getElementById('backup-create-cancel');
+            const note = document.getElementById('backup-reason');
+            dialog.append(fallback.querySelector('form'));
+            fallback.hidden = true;
+            opener.hidden = false;
+            cancel.hidden = false;
+            opener.addEventListener('click', () => {
+                dialog.showModal();
+                note.focus();
+            });
+            cancel.addEventListener('click', () => dialog.close());
+            dialog.addEventListener('close', () => opener.focus({ preventScroll: true }));
+        }
+
+        const progress = document.getElementById('recovery-progress');
+        let submittedButton;
+        backupSection.querySelectorAll('[data-recovery-submit]').forEach(form => {
+            form.addEventListener('submit', event => {
+                if (submittedButton) {
+                    event.preventDefault();
+                    return;
+                }
+                submittedButton = event.submitter || form.querySelector('button[type="submit"]');
+                submittedButton.disabled = true;
+                form.append(progress);
+                progress.hidden = false;
+            });
         });
-    });
+        window.addEventListener('pageshow', event => {
+            if (!event.persisted || !submittedButton) return;
+            submittedButton.disabled = false;
+            submittedButton = null;
+            progress.hidden = true;
+        });
+    }
 
     const bannerEditBtn = document.getElementById('banner-edit-btn');
     if (bannerEditBtn) {

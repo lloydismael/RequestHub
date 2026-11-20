@@ -1,4 +1,5 @@
 import json
+import re
 from unittest.mock import patch
 
 from django.utils import timezone
@@ -188,6 +189,45 @@ class RecoveryCenterTests(TransactionTestCase):
         self.assertContains(response, "Test snapshot")
         self.assertContains(response, "Recovery Center")
 
+    def test_created_backup_feedback_and_latest_download_are_in_recovery_center(self):
+        from accounts.models import BackupSnapshot
+
+        response = self.client.post(reverse('accounts:backup-create'), {'reason': 'Before import'}, follow=True)
+        snapshot = BackupSnapshot.objects.get()
+        html = response.content.decode()
+        feedback = f'Snapshot #{snapshot.pk} created.'
+        recovery = html.partition('id="profile-panel-backup"')[2]
+        self.assertTrue(feedback in recovery, 'The backup result is outside the section linked by the redirect.')
+        self.assertEqual(html.count(feedback), 1)
+        download = reverse('accounts:backup-download', args=[snapshot.pk])
+        latest = re.search(r'<a\b[^>]*href="' + re.escape(download) + r'"[^>]*>[^<]*(?:<i[^>]*></i>)?\s*Download latest\s*</a>', recovery)
+        self.assertIsNotNone(latest, 'The new backup should be downloadable without opening history.')
+
+    def test_deleted_request_disclosure_reopens_for_search_and_pagination(self):
+        from hub.models import Request
+
+        account = Account.objects.create(name='Recovery example')
+        deleted_at = timezone.now()
+        Request.all_objects.bulk_create([
+            Request(requestor=self.user, account=account, reference_code=f'REQ-RECOVERY-{i:02}',
+                    is_deleted=True, deleted_at=deleted_at)
+            for i in range(21)
+        ])
+        url = reverse('accounts:update')
+        self.client.raise_request_exception = False
+        for params, opened, reference in (({}, False, 'REQ-RECOVERY-20'),
+                                          ({'deleted_query': ''}, True, 'REQ-RECOVERY-20'),
+                                          ({'deleted_q': 'REQ-RECOVERY-03'}, True, 'REQ-RECOVERY-03'),
+                                          ({'deleted_page': '2'}, True, 'REQ-RECOVERY-00')):
+            with self.subTest(params=params):
+                response = self.client.get(url, params)
+                self.assertEqual(response.status_code, 200, 'Existing deleted requests must not break the profile.')
+                html = response.content.decode()
+                disclosure = re.search(r'<details\b[^>]*\bid="recovery-deleted"[^>]*>(.*?)</details>', html, re.S)
+                self.assertIsNotNone(disclosure, 'Deleted requests need their own disclosure.')
+                self.assertEqual(bool(re.search(r'\sopen\b', disclosure[0].split('>', 1)[0])), opened)
+                self.assertIn(reference, disclosure[1])
+
     def test_project_restore_cannot_drop_protected_sqr_history(self):
         from accounts import recovery
         from hub.models import SqrSubmission, SqrSubmissionHistory
@@ -341,7 +381,10 @@ class RecoveryCenterTests(TransactionTestCase):
         self.client.post(restore_url)
         self.assertFalse(Request.objects.filter(pk=req.pk).exists())
         self.client.force_login(self.user)
-        self.assertRedirects(self.client.post(restore_url), reverse("accounts:update") + "#backup", fetch_redirect_response=False)
+        response = self.client.post(restore_url, follow=True)
+        self.assertEqual(response.redirect_chain, [(reverse("accounts:update") + "#backup", 302)])
+        recovery = response.content.decode().partition('id="profile-panel-backup"')[2]
+        self.assertIn(f"Request {req.reference_code} has been restored.", recovery)
         restored = Request.objects.get(pk=req.pk)
         self.assertIsNone(restored.deleted_at)
         self.assertTrue(restored.status_logs.filter(pk=update.pk).exists())

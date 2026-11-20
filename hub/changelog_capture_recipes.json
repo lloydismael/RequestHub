@@ -34,6 +34,24 @@
       }]
     },
     {
+      "id": "admin-profile-tools",
+      "paths": ["templates/accounts/_recovery_center.html", "static/css/recovery.css", "static/js/sqr-classic-visibility.js", "accounts/recovery_views.py"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "admin_profile", "title": "Admin profile tools — desktop",
+          "before_text": "Classic SQR visibility and the full backup and recovery sections were shown together.",
+          "after_text": "A visibility badge, backup tiles, and a quick download replace the wall of text. The off-host warning stays visible; secondary tasks expand on demand.",
+          "viewport": {"width": 1280, "height": 960}
+        },
+        {
+          "kind": "ui", "fixture": "admin_profile", "title": "Admin profile tools — mobile",
+          "before_text": "On phones, the recovery forms, tables, and explanations formed one long page.",
+          "after_text": "The short phone layout prioritizes creating or downloading a backup. This static capture shows the no-script create control; supported browsers open a dialog.",
+          "viewport": {"width": 375, "height": 844}
+        }
+      ]
+    },
+    {
       "id": "changelog-display",
       "paths": ["templates/hub/notifications.html", "templates/hub/partials/changelog_entry.html", "templates/hub/partials/changelog_change_list.html", "templates/hub/partials/changelog_comparison.html", "static/hub/changelogs.css"],
       "scenes": [

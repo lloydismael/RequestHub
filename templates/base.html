@@ -511,7 +511,7 @@
                     </div>
                 </div>
                 <script src="{% static 'js/login-success.js' %}" defer></script>
-            {% else %}
+            {% elif message.extra_tags != 'recovery-feedback' or request.resolver_match.view_name != 'accounts:update' or request.user.role != 'admin' %}
                 <div class="alert alert-{{ message.tags }} glass-card" role="alert">{{ message }}</div>
             {% endif %}
         {% endfor %}
