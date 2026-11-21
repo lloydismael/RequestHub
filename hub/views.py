@@ -8037,36 +8037,38 @@ class RequestLifecycleAcknowledgeView(LoginRequiredMixin, View):
 
 class RequestStatusUpdateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        request_obj = get_object_or_404(
-            Request.objects.select_related("engineer", "requestor"),
-            pk=pk,
-        )
-
-        if request.user.role not in ENGINEER_ACCESS_ROLES or request_obj.engineer_id != request.user.id:
-            messages.error(request, "You are not allowed to update this request's status.")
-            return redirect("hub:request-manage-collab", pk=pk)
-
-        original = Request.objects.get(pk=request_obj.pk)
-        form = RequestStatusForm(request.POST, instance=request_obj, actor_user=request.user)
-        if form.is_valid():
-            request_obj._actor_user = request.user
-            request_obj._actor_source = "Engineer · Status Update"
-            form.save()
-            request_lifecycle.record_status_change(
-                request_obj.pk,
-                previous_status=original.status,
-                actor=request.user,
-                source="Engineer · Status Update",
+        with transaction.atomic():
+            request_obj = get_object_or_404(
+                Request.all_objects.select_for_update(of=("self",)).select_related("engineer", "requestor"),
+                pk=pk,
             )
-            changed_fields = []
-            if original.status != request_obj.status:
-                changed_fields.append("status")
-            if original.end_date != request_obj.end_date:
-                changed_fields.append("end_date")
-            if changed_fields:
-                summary_text = summarize_request_changes(original, request_obj, changed_fields)
-                create_change_status_log(request_obj, request.user, "Engineer · Status Update", summary_text)
-            messages.success(request, "Request status updated.")
-        else:
-            messages.error(request, "Unable to update status. Please try again.")
+
+            if request_obj.is_deleted or request.user.role not in ENGINEER_ACCESS_ROLES or request_obj.engineer_id != request.user.id:
+                messages.error(request, "You are not allowed to update this request's status.")
+                return redirect("hub:request-manage-collab", pk=pk)
+
+            original = copy(request_obj)
+            form = RequestStatusForm(request.POST, instance=request_obj, actor_user=request.user)
+            if form.is_valid():
+                request_obj._actor_user = request.user
+                request_obj._actor_source = "Engineer · Status Update"
+                form.save(commit=False)
+                request_obj.save(update_fields=["status", "end_date", "updated_at"])
+                request_lifecycle.record_status_change(
+                    request_obj.pk,
+                    previous_status=original.status,
+                    actor=request.user,
+                    source="Engineer · Status Update",
+                )
+                changed_fields = []
+                if original.status != request_obj.status:
+                    changed_fields.append("status")
+                if original.end_date != request_obj.end_date:
+                    changed_fields.append("end_date")
+                if changed_fields:
+                    summary_text = summarize_request_changes(original, request_obj, changed_fields)
+                    create_change_status_log(request_obj, request.user, "Engineer · Status Update", summary_text)
+                messages.success(request, "Request status updated.")
+            else:
+                messages.error(request, "Unable to update status. Please try again.")
         return redirect("hub:request-manage-collab", pk=pk)

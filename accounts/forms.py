@@ -1,14 +1,17 @@
 from django import forms
 from django.contrib.admin.forms import AdminAuthenticationForm
-from django.contrib.auth import authenticate, password_validation
+from django.contrib.auth import authenticate, check_password_with_timing_attack_mitigation, password_validation
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.views.decorators.debug import sensitive_variables
 
 from io import BytesIO
 
 from .models import User
+from .login_throttle import finish, reserve
+from .sign_in_log import client_ip
 from .themes import DEFAULT_CUSTOM_COLORS, custom_theme_style, normalize_hex
 
 # Longest edge, in pixels, that a stored profile photo may have.
@@ -144,8 +147,9 @@ class ProfileForm(forms.ModelForm):
             "banner_gradient": forms.HiddenInput(),
         }
 
-    def __init__(self, *args, is_admin=False, **kwargs):
+    def __init__(self, *args, is_admin=False, request=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.request = request
         if not is_admin:
             department = self.fields["department"]
             department.disabled = True
@@ -230,8 +234,23 @@ class ProfileForm(forms.ModelForm):
         if new_password1 or new_password2:
             if not current_password:
                 self.add_error("current_password", "Enter your current password to set a new one.")
-            elif not user.check_password(current_password):
-                self.add_error("current_password", "Current password is incorrect.")
+            else:
+                source = client_ip(self.request) if self.request is not None else "unknown"
+
+                def find_user():
+                    return User.objects.filter(pk=user.pk).first() if user.pk else None
+
+                fresh_user, reservation = reserve(source, user.get_username().casefold(), find_user)
+                if reservation is None:
+                    allowed = False
+                else:
+                    allowed = (
+                        fresh_user is not None
+                        and check_password_with_timing_attack_mitigation(fresh_user, current_password)
+                    )
+                    finish(reservation, success=allowed)
+                if not allowed:
+                    self.add_error("current_password", "Current password is incorrect.")
 
             if not new_password1:
                 self.add_error("new_password1", "Enter a new password.")
@@ -259,13 +278,24 @@ class ProfileForm(forms.ModelForm):
         user = super().save(commit=False)
         new_password = self.cleaned_data.get("new_password1")
 
-        if new_password:
-            user.set_password(new_password)
-            if user.must_change_password:
-                user.must_change_password = False
-
         if commit:
-            user.save()
+            with transaction.atomic():
+                fresh_user = User.objects.select_for_update().get(pk=user.pk)
+                if new_password:
+                    current_password = self.cleaned_data.get("current_password")
+                    if not check_password_with_timing_attack_mitigation(fresh_user, current_password):
+                        raise ValidationError("Current password is incorrect.")
+                    fresh_user.set_password(new_password)
+                    if fresh_user.must_change_password:
+                        fresh_user.must_change_password = False
+                for field in ("first_name", "last_name", "email", "phone_number", "department", "profile_photo", "banner_gradient"):
+                    setattr(fresh_user, field, getattr(user, field))
+                update_fields = ["first_name", "last_name", "email", "phone_number", "department", "profile_photo", "banner_gradient"]
+                if new_password:
+                    update_fields.extend(["password", "must_change_password"])
+                fresh_user.save(update_fields=update_fields)
+                user = fresh_user
+            self.instance = user
             self.save_m2m()
 
         return user

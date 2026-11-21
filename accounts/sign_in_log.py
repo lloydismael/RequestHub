@@ -272,6 +272,8 @@ def _record_sign_in(request, user, session_key):
 @receiver(user_login_failed)
 @_never_block_auth
 def record_failed_sign_in(sender, credentials=None, request=None, **kwargs):
+    if getattr(request, "_login_throttle_rejected", False):
+        return
     username = str((credentials or {}).get("username") or "").strip()
     SignInLog.objects.create(
         username=username[:150],
