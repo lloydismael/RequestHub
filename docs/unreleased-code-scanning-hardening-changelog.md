@@ -28,7 +28,24 @@ Status: local validation only. No release version, release date, integrated chan
 
 ### Refreshed-scan follow-up evidence
 
-The final checkout passed 965 Django tests on disposable PostgreSQL with offline Chromium enabled, all 117 Node tests, and migration autodetection with no missing migrations. The final suite passed both SQR query-budget tests: ordinary authenticated reads fetch the deadline with Django's session lookup rather than writing or locking for a live session. A compact-navigation viewport assertion failed once in a separate targeted run; it passed in the final suite and in four isolated runs each on the baseline and patched checkout. No navigation changes were made.
+The latest local hardening covers the status, profile, and sign-in scan findings:
+
+- **Concurrent request status ([#91](https://github.com/lloydismael/RequestHub/security/code-scanning/91)):** Status updates now lock the request row and recheck deletion and primary-assignee authorization before saving only the editable status fields.
+- **Concurrent profile updates ([#92](https://github.com/lloydismael/RequestHub/security/code-scanning/92)):** Profile saves copy only editable profile fields and re-lock the user before password changes, preserving password, role, active, and privilege state from stale form instances.
+- **Profile password guesses ([#93](https://github.com/lloydismael/RequestHub/security/code-scanning/93)):** Profile password changes use the shared source/account quota and Django timing-mitigated password verification instead of direct unthrottled checks.
+- **Sign-in audit growth ([#94](https://github.com/lloydismael/RequestHub/security/code-scanning/94)):** Failed sign-in audit rows are no longer created when the login backend rejects credentials at an exhausted source or account quota.
+
+The reconciliation preserves the [split request-status view](../hub/views/request_views.py) and carries over the locked update without a new route or migration. Two PostgreSQL regressions verify that the first request read locks the row and that a lifecycle write failure rolls back the status and completion date. Both failed before the port and passed afterward on the same synthetic fixture.
+
+[Before report](../hub/changelog_assets/pending-request-status-reconciliation/report-before.png) · [After report](../hub/changelog_assets/pending-request-status-reconciliation/report-after.png) · [Measurements and checksums](../hub/changelog_assets/pending-request-status-reconciliation/capture.json).
+
+**SQR inline status validation:** An unsupported status returns HTTP 400 with `Invalid SQR status`, instead of the generic message. Other workflow errors still hide internal details; this change does not affect lookup, permissions, Undo, or History Restore. The legacy lookup regression failed before the fix and passed after. A second test verified that arbitrary workflow details stay private even for HTTP 400, without changing the submission or its history.
+
+[Before report](../hub/changelog_assets/pending-sqr-inline-status-reconciliation/report-before.png) · [After report](../hub/changelog_assets/pending-sqr-inline-status-reconciliation/report-after.png) · [Measurements and checksums](../hub/changelog_assets/pending-sqr-inline-status-reconciliation/capture.json).
+
+In disposable PostgreSQL, both comparisons and their images were hidden from a non-admin while the entries were drafts. After test publication, both were visible in **Notifications → Changelogs → Technical evidence**, and the four PNGs matched their checksums and were served with `no-store`. The fixtures were rolled back. These are local technical comparisons; verify the actual revision pair in Notifications before release.
+
+The original hardening checkout passed 965 Django tests on disposable PostgreSQL with offline Chromium enabled, all 117 Node tests, and migration autodetection with no missing migrations. The final suite passed both SQR query-budget tests: ordinary authenticated reads fetch the deadline with Django's session lookup rather than writing or locking for a live session. A compact-navigation viewport assertion failed once in a separate targeted run; it passed in the final suite and in four isolated runs each on the baseline and patched checkout. No navigation changes were made.
 
 Offline Chromium captured three before/after previews from `2f30f88596e4e714f667d8f825ffbbaca40beb3b` and the local working tree using the same synthetic fixtures and viewport. Images are in the session's `hardening-previews` folder.
 

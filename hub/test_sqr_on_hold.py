@@ -139,6 +139,20 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.status, SqrSubmission.Status.FOR_PROCESSING)
 
+    def test_inline_edit_keeps_internal_workflow_error_details_private(self) -> None:
+        """Do not expose arbitrary workflow error details even for HTTP 400."""
+        from hub.services.sqr_workflow import SqrWorkflowError
+
+        before, counts = self.snapshot(), self.mutation_counts()
+        with patch(
+            "hub.services.sqr_workflow.save_inline_change",
+            side_effect=SqrWorkflowError("Synthetic internal detail", 400),
+        ):
+            response = self.update_status(SqrSubmission.Status.ON_HOLD, hold_reason="Awaiting approval")
+
+        self.assert_rejected_without_mutation(response, before, counts)
+        self.assertEqual(response.json()["error"], "Unable to process request")
+
     def test_pm_and_admin_can_hold(self):
         for user in (self.pm, self.admin):
             with self.subTest(role=user.role):
