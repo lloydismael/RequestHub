@@ -9,7 +9,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 GROUPS = (("new", "New"), ("improved", "Improved"), ("fixed", "Fixed"), ("maintenance", "Maintenance"))
@@ -237,6 +237,7 @@ def curated_manifests(asset_dir=ASSET_DIR):
 def _git(repo, *args, ok=(0,)):
     result = subprocess.run(
         ["git", "-C", os.fspath(repo), *args],
+        check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -274,7 +275,7 @@ def build_manifest(version, revision, repo=".", baseline=BASELINE, now=None):
         record = record.strip("\n")
         if not record:
             continue
-        commit_sha, parents, subject, body, files = record.split("\x1f", 4)
+        commit_sha, parents, subject, body, _files = record.split("\x1f", 4)
         if is_excluded(subject, body):
             continue
         kind, title = classify(subject)
@@ -290,7 +291,7 @@ def build_manifest(version, revision, repo=".", baseline=BASELINE, now=None):
             item["comparisons"] = []
             item["capture_error"] = "Packaged screenshots need recapture from this change and its parent."
         commits.append(item)
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     return validate_manifest(
         {
             "version": version, "revision": sha, "generated_at": now.isoformat(),

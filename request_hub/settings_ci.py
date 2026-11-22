@@ -5,6 +5,6 @@ changed; PBKDF2 costs hundreds of milliseconds per user creation or login and
 dominated the test suite's runtime.
 """
 
-from .settings import *  # noqa: F401,F403
+from .settings import *
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

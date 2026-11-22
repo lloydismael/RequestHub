@@ -1,8 +1,8 @@
 import importlib
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
@@ -33,6 +33,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                                           "capture_note": "Exact historical report."}]}],
         }
         from io import BytesIO
+
         from PIL import Image
         directory = self.assets / "automatic" / "test"
         directory.mkdir(parents=True)

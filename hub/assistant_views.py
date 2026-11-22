@@ -3,8 +3,7 @@ import json
 import logging
 import time
 from dataclasses import asdict
-from uuid import UUID
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
@@ -49,7 +48,6 @@ from hub.assistant_runtime import (
 )
 from hub.assistant_service import AssistantToolError, answer_message
 from hub.assistant_types import AssistantReply
-
 
 logger = logging.getLogger("hub.assistant_api")
 MAX_REQUEST_BODY_BYTES = 32 * 1024
@@ -205,7 +203,7 @@ def _unknown_query_parameters(request: HttpRequest, allowed: set[str]) -> bool:
 
 @require_GET
 def assistant_state(request: HttpRequest) -> JsonResponse:
-    user, denial = _require_access(request)
+    _user, denial = _require_access(request)
     if denial:
         return denial
     try:
@@ -479,7 +477,7 @@ def assistant_messages(request: HttpRequest) -> JsonResponse:
 
 @require_POST
 def assistant_conversation_reset(request: HttpRequest) -> JsonResponse:
-    user, denial = _require_access(request)
+    _user, denial = _require_access(request)
     if denial:
         return denial
     try:

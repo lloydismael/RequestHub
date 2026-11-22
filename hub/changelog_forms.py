@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import ClassVar
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -6,7 +7,15 @@ from django.core.paginator import Paginator
 from django.db.models.fields.files import FieldFile
 
 from .models import Changelog, changelog_image_upload_to
-from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, MAX_COMPARISONS, SHA_RE, TEXT_MAX, missing_comparisons
+from .release_changelog import (
+    COMPARISON_FIELDS,
+    COMPARISON_META_FIELDS,
+    EVIDENCE_POLICY,
+    MAX_COMPARISONS,
+    SHA_RE,
+    TEXT_MAX,
+    missing_comparisons,
+)
 
 
 class ScreenshotField(forms.ImageField):
@@ -33,11 +42,11 @@ class ChangelogForm(forms.ModelForm):
             "title", "previous_version", "new_version", "release_date", "summary",
             "before_text", "before_image", "after_text", "after_image", "is_published", "publish_when_ready",
         )
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "before_text": "Before description", "after_text": "After description",
             "is_published": "Publish to Notifications",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "release_date": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
             "summary": forms.Textarea(attrs={"rows": 3}),
             "before_text": forms.Textarea(attrs={"rows": 4}),

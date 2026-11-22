@@ -18,7 +18,6 @@ from accounts.models import User
 from hub.assistant_types import ConversationState
 from hub.models import AssistantUsageLimit
 
-
 REQUEST_WINDOW = timedelta(minutes=10)
 MAX_REQUESTS_PER_WINDOW = 20
 MAX_CONCURRENT_MODEL_REQUESTS = 2

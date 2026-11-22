@@ -1,13 +1,12 @@
 """Analyze exported GitHub Actions metadata without network access or dependencies."""
 
 import argparse
-from collections import Counter, defaultdict
-from datetime import datetime, timezone
 import json
 import math
-from pathlib import Path
 import statistics
-
+from collections import Counter, defaultdict
+from datetime import UTC, datetime
+from pathlib import Path
 
 HEAVY_CHECKS = {'Django Validation', 'Python dependency audit', 'Build, scan, and publish SBOM'}
 
@@ -16,8 +15,8 @@ def _timestamp(value):
     if not isinstance(value, str) or not value or value.startswith('0001-'):
         return None
     try:
-        timestamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        return timestamp.astimezone(timezone.utc) if timestamp.tzinfo else None
+        timestamp = datetime.fromisoformat(value)
+        return timestamp.astimezone(UTC) if timestamp.tzinfo else None
     except (ValueError, TypeError):
         return None
 

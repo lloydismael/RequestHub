@@ -3,6 +3,9 @@
 {% load static tz %}
 {% block title %}Manage Request {{ object.reference_code }} · Request Hub{% endblock %}
 {% block body_class %}request-manager-page{% endblock %}
+{% block extra_head %}
+    <link rel="stylesheet" href="{% static 'css/request-progress.css' %}">
+{% endblock %}
 
 {% block content %}
 
@@ -781,12 +784,7 @@
         updateDeploymentSummary();
     })();
 </script>
-<script src="{% static 'js/account-autocomplete.js' %}?v=2"></script>
-<script>
-    if (window.initAccountAutocompletes) {
-        window.initAccountAutocompletes();
-    }
-</script>
+<script src="{% static 'js/account-autocomplete.js' %}?v=2" defer></script>
 <script>
     (function () {
         const table = document.querySelector('.request-activity-table');

@@ -1,13 +1,13 @@
 import importlib
 import json
-from threading import Thread
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import unittest
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import unittest
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from threading import Thread
 
 
 class ContainerCleanupTests(unittest.TestCase):
@@ -17,7 +17,8 @@ class ContainerCleanupTests(unittest.TestCase):
     def test_successful_run_removes_every_owned_container_and_volume(self):
         self.run_smoke(fail_start=False)
 
-    def run_smoke(self, *, fail_start):
+    def run_smoke(self, *, fail_start: bool) -> None:
+        """Exercise smoke cleanup with simulated container startup and Docker commands."""
         bash = os.environ.get("TEST_BASH") or shutil.which("bash")
         with tempfile.TemporaryDirectory() as temporary:
             live = Path(temporary) / "live"
@@ -46,7 +47,7 @@ class ContainerCleanupTests(unittest.TestCase):
             export -f docker
             bash scripts/smoke-container.sh image:test aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
             '''
-            result = subprocess.run([bash, "-c", stub], env={
+            result = subprocess.run([bash, "-c", stub], check=False, env={
                                         **os.environ, "LIVE_CONTAINERS": str(live),
                                         "DOCKER_COMMANDS": str(commands), "FAIL_START": str(fail_start).lower(),
                                         "SMOKE_PYTHON": "true",

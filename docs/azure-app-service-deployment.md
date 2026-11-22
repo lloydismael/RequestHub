@@ -98,6 +98,13 @@ The image collects and compresses static files during the Docker build, using a 
 - For temporary staging diagnostics, set `DJANGO_PAGE_PERFORMANCE_ENABLED=true` and `DJANGO_ENVIRONMENT=staging`. Development also allows the diagnostic flag with `DJANGO_DEBUG=true`. Diagnostics are disabled by default and remain disabled in production unless explicitly classified as staging.
 - Enabled diagnostics emit a `Server-Timing` header and sanitized `hub.performance` log records containing route name, response status, elapsed time, SQL execution time and query count. They do not log SQL, parameters, identities, or cookies. Database duration is included in request duration; do not add them together. Timings cover the synchronous response, not subsequent streaming iteration.
 - Runtime changelog synchronization is still bounded by its existing timeout. Moving it to a release step requires a separately verified database-access and failure-recovery path; do not simply disable it.
+- PostgreSQL connections retain `DB_CONN_MAX_AGE` (60 seconds by default). Django checks a reused connection on the first DB access in a request so it can reconnect after a restart; requests that never use the connection do not run a health query.
+
+### Optional shared lookup cache
+
+Leave `REDIS_LOOKUP_URL` unset to use PostgreSQL for these lookups. To enable it, set the same `rediss://` endpoint with certificate verification in all workers using the same database. Use a private Redis instance or logical database dedicated to this deployment and keep any credentials in App Service secrets. Do not share it across production, staging, or development databases. Plain `redis://` is accepted only in `DEBUG` for local testing. No Redis service is provisioned by this release.
+
+The cache stores only notification badge summaries (including the initial toast cursor) and active department labels/counts. Lookups expire after 30 seconds. The Notifications Activity page, toast API, and directory member searches continue to read PostgreSQL. Redis errors fall back to SQL; a missed invalidation during an outage can leave a recovered cached value stale until it expires. To disable the cache, remove the setting and restart all workers. The existing process-local Django cache is unchanged.
 
 ### Optional Application Insights tracing
 

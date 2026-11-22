@@ -4,7 +4,13 @@ from urllib.parse import quote
 import requests
 
 from accounts.models import User
-from hub.services.outlook_drafts import TIMEOUT, OutlookError, OutlookSignInRequired, graph_get, safe_draft_link
+from hub.services.outlook_drafts import (
+    TIMEOUT,
+    OutlookError,
+    OutlookSignInRequired,
+    graph_get,
+    safe_draft_link,
+)
 
 MESSAGES_URL = "https://graph.microsoft.com/v1.0/me/messages"
 MESSAGE_FIELDS = "id,conversationId,subject,sentDateTime,receivedDateTime,isDraft,webLink"

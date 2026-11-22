@@ -52,6 +52,24 @@
       ]
     },
     {
+      "id": "request-progress-dark-mode",
+      "paths": ["static/css/request-progress.css"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "request_progress", "title": "Request progress in dark mode — desktop",
+          "before_text": "Fixed navy blocks behind the progress labels clashed with the Christmas theme's dark green card.",
+          "after_text": "Step names and statuses sit directly on the themed card, with readable text and connectors that stop before the labels.",
+          "viewport": {"width": 1200, "height": 900}
+        },
+        {
+          "kind": "ui", "fixture": "request_progress", "title": "Request progress in dark mode — phone",
+          "before_text": "The stacked steps showed the same mismatched navy blocks behind their text.",
+          "after_text": "The stacked steps use the card as their background while keeping the vertical progress line and current-step highlight.",
+          "viewport": {"width": 375, "height": 844}
+        }
+      ]
+    },
+    {
       "id": "changelog-display",
       "paths": ["templates/hub/notifications.html", "templates/hub/partials/changelog_entry.html", "templates/hub/partials/changelog_change_list.html", "templates/hub/partials/changelog_comparison.html", "static/hub/changelogs.css"],
       "scenes": [
@@ -87,6 +105,35 @@
           "before_text": "Opening a technical report reveals the before and after comparison embedded in the feed.",
           "after_text": "Opening the same report without scripts shows a direct report link. With scripts enabled, the comparison loads on demand.",
           "viewport": {"width": 375, "height": 844}
+        }
+      ]
+    },
+    {
+      "id": "management-accounts",
+      "paths": ["static/hub/management-accounts.js", "templates/hub/partials/account_fields.html", "templates/hub/partials/account_error_links.html"],
+      "scenes": [
+        {
+          "kind": "ui",
+          "fixture": "management_accounts",
+          "title": "Management account search — desktop",
+          "before_text": "Without scripts, the Accounts pane loaded the complete directory and ignored the search URL.",
+          "after_text": "The same URL shows the matching account and result count even without scripts. Cross-page drafts require scripts.",
+          "viewport": {"width": 1200, "height": 900}
+        },
+        {
+          "kind": "ui",
+          "fixture": "management_accounts",
+          "title": "Management account search — phone",
+          "before_text": "The phone fallback also loaded the complete directory; search was browser-only.",
+          "after_text": "The phone fallback shows the single matching account and keeps the new-account field available.",
+          "viewport": {"width": 375, "height": 844}
+        },
+        {
+          "kind": "report",
+          "fixture": "repository_change",
+          "title": "Accounts, dashboard and SQR performance changes",
+          "before_text": "File fingerprints at the first-parent revision.",
+          "after_text": "File fingerprints cover the updated editor, query and write paths, documentation and tests. This is not a runtime benchmark."
         }
       ]
     },

@@ -106,11 +106,12 @@ For maintenance, keep chart assets scoped to views that use them. Reuse [the cha
 - Optional Teams chat topic field per request
 
 ### ?? SQR (Service Quotation Request)
-- **SQR Tracker** (formerly Prototype) opens by default. Engineers and reviewers use shared **List** and **Table** layouts with the same authorized records, sorting, pagination, filters and Open editor. Existing `view=prototype` bookmarks remain compatible.
-- **Multi-filtering:** select one or more Status, Project Manager, SSE, Approver, Stage, Scope, performance or billing values. Selections use OR within a field and AND across fields; no selection means All. Search, My assigned, Needs attention, date ranges and price ranges combine with them. Use Apply to commit filter drafts, remove individual chips, or Clear all. Unassigned and Not assessed are selectable; zero prices remain valid.
+- **SQR Tracker** (formerly Prototype) opens by default. Engineers and reviewers use shared **List** and **Table** layouts with the same authorized records, sorting, pagination, filters and Open editor. In **List**, vertical scrolling moves the results first and continues on the page when you reach either end. Existing `view=prototype` bookmarks remain compatible.
+- **SQR Reports:** use **To Reports** on the Tracker and **To SQR Tracker** to return. The return link appears only on SQR Reports.
+- **Multi-filtering:** open the **Filters** funnel in SQR Tracker to select Status, Project Manager, SSE, Approver, Stage, Scope, performance or billing values. Closing the panel keeps applied filters. Selections use OR within a field and AND across fields; no selection means All. Search, My assigned, Needs attention, date ranges and price ranges combine with them. Use Apply to commit filter drafts, remove individual chips, or Clear all. Unassigned and Not assessed are selectable; zero prices remain valid.
 - **My Assigned:** sa unified Tracker, Engineer/On Hold viewers match the explicitly saved **Assigned SSE** within their existing authorized records. Blank SSE stays Unassigned; form ownership does not supply an assignment fallback. PM/reviewer and PPT shortcuts still match the reviewer, not the delivery PM. These filters never grant additional read or edit access.
-- **Classic visibility:** only the exact Admin role can save the account settings switch **Show SQR Tracker Classic**. It applies globally, persists across logins, and takes effect on the next page load. Hiding Classic removes its tab and redirects old Classic bookmarks to the unified tracker; it does not remove records, Reports, PPT or edit permissions. When shown, explicit Classic and focus bookmarks still work.
-- **PPT — Project Performance Tracking** (Admin/PM): open it between Dashboard and SQR. It is read-only and uses saved SQR Schedule, Budget/Effort and Quality assessments, with coverage shown as assessed dimensions out of three. Nothing is inferred from dates, progress percentages, legacy Health, Scope or notes. Every summary and chart uses the full filtered authorized population before table pagination. Data refreshes after tracker changes or return to the browser tab; errors retain the last snapshot and offer Retry. PPT filter preferences are separate from SQR Tracker preferences.
+- **Classic visibility:** only the exact Admin role can save the account settings switch **Show SQR Tracker Classic**. It applies globally, persists across logins, and takes effect on the next page load. Hiding Classic removes the tracker selector row and opens old Classic bookmarks in the unified tracker; it does not remove records, Reports, PPT or edit permissions. When shown, explicit Classic and focus bookmarks still work.
+- **PPT — Project Performance Tracking** (Admin/PM): open it between Dashboard and SQR. Both administrator account types start with no filters; PM-ESG starts with **My Assigned**. Saved PPT filters and explicit filter links still take precedence, and PPT preferences are separate from SQR Tracker preferences. PPT is read-only and uses saved SQR Schedule, Budget/Effort and Quality assessments, with coverage shown as assessed dimensions out of three. Nothing is inferred from dates, progress percentages, legacy Health, Scope or notes. Every summary and chart uses the full filtered authorized population before table pagination. Data refreshes after tracker changes or return to the browser tab; errors retain the last snapshot and offer Retry.
 - **Delivery → Schedule** contains Start and Finish only. **Progress** contains Schedule Performance (On Track / At Risk / Delayed), Budget/Effort Performance (Within Budget / At Risk / Over Budget), and Quality Performance (Met / At Risk / Unmet), alongside overall progress and updates/risks. Performance labels use green, amber and red; blanks remain neutral **Not assessed**. Any red assessment needs action, otherwise amber is At Risk; only three greens are Healthy. Partial greens remain Incomplete assessment, including on closed projects.
 - Portfolio labels classify legacy completion evidence as Closed, planning/no delivery evidence as Pipeline, cancellations/lost proposals as Removed, and other delivery candidates as Ongoing. Historical completion markers preserve lifecycle classification without supplying an assessment or warranty date. Retired PPT lifecycle-scope and reason-specific attention bookmarks display a notice so users can reapply current Stage/Portfolio/Needs attention filters.
 - Tracks quotation details, SSE/PM man-hours, managed support amount, discounting, approval metadata, and revenue fields
@@ -144,7 +145,7 @@ For maintenance, keep chart assets scoped to views that use them. Reuse [the cha
 - Forced password-change on first login or admin reset
 - **5-Minute Idle Timeout:** when enabled, Request Hub and Django admin warn after five idle minutes, and the server rejects the session after six even without JavaScript. Deliberate activity or confirming the warning renews a live session; background polling and page-load heartbeats do not. Saving it off cancels the warning across tabs, and a stale timer checks the server before taking the user away from their work. Manual sign-out remains available. Apply `accounts` migration `0031_sessionidledeadline` before deploying this change.
 - Microsoft Graph user sync via `fetch_phildata_users` management command
-- Management renders only the selected tab. Users search updates the rows, count and pagination without reloading the page. If a live search fails, the previous results stay visible and you can press Enter to retry. Accounts warns before you leave with unsaved edits.
+- Management renders only the selected tab. Users and Accounts search update the rows, count and pagination without reloading the page. If live search fails, the previous results stay visible and you can press Enter to retry. Accounts searches the whole directory and shows up to 50 rows per page. Drafts keep their original form fields across pages and searches. **Save Changes** applies the whole draft together; if it is too large, revert individual rows and retry. Without JavaScript, search and pagination still work; save edits before changing pages. See the [performance release notes](docs/cd-workflow-testing.md#unreleased-accounts-dashboard-and-sqr-performance).
 - **Management → Monitoring** lets Admins check Django and PostgreSQL health every five seconds while the tab is visible. App Service and database server metrics (including CPU, memory, used and free disk) use one-minute Azure samples. [Azure setup](docs/azure-app-service-deployment.md#optional-azure-metrics-for-management--monitoring) supports Azure CLI sign-in locally and managed identity on App Service. See the [Monitoring release notes and before/after captures](docs/unreleased-management-monitoring-changelog.md).
 
 ### Release changelogs and visual evidence
@@ -345,15 +346,15 @@ request-hub/
 
 +-- hub/                        # Core business logic app
    +-- models.py               #   Request, Account, StatusLog, SQR, ActivityLog
-   +-- views.py                #   Dashboard, requests, reports, SQR, activity logs
+   +-- views/                  #   Domain views plus the legacy import facade
    +-- notification_views.py   #   Notification pages, actions, and toast polling
-   +-- view_helpers.py         #   Shared view helpers and role constants
+   +-- view_helpers.py         #   Shared return URL and time-zone helpers
    +-- forms.py                #   RequestForm, AdminForm, ActivityLogForm
    +-- mixins.py               #   Role-based access mixins
    +-- signals.py              #   Notification triggers
    +-- constants.py            #   Shared choices / constants
    +-- urls.py
-   +-- services/
+   +-- services/               #   Workflows, reporting, email, and integrations
      +-- microsoft_graph.py  #   MS Graph API integration
    +-- management/commands/
        +-- check_sla.py        #   Daily SLA overdue checker
@@ -395,6 +396,8 @@ request-hub/
 +-- requirements-ci.txt        # test-only tooling (tblib)
 +-- LICENSE
 ```
+
+Keep existing view imports through the [compatibility facade](hub/views/__init__.py). Add new endpoints to the relevant module in [hub/views/](hub/views/), put business rules in [hub/services/](hub/services/), and share equivalent role checks through [mixins.py](hub/mixins.py).
 
 ---
 
@@ -480,6 +483,8 @@ docker compose exec web python manage.py migrate
 | `DB_PASSWORD` | Database password. Required when `DJANGO_DEBUG` is `False`. |
 | `DB_HOST` | Database host (e.g. Azure PostgreSQL hostname). Required when `DJANGO_DEBUG` is `False`. |
 | `DB_PORT` | Database port (default `5432`) |
+| `DB_CONN_MAX_AGE` | PostgreSQL connection lifetime in seconds (default `60`), with health checks on reused connections. |
+| `REDIS_LOOKUP_URL` | Optional TLS Redis connection for short-lived badge and department counts. Leave blank to use PostgreSQL. See [shared lookup setup](docs/azure-app-service-deployment.md#optional-shared-lookup-cache). |
 | `ACS_EMAIL_CONNECTION_STRING` | Azure Communication Services connection string |
 | `ACS_EMAIL_SENDER` | ACS sender address |
 | `PHILDATA_TENANT_ID` | Microsoft Entra tenant ID |

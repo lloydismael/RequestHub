@@ -9,16 +9,29 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
+from capture_release_changelog import (
+    ROOT,
+    CaptureError,
+    _render,
+    _screenshot,
+    _select_recipe,
+    _snapshot,
+    capture_manifest,
+    load_recipes,
+    main,
+    prepare_assets,
+)
 from PIL import Image
 
-from capture_release_changelog import CaptureError, ROOT, _render, _screenshot, _select_recipe, _snapshot, capture_manifest, load_recipes, main, prepare_assets
 from hub.release_changelog import build_manifest
 
 
-def git(repo, *args):
+def git(repo: Path | str, *args: str) -> str:
+    """Run Git with a fixture identity in the synthetic capture repository."""
     result = subprocess.run(
         ["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
          "-c", "commit.gpgsign=false", "-C", str(repo), *args],
+        check=False,
         capture_output=True, text=True, encoding="utf-8",
     )
     if result.returncode:
@@ -388,24 +401,30 @@ class CaptureTests(unittest.TestCase):
         self.assertFalse((snapshot / "alias.md").exists())
         self.assertTrue((snapshot / "docs" / "guide.md").is_file())
 
-    def test_browser_external_resources_are_blocked_before_screenshot(self):
+    def test_browser_external_resources_are_blocked_before_screenshot(self) -> None:
+        """Refuse a screenshot when the offline browser sees an external resource."""
         from playwright.sync_api import sync_playwright
         output = self.repo / "blocked.png"
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             try:
-                with patch("capture_release_changelog._render", return_value="<html><body><img src='https://external.invalid/image.png'></body></html>"):
-                    with self.assertRaisesRegex(CaptureError, "external traffic"):
-                        _screenshot(browser, self.repo, self.recipe["scenes"][0], output, self.repo)
+                with (
+                    patch("capture_release_changelog._render", return_value="<html><body><img src='https://external.invalid/image.png'></body></html>"),
+                    self.assertRaisesRegex(CaptureError, "external traffic"),
+                ):
+                    _screenshot(browser, self.repo, self.recipe["scenes"][0], output, self.repo)
             finally:
                 browser.close()
         self.assertFalse(output.exists())
 
-    def test_vendor_integrity_failure_does_not_write_unverified_asset(self):
+    def test_vendor_integrity_failure_does_not_write_unverified_asset(self) -> None:
+        """Do not save evidence if a vendor asset fails its checksum."""
         vendor = self.repo / "vendor"
-        with patch("capture_release_changelog.urllib.request.urlopen", return_value=BytesIO(b"incorrect asset")):
-            with self.assertRaisesRegex(CaptureError, "integrity"):
-                prepare_assets(vendor)
+        with (
+            patch("capture_release_changelog.urllib.request.urlopen", return_value=BytesIO(b"incorrect asset")),
+            self.assertRaisesRegex(CaptureError, "integrity"),
+        ):
+            prepare_assets(vendor)
         self.assertEqual(list(vendor.iterdir()), [])
 
     def test_dependency_lock_changes_invalidate_capture_fingerprint(self):
@@ -444,7 +463,8 @@ class CaptureTests(unittest.TestCase):
 
 
 class HistoricalSceneTests(unittest.TestCase):
-    def test_ui_scene_explicitly_selects_accounts_config_without_database(self):
+    def test_ui_scene_explicitly_selects_accounts_config_without_database(self) -> None:
+        """Render an account fixture using explicit app configuration and no live database."""
         result = subprocess.run(
             [sys.executable, "-c", (
                 "import sys; from pathlib import Path; "
@@ -456,6 +476,7 @@ class HistoricalSceneTests(unittest.TestCase):
                 "assert config.get_model('User')._meta.app_config is config; "
                 "assert settings.DATABASES['default']['ENGINE'] == 'django.db.backends.dummy'"
             ), str(ROOT)],
+            check=False,
             cwd=ROOT / "scripts", capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -510,6 +531,75 @@ class HistoricalSceneTests(unittest.TestCase):
                 browser.close()
             with Image.open(output) as image:
                 self.assertEqual([color for _, color in image.convert("RGB").getcolors()], [(255, 255, 255)])
+
+    def test_dark_request_progress_text_blends_into_card_and_stays_readable(self):
+        from playwright.sync_api import sync_playwright
+
+        document = _render(ROOT, {"kind": "ui", "fixture": "request_progress"})
+        styles = ROOT / "static" / "css"
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(java_script_enabled=False)
+
+            def load_styles(route):
+                if match := re.fullmatch(r"http://fixture\.invalid/static/css/([\w-]+\.css)(?:\?.*)?", route.request.url):
+                    path = styles / match[1]
+                    if path.is_file():
+                        route.fulfill(path=path, content_type="text/css")
+                        return
+                route.abort()
+
+            page.route("**/*", load_styles)
+            page.set_content(document.replace("<head>", '<head><base href="http://fixture.invalid/">', 1))
+            steps = page.get_by_role("list", name="Request lifecycle stages")
+            self.assertEqual(steps.get_by_role("listitem").count(), 5)
+            for width in (1200, 375):
+                for theme in ("christmas", "default"):
+                    with self.subTest(width=width, theme=theme):
+                        page.set_viewport_size({"width": width, "height": 844})
+                        boxes = steps.evaluate("""(list, theme) => {
+                            const body = list.closest('body');
+                            body.dataset.accountTheme = theme;
+                            body.classList.toggle('account-themed', theme !== 'default');
+                            const canvas = body.ownerDocument.createElement('canvas').getContext('2d');
+                            function rgb(color, background) {
+                                canvas.clearRect(0, 0, 1, 1);
+                                if (background) {
+                                    canvas.fillStyle = background;
+                                    canvas.fillRect(0, 0, 1, 1);
+                                }
+                                canvas.fillStyle = color;
+                                canvas.fillRect(0, 0, 1, 1);
+                                return canvas.getImageData(0, 0, 1, 1).data;
+                            }
+                            function luminance([r, g, b]) {
+                                const linear = value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+                                return 0.2126 * linear(r / 255) + 0.7152 * linear(g / 255) + 0.0722 * linear(b / 255);
+                            }
+                            const card = getComputedStyle(list.closest('.rmf-progress-card'));
+                            const lightestCard = luminance(rgb(card.backgroundColor, '#fff'));
+                            return Array.from(list.querySelectorAll('.rmf-progress__content'), box => ({
+                                alpha: rgb(getComputedStyle(box).backgroundColor)[3],
+                                text: Array.from(box.children, element => ({
+                                    label: element.textContent,
+                                    contrast: (luminance(rgb(getComputedStyle(element).color)) + 0.05) / (lightestCard + 0.05),
+                                })),
+                            }));
+                        }""", theme)
+                        for box in boxes:
+                            self.assertEqual(box["alpha"], 0, "Step text must not have a separate background")
+                            for text in box["text"]:
+                                self.assertGreaterEqual(text["contrast"], 4.5, text["label"])
+            browser.close()
+
+    def test_accounts_recipe_shows_server_search_without_scripts_or_a_database(self):
+        recipes = load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+        recipe = next((recipe for recipe in recipes if recipe["id"] == "management-accounts"), None)
+        self.assertIsNotNone(recipe, "Accounts changes need a before/after screen capture")
+        document = _render(ROOT, recipe["scenes"][0])
+        self.assertIn('value="Summit Research"', document)
+        self.assertIn("Showing 1–1 of 1", document)
+        self.assertNotIn('value="Demo Account 001"', document)
 
     def test_monitoring_recipe_shows_the_actual_management_shell(self):
         path = ROOT / "hub" / "changelog_capture_recipes.json"

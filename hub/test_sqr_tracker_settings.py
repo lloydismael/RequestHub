@@ -74,11 +74,20 @@ class SqrTrackerSettingsTests(TestCase):
         self.assertEqual(page.context['active_sqr_view'], 'prototype')
         self.assertTrue(page.context['sqr_view_notice'])
         self.assertTrue(page.context['default_my_assigned_filter'])
-        for marker in ('data-sqr-view-panel="tracker"', 'data-sqr-view-button="tracker"',
+        for marker in ('data-sqr-view-panel="tracker"', 'aria-label="SQR tracker selector"', 'data-sqr-view-button=',
                        'id="sqr-table-filter-panel"', 'id="sqr-badge-filters"', 'id="sqr-header-search"'):
             self.assertIsNone(re.search(r'<[^>]*\s' + re.escape(marker), page.content.decode()), marker)
         self.assertContains(page, 'data-sqr-view-panel="prototype"')
         self.assertNotIn('proposal_submissions', page.context)
+
+    def test_ppt_opens_unfiltered_for_both_admin_account_types_when_classic_is_hidden(self):
+        SqrTrackerSettings.objects.create(pk=1, show_classic_sqr_tracker=False)
+        primary_admin = User.objects.create_superuser(username='visibility-primary-admin', role=User.Roles.ADMIN)
+        for admin in (self.admin, primary_admin):
+            with self.subTest(is_superuser=admin.is_superuser):
+                self.client.force_login(admin)
+                page = self.client.get(reverse('hub:sqr'), {'view': 'performance'})
+                self.assertContains(page, 'data-default-mine="0"')
 
     def test_primary_and_explicit_authorized_bookmarks(self):
         self.client.force_login(self.admin)

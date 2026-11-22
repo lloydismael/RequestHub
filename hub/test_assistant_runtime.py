@@ -13,8 +13,8 @@ from django.utils import timezone
 from accounts.models import User
 from hub.assistant_runtime import (
     AssistantGlobalCapacityError,
-    AssistantRequestConflictError,
     AssistantRateLimitError,
+    AssistantRequestConflictError,
     AssistantRequestInProgressError,
     acquire_request,
     append_exchange_if_current,

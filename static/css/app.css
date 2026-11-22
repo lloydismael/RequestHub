@@ -4789,10 +4789,6 @@ body.dark-mode .rmf-progress__step--complete:not(:last-child)::after { backgroun
 body.dark-mode .rmf-progress__marker { background: #0f172a; border-color: #475569; color: #94a3b8; }
 body.dark-mode .rmf-progress__step--complete .rmf-progress__marker { background: #16a34a; border-color: #16a34a; color: #fff; }
 body.dark-mode .rmf-progress__step--current .rmf-progress__marker { border-color: #60a5fa; color: #93c5fd; }
-body.dark-mode .rmf-progress__content { background: #0f172a; }
-body.dark-mode .rmf-progress__label { color: #cbd5e1; }
-body.dark-mode .rmf-progress__step--current .rmf-progress__label,
-body.dark-mode .rmf-progress__step--current .rmf-progress__state { color: #93c5fd; }
 body.dark-mode .rmf-progress__action { background: rgba(30,58,138,0.12); border-color: rgba(96,165,250,0.2); }
 body.dark-mode .rmf-progress__action-text,
 body.dark-mode .rmf-progress__owner { color: #e2e8f0; }

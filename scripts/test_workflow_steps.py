@@ -1,10 +1,9 @@
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import unittest
 
-from workflow_test_utils import read_run_block, ROOT
+from workflow_test_utils import ROOT, read_run_block
 
 BASH = os.environ.get('TEST_BASH') or shutil.which('bash')
 
@@ -16,23 +15,29 @@ class FastGateTests(unittest.TestCase):
         except ValueError as error:
             self.fail(str(error))
 
-    def test_node_failure_stops_before_deployment_checks(self):
+    def test_node_failure_stops_before_deployment_checks(self) -> None:
+        """Stop the fast gate before deployment checks when the Node step fails."""
         script = self.script()
         result = subprocess.run([BASH, '-e', '-o', 'pipefail', '-c',
             'node() { return 42; }; bash() { echo unexpected-deployment; };\n' + script],
+            check=False,
             cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 42, result.stderr)
         self.assertNotIn('unexpected-deployment', result.stdout)
 
-    def test_deployment_check_failure_is_not_hidden(self):
+    def test_deployment_check_failure_is_not_hidden(self) -> None:
+        """Propagate deployment-check failures through the fast gate."""
         script = self.script()
         result = subprocess.run([BASH, '-e', '-o', 'pipefail', '-c',
             'node() { return 0; }; bash() { return 43; };\n' + script],
+            check=False,
             cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 43, result.stderr)
 
-    def test_actual_fast_checks_pass(self):
+    def test_actual_fast_checks_pass(self) -> None:
+        """Exercise the configured fast gate with real local checks."""
         result = subprocess.run([BASH, '-e', '-o', 'pipefail', '-c', self.script()],
+            check=False,
             cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('PASS: success', result.stdout)

@@ -308,27 +308,30 @@ class PrototypeTabRenderTests(TestCase):
         cls.pm = User.objects.create_user(username="tab-pm", role=User.Roles.PM_ESG)
         cls.engineer = User.objects.create_user(username="tab-eng", role=User.Roles.ENGINEER)
 
-    def test_pm_can_navigate_to_tracker_and_reports_from_either_page(self):
+    def test_pm_header_links_back_to_tracker_only_from_reports(self):
         self.client.force_login(self.pm)
-        for tab in ("table", "reports"):
-            with self.subTest(tab=tab):
-                response = self.client.get(reverse("hub:sqr"), {"tab": tab})
+        sqr_url = reverse("hub:sqr")
+        for params in ({"view": "prototype"}, {"view": "tracker"}, {"tab": "reports"}):
+            with self.subTest(params=params):
+                response = self.client.get(sqr_url, params)
                 self.assertEqual(response.status_code, 200)
-                self.assertContains(response, "To SQR Tracker", count=1)
-                self.assertContains(response, "To Reports", count=1)
-                for destination, label, icon, style in (
-                    ("table", "To SQR Tracker", "bi-table", "btn-primary lg-btn--accent"),
-                    ("reports", "To Reports", "bi-bar-chart-line-fill", "btn-outline-primary lg-btn--ghost"),
-                ):
-                    href = "/sqr/?view=prototype" if destination == "table" else "/sqr/?tab=reports"
-                    tracker_link = " data-sqr-tracker-link" if destination == "table" else ""
-                    current = ' aria-current="page"' if tab == destination else ""
+                on_reports = params.get("tab") == "reports"
+                current = ' aria-current="page"' if on_reports else ""
+                self.assertContains(
+                    response,
+                    f'<a href="{sqr_url}?tab=reports" class="btn btn-sm sqr-toggle-btn lg-btn btn-outline-primary lg-btn--ghost"{current}>'
+                    '<i class="bi bi-bar-chart-line-fill me-1" aria-hidden="true"></i>To Reports</a>',
+                    count=1, html=True,
+                )
+                if on_reports:
                     self.assertContains(
                         response,
-                        f'<a href="{href}" class="btn btn-sm sqr-toggle-btn lg-btn {style}"{tracker_link}{current}>'
-                        f'<i class="bi {icon} me-1" aria-hidden="true"></i>{label}</a>',
-                        html=True,
+                        f'<a href="{sqr_url}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent">'
+                        '<i class="bi bi-table me-1" aria-hidden="true"></i>To SQR Tracker</a>',
+                        count=1, html=True,
                     )
+                else:
+                    self.assertNotContains(response, "To SQR Tracker")
 
     def test_engineer_does_not_get_pm_navigation_buttons(self):
         self.client.force_login(self.engineer)

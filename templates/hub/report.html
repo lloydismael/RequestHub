@@ -357,11 +357,7 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="{% static 'js/chart-values.js' %}"></script>
-<script src="{% static 'js/chart-theme.js' %}?v=2"></script>
-<script src="{% static 'js/report-charts.js' %}?v=3"></script>
-<script src="{% static 'js/report-details.js' %}"></script>
+<script src="{% static 'js/report-details.js' %}" defer></script>
 <script>
 (function () {
     var modal = document.getElementById('activity-edit-modal');
@@ -405,4 +401,11 @@
     });
 })();
 </script>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+<script src="{% static 'js/chart-values.js' %}" defer></script>
+<script src="{% static 'js/chart-theme.js' %}?v=2" defer></script>
+<script src="{% static 'js/report-charts.js' %}?v=3" defer></script>
 {% endblock %}

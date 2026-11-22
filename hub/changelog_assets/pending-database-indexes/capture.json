@@ -1,0 +1,328 @@
+{
+  "base_head": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "before_source": "Saved local pre-Phase-4 inputs; includes earlier uncommitted changes.",
+  "after_source": "Local Phase 4 working tree, not an exact release revision.",
+  "capture": "Offline Chromium 156.0.8078.4. Synthetic PostgreSQL query plans, not a UI screenshot.",
+  "comparison": {
+    "title": "PostgreSQL query plans and source fingerprints",
+    "before_text": "The existing catalog required more row scanning or sorting for nine representative list queries.",
+    "after_text": "Seven concurrent indexes lowered shared block accesses in nine plans. Queries and result data matched.",
+    "capture_note": "304,004 synthetic PostgreSQL rows; shared hits plus reads per SQL plan, not production latency.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "files": {
+    "before": {
+      "hub/models.py": {
+        "bytes": 65676,
+        "sha256": "d32496a093c2d1f0913589fc29d8cfc89582d3b4adb2697b3a6b1e1d15d00d40"
+      },
+      "docs/cd-workflow-testing.md": {
+        "bytes": 52527,
+        "sha256": "73687ef2eeb7288a282ee6b200815d9dcd59f03b52ddca2abc734c3bc470a229"
+      },
+      "hub/migrations/0065_request_status_order_index.py": null,
+      "hub/migrations/0066_request_sla_attention_index.py": null,
+      "hub/migrations/0067_notification_recipient_read_index.py": null,
+      "hub/migrations/0068_sqr_creation_order_index.py": null,
+      "hub/migrations/0069_sqr_engineer_order_index.py": null,
+      "hub/migrations/0070_sqr_reviewer_order_index.py": null,
+      "hub/migrations/0071_activity_engineer_date_index.py": null
+    },
+    "after": {
+      "hub/models.py": {
+        "bytes": 66742,
+        "sha256": "0fc498eb8069d00e26b54463827999ba5b7789bf0ca1310a2f8252205e653f41"
+      },
+      "docs/cd-workflow-testing.md": {
+        "bytes": 56965,
+        "sha256": "45c17c3c287290fceae0747fed7be7319a43474b6198cd01c58b6d043cd76c47"
+      },
+      "hub/migrations/0065_request_status_order_index.py": {
+        "bytes": 591,
+        "sha256": "759801e55e4b08e2bcf2a4e32af35e4a618977662df4153c520ee9b248144878"
+      },
+      "hub/migrations/0066_request_sla_attention_index.py": {
+        "bytes": 609,
+        "sha256": "640202b95cf392918a22c9e0a29c833d82be6457571e4ee74e2fe05f81f1f29e"
+      },
+      "hub/migrations/0067_notification_recipient_read_index.py": {
+        "bytes": 468,
+        "sha256": "e7c561f193d2f774f09e60ad443028592f49131bf69540d273cd432ac034c60e"
+      },
+      "hub/migrations/0068_sqr_creation_order_index.py": {
+        "bytes": 447,
+        "sha256": "fb890c604cbb1254f60249fdd70f135d50491483a806cf470f46bd959a895eb0"
+      },
+      "hub/migrations/0069_sqr_engineer_order_index.py": {
+        "bytes": 459,
+        "sha256": "05637b08933f3e59842fd6c849b875ee32cdad043911a621105fc105303fff2d"
+      },
+      "hub/migrations/0070_sqr_reviewer_order_index.py": {
+        "bytes": 466,
+        "sha256": "1bdd38de4375c3bd2fbbb6b7cac44cb1152fe8f3eb7ffec45559770f571976a6"
+      },
+      "hub/migrations/0071_activity_engineer_date_index.py": {
+        "bytes": 480,
+        "sha256": "22d1f78be8763cfb8a86e760841843df67db26f65dd47363fbe83943333f6297"
+      }
+    }
+  },
+  "metrics": {
+    "postgresql_version": "16.16 (Debian 16.16-1.pgdg13+1)",
+    "table_counts": {
+      "hub_engineeractivitylog": 64001,
+      "hub_notification": 144001,
+      "hub_request": 60001,
+      "hub_sqrsubmission": 36001
+    },
+    "new_indexes": {
+      "activity_eng_date_new_idx": {
+        "bytes": 2621440,
+        "definition": "CREATE INDEX activity_eng_date_new_idx ON public.hub_engineeractivitylog USING btree (engineer_id, request_date DESC, created_at DESC)",
+        "table": "hub_engineeractivitylog",
+        "valid": true
+      },
+      "notif_rec_read_new_idx": {
+        "bytes": 5873664,
+        "definition": "CREATE INDEX notif_rec_read_new_idx ON public.hub_notification USING btree (recipient_id, is_read, created_at DESC)",
+        "table": "hub_notification",
+        "valid": true
+      },
+      "req_active_status_new_idx": {
+        "bytes": 2629632,
+        "definition": "CREATE INDEX req_active_status_new_idx ON public.hub_request USING btree (status, created_at DESC NULLS LAST, id DESC) WHERE (NOT is_deleted)",
+        "table": "hub_request",
+        "valid": true
+      },
+      "req_ongoing_sla_idx": {
+        "bytes": 434176,
+        "definition": "CREATE INDEX req_ongoing_sla_idx ON public.hub_request USING btree (due_date, priority, reference_code) WHERE ((due_date IS NOT NULL) AND (NOT is_deleted) AND ((status)::text = 'ongoing'::text))",
+        "table": "hub_request",
+        "valid": true
+      },
+      "sqr_engineer_new_idx": {
+        "bytes": 1474560,
+        "definition": "CREATE INDEX sqr_engineer_new_idx ON public.hub_sqrsubmission USING btree (engineer_id, created_at DESC, id DESC)",
+        "table": "hub_sqrsubmission",
+        "valid": true
+      },
+      "sqr_new_idx": {
+        "bytes": 1146880,
+        "definition": "CREATE INDEX sqr_new_idx ON public.hub_sqrsubmission USING btree (created_at DESC, id DESC)",
+        "table": "hub_sqrsubmission",
+        "valid": true
+      },
+      "sqr_reviewer_new_idx": {
+        "bytes": 1474560,
+        "definition": "CREATE INDEX sqr_reviewer_new_idx ON public.hub_sqrsubmission USING btree (pm_esg_reviewer_id, created_at DESC, id DESC)",
+        "table": "hub_sqrsubmission",
+        "valid": true
+      }
+    },
+    "matched_plan_count": 12,
+    "improved_plan_count": 9,
+    "unchanged_plan_count": 3,
+    "plans": [
+      {
+        "label": "Admin dashboard \u2014 open",
+        "result_rows": 50,
+        "sql_sha256": "e24c2561ee01b0483829d7e8811b34e034db0b7e5365e11f8840669d3fd00930",
+        "rows_sha256": "c23e961fbfc0df049517a17b74a86078cf5661cb8c0463b2686d85f6d7bbc799",
+        "before_blocks": 2971,
+        "after_blocks": 332,
+        "before_sorts": [
+          "top-N heapsort"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "req_active_status_new_idx"
+        ]
+      },
+      {
+        "label": "Admin dashboard \u2014 completed",
+        "result_rows": 50,
+        "sql_sha256": "283546ce6f61d47af4e5c327413f87c016cd617f890ce25d650a885db9960373",
+        "rows_sha256": "688fe31e9de9a1a0188b3e730a447c1c97d7978b0056b9fbbd0280a4ebb83c3f",
+        "before_blocks": 2971,
+        "after_blocks": 351,
+        "before_sorts": [
+          "top-N heapsort"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "req_active_status_new_idx"
+        ]
+      },
+      {
+        "label": "SLA report \u2014 attention list",
+        "result_rows": 10,
+        "sql_sha256": "76be5d8313bd71825fe2d36f3349a8f1cd1cefec771b210a9f6c72eb9fe790d4",
+        "rows_sha256": "d327c8ffdf213652b1dd72353120fab05a909c182fe41d1f5319f082399afec4",
+        "before_blocks": 2951,
+        "after_blocks": 50,
+        "before_sorts": [
+          "top-N heapsort"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "req_ongoing_sla_idx"
+        ]
+      },
+      {
+        "label": "Notifications \u2014 unread",
+        "result_rows": 50,
+        "sql_sha256": "126e88221770e26b1d18a36aaa6519d2b32bd1c409ed6357d69c74ab3d13c2b0",
+        "rows_sha256": "f70397dcaf37857851ad454bc2ec312c053a58d4e753186f572d7c4438716a0b",
+        "before_blocks": 9860,
+        "after_blocks": 58,
+        "before_sorts": [],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "notif_rec_read_new_idx"
+        ]
+      },
+      {
+        "label": "Notifications \u2014 read",
+        "result_rows": 50,
+        "sql_sha256": "1bfb6b9bbed83783273477154e44f3ce333c8151fd131e6d198602422594a1ca",
+        "rows_sha256": "6fae9f7432a3fe7f9eecb0199eb6b4cda3d787f7946cdf2568c57be6272d4cb2",
+        "before_blocks": 976,
+        "after_blocks": 59,
+        "before_sorts": [],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "notif_rec_read_new_idx"
+        ]
+      },
+      {
+        "label": "Classic SQR \u2014 all",
+        "result_rows": 50,
+        "sql_sha256": "74406acc5d8895950b73d7ba7c85da0698e7d75ace218d99e1648c833dc8598f",
+        "rows_sha256": "6556f098387453b156d45be65ac1293b029bb00046a069e1d60360153dc13fb9",
+        "before_blocks": 1906,
+        "after_blocks": 200,
+        "before_sorts": [
+          "external merge"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "sqr_new_idx"
+        ]
+      },
+      {
+        "label": "Classic SQR \u2014 filing engineer",
+        "result_rows": 50,
+        "sql_sha256": "be7362a828e8213ee7e760b9e75772334856b921ea783da61f60b26e9805d840",
+        "rows_sha256": "14716c21b0a0abde0ff6c5e461d4bcb3f1f728bfdf8b0fee9d5eed84e798bcef",
+        "before_blocks": 320,
+        "after_blocks": 80,
+        "before_sorts": [
+          "top-N heapsort"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "sqr_engineer_new_idx"
+        ]
+      },
+      {
+        "label": "Classic SQR \u2014 assigned PM",
+        "result_rows": 50,
+        "sql_sha256": "675c4b4587a0fe1d9a49eb8206d6fea7b6f4171f0a4713f9adeb523f20cfa385",
+        "rows_sha256": "aba84e1f51a153003ef0ba95174d30aacd7bf3e631c48ea9ae9f97f06095f943",
+        "before_blocks": 331,
+        "after_blocks": 154,
+        "before_sorts": [
+          "quicksort"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "sqr_reviewer_new_idx"
+        ]
+      },
+      {
+        "label": "Engineer activity logs",
+        "result_rows": 50,
+        "sql_sha256": "ca8227d21fd74eed2d8ede26e0ce71267ee3a5ed49e54b93e93ed41e4ef83f3a",
+        "rows_sha256": "bd3f9e423499375d7165b67f031e5b3d695ddb7b164b6176b19a73eaec69787b",
+        "before_blocks": 451,
+        "after_blocks": 110,
+        "before_sorts": [
+          "top-N heapsort"
+        ],
+        "after_sorts": [],
+        "new_plan_indexes": [
+          "activity_eng_date_new_idx"
+        ]
+      },
+      {
+        "label": "Request engineer queue (deferred)",
+        "result_rows": 367,
+        "sql_sha256": "46f618c1e7d21e92ce9c4bbf28f1e427baa1a1c7315f3a9465822f1c2a0085ae",
+        "rows_sha256": "641a1dcef4df07f5c9b9c285b82421fc69863c410f523f578828f4312f7ceb9f",
+        "before_blocks": 428,
+        "after_blocks": 428,
+        "before_sorts": [
+          "quicksort"
+        ],
+        "after_sorts": [
+          "quicksort"
+        ],
+        "new_plan_indexes": []
+      },
+      {
+        "label": "Request backup queue (deferred)",
+        "result_rows": 129,
+        "sql_sha256": "9512ff854831e7a46061dcd02f817e64a5e04862540f12b695812535ec3b0533",
+        "rows_sha256": "5fa3d4f5894b35ee7402a9afd3022d65481cd201d820ed3bea986b710ec9ba73",
+        "before_blocks": 168,
+        "after_blocks": 168,
+        "before_sorts": [
+          "quicksort"
+        ],
+        "after_sorts": [
+          "quicksort"
+        ],
+        "new_plan_indexes": []
+      },
+      {
+        "label": "Requestor dashboard (deferred)",
+        "result_rows": 461,
+        "sql_sha256": "1e74957b3bba437d73dfa84cf96404c3bbf40dc808449fd87a732d848b273313",
+        "rows_sha256": "46e080a460d706aeda03eb9b002818174f0e2612dd1445e881e4127dc4a704c4",
+        "before_blocks": 83,
+        "after_blocks": 83,
+        "before_sorts": [
+          "quicksort"
+        ],
+        "after_sorts": [
+          "quicksort"
+        ],
+        "new_plan_indexes": []
+      }
+    ],
+    "plan_artifact_sha256": {
+      "before": "c341b3c2014466a6bfa32d7521362008274c0370c5ef5ff5ad4dc6e170cb608a",
+      "after": "fff4cc6112faf3538f61663f4ddac43200c7b0931a36d02b05bbfd4b9c81f5a5"
+    },
+    "schema_round_trip": {
+      "valid_indexes": 7,
+      "reverse_restored_catalog": true,
+      "reapplied": true,
+      "table_counts_and_row_fingerprints_unchanged": true
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "85f672383a61973d406b276eb9cd73353d903ab4a66686288410eb88b083d48a",
+    "report-after.png": "2ef3cbd9b6ccaa6532ac4b2f1608ae545e3ed8b3d033f6d08eca9370900aa677"
+  },
+  "notifications_verification": {
+    "draft_hidden_from_reader": true,
+    "draft_report_and_images_return_404": true,
+    "published_via_local_admin_editor": true,
+    "published_report_link_under_technical_evidence": true,
+    "published_images_byte_exact_and_no_store": 2,
+    "local_fixture_rolled_back": true
+  }
+}

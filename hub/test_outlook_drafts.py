@@ -19,7 +19,12 @@ from django.urls import include, path, reverse
 from django.utils import timezone
 
 from accounts.models import User
-from hub.models import OutlookConnection, OutlookOAuthAttempt, OutlookSqrDraft, SqrSubmission
+from hub.models import (
+    OutlookConnection,
+    OutlookOAuthAttempt,
+    OutlookSqrDraft,
+    SqrSubmission,
+)
 from hub.outlook_views import FLOW_SESSION_KEY, OutlookCallbackView, OutlookDraftView
 from hub.services import outlook_drafts as service
 
@@ -44,7 +49,7 @@ LINK = "https://outlook.office.com/mail/drafts/id/draft-1"
 def make_pfx(password=b"pfx-pass"):
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "request-hub-sqr-test")])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name)
             .public_key(key.public_key()).serial_number(x509.random_serial_number())
             .not_valid_before(now).not_valid_after(now + datetime.timedelta(days=1))
@@ -400,6 +405,7 @@ class OutlookConcurrentDraftTests(TransactionTestCase):
     def test_workers_share_durable_pending_owner(self):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Event
+
         from django.db import close_old_connections, connections
 
         user = User.objects.create_user(username="concurrent-pm", role=User.Roles.PM_ESG)

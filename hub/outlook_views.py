@@ -2,6 +2,7 @@
 import hmac
 import uuid
 from datetime import timedelta
+from typing import ClassVar
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -12,16 +13,22 @@ from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.decorators.cache import never_cache
-from django.utils.decorators import method_decorator
 
 from hub.models import OutlookConnection, OutlookOAuthAttempt, Request
 from hub.services.outlook_drafts import (
-    OutlookError, OutlookSignInRequired, access_token, client_and_cache,
-    create_or_reuse_draft, digest, encrypt_cache, require_configuration,
     SCOPES,
+    OutlookError,
+    OutlookSignInRequired,
+    access_token,
+    client_and_cache,
+    create_or_reuse_draft,
+    digest,
+    encrypt_cache,
+    require_configuration,
 )
 from hub.services.outlook_threads import request_email_access_error
 from hub.views import SqrApprovalOutlookRedirectView, _get_sqr_approval_email_context
@@ -58,7 +65,7 @@ def begin_authorization(request, pk, session_hash, kind="sqr", return_url=""):
 
 @method_decorator(never_cache, name="dispatch")
 class OutlookDraftView(LoginRequiredMixin, View):
-    http_method_names = ["post", "options"]
+    http_method_names: ClassVar[list[str]] = ["post", "options"]
 
     def post(self, request, pk):
         validator = SqrApprovalOutlookRedirectView()
@@ -86,7 +93,7 @@ class OutlookDraftView(LoginRequiredMixin, View):
 
 @method_decorator(never_cache, name="dispatch")
 class OutlookCallbackView(LoginRequiredMixin, View):
-    http_method_names = ["get", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "options"]
 
     def dispatch(self, request, *args, **kwargs):
         # Never put an OAuth code in the login URL's next parameter or referrer.
@@ -162,7 +169,7 @@ class OutlookCallbackView(LoginRequiredMixin, View):
 
 
 class RequestOutlookConnectView(LoginRequiredMixin, View):
-    http_method_names = ["get", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "options"]
 
     @method_decorator(never_cache)
     def get(self, request, pk):

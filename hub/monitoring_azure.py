@@ -37,7 +37,7 @@ class Resource:
 
     def valid_id(self, value):
         pattern = RESOURCE_PREFIX + re.escape(self.namespace) + rf"/[a-z0-9][a-z0-9-]{{0,{self.max_name_length - 1}}}"
-        return re.fullmatch(pattern, value, re.I | re.ASCII)
+        return re.fullmatch(pattern, value, re.IGNORECASE | re.ASCII)
 
     def groups(self):
         return (("Average", self.average), ("Total", self.total))

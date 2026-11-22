@@ -2,10 +2,10 @@ import json
 import re
 from unittest.mock import patch
 
-from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.models import User
 from hub.models import Account
@@ -23,6 +23,7 @@ class RecoveryCenterTests(TransactionTestCase):
 
     def test_outlook_models_are_explicitly_excluded_from_recovery(self):
         from django.apps import apps
+
         from accounts import recovery
 
         actual = {model._meta.label_lower for model in apps.get_app_config("hub").get_models()}
@@ -34,6 +35,7 @@ class RecoveryCenterTests(TransactionTestCase):
 
     def test_assistant_runtime_data_is_excluded_and_existing_snapshot_restores(self):
         from django.apps import apps
+
         from accounts import recovery
         from hub.models import AssistantUsageLimit
 
@@ -104,6 +106,7 @@ class RecoveryCenterTests(TransactionTestCase):
 
     def test_pre_transition_sqr_backup_restores_without_reopening_signed_completion(self):
         from datetime import date
+
         from accounts import recovery
         from hub.models import SqrSubmission
 
@@ -137,6 +140,7 @@ class RecoveryCenterTests(TransactionTestCase):
 
     def test_current_sqr_backup_preserves_assessments_and_unmarked_signed_date(self):
         from datetime import date
+
         from hub.models import SqrSubmission
 
         row = SqrSubmission.objects.create(
@@ -203,7 +207,8 @@ class RecoveryCenterTests(TransactionTestCase):
         latest = re.search(r'<a\b[^>]*href="' + re.escape(download) + r'"[^>]*>[^<]*(?:<i[^>]*></i>)?\s*Download latest\s*</a>', recovery)
         self.assertIsNotNone(latest, 'The new backup should be downloadable without opening history.')
 
-    def test_deleted_request_disclosure_reopens_for_search_and_pagination(self):
+    def test_deleted_request_disclosure_reopens_for_search_and_pagination(self) -> None:
+        """Keep deleted requests expanded when applying its search or changing pages."""
         from hub.models import Request
 
         account = Account.objects.create(name='Recovery example')
@@ -223,7 +228,7 @@ class RecoveryCenterTests(TransactionTestCase):
                 response = self.client.get(url, params)
                 self.assertEqual(response.status_code, 200, 'Existing deleted requests must not break the profile.')
                 html = response.content.decode()
-                disclosure = re.search(r'<details\b[^>]*\bid="recovery-deleted"[^>]*>(.*?)</details>', html, re.S)
+                disclosure = re.search(r'<details\b[^>]*\bid="recovery-deleted"[^>]*>(.*?)</details>', html, re.DOTALL)
                 self.assertIsNotNone(disclosure, 'Deleted requests need their own disclosure.')
                 self.assertEqual(bool(re.search(r'\sopen\b', disclosure[0].split('>', 1)[0])), opened)
                 self.assertIn(reference, disclosure[1])
@@ -293,9 +298,10 @@ class RecoveryCenterTests(TransactionTestCase):
         new_account = Account.objects.create(name="Next account")
         self.assertNotEqual(new_account.pk, account.pk)
 
-    def test_failed_restore_rolls_back_and_retains_safety_snapshot(self):
-        from accounts.models import BackupSnapshot, RecoveryEvent
+    def test_failed_restore_rolls_back_and_retains_safety_snapshot(self) -> None:
+        """Roll back a failed restore without losing its pre-restore snapshot."""
         from accounts import recovery
+        from accounts.models import BackupSnapshot, RecoveryEvent
         account = Account.objects.create(name="Before")
         _, payload = self.create_backup()
         Account.objects.filter(pk=account.pk).update(name="Current")
@@ -310,9 +316,11 @@ class RecoveryCenterTests(TransactionTestCase):
                 return original_replace(payload)
             Account.objects.all().delete()
             raise RuntimeError("Simulated restore failure")
-        with patch("accounts.recovery._replace", side_effect=fail):
-            with self.assertRaises(RuntimeError):
-                recovery.restore_preview(self.user, preview.token)
+        with (
+            patch("accounts.recovery._replace", side_effect=fail),
+            self.assertRaises(RuntimeError),
+        ):
+            recovery.restore_preview(self.user, preview.token)
         self.assertTrue(Account.objects.filter(pk=account.pk, name="Current").exists())
         self.assertEqual(BackupSnapshot.objects.count(), count + 1)
         self.assertTrue(RecoveryEvent.objects.filter(action="restore", outcome="failed").exists())
@@ -450,14 +458,17 @@ class RecoveryCenterTests(TransactionTestCase):
                 recovery.create_preview(self.user, changed)
             self.assertTrue(Account.objects.filter(name="Original").exists())
 
-    def test_safety_snapshot_failure_blocks_replacement(self):
+    def test_safety_snapshot_failure_blocks_replacement(self) -> None:
+        """Leave the current state untouched if its safety snapshot cannot be saved."""
         from accounts import recovery
         account = Account.objects.create(name="Original")
         _, payload = self.create_backup()
         preview, _ = recovery.create_preview(self.user, payload)
-        with patch("accounts.recovery.persist_snapshot", side_effect=RuntimeError("Snapshot unavailable")):
-            with self.assertRaises(RuntimeError):
-                recovery.restore_preview(self.user, preview.token)
+        with (
+            patch("accounts.recovery.persist_snapshot", side_effect=RuntimeError("Snapshot unavailable")),
+            self.assertRaises(RuntimeError),
+        ):
+            recovery.restore_preview(self.user, preview.token)
         self.assertTrue(Account.objects.filter(pk=account.pk, name="Original").exists())
 
     def test_validation_rejects_modified_checksum(self):

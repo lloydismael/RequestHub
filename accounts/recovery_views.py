@@ -14,8 +14,8 @@ from django.views.decorators.csrf import csrf_protect
 from hub.mixins import AdminRequiredMixin
 from hub.models import Request
 
-from .models import BackupSnapshot, RecoveryEvent, User
 from . import recovery
+from .models import BackupSnapshot, RecoveryEvent, User
 
 
 def recovery_context(request):

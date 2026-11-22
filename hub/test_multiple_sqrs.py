@@ -3,17 +3,32 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from threading import Barrier
+from typing import Any
 from unittest.mock import patch
 
 from django.db import IntegrityError, close_old_connections, connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from openpyxl import load_workbook
 
 from accounts.models import User
-from hub.models import Account, Notification, Request, SqrProjectPerformance, SqrSubmission
-from hub.views import RequestCollaborativeManageView, SqrEngineerUpdateView, SqrImportView, _make_sqr_edit_form
+from hub.forms import SqrSubmissionForm
+from hub.models import (
+    Account,
+    Notification,
+    Request,
+    SqrProjectPerformance,
+    SqrSubmission,
+)
+from hub.views import (
+    RequestCollaborativeManageView,
+    SqrEngineerUpdateView,
+    SqrImportView,
+    SqrListView,
+    _make_sqr_edit_form,
+)
 
 
 class MultipleSqrFixtures:
@@ -43,7 +58,7 @@ class MultipleSqrFixtures:
             linked_request=rq or self.rq, engineer=engineer or self.engineer,
             pm_esg_reviewer=self.pm, customer_name=self.account.name,
             customer_company="ESS", project_title="Independent project",
-            project_details="Implementation", sse_manhrs=Decimal("20"),
+            project_details="Implementation", sse_manhrs=Decimal(20),
             sqr_folder_link="https://example.com/quotation",
         )
 
@@ -80,6 +95,20 @@ class MultipleSqrTests(MultipleSqrFixtures, TestCase):
         self.assertEqual(send_email.call_count, 3)
         self.assertEqual(Notification.objects.filter(recipient=self.pm, source="SQR · New Submission").count(), 3)
 
+    def test_submission_notifies_unique_reviewer_and_admins_in_one_insert(self):
+        User.objects.create_user(username="additional_sqr_admin", role=User.Roles.ADMIN)
+        admin_ids = list(User.objects.filter(role=User.Roles.ADMIN).values_list("pk", flat=True))
+        self.client.force_login(self.engineer)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.post(reverse("hub:sqr"), self.payload)
+        self.assertEqual(response.status_code, 302)
+        submission = SqrSubmission.objects.get(linked_request=self.rq)
+        notifications = Notification.objects.filter(source="SQR · New Submission")
+        self.assertCountEqual(notifications.values_list("recipient_id", flat=True), [self.pm.pk, *admin_ids])
+        self.assertEqual(notifications.exclude(message__contains=submission.reference_code).count(), 0)
+        inserts = [query for query in queries if f'INSERT INTO "{Notification._meta.db_table}"' in query['sql']]
+        self.assertEqual(len(inserts), 1)
+
     def test_engineer_can_submit_training_scope_with_sse_hours(self):
         self.client.force_login(self.engineer)
         url = reverse("hub:sqr")
@@ -92,7 +121,7 @@ class MultipleSqrTests(MultipleSqrFixtures, TestCase):
         self.assertRedirects(response, url, fetch_redirect_response=False)
         submission = SqrSubmission.objects.get(linked_request=self.rq)
         self.assertEqual(submission.project_details, "Training")
-        self.assertEqual(submission.sse_manhrs, Decimal("20"))
+        self.assertEqual(submission.sse_manhrs, Decimal(20))
         self.assertIsNone(submission.managed_support_amount)
 
     def test_invalid_post_retains_reusable_request(self):
@@ -114,6 +143,43 @@ class MultipleSqrTests(MultipleSqrFixtures, TestCase):
         self.assertFalse(SqrSubmission.objects.filter(linked_request=self.rq).exists())
         response = self.client.get(reverse("hub:sqr"))
         self.assertNotIn(self.rq, response.context["sqr_form"].fields["linked_request"].queryset)
+
+    def test_reassigned_filing_recovers_from_context_integrity_error(self) -> None:
+        """Render both form errors when the stale-assignment context fails once."""
+        self.client.force_login(self.engineer)
+        original_valid = SqrSubmissionForm.is_valid
+        original_context = SqrListView.get_context_data
+        failed_once = False
+
+        def valid_then_reassign(form: SqrSubmissionForm) -> bool:
+            """Change the primary engineer after validating the submitted request."""
+            valid = original_valid(form)
+            if valid:
+                Request.objects.filter(pk=self.rq.pk).update(engineer=self.other)
+            return valid
+
+        def context_with_failure(view: SqrListView, **kwargs: Any) -> dict[str, Any]:
+            """Fail once while preparing the stale-assignment response."""
+            nonlocal failed_once
+            form = kwargs.get("form")
+            if form is not None and "linked_request" in form.errors and not failed_once:
+                failed_once = True
+                raise IntegrityError("test context failure")
+            return original_context(view, **kwargs)
+
+        with (
+            patch.object(SqrSubmissionForm, "is_valid", valid_then_reassign),
+            patch.object(SqrListView, "get_context_data", context_with_failure),
+            patch("hub.views.logger.exception"),
+        ):
+            response = self.client.post(reverse("hub:sqr"), self.payload)
+
+        self.assertEqual(response.status_code, 200)
+        form_errors = response.context["sqr_form"].errors
+        self.assertIn("This request is no longer assigned to you.", form_errors["linked_request"])
+        self.assertIn("The SQR could not be saved. Please try again.", form_errors["__all__"])
+        self.assertFalse(SqrSubmission.objects.exists())
+        self.assertFalse(Notification.objects.filter(source="SQR · New Submission").exists())
 
     def test_non_engineer_creation_permissions_unchanged(self):
         for user in (self.pm, self.admin, self.requestor):

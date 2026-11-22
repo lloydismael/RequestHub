@@ -7,6 +7,7 @@ import subprocess
 import zlib
 from io import BytesIO
 from pathlib import Path
+from typing import ClassVar
 from unittest import skipUnless
 
 from django.conf import settings
@@ -273,7 +274,7 @@ class ProfilePhotoNormalizationTests(SimpleTestCase):
     class _Form:
         """Minimal stand-in: the cleaner reads nothing but `cleaned_data`."""
 
-        cleaned_data = {}
+        cleaned_data: ClassVar[dict[str, SimpleUploadedFile]] = {}
 
     def clean(self, upload):
         form = self._Form()

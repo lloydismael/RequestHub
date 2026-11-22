@@ -1,9 +1,9 @@
 import json
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import asdict
-from datetime import timezone as datetime_timezone
-from typing import Mapping
+from datetime import UTC
 
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
@@ -39,7 +39,6 @@ from hub.assistant_types import (
     ToolResult,
     UserMessage,
 )
-
 
 MAX_TOOL_ROUNDS = 3
 MAX_TOOL_CALLS = 5
@@ -183,7 +182,7 @@ def _require_page(arguments: Mapping[str, object]) -> int:
 
 
 def _source(kind: str, key: str, title: str) -> SourceRef:
-    revision = timezone.now().astimezone(datetime_timezone.utc).isoformat()
+    revision = timezone.now().astimezone(UTC).isoformat()
     return SourceRef(key=f"{kind}:{key}", title=title, revision=revision, kind=kind)
 
 

@@ -1,19 +1,29 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
+from typing import ClassVar
 from urllib.parse import quote
-from zoneinfo import ZoneInfo
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import connections, models, router, transaction
-from django.contrib.contenttypes.models import ContentType
 from django.db.models import Exists, OuterRef, Q
 from django.db.models.functions import Cast, Concat, StrIndex, Substr
 from django.utils import timezone
+
 from accounts.storage import DatabaseMediaStorage
-from .release_changelog import COMPARISON_FIELDS, COMPARISON_META_FIELDS, EVIDENCE_POLICY, GROUPS, comparison_kind, missing_comparisons
+
+from .release_changelog import (
+    COMPARISON_FIELDS,
+    COMPARISON_META_FIELDS,
+    EVIDENCE_POLICY,
+    GROUPS,
+    comparison_kind,
+    missing_comparisons,
+)
 
 MANILA_TZ = ZoneInfo("Asia/Manila")
 
@@ -71,7 +81,7 @@ class Changelog(models.Model):
     objects = ChangelogManager()
 
     class Meta:
-        ordering = ["-release_date", "-pk"]
+        ordering: ClassVar[list[str]] = ["-release_date", "-pk"]
 
     def __str__(self):
         return self.title
@@ -167,7 +177,7 @@ class Account(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["name"]
+        ordering: ClassVar[list[str]] = ["name"]
 
     def __str__(self) -> str:
         return self.name
@@ -205,7 +215,7 @@ class Request(models.Model):
         ONGOING = "ongoing", "Ongoing"
         COMPLETED = "completed", "Completed"
 
-    SLA_DAYS = {
+    SLA_DAYS: ClassVar[dict[str, int]] = {
         Priority.MEDIUM: 5,
         Priority.HIGH: 3,
     }
@@ -279,7 +289,18 @@ class Request(models.Model):
     all_objects = models.Manager()
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering: ClassVar[list[str]] = ["-created_at"]
+        indexes = (
+            models.Index(
+                "status", models.F("created_at").desc(nulls_last=True), models.F("id").desc(),
+                condition=Q(is_deleted=False), name="req_active_status_new_idx",
+            ),
+            models.Index(
+                fields=["due_date", "priority", "reference_code"],
+                condition=Q(is_deleted=False, status="ongoing", due_date__isnull=False),
+                name="req_ongoing_sla_idx",
+            ),
+        )
 
     def get_absolute_url(self):
         from django.urls import reverse
@@ -582,8 +603,8 @@ class RequestLifecycleEvent(models.Model):
     idempotency_key = models.CharField(max_length=160)
 
     class Meta:
-        ordering = ["sequence"]
-        constraints = [
+        ordering: ClassVar[list[str]] = ["sequence"]
+        constraints: ClassVar[list[models.BaseConstraint]] = [
             models.UniqueConstraint(
                 fields=["request", "sequence"],
                 name="uniq_req_lifecycle_sequence",
@@ -597,7 +618,7 @@ class RequestLifecycleEvent(models.Model):
                 name="req_lifecycle_sequence_gte_1",
             ),
         ]
-        indexes = [
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["request", "occurred_at"], name="req_life_req_time_idx"),
             models.Index(fields=["primary_owner", "stage"], name="req_life_owner_stage_idx"),
         ]
@@ -625,8 +646,8 @@ class RequestCommunication(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-created_at"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-created_at"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["request", "user", "channel"]),
         ]
 
@@ -687,7 +708,10 @@ class EngineerActivityLog(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-request_date", "-created_at"]
+        ordering: ClassVar[list[str]] = ["-request_date", "-created_at"]
+        indexes = (
+            models.Index(fields=["engineer", "-request_date", "-created_at"], name="activity_eng_date_new_idx"),
+        )
 
     def __str__(self) -> str:
         engineer_name = self.engineer.get_full_name() or self.engineer.username or "Engineer"
@@ -935,7 +959,12 @@ class SqrSubmission(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        ordering: ClassVar[list[str]] = ["-created_at"]
+        indexes = (
+            models.Index(fields=["-created_at", "-id"], name="sqr_new_idx"),
+            models.Index(fields=["engineer", "-created_at", "-id"], name="sqr_engineer_new_idx"),
+            models.Index(fields=["pm_esg_reviewer", "-created_at", "-id"], name="sqr_reviewer_new_idx"),
+        )
 
     def __str__(self) -> str:
         return self.reference_code or f"SQR draft #{self.pk}"
@@ -953,8 +982,8 @@ class SqrSubmission(models.Model):
     def discounted_price(self):
         if self.quotation_total_price is None:
             return None
-        discount = Decimal(self.discount_rate or 0) / Decimal("100")
-        discounted = self.quotation_total_price * (Decimal("1") - discount)
+        discount = Decimal(self.discount_rate or 0) / Decimal(100)
+        discounted = self.quotation_total_price * (Decimal(1) - discount)
         return discounted.quantize(Decimal("0.01"))
 
     @property
@@ -962,7 +991,7 @@ class SqrSubmission(models.Model):
         """Computed cost = (sse_manhrs + pm_manhrs) × hourly_rate."""
         if not self.hourly_rate:
             return None
-        total_hrs = (self.sse_manhrs or Decimal("0")) + (self.pm_manhrs or Decimal("0"))
+        total_hrs = (self.sse_manhrs or Decimal(0)) + (self.pm_manhrs or Decimal(0))
         if not total_hrs:
             return None
         return (total_hrs * self.hourly_rate).quantize(Decimal("0.01"))
@@ -973,15 +1002,15 @@ class SqrSubmission(models.Model):
         base = self.base_cost
         if base is None:
             return None
-        discount = Decimal(self.discount_rate or 0) / Decimal("100")
-        return (base * (Decimal("1") - discount)).quantize(Decimal("0.01"))
+        discount = Decimal(self.discount_rate or 0) / Decimal(100)
+        return (base * (Decimal(1) - discount)).quantize(Decimal("0.01"))
 
     @property
     def computed_gross_total(self):
         """SSE Amount + PM Amount + Managed Support Amount."""
-        sse = self.sse_amount or Decimal("0")
-        pm = self.pm_amount or Decimal("0")
-        mgmt = self.managed_support_amount or Decimal("0")
+        sse = self.sse_amount or Decimal(0)
+        pm = self.pm_amount or Decimal(0)
+        mgmt = self.managed_support_amount or Decimal(0)
         gross = sse + pm + mgmt
         return gross.quantize(Decimal("0.01")) if gross else None
 
@@ -991,7 +1020,7 @@ class SqrSubmission(models.Model):
         gross = self.computed_gross_total
         if gross is None:
             return None
-        return (gross * Decimal(self.discount_rate or 0) / Decimal("100")).quantize(Decimal("0.01"))
+        return (gross * Decimal(self.discount_rate or 0) / Decimal(100)).quantize(Decimal("0.01"))
 
     @property
     def computed_total_price(self):
@@ -999,8 +1028,8 @@ class SqrSubmission(models.Model):
         gross = self.computed_gross_total
         if gross is None:
             return None
-        discount = Decimal(self.discount_rate or 0) / Decimal("100")
-        return (gross * (Decimal("1") - discount)).quantize(Decimal("0.01"))
+        discount = Decimal(self.discount_rate or 0) / Decimal(100)
+        return (gross * (Decimal(1) - discount)).quantize(Decimal("0.01"))
 
     _IMPL_SCOPES = frozenset([
         "Deployment Only",
@@ -1021,11 +1050,11 @@ class SqrSubmission(models.Model):
         "Support",
     ])
     _PM_MANHOUR_BUCKETS = frozenset([
-        Decimal("8"),
-        Decimal("16"),
-        Decimal("24"),
-        Decimal("32"),
-        Decimal("48"),
+        Decimal(8),
+        Decimal(16),
+        Decimal(24),
+        Decimal(32),
+        Decimal(48),
     ])
 
     @property
@@ -1087,15 +1116,15 @@ class SqrSubmission(models.Model):
         if sse_manhrs is None:
             return None
         hrs = Decimal(str(sse_manhrs))
-        if hrs <= Decimal("20"):
-            return Decimal("8")
-        if hrs <= Decimal("40"):
-            return Decimal("16")
-        if hrs <= Decimal("60"):
-            return Decimal("24")
-        if hrs <= Decimal("80"):
-            return Decimal("32")
-        return Decimal("48")
+        if hrs <= Decimal(20):
+            return Decimal(8)
+        if hrs <= Decimal(40):
+            return Decimal(16)
+        if hrs <= Decimal(60):
+            return Decimal(24)
+        if hrs <= Decimal(80):
+            return Decimal(32)
+        return Decimal(48)
 
     @property
     def effective_pm_manhrs(self):
@@ -1109,7 +1138,7 @@ class SqrSubmission(models.Model):
         pm_manhrs = self.effective_pm_manhrs
         if pm_manhrs is None:
             return None
-        return (Decimal(str(pm_manhrs)) * Decimal("3000")).quantize(Decimal("0.01"))
+        return (Decimal(str(pm_manhrs)) * Decimal(3000)).quantize(Decimal("0.01"))
 
     def save(self, *args, **kwargs):
         creating = self.pk is None
@@ -1123,11 +1152,11 @@ class SqrSubmission(models.Model):
 
         # Auto-compute SSE Amount (col M = col L × 2000) and PM Amount (col O = col N × 3000)
         if self.sse_manhrs is not None:
-            self.sse_amount = (Decimal(str(self.sse_manhrs)) * Decimal("2000")).quantize(Decimal("0.01"))
+            self.sse_amount = (Decimal(str(self.sse_manhrs)) * Decimal(2000)).quantize(Decimal("0.01"))
         else:
             self.sse_amount = None
         if self.pm_manhrs is not None:
-            self.pm_amount = (Decimal(str(self.pm_manhrs)) * Decimal("3000")).quantize(Decimal("0.01"))
+            self.pm_amount = (Decimal(str(self.pm_manhrs)) * Decimal(3000)).quantize(Decimal("0.01"))
         else:
             self.pm_amount = None
 
@@ -1163,7 +1192,7 @@ class SqrTrackerSettings(models.Model):
     show_classic_sqr_tracker = models.BooleanField(default=True)
 
     class Meta:
-        constraints = [
+        constraints: ClassVar[list[models.BaseConstraint]] = [
             models.CheckConstraint(condition=models.Q(pk=1), name="sqr_tracker_settings_singleton"),
         ]
 
@@ -1196,8 +1225,8 @@ class SqrSubmissionChange(models.Model):
     )
 
     class Meta:
-        ordering = ["-changed_at"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-changed_at"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["submission", "field", "changed_at"]),
             models.Index(fields=["undone_at"]),
         ]
@@ -1271,7 +1300,7 @@ class SqrProjectPerformance(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-updated_at", "-pk"]
+        ordering: ClassVar[list[str]] = ["-updated_at", "-pk"]
 
     def __str__(self) -> str:
         return f"Performance for {self.submission}"
@@ -1322,8 +1351,8 @@ class SqrSubmissionHistory(models.Model):
     )
 
     class Meta:
-        ordering = ["-created_at", "-pk"]
-        indexes = [
+        ordering: ClassVar[list[str]] = ["-created_at", "-pk"]
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["submission", "-created_at"]),
             models.Index(fields=["actor", "-created_at"]),
             models.Index(fields=["action", "-created_at"]),
@@ -1358,16 +1387,17 @@ class Notification(models.Model):
     event_revision = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ["-created_at"]
-        constraints = [
+        ordering: ClassVar[list[str]] = ["-created_at"]
+        constraints: ClassVar[list[models.BaseConstraint]] = [
             models.UniqueConstraint(
                 fields=["recipient", "event_key"],
                 condition=~models.Q(event_key=""),
                 name="uniq_notif_recipient_event_key",
             ),
         ]
-        indexes = [
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(fields=["recipient", "event_type", "id"], name="notif_rec_evt_id"),
+            models.Index(fields=["recipient", "is_read", "-created_at"], name="notif_rec_read_new_idx"),
         ]
 
     def __str__(self) -> str:
@@ -1440,7 +1470,7 @@ class StatusLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["created_at"]
+        ordering: ClassVar[list[str]] = ["created_at"]
 
     def __str__(self) -> str:
         return f"{self.request.reference_code or 'Request'}: {self.author.get_full_name() or self.author.username}"
@@ -1497,8 +1527,8 @@ class FormVersion(ImmutableFormRecord):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-number"]
-        constraints = [models.UniqueConstraint(fields=["definition", "number"], name="unique_form_version_number")]
+        ordering: ClassVar[list[str]] = ["-number"]
+        constraints: ClassVar[list[models.BaseConstraint]] = [models.UniqueConstraint(fields=["definition", "number"], name="unique_form_version_number")]
 
 
 class FormAnswerSet(models.Model):
@@ -1510,7 +1540,7 @@ class FormAnswerSet(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["definition", "content_type", "object_id"], name="unique_form_record_answers")]
+        constraints: ClassVar[list[models.BaseConstraint]] = [models.UniqueConstraint(fields=["definition", "content_type", "object_id"], name="unique_form_record_answers")]
 
     def clean(self):
         from .form_editor import get_form_class
@@ -1531,7 +1561,7 @@ class FormEditorAuditEvent(ImmutableFormRecord):
     details = models.JSONField(default=dict)
 
     class Meta:
-        ordering = ["-created_at", "-pk"]
+        ordering: ClassVar[list[str]] = ["-created_at", "-pk"]
 
 class OutlookConnection(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
@@ -1542,7 +1572,7 @@ class OutlookConnection(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["user", "session_hash"], name="outlook_user_session_unique")]
+        constraints: ClassVar[list[models.BaseConstraint]] = [models.UniqueConstraint(fields=["user", "session_hash"], name="outlook_user_session_unique")]
 
 
 class OutlookOAuthAttempt(models.Model):
@@ -1565,7 +1595,7 @@ class OutlookSqrDraft(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["user", "tenant_id", "mailbox_oid", "submission"], name="outlook_user_mailbox_sqr_unique")]
+        constraints: ClassVar[list[models.BaseConstraint]] = [models.UniqueConstraint(fields=["user", "tenant_id", "mailbox_oid", "submission"], name="outlook_user_mailbox_sqr_unique")]
 
 
 class AssistantUsageLimit(models.Model):
@@ -1587,7 +1617,7 @@ class AssistantUsageLimit(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        indexes = [
+        indexes: ClassVar[list[models.Index]] = [
             models.Index(
                 fields=["lease_expires_at"],
                 name="assistant_lease_expiry_idx",

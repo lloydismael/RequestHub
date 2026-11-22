@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from django.db import transaction
 from django.db.models import Count, Max, Q
 
 from accounts.models import User
-from hub.models import Notification, Request
+from hub.mixins import ADMIN_PANEL_ROLES as ADMIN_NOTIFICATION_ROLES
+from hub.models import Notification, Request, SqrSubmission
+from hub.services.lookup_cache import invalidate_notification_badges
+from hub.services.request_changes import (
+    create_change_status_log,
+    summarize_request_changes,
+)
 
-
-ADMIN_NOTIFICATION_ROLES = {User.Roles.ADMIN, User.Roles.PM_ESG}
 TOAST_EVENT_TYPES = (Notification.EventType.NEW_REQUEST, Notification.EventType.ASSIGNMENT, Notification.EventType.MENTION)
 
 
@@ -41,6 +47,63 @@ def notification_summary(user: User, *, include_toast_cursor: bool = False) -> d
 
 def _user_label(user: User) -> str:
     return user.get_full_name().strip() or user.username or "Request Hub"
+
+
+def notify_request_edit(
+    actor: User,
+    original: Request,
+    updated: Request,
+    changed_fields: Iterable[str],
+    source_label: str,
+    *,
+    include_management: bool = False,
+) -> None:
+    """Record a request edit and notify the recipients selected by that flow."""
+    summary_text = summarize_request_changes(original, updated, changed_fields)
+    if not summary_text:
+        return
+    create_change_status_log(updated, actor, source_label, summary_text)
+
+    name = actor.get_full_name() or actor.username
+    management_ids = (
+        User.objects.filter(role__in=ADMIN_NOTIFICATION_ROLES).values_list("pk", flat=True)
+        if include_management else ()
+    )
+    recipient_ids = dict.fromkeys((*management_ids, updated.requestor_id, updated.engineer_id, updated.backup_engineer_id))
+    recipient_ids.pop(None, None)
+    recipient_ids.pop(actor.pk, None)
+    notifications = Notification.objects.bulk_create([
+        Notification(
+            recipient_id=recipient_id,
+            message=f"{name} updated {updated.reference_code}: {summary_text}",
+            related_request=updated,
+            actor=name,
+            source=source_label,
+        )
+        for recipient_id in recipient_ids
+    ])
+    if notifications:
+        invalidate_notification_badges(recipient_ids, using=notifications[0]._state.db)
+
+
+def notify_sqr_submission(submission: SqrSubmission) -> None:
+    """Notify the reviewer and admins of a newly filed SQR."""
+    actor_name = submission.engineer.get_full_name() or submission.engineer.username
+    message = f"{actor_name} submitted {submission.reference_code} for {submission.customer_name}."
+    admin_ids = User.objects.filter(role=User.Roles.ADMIN).values_list("pk", flat=True)
+    recipient_ids = dict.fromkeys((submission.pm_esg_reviewer_id, *admin_ids))
+    recipient_ids.pop(submission.engineer_id, None)
+    notifications = Notification.objects.bulk_create([
+        Notification(
+            recipient_id=recipient_id,
+            message=message,
+            actor=actor_name,
+            source="SQR · New Submission",
+        )
+        for recipient_id in recipient_ids
+    ])
+    if notifications:
+        invalidate_notification_badges(recipient_ids, using=notifications[0]._state.db)
 
 
 def queue_new_request_notifications(request_obj: Request, *, actor_user: User) -> None:

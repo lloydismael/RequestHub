@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 from django.http import JsonResponse
 from django.views import View
 
@@ -6,7 +8,7 @@ from .monitoring import app_snapshot, database_snapshot
 
 
 class MonitoringView(AdminRequiredMixin, View):
-    http_method_names = ["get"]
+    http_method_names: ClassVar[list[str]] = ["get"]
 
     def handle_no_permission(self):
         if self.request.user.is_authenticated:

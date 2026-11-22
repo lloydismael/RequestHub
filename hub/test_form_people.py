@@ -6,9 +6,10 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import User
+
 from . import form_editor as editor
-from .forms import RequestForm, SqrSubmissionForm
 from .form_editor_runtime import TOKEN_FIELD
+from .forms import RequestForm, SqrSubmissionForm
 from .models import FormDefinition, FormVersion, SqrSubmission
 
 

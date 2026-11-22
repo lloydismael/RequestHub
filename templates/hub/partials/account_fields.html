@@ -1,0 +1,10 @@
+{% load form_customization %}
+{% for hidden in form.hidden_fields %}{% if hidden.name != '_form_version' %}{{ hidden }}{% endif %}{% endfor %}
+<div data-editor-field="{{ form.name.html_name }}">
+    {{ form.name }}
+    {% if form.name.help_text %}<div class="form-text" id="{{ form.name.auto_id }}_helptext">{{ form.name.help_text }}</div>{% endif %}
+    {% if form.name.errors %}<div class="invalid-feedback d-block" id="{{ form.name.auto_id }}_error">{{ form.name.errors|join:' ' }}</div>{% endif %}
+</div>
+{% form_editor_extras form %}
+{% for error in form.id.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+{% for error in form.non_field_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}

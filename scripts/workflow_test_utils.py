@@ -1,8 +1,8 @@
 """Read literal workflow scripts for offline execution, not general YAML parsing."""
 
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 

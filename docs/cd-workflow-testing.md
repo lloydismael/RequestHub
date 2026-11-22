@@ -133,6 +133,164 @@ Images are stored alongside each versioned manifest, not in the Git-ignored `hub
 
 `sync_release_changelog` enriches matching existing entries from these packaged manifests without relogging commits. System drafts publish when evidence is complete. Legacy/admin-held drafts still require an explicit publication choice; the v57.1 legacy draft was explicitly opted into publication during this authorized recovery. Existing release titles, summaries, dates and previous-version links are preserved.
 
+### Unreleased: Request progress in dark mode
+
+**Before:** Fixed navy rectangles behind the step names and statuses stood out against themed cards, including the Christmas theme's dark green card.
+
+**After:** Step names and statuses use the card background and theme-aware text. On wider screens, the connectors run between labels instead of behind them. The phone layout keeps its vertical connectors. Light mode and lifecycle behavior are unchanged.
+
+| Viewport | Before | After |
+| --- | --- | --- |
+| Desktop | [Before](../hub/changelog_assets/pending-request-progress-dark-mode/desktop-before.png) | [After](../hub/changelog_assets/pending-request-progress-dark-mode/desktop-after.png) |
+| Phone | [Before](../hub/changelog_assets/pending-request-progress-dark-mode/phone-before.png) | [After](../hub/changelog_assets/pending-request-progress-dark-mode/phone-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-request-progress-dark-mode/capture.json) records the baseline, working-tree fingerprints, and image checksums. Both sides use the same synthetic request. The `request-progress-dark-mode` recipe captures the exact release revisions before publication. A Chromium regression check verifies that all five step labels and statuses sit on the card surface and have at least 4.5:1 contrast in the Default and Christmas dark themes at both widths. Light-mode captures were pixel-identical at both widths.
+
+In disposable PostgreSQL, **Notifications → Changelogs** hid an unpublished test release and all four images from a signed-in reader. After test publication, the desktop pair appeared in the feed, the phone pair opened on demand, and all images were served byte-for-byte with `no-store`. No live release was published.
+
+### Unreleased: Accounts, dashboard and SQR performance
+
+- **Management → Accounts:** The old editor sent every account and hid rows in the browser. The new editor sends up to 50 rows at a time, searches the entire directory by name, and fetches only rows and pagination controls for in-page navigation. The search box follows the accepted results if paging cancels a pending search. Edits retain their original fields and signed schema across pages, even if a new schema is published. Save Changes validates the whole draft before writing; a failed save retains submitted values and links errors to the affected inputs.
+- **Save limits:** Pages shrink for schemas with many custom fields or multiselect options. Native search, paging, and single-page saves work without scripts when the fields fit Django’s request limit. If saved retired choices make a page too large, it explains why native save is unavailable. The script counts submitted selections individually and keeps oversized drafts available for correction or row-by-row reversion. It never silently splits a batch or raises the global limit.
+- **Form Editor:** The old Accounts formset did not load the published configuration. It now loads the definition and only the visible accounts' answers in two queries. Custom fields follow chained visibility rules in the browser and on the server. SQR conditions refresh after department changes rebuild the Account Manager choices. Account forms still save individually to preserve custom-answer validation and persistence.
+- **Engineer dashboard and SQR:** Assigned and backup requests fetch owner relations with the row query instead of reading users per row. SQR history shares one quotation-edit lookup per read without relaxing restore or undo checks. New-submission notifications insert the same deduplicated recipients in one statement. No schema migration or background job changes are needed.
+- **Regression coverage:** Added checks for directory-wide search, bounded queries, native field limits, draft retention after schema reset, hidden descendants, search cancellation, atomic saves and retries, and the dashboard, SQR history and notification query counts.
+
+Measured locally with disposable PostgreSQL and 128 synthetic accounts against `ff89314`. The HTML sizes are uncompressed; these are not production timings.
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Existing account rows in the initial HTML | 128 | 50 |
+| Accounts HTML | 290,047 bytes | 190,978 bytes |
+| Accounts GET SQL queries | 6 | 8 |
+| Accounts Form Editor queries with a published schema | 0 (fields not rendered) | 2 |
+| Assigned dashboard standalone User reads, 1 → 12 requests | 2 → 13 | No per-row growth |
+| Backup dashboard standalone User reads, 1 → 12 requests | 3 → 25 | No per-row growth |
+| SQR history table reads in the restore-policy regression | 3 | 2 |
+| SQR submission notification inserts in the fixture | 5 | 1 |
+
+| Viewport | Before | After |
+| --- | --- | --- |
+| Desktop | [Before](../hub/changelog_assets/pending-accounts-pagination/desktop-before.png) | [After](../hub/changelog_assets/pending-accounts-pagination/desktop-after.png) |
+| Phone | [Before](../hub/changelog_assets/pending-accounts-pagination/phone-before.png) | [After](../hub/changelog_assets/pending-accounts-pagination/phone-after.png) |
+
+The `management-accounts` recipe uses the same synthetic directory and search URL at both revisions. It captures the desktop and phone fallback without scripts and includes a technical fingerprint report for related changes. The [capture metadata](../hub/changelog_assets/pending-accounts-pagination/capture.json) records the exact baseline, working-tree fingerprints, and image checksums. Trusted CI captures the exact Git revision pair before release. In disposable PostgreSQL, a signed-in non-admin could not see the draft or its four images. After test publication, **Notifications → Changelogs** displayed the desktop comparison and linked the phone comparison; all four images matched the captures and were served with `no-store`. The test transaction was rolled back; nothing was published live.
+
+### Unreleased: Phase 2 — view and service organization
+
+- Split the view monolith into eight [domain modules](../hub/views/) and kept the existing [view import facade](../hub/views/__init__.py) and [URL registrations](../hub/urls.py). Centralized equivalent role checks in [mixins.py](../hub/mixins.py) without merging distinct assignee or reviewer rules.
+- Moved SLA calculations, report and export builders, request-change notifications and email composition, and SQR workflow and workbook import logic into [services](../hub/services/). Removed a duplicate backup-assignee assignment. This phase adds no migrations or template changes.
+- Added tests for the dashboard route, Manila business hours, reversed report months, and SQR approval metadata on hold. Compatibility tests also cover retrying an SQR filing error after rollback, using the legacy locked lookup for inline updates, and redirecting to Outlook sign-in before recording acknowledgement. The [README](../README.md#project-structure) documents the new layout.
+
+| Technical evidence | Before | After |
+| --- | --- | --- |
+| View organization, services, and regression coverage | [Pre-split report](../hub/changelog_assets/pending-view-service-split/report-before.png) | [Working-tree report](../hub/changelog_assets/pending-view-service-split/report-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-view-service-split/capture.json) identifies the pre-split local checkout (including earlier uncommitted work) and the Phase 2 working tree. These are offline technical reports, not UI screenshots or exact release commits. Trusted CI generates exact first-parent and change reports for backend-only changes when the release revisions exist.
+
+### Unreleased: Phase 3 — query optimization
+
+| Change | Impact | Implementation |
+| --- | --- | --- |
+| Batch historical SQR assignee and linked-request labels instead of looking each ID up per row | High | [SQR workflow](../hub/services/sqr_workflow.py), [history view](../hub/views/sqr.py) |
+| Calculate assignment capacity in one grouped query, join request participants, and reuse loaded lifecycle events and activity totals | High | [Request changes](../hub/services/request_changes.py), [request views](../hub/views/requests.py), [lifecycle](../hub/services/request_lifecycle.py) |
+| Reuse form choices, load account suggestions only when displayed, and reuse Form Editor metadata without losing the offline baseline render | High | [Forms](../hub/forms.py), [Form Editor](../hub/form_editor.py), [Form Editor runtime](../hub/form_editor_runtime.py), [people directory](../hub/form_editor_views.py), [SQR forms](../hub/views/sqr.py) |
+| Aggregate SLA health, turnaround, and activity hours in SQL; reuse grouped counts and retrieve only the fields the attention list displays | Medium | [Reports](../hub/services/reports.py) |
+| Insert ordinary edit notifications in one batch, preserving the status-log entry and deduplicated recipients | Medium | [Notifications service](../hub/services/notifications.py) |
+
+The [regression tests](../hub/test_query_performance.py) pin ten rendered query budgets and cover scaling, recipient deduplication, and opt-in SQR history pagination. History still returns its newest 200 entries by default, with the same payload. Supply `?page=1` to opt into 50-entry pages and pagination metadata. Existing list controls, filters, URLs, and permission scopes are unchanged. The SQR Prototype still loads its full authorized pool by default for client-side filtering; its existing paged JSON is opt-in. Exports, request-detail timelines, and the full populations used for dashboard and SQR report totals are not capped. Dashboard and SQR report rollups that reuse those populations remain in Python. Event-keyed notification writes and audit-producing saves were not batched. This phase adds no migrations.
+
+| Authenticated GET (120-row fixture) | SQL statements before | SQL statements after |
+| --- | ---: | ---: |
+| SQR history with relationship edits | 244 | 6 |
+| Admin request management | 79 | 18 |
+| Engineer collaborative detail | 34 | 19 |
+| Engineer Classic SQR | 33 | 13 |
+| Admin dashboard search | 25 | 14 |
+| Requestor edit | 21 | 9 |
+| SQR edit | 21 | 9 |
+| Operational report / SLA | 20 | 12 |
+| Form Editor people directory | 19 | 4 |
+| Engineer activity logs | 18 | 12 |
+
+The disposable PostgreSQL probes included template rendering at 6 and 120 synthetic rows: 36 of 122 paired measurements used fewer queries, and 86 were unchanged. Relationship-history reads stayed at 6 as the fixture grew. Adding 20 assignable engineers previously took request management from 79 to 119 queries; it now stays at 18. Matching HTTP statuses and recorded row counts do not imply byte-for-byte HTML parity or production latency. Both runs excluded the same two existing SQR approval `mailto:` failures (HTTP 400).
+
+| Technical evidence | Before | After |
+| --- | --- | --- |
+| Rendered query counts and source fingerprints | [Pre-optimization report](../hub/changelog_assets/pending-query-optimization/report-before.png) | [Optimized report](../hub/changelog_assets/pending-query-optimization/report-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-query-optimization/capture.json) records the local source snapshots, query counts, image checksums, and disposable Notifications check. These are technical reports, not UI screenshots or exact release revisions. No live publication was performed.
+
+### Unreleased: Phase 4 — database indexes
+
+The [model indexes](../hub/models.py) and [migrations 0065–0071](../hub/migrations/) change how PostgreSQL finds rows, not the SQL emitted by the views, the rows returned, or notification and request permissions. No indexes were removed and no rows were rewritten. Each index targets a measured filter and ordering:
+
+| Index | Query served | Shared block accesses, before → after | Impact |
+| --- | --- | ---: | --- |
+| `req_active_status_new_idx` | [Admin dashboard](../hub/services/dashboard_queries.py): non-deleted requests for one status, newest 50 by creation date (`DESC NULLS LAST`) and descending ID | Open: 2,971 → 332; completed: 2,971 → 351 | High |
+| `req_ongoing_sla_idx` | [SLA report](../hub/services/reports.py): first 10 non-deleted, ongoing requests due by the cutoff, ordered by due date, priority, then reference | 2,951 → 50 | High |
+| `notif_rec_read_new_idx` | [Notifications](../hub/notification_views.py): one recipient and read state, newest first. The same prefix supports marking that recipient's unread rows read | Unread: 9,860 → 58; read: 976 → 59 | High |
+| `sqr_new_idx` | [Classic SQR](../hub/views/sqr.py): admin's unscoped page ordered by descending creation date and ID | 1,906 → 200 | High |
+| `sqr_engineer_new_idx` | [Classic SQR](../hub/views/sqr.py): filing engineer's page with the same stable ordering | 320 → 80 | Medium |
+| `sqr_reviewer_new_idx` | [Classic SQR](../hub/services/sqr_queries.py): assigned PM's page in the same order | 331 → 154 | Medium |
+| `activity_eng_date_new_idx` | [Activity Logs](../hub/views/reports.py): one engineer, most recent request dates first, then descending creation time | 451 → 110 | Medium |
+
+These are `EXPLAIN (ANALYZE, BUFFERS)` shared hits plus reads for individual SQL statements captured from authenticated requests on disposable PostgreSQL 16 with 304,004 synthetic rows. All 12 paired SQL statements and results matched (for tied keys with no SQL tie-breaker, row membership and ordered keys matched). Nine plans reduced block accesses; three were unchanged. This is not a production latency estimate or a reduction in the number of SQL statements. New indexes occupied about 15 MiB on the fixture and add maintenance cost to writes, including read-state updates. Separate primary-assignee, backup-assignee, and requestor composites were deferred: the existing foreign-key indexes served those queries, and the tested alternatives saved at most 9% of blocks without eliminating their sorts. No standalone low-selectivity status indexes or indexes for computed search/aggregate expressions were added.
+
+Each non-atomic migration builds or drops one index concurrently. This permits ordinary reads and writes but can still wait for long-running transactions and use I/O during the build. Keep the production migration run serialized. If a build is interrupted, first check that no migration is still active, then compare `showmigrations hub` with `pg_index.indisvalid` and `pg_get_indexdef` for the affected index. If an index exists for an unapplied migration, confirm its ownership and definition against `sqlmigrate hub <number>`; in an approved maintenance window, drop only that orphaned index concurrently outside a transaction, then retry `migrate`. Do not fake migrations or remove unrelated indexes. To roll back just Phase 4 when it is the current migration tip, target `python manage.py migrate hub 0064_backfill_sqr_schedule_performance`. Forward migration, rollback, and reapplication were exercised on the same populated fixture; all four tables retained their row counts and content fingerprints.
+
+| Technical evidence | Before | After |
+| --- | --- | --- |
+| PostgreSQL query plans and source fingerprints | [Pre-index report](../hub/changelog_assets/pending-database-indexes/report-before.png) | [Indexed report](../hub/changelog_assets/pending-database-indexes/report-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-database-indexes/capture.json) records the source fingerprints, matched plans, image checksums, and disposable Notifications check. The draft and its images were hidden from a non-admin. After local admin publication, **Notifications → Changelogs → Technical evidence** opened the report and served the exact images. The fixture was rolled back; no deployment or live publication was performed.
+
+### Unreleased: Phase 5 — lazy badges and shared lookups
+
+[Notification badges and the initial toast cursor](../hub/context_processors.py) now query only when consumed and share one summary per request. An optional [Redis cache](../hub/services/lookup_cache.py) stores the summary for 30 seconds per database, user, and role. [Activity and toast polling](../hub/notification_views.py) still read live data. The [department directory](../hub/assistant_directory.py) caches only active-user counts and department labels; member searches and permissions stay live. Roles, request types, and theme choices are constants or loaded with the user, so they do not need a shared cache.
+
+[Save/delete signals](../hub/signals.py), [batched writes](../hub/services/notifications.py), mark-all-read, and [backup recovery](../accounts/recovery.py) invalidate the affected lookups after commit. Tests cover committed writes and rollbacks, recipient changes, late cache fills, live polling, and directory membership changes. [Settings](../request_hub/settings.py) enable health checks on reused PostgreSQL connections without changing the default 60-second connection lifetime. See the [environment variable reference](../README.md#environment-variables) and [deployment guidance](azure-app-service-deployment.md#optional-shared-lookup-cache). The Redis client is pinned in the runtime and capture locks. Redis is not provisioned or enabled by default. If it is unavailable, reads fall back to SQL; an invalidation missed during an outage can leave a recovered entry stale for the remainder of its TTL. No URLs, templates, or migrations changed.
+
+| Authenticated operation on the same synthetic PostgreSQL fixture | Before | After, no Redis | After, warm Redis |
+| --- | ---: | ---: | ---: |
+| Build the badge context without reading a badge | 1 | 0 | 0 |
+| Read the badge and initial cursor | 1 | 1 | 0 |
+| Read the grouped department counts | 1 | 1 | 0 |
+| Render Request Edit | 9 | 8 | 8 |
+| Render the admin dashboard | 13 | 13 | 12 |
+| Render the Changelogs tab | 5 | 5 | 4 |
+| List departments (JSON) | 3 | 3 | 2 |
+| Render Activity / poll toasts / list members | 6 / 4 / 6 | 6 / 4 / 6 | 6 / 4 / 6 |
+
+Counts are SQL statements, not production timings. Cold badge and department reads still use one statement each. The 12 probes matched on their recorded statuses and response values. Separate processes verified warm Redis reads, refresh after committed changes, and SQL fallback during a Redis outage.
+
+| Technical evidence | Before | After |
+| --- | --- | --- |
+| Lookup query counts and source fingerprints | [Pre-cache report](../hub/changelog_assets/pending-shared-lookup-cache/report-before.png) | [Lazy lookups report](../hub/changelog_assets/pending-shared-lookup-cache/report-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-shared-lookup-cache/capture.json) records the local snapshots, query comparisons, image checksums, and disposable **Notifications → Changelogs → Technical evidence** verification. These are technical reports, not UI screenshots or exact release revisions. Nothing was published live.
+
+### Unreleased: Phase 8 — chart loading and reduced motion
+
+Reports, Activity Logs, both Dashboard report variants, and SQR Reports defer Chart.js and its dependent scripts in order. The page shell, Reports table details, and Dashboard account autocomplete no longer wait for the chart CDN while the page is parsing. Chart controls still initialize in order, and exact values remain available if chart rendering fails. Request Edit and Request Management also defer the shared account autocomplete script. The admin reassignment test checks that the management form loads that script once and still saves the new account; Chromium covers keyboard selection.
+
+[Login parallax](../static/js/liquid-glass.js) cancels pending frames and resets its lighting when the system enables reduced motion. Turning that preference off resumes motion only on new pointer input. Existing app opt-outs, hidden-tab guards, and holiday motion behavior are unchanged. WhiteNoise already serves compressed manifest assets; no static files were removed and no settings or migrations changed.
+
+| Matched local observation | Before | After |
+| --- | ---: | ---: |
+| Parser-blocking chart scripts on each of the five chart pages | 4 | 0 |
+| Reports reached `interactive` while Chart.js was held | 0/5 | 5/5 |
+| Login layout reads per pointer input (normal / reduced / resumed) | 1 / 1 / 1 | 1 / 0 / 1 |
+| Authenticated SQL counts (Reports / Activity Logs / Requestor Dashboard / Engineer Dashboard report / SQR Reports / Request Edit) | 12 / 12 / 7 / 11 / 8 / 8 | 12 / 12 / 7 / 11 / 8 / 8 |
+
+In the held-CDN Chromium probe, the candidate's median `domInteractive` was 197 ms from local navigation start. The baseline stayed in `loading` until the probe released Chart.js. This is not a production timing or a `DOMContentLoaded` comparison. Both snapshots served gzip with `Vary: Accept-Encoding`, `max-age=315360000, public, immutable` on the fingerprinted URL, and `max-age=60, public` on the unversioned URL.
+
+| Technical evidence | Before | After |
+| --- | --- | --- |
+| Browser measurements, queries, cache headers, and source fingerprints | [Pre-change report](../hub/changelog_assets/pending-frontend-performance/report-before.png) | [Deferred scripts and live motion report](../hub/changelog_assets/pending-frontend-performance/report-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-frontend-performance/capture.json) records the local snapshots and image checksums. A reader could not fetch the draft or its images. After local admin test publication, **Notifications → Changelogs → Technical evidence** linked to both byte-verified images with `no-store`; the transaction was rolled back. These reports are not screenshots of a visual redesign or exact Git first-parent evidence. Before release, attach evidence for the actual revision pair. Nothing was published live.
+
 ### Preparing screenshot evidence
 
 The non-blocking **Prepare release screenshot evidence** job runs only on trusted `master` pushes, alongside CI validation. It uses Python 3.12, installs the complete hash-verified `requirements-changelog-capture.txt` in an isolated virtual environment, and caches pip downloads, Chromium, verified vendor assets, and fingerprinted historical captures. It prepares SHA-256-checked Bootstrap assets and runs `scripts/capture_release_changelog.py`, bounded to eight minutes. Historical Chromium regression tests run in this environment too. Capture setup/failure does not turn successful required CI red; missing evidence retains every change as a draft with an actionable reason.
@@ -145,7 +303,7 @@ Recipes in `hub/changelog_capture_recipes.json` use schema 1, a unique `id`, and
 
 When an uncovered change touches templates, stylesheets, or browser scripts, it needs an explicit recipe or manual screenshots. Other uncovered changes can use a `repository_change` report from the exact parent and change snapshots. Reports show public paths, presence, byte counts, and fingerprints, but not file contents. Existing packaged reports remain usable as technical evidence when the UI cannot be recovered. The Notifications feed keeps reports and documentation under **Technical evidence** and screenshots under **Visual changes**. Each scene declares a bounded `title`, `before_text`, `after_text`, and optional `viewport` (`width` 320-1920; `height` 240-1600):
 
-- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, Admin profile tools, changelog display, editor, history preview or Notifications feed, Management Monitoring, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app. The `admin-profile-tools` recipe selects Personalization and captures the desktop and phone defaults with scripts disabled; the Create backup control shows its inline fallback. The `changelog-loading` recipe opens native disclosures with scripts disabled to capture the server-rendered fallback in Management and the mobile Notifications feed. These screenshots document the fallback, not load times. Monitoring captures show the shell before readings load.
+- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, Admin profile tools, changelog display, editor, history preview or Notifications feed, Management Accounts or Monitoring, Request progress, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app. The `management-accounts` recipe compares the same Accounts search request without scripts at both revisions. The `request-progress-dark-mode` recipe captures the Christmas theme's dark-mode progress card on desktop and phone. The `admin-profile-tools` recipe selects Personalization and captures the desktop and phone defaults with scripts disabled; the Create backup control shows its inline fallback. The `changelog-loading` recipe opens native disclosures with scripts disabled to capture the server-rendered fallback in Management and the mobile Notifications feed. These screenshots document the fallback, not load times. Monitoring captures show the shell before readings load.
 - `kind: "document"` selects a repository-relative text `path` and Markdown `heading`. Code blocks and private configuration/credential paths are rejected.
 - `kind: "report"` selects the allowlisted `changelog_contract` behavior report or `repository_change` file fingerprint report. Fingerprints cover safe paths changed from the first parent and can accompany a UI scene to document related backend, configuration, documentation, and test changes. Neither report calls a live provider.
 
@@ -201,7 +359,7 @@ Local comparison against `b61e6ab` used the same synthetic PostgreSQL fixture an
 | Management → Changelogs | 125–146 ms → 41–53 ms | 381 KB → 59 KB | 8 → 7 |
 | Notifications → Changelogs | 179–184 ms → 69–102 ms | 367 KB → 216 KB | 9 → 5 |
 
-Management Sign-In Logs and Forms also served less HTML (about 176 KB and 59 KB, respectively, down from 1.11 MB each). Activity dropped from 14 queries to 6 and no longer makes an immediate duplicate page request. Dashboard, Reports, PPT, and Profile each used one fewer query; these runs did not establish a consistent speedup on those pages. Accounts dropped to 694 KB but still renders the full 350-row bulk formset, and its timing ranges overlapped.
+Management Sign-In Logs and Forms also served less HTML (about 176 KB and 59 KB, respectively, down from 1.11 MB each). Activity dropped from 14 queries to 6 and no longer makes an immediate duplicate page request. Dashboard, Reports, PPT, and Profile each used one fewer query; these runs did not establish a consistent speedup on those pages. At that benchmark revision, Accounts dropped to 694 KB but still rendered the full 350-row bulk formset, and its timing ranges overlapped. The [separate Accounts pagination comparison](#unreleased-accounts-dashboard-and-sqr-performance) measures the editor update.
 
 The after screenshots are working-tree captures, not exact Git revision evidence. Run trusted CI against the actual release revision and its first parent before packaging. Verify the numbered release and both sides of its comparisons in **Notifications → Changelogs** as a non-admin after authorized publication.
 

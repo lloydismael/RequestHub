@@ -1,8 +1,9 @@
 import csv
 import io
 import json
-from datetime import date, datetime, timedelta, timezone as dt_timezone
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Any, ClassVar
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
@@ -10,8 +11,8 @@ from django.contrib.auth import authenticate
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.middleware import SessionMiddleware
-from django.http import HttpResponse
 from django.core.management import call_command
+from django.http import HttpRequest, HttpResponse
 from django.templatetags.static import static
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -32,11 +33,14 @@ from hub.models import (
     EngineerActivityLog,
     Notification,
     Request,
-    RequestCommunication,
     SqrProjectPerformance,
     SqrSubmission,
     SqrSubmissionChange,
     SqrSubmissionHistory,
+)
+from hub.services.notifications import (
+    queue_assignment_notifications,
+    queue_new_request_notifications,
 )
 from hub.views import (
     AssignmentEmailResult,
@@ -51,13 +55,9 @@ from hub.views import (
     _get_sqr_approval_email_context,
     _resolve_sqr_account_manager_email,
     _send_sqr_approved_email,
-    clear_engineer_outlook_lock_on_reassignment,
     notify_engineer_assignment_email,
 )
-from hub.services.notifications import (
-    queue_assignment_notifications,
-    queue_new_request_notifications,
-)
+from request_hub.test_html_helpers import extract_scripts
 
 
 class ProductCategoryChoiceTests(SimpleTestCase):
@@ -139,11 +139,12 @@ class AssignmentEmailTests(TestCase):
         self.assertTrue(any("assignment email could not be delivered" in message for message in messages))
 
     @staticmethod
-    def _attach_session_and_messages(request):
+    def _attach_session_and_messages(request: HttpRequest) -> None:
+        """Attach real session and fallback message storage to the test request."""
         session_middleware = SessionMiddleware(lambda req: None)
         session_middleware.process_request(request)
         request.session.save()
-        setattr(request, "_messages", FallbackStorage(request))
+        request._messages = FallbackStorage(request)
 
     def _create_account_id(self, name: str) -> int:
         return Account.objects.create(name=name).pk
@@ -561,11 +562,12 @@ class RequestReportViewTests(TestCase):
         self.assertContains(response, "3 days overdue")
         self.assertContains(response, "Due in 2 days")
 
-    def test_operational_report_and_export_honor_month_filter(self):
+    def test_operational_report_and_export_honor_month_filter(self) -> None:
+        """Use the same month range for the operational page and export."""
         january = self._create_request()
         march = self._create_request()
-        Request.objects.filter(pk=january.pk).update(created_at=datetime(2026, 1, 15, 12, tzinfo=dt_timezone.utc))
-        Request.objects.filter(pk=march.pk).update(created_at=datetime(2026, 3, 10, 12, tzinfo=dt_timezone.utc))
+        Request.objects.filter(pk=january.pk).update(created_at=datetime(2026, 1, 15, 12, tzinfo=UTC))
+        Request.objects.filter(pk=march.pk).update(created_at=datetime(2026, 3, 10, 12, tzinfo=UTC))
         self.client.force_login(self.admin)
 
         response = self.client.get(
@@ -705,7 +707,8 @@ class UserManagementSearchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "notifications-page authenticated")
 
-    def test_user_search_prioritizes_best_matches_and_sorts_results(self):
+    def test_user_search_prioritizes_best_matches_and_sorts_results(self) -> None:
+        """Rank stronger user matches first and order the returned results."""
         alina = User.objects.create_user(
             username="alina",
             password="pass12345",
@@ -731,8 +734,8 @@ class UserManagementSearchTests(TestCase):
             last_name="Brown",
         )
 
-        alina.date_joined = datetime(2024, 1, 1, tzinfo=dt_timezone.utc)
-        alice.date_joined = datetime(2024, 1, 3, tzinfo=dt_timezone.utc)
+        alina.date_joined = datetime(2024, 1, 1, tzinfo=UTC)
+        alice.date_joined = datetime(2024, 1, 3, tzinfo=UTC)
         alina.save(update_fields=["date_joined"])
         alice.save(update_fields=["date_joined"])
 
@@ -1816,9 +1819,10 @@ class RequestActivityLogEditModalTests(TestCase):
             details="Admin activity for an assigned request.",
         ).exists())
 
-    def test_manage_request_rejects_activity_creation_for_other_roles(self):
+    def test_manage_request_rejects_activity_creation_for_other_roles(self) -> None:
+        """Reject activity creation from roles without access to the management action."""
         url = reverse("hub:request-manage-collab", args=[self.request_obj.pk])
-        for role in {"requestor", "requestor_ess", "pm_ess", "pm_esg", "on_hold"}:
+        for role in ("requestor", "requestor_ess", "pm_ess", "pm_esg", "on_hold"):
             with self.subTest(role=role):
                 actor = self.engineer if role == "on_hold" else self.requestor
                 actor.role = role
@@ -1961,7 +1965,8 @@ class SqrSubmissionAccountManagerTests(TestCase):
 
 
 class SqrApprovalEmailTemplateTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
+        """Create the submission and recipients for approval email previews."""
         self.engineer = User.objects.create_user(
             username="sqr_approval_engineer",
             password="pass12345",
@@ -1986,14 +1991,14 @@ class SqrApprovalEmailTemplateTests(TestCase):
             customer_contact="Jane Customer",
             project_title="Cloud Migration",
             project_details="Infrastructure assessment, migration planning, support handoff",
-            sse_manhrs=Decimal("20"),
-            pm_manhrs=Decimal("8"),
+            sse_manhrs=Decimal(20),
+            pm_manhrs=Decimal(8),
             sse_amount=Decimal("40000.00"),
             pm_amount=Decimal("24000.00"),
             managed_support_amount=Decimal("15000.00"),
             quotation_total_price=Decimal("79000.00"),
             validity_due_date=date(2026, 12, 31),
-            reviewed_at=datetime(2026, 9, 4, 0, 0, tzinfo=dt_timezone.utc),
+            reviewed_at=datetime(2026, 9, 4, 0, 0, tzinfo=UTC),
         )
 
     def test_approval_body_includes_requested_summary_sections(self):
@@ -2044,7 +2049,8 @@ class SqrApprovalEmailTemplateTests(TestCase):
         self.assertIn("no-store", response["Cache-Control"])
 
     @override_settings(DEBUG=True)
-    def test_preview_offers_mailto_with_plain_text_body_unless_too_long(self):
+    def test_preview_offers_mailto_with_plain_text_body_unless_too_long(self) -> None:
+        """Offer a plain-text mailto draft only when the message fits."""
         from urllib.parse import parse_qs, unquote, urlsplit
 
         self.submission.status = SqrSubmission.Status.APPROVED
@@ -2080,14 +2086,14 @@ class SqrApprovalEmailTemplateTests(TestCase):
         self.assertEqual(response.context["microsoft_draft_url"], "")
         self.assertNotContains(response, 'id="sqr-email-microsoft"')
 
-        configured = dict(
-            SQR_OUTLOOK_TENANT_ID="11111111-1111-1111-1111-111111111111",
-            SQR_OUTLOOK_CLIENT_ID="22222222-2222-2222-2222-222222222222",
-            SQR_OUTLOOK_CLIENT_SECRET="test-client-secret",
-            SQR_OUTLOOK_REDIRECT_URI="https://example.com/sqr/outlook/callback/",
-            SQR_OUTLOOK_TOKEN_KEY=Fernet.generate_key().decode(),
-            SESSION_ENGINE="django.contrib.sessions.backends.db",
-        )
+        configured = {
+            "SQR_OUTLOOK_TENANT_ID": "11111111-1111-1111-1111-111111111111",
+            "SQR_OUTLOOK_CLIENT_ID": "22222222-2222-2222-2222-222222222222",
+            "SQR_OUTLOOK_CLIENT_SECRET": "test-client-secret",
+            "SQR_OUTLOOK_REDIRECT_URI": "https://example.com/sqr/outlook/callback/",
+            "SQR_OUTLOOK_TOKEN_KEY": Fernet.generate_key().decode(),
+            "SESSION_ENGINE": "django.contrib.sessions.backends.db",
+        }
         with override_settings(**configured):
             response = self.client.get(url)
             resumed = self.client.get(url + "?outlook=1")
@@ -2103,6 +2109,7 @@ class SqrApprovalEmailTemplateTests(TestCase):
         import base64
         from email import policy
         from email.parser import BytesParser
+
         from hub.views import _build_sqr_approval_mime_message
 
         context = _get_sqr_approval_email_context(self.submission)
@@ -2211,7 +2218,8 @@ class SqrApprovalEmailTemplateTests(TestCase):
 
 
 class SqrEngineerLinkedRequestAccessTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
+        """Create a linked request and users on both sides of its access boundary."""
         self.engineer = User.objects.create_user(
             username="sqr_link_owner",
             password="pass12345",
@@ -2257,7 +2265,7 @@ class SqrEngineerLinkedRequestAccessTests(TestCase):
             customer_contact="Linked Contact",
             project_title="Linked Project",
             project_details="Implementation",
-            sse_manhrs=Decimal("20"),
+            sse_manhrs=Decimal(20),
             documentation_links="https://example.com/doc",
             sqr_folder_link="https://example.com/sqr",
         )
@@ -2427,7 +2435,8 @@ class SqrEngineerLinkedRequestAccessTests(TestCase):
 
 
 class SqrInlineUndoTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
+        """Create the linked request and submission used by inline edit and undo tests."""
         self.engineer = User.objects.create_user(
             username="sqr_engineer",
             password="pass12345",
@@ -2467,7 +2476,7 @@ class SqrInlineUndoTests(TestCase):
             customer_contact="Undo Contact",
             project_title="Undo Project",
             project_details="Implementation",
-            sse_manhrs=Decimal("20"),
+            sse_manhrs=Decimal(20),
             documentation_links="https://example.com/doc",
             sqr_folder_link="https://example.com/sqr",
         )
@@ -2508,7 +2517,8 @@ class SqrInlineUndoTests(TestCase):
         self.assertEqual(send_email.call_args.args[1], "SQR PM")
         self.assertTrue(SqrSubmissionChange.objects.filter(submission=self.submission, field="status").exists())
 
-    def test_invalid_inline_values_are_rejected_without_writes(self):
+    def test_invalid_inline_values_are_rejected_without_writes(self) -> None:
+        """Reject invalid inline tracker values without changing the stored submission."""
         self.client.raise_request_exception = False
         cases = (
             ("sse_manhrs", "-1"), ("pm_manhrs", "-1"),
@@ -2525,8 +2535,8 @@ class SqrInlineUndoTests(TestCase):
         for field, value in cases:
             with self.subTest(field=field, value=value):
                 SqrSubmission.objects.filter(pk=self.submission.pk).update(
-                    sse_manhrs=Decimal("20"), pm_manhrs=Decimal("8"),
-                    sse_amount=Decimal("40000"), pm_amount=Decimal("24000"),
+                    sse_manhrs=Decimal(20), pm_manhrs=Decimal(8),
+                    sse_amount=Decimal(40000), pm_amount=Decimal(24000),
                     managed_support_amount=None, discount_rate=0,
                 )
                 original = SqrSubmission.objects.filter(pk=self.submission.pk).values().get()
@@ -2590,13 +2600,14 @@ class SqrInlineUndoTests(TestCase):
         self.assertEqual(change.old_values["pm_amount"], "24000")
         self.assertEqual(change.new_values["pm_amount"], "48000")
 
-    def test_undo_restores_dependent_sse_values(self):
+    def test_undo_restores_dependent_sse_values(self) -> None:
+        """Restore derived SSE values along with the inline value being undone."""
         response = self._inline_update("sse_manhrs", "50")
         self.assertEqual(response.status_code, 200)
         change = SqrSubmissionChange.objects.get(pk=response.json()["change_id"])
         self.submission.refresh_from_db()
-        self.assertEqual(self.submission.sse_manhrs, Decimal("50"))
-        self.assertEqual(self.submission.pm_manhrs, Decimal("24"))
+        self.assertEqual(self.submission.sse_manhrs, Decimal(50))
+        self.assertEqual(self.submission.pm_manhrs, Decimal(24))
 
         undo_response = self._undo(change)
 
@@ -2606,24 +2617,25 @@ class SqrInlineUndoTests(TestCase):
         self.assertTrue(undo_data["undone"])
         self.submission.refresh_from_db()
         change.refresh_from_db()
-        self.assertEqual(self.submission.sse_manhrs, Decimal("20"))
+        self.assertEqual(self.submission.sse_manhrs, Decimal(20))
         self.assertEqual(self.submission.sse_amount, Decimal("40000.00"))
-        self.assertEqual(self.submission.pm_manhrs, Decimal("8"))
+        self.assertEqual(self.submission.pm_manhrs, Decimal(8))
         self.assertEqual(self.submission.pm_amount, Decimal("24000.00"))
         self.assertIsNotNone(change.undone_at)
         self.assertEqual(change.undone_by, self.pm)
 
-    def test_approval_response_offers_direct_microsoft_draft_when_configured(self):
+    def test_approval_response_offers_direct_microsoft_draft_when_configured(self) -> None:
+        """Offer the direct Microsoft draft URL when Outlook is configured."""
         from cryptography.fernet import Fernet
 
-        configured = dict(
-            SQR_OUTLOOK_TENANT_ID="11111111-1111-1111-1111-111111111111",
-            SQR_OUTLOOK_CLIENT_ID="22222222-2222-2222-2222-222222222222",
-            SQR_OUTLOOK_CLIENT_SECRET="test-client-secret",
-            SQR_OUTLOOK_REDIRECT_URI="https://example.com/sqr/outlook/callback/",
-            SQR_OUTLOOK_TOKEN_KEY=Fernet.generate_key().decode(),
-            SESSION_ENGINE="django.contrib.sessions.backends.db",
-        )
+        configured = {
+            "SQR_OUTLOOK_TENANT_ID": "11111111-1111-1111-1111-111111111111",
+            "SQR_OUTLOOK_CLIENT_ID": "22222222-2222-2222-2222-222222222222",
+            "SQR_OUTLOOK_CLIENT_SECRET": "test-client-secret",
+            "SQR_OUTLOOK_REDIRECT_URI": "https://example.com/sqr/outlook/callback/",
+            "SQR_OUTLOOK_TOKEN_KEY": Fernet.generate_key().decode(),
+            "SESSION_ENGINE": "django.contrib.sessions.backends.db",
+        }
         with override_settings(**configured):
             response = self._inline_update("status", SqrSubmission.Status.APPROVED)
         self.assertEqual(response.status_code, 200)
@@ -2647,12 +2659,13 @@ class SqrInlineUndoTests(TestCase):
         self.assertIsNotNone(self.submission.reviewed_at)
         self.assertIsNotNone(self.submission.validity_due_date)
 
-    def test_stale_undo_is_rejected(self):
+    def test_stale_undo_is_rejected(self) -> None:
+        """Reject an undo token after another edit changes the submission."""
         response = self._inline_update("pm_manhrs", "16")
         self.assertEqual(response.status_code, 200)
         change = SqrSubmissionChange.objects.get(pk=response.json()["change_id"])
         SqrSubmission.objects.filter(pk=self.submission.pk).update(
-            pm_manhrs=Decimal("24"),
+            pm_manhrs=Decimal(24),
             pm_amount=Decimal("72000.00"),
         )
 
@@ -2671,7 +2684,8 @@ class SqrInlineUndoTests(TestCase):
 
 
 class SqrHistoryTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
+        """Create the linked SQR and role fixtures used by history and restore tests."""
         self.engineer = User.objects.create_user(
             username="sqr_history_engineer",
             password="pass12345",
@@ -2717,7 +2731,7 @@ class SqrHistoryTests(TestCase):
             customer_contact="History Contact",
             project_title="History Project",
             project_details="Implementation",
-            sse_manhrs=Decimal("20"),
+            sse_manhrs=Decimal(20),
             documentation_links="https://example.com/doc",
             sqr_folder_link="https://example.com/sqr",
         )
@@ -2763,7 +2777,8 @@ class SqrHistoryTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertFalse(response.json()["ok"])
 
-    def test_restore_reverts_history_entry(self):
+    def test_restore_reverts_history_entry(self) -> None:
+        """Restore the saved values from the selected history entry."""
         response = self._inline_update("pm_manhrs", "16")
         self.assertEqual(response.status_code, 200)
         history = SqrSubmissionHistory.objects.get(action=SqrSubmissionHistory.Action.UPDATED)
@@ -2774,19 +2789,20 @@ class SqrHistoryTests(TestCase):
         self.assertTrue(restore_response.json()["ok"])
         self.submission.refresh_from_db()
         history.refresh_from_db()
-        self.assertEqual(self.submission.pm_manhrs, Decimal("8"))
+        self.assertEqual(self.submission.pm_manhrs, Decimal(8))
         self.assertEqual(self.submission.pm_amount, Decimal("24000.00"))
         self.assertIsNotNone(history.restored_at)
         self.assertEqual(history.restored_by, self.pm)
         restore_entry = SqrSubmissionHistory.objects.get(action=SqrSubmissionHistory.Action.RESTORED)
         self.assertEqual(restore_entry.metadata["restored_history_id"], history.pk)
 
-    def test_stale_restore_is_rejected(self):
+    def test_stale_restore_is_rejected(self) -> None:
+        """Keep a stale history restore from overwriting newer work."""
         response = self._inline_update("pm_manhrs", "16")
         self.assertEqual(response.status_code, 200)
         history = SqrSubmissionHistory.objects.get(action=SqrSubmissionHistory.Action.UPDATED)
         SqrSubmission.objects.filter(pk=self.submission.pk).update(
-            pm_manhrs=Decimal("24"),
+            pm_manhrs=Decimal(24),
             pm_amount=Decimal("72000.00"),
         )
 
@@ -2797,7 +2813,7 @@ class SqrHistoryTests(TestCase):
 
 
 class SqrExportTests(TestCase):
-    ESG_HEADERS = [
+    ESG_HEADERS: ClassVar[list[str]] = [
         "Account Name",
         "Service Description",
         "Project Name",
@@ -2831,7 +2847,7 @@ class SqrExportTests(TestCase):
         "Action",
     ]
 
-    SQR_HEADERS = [
+    SQR_HEADERS: ClassVar[list[str]] = [
         "SQR Date",
         "SQR ID",
         "Account Name",
@@ -2989,7 +3005,8 @@ class SqrExportTests(TestCase):
                         for cell in cells
                     ))
 
-    def test_esg_export_headers_and_row_match_esg_tracker_table(self):
+    def test_esg_export_headers_and_row_match_esg_tracker_table(self) -> None:
+        """Keep ESG export columns and values aligned with the tracker table."""
         older = self._create_submission(customer_name="Older Account", project_title="Older Service")
         target = self._create_submission(
             customer_name="Acme Corp",
@@ -3002,8 +3019,8 @@ class SqrExportTests(TestCase):
             delivery_progress=75,
             overall_status=SqrSubmission.OverallStatus.IN_PROGRESS,
             key_updates_risks="Migration is on track.",
-            sse_manhrs=Decimal("12"),
-            pm_manhrs=Decimal("8"),
+            sse_manhrs=Decimal(12),
+            pm_manhrs=Decimal(8),
             managed_support_amount=Decimal("5000.00"),
             revenue_date=date(2026, 8, 3),
             revenue_source="invoiced",
@@ -3080,7 +3097,8 @@ class SqrExportTests(TestCase):
         self.assertEqual(row["SQR Status"], "On Hold")
         self.assertEqual(row["Hold Reason"], "Awaiting customer confirmation")
 
-    def _create_submission(self, **overrides):
+    def _create_submission(self, **overrides: Any) -> SqrSubmission:
+        """Create an export fixture with optional overrides to the default row."""
         data = {
             "engineer": self.engineer,
             "pm_esg_reviewer": self.pm,
@@ -3089,7 +3107,7 @@ class SqrExportTests(TestCase):
             "customer_contact": "Export Contact",
             "project_title": "Export Service",
             "project_details": "Implementation",
-            "sse_manhrs": Decimal("20"),
+            "sse_manhrs": Decimal(20),
             "documentation_links": "https://example.com/doc",
             "sqr_folder_link": "https://example.com/sqr",
         }
@@ -3098,7 +3116,8 @@ class SqrExportTests(TestCase):
 
 
 class SqrMyAssignedFilterTests(TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
+        """Create submissions assigned to different reviewers for filter checks."""
         self.factory = RequestFactory()
         self.engineer = User.objects.create_user(
             username="sqr_assigned_engineer",
@@ -3136,7 +3155,7 @@ class SqrMyAssignedFilterTests(TestCase):
             customer_contact="Mine Contact",
             project_title="Mine Service",
             project_details="Implementation",
-            sse_manhrs=Decimal("10"),
+            sse_manhrs=Decimal(10),
             documentation_links="https://example.com/doc",
             sqr_folder_link="https://example.com/sqr-mine",
         )
@@ -3148,7 +3167,7 @@ class SqrMyAssignedFilterTests(TestCase):
             customer_contact="Other Contact",
             project_title="Other Service",
             project_details="Implementation",
-            sse_manhrs=Decimal("12"),
+            sse_manhrs=Decimal(12),
             documentation_links="https://example.com/doc",
             sqr_folder_link="https://example.com/sqr-other",
         )
@@ -3193,7 +3212,8 @@ class SqrReportsDashboardTests(TestCase):
         "sqrScopeDistributionChart",
     )
 
-    def setUp(self):
+    def setUp(self) -> None:
+        """Create role fixtures for submission and reporting access checks."""
         self.admin = User.objects.create_user(
             username="sqr_reports_admin",
             password="pass12345",
@@ -3220,7 +3240,7 @@ class SqrReportsDashboardTests(TestCase):
             customer_contact="CRM Contact",
             project_title="CRM Service",
             project_details="Implementation",
-            sse_manhrs=Decimal("10"),
+            sse_manhrs=Decimal(10),
             documentation_links="https://example.com/doc",
             sqr_folder_link="https://example.com/sqr-report",
         )
@@ -3333,7 +3353,8 @@ class AdminAccountChangeTests(TestCase):
         self.request_obj.refresh_from_db()
         self.assertEqual(self.request_obj.account_id, existing.pk)
 
-    def test_admin_manage_view_exposes_account_field_and_saves_change(self):
+    def test_admin_manage_view_exposes_account_field_and_saves_change(self) -> None:
+        """Let an admin reassign the account from the management form."""
         target = self._make_used_account("Admin Reassigned Account")
         request = self.factory.get(reverse("hub:request-manage", args=[self.request_obj.pk]))
         request.user = self.admin
@@ -3350,8 +3371,11 @@ class AdminAccountChangeTests(TestCase):
         self.assertIn('id="account-name-options"', html)
         self.assertIn("Original Account", html)
         self.assertIn(target.name, html)
-        self.assertIn("account-autocomplete", html)
-        self.assertIn("initAccountAutocompletes", html)
+        autocomplete_url = urlparse(static('js/account-autocomplete.js')).path
+        autocomplete_scripts = [attrs for attrs, _ in extract_scripts(html)
+                                if urlparse(attrs.get('src', '')).path == autocomplete_url]
+        self.assertEqual(len(autocomplete_scripts), 1)
+        self.assertIn('defer', autocomplete_scripts[0])
         self.assertRegex(html, r'<select[^>]*name="product_category"')
         self.assertIn('<option value="Veeam">Veeam</option>', html)
 
@@ -3375,9 +3399,11 @@ class AdminAccountChangeTests(TestCase):
         )
         post.user = self.admin
         AssignmentEmailTests._attach_session_and_messages(post)
-        with patch("hub.views.notify_engineer_assignment_email", return_value=AssignmentEmailResult("no_new_assignee")):
-            with patch("hub.views.notify_engineer_assignment_notification"):
-                response = RequestAdminUpdateView.as_view()(post, pk=self.request_obj.pk)
+        with (
+            patch("hub.views.notify_engineer_assignment_email", return_value=AssignmentEmailResult("no_new_assignee")),
+            patch("hub.views.notify_engineer_assignment_notification"),
+        ):
+            response = RequestAdminUpdateView.as_view()(post, pk=self.request_obj.pk)
         self.assertEqual(response.status_code, 302)
         self.request_obj.refresh_from_db()
         self.assertEqual(self.request_obj.account_id, target.pk)

@@ -1,7 +1,20 @@
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Case, Count, DateField, DateTimeField, DecimalField, F, Func, Q, Sum, TextField, Value, When
+from django.db.models import (
+    Case,
+    Count,
+    DateField,
+    DateTimeField,
+    DecimalField,
+    F,
+    Func,
+    Q,
+    Sum,
+    TextField,
+    Value,
+    When,
+)
 from django.db.models.functions import Cast, Coalesce, TruncDate
 
 from accounts.models import User
@@ -28,9 +41,9 @@ class RoundMoney(Func):
 
 
 def price_expression():
-    gross = Coalesce('sse_amount', Decimal('0')) + Coalesce('pm_amount', Decimal('0')) + Coalesce('managed_support_amount', Decimal('0'))
-    amount = RoundMoney(gross * (Value(Decimal('1')) - Cast(Coalesce('discount_rate', 0), DecimalField(max_digits=10, decimal_places=4)) / Decimal('100')))
-    return Coalesce(Case(When(_gross=0, then=F('quotation_total_price')), default=amount), Decimal('0'))
+    gross = Coalesce('sse_amount', Decimal(0)) + Coalesce('pm_amount', Decimal(0)) + Coalesce('managed_support_amount', Decimal(0))
+    amount = RoundMoney(gross * (Value(Decimal(1)) - Cast(Coalesce('discount_rate', 0), DecimalField(max_digits=10, decimal_places=4)) / Decimal(100)))
+    return Coalesce(Case(When(_gross=0, then=F('quotation_total_price')), default=amount), Decimal(0))
 
 
 def annotate_tracker(queryset, today):
@@ -42,7 +55,7 @@ def annotate_tracker(queryset, today):
         _pipeline=Case(When(closed, then=Value('closed')), When(~won, then=Value('opportunity')),
                        When(Q(overall_status='cancelled') | billed, then=Value('closed')),
                        When(finished, then=Value('billing')), default=Value('delivery')),
-        _gross=Coalesce('sse_amount', Decimal('0')) + Coalesce('pm_amount', Decimal('0')) + Coalesce('managed_support_amount', Decimal('0')),
+        _gross=Coalesce('sse_amount', Decimal(0)) + Coalesce('pm_amount', Decimal(0)) + Coalesce('managed_support_amount', Decimal(0)),
     ).annotate(_price=price_expression())
     dangerous = Q(status='for_revision') | Q(_pipeline='opportunity', status='reviewed', validity_due_date__lt=today) | Q(_pipeline='delivery', delivery_target_finish_date__lt=today) | Q(_pipeline='delivery', delivery_health='at_risk')
     score = Case(When(status='for_revision', then=3), When(status='submitted', then=2), default=0)
@@ -149,7 +162,7 @@ def prototype_page(queryset, params, user, today):
     conditions = {'all': Q(), 'mine': Q(pm_esg_reviewer=user), 'attention': Q(_attention=True) | (Q(status='submitted') if user.role in (User.Roles.ADMIN, User.Roles.PM_ESG) else Q(pk__in=[])),
                   'on_hold': Q(status='on_hold'), **{stage: Q(_pipeline=stage) for stage in ('opportunity', 'delivery', 'billing', 'closed')}}
     aggregates = base.aggregate(**{key + '_count': Count('id', filter=q) for key, q in conditions.items()},
-                                **{key + '_total': Sum('_price', filter=q, default=Decimal('0')) for key, q in conditions.items()})
+                                **{key + '_total': Sum('_price', filter=q, default=Decimal(0)) for key, q in conditions.items()})
     pipeline = {key: {'count': aggregates[key + '_count'], 'total': str(aggregates[key + '_total'])} for key in conditions}
     stage = params.get('stage', 'all')
     if stage not in conditions or (stage == 'mine' and user.role not in (User.Roles.ADMIN, User.Roles.PM_ESG)):

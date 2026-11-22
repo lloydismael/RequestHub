@@ -39,12 +39,13 @@ class ChristmasPreferencesTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    def preferences(self, client=None, url=None):
+    def preferences(self, client: Client | None = None, url: str | None = None) -> dict[str, bool]:
+        """Read the saved effects settings emitted to the requested page."""
         response = (client or self.client).get(url or reverse("accounts:update"))
         self.assertEqual(response.status_code, 200)
         match = re.search(
             r'<script id="christmas-effects-settings" type="application/json">(.*?)</script>',
-            response.content.decode(), re.S,
+            response.content.decode(), re.DOTALL,
         )
         self.assertIsNotNone(match, "Saved Christmas preferences must be supplied to every page")
         return json.loads(match.group(1))

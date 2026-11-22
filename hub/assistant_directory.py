@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import TypeAlias
+from typing import TypeAlias, TypedDict
 
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import PermissionDenied
@@ -11,6 +11,7 @@ from hub.assistant_knowledge import (
     normalize_department,
 )
 from hub.assistant_types import DepartmentSummary, MemberPage, MemberSummary
+from hub.services.lookup_cache import DEPARTMENT_COUNTS, read_shared_lookup
 
 
 class AssistantDirectoryValidationError(ValueError):
@@ -57,16 +58,27 @@ def _department_key(value: str) -> str:
     return normalized
 
 
-def _department_summaries() -> dict[str, DepartmentSummary]:
+class _DepartmentCount(TypedDict):
+    department: str
+    member_count: int
+
+
+def _department_summaries(*, live: bool = False) -> dict[str, DepartmentSummary]:
+    """Merge grouped active-user counts with the approved department descriptions."""
     approved = {item.key: item for item in approved_department_overviews()}
     label_groups: dict[str, _DepartmentLabels] = defaultdict(dict)
-
-    rows = (
+    queryset = (
         User.objects.filter(is_active=True)
         .values("department")
         .annotate(member_count=Count("pk"))
         .order_by("department")
     )
+
+    def load_rows() -> list[_DepartmentCount]:
+        """Read only the labels and counts that are safe to share."""
+        return list(queryset)
+
+    rows = load_rows() if live else read_shared_lookup(DEPARTMENT_COUNTS, load_rows, using=queryset.db)
     for row in rows:
         raw_label = row["department"] or ""
         normalized = normalize_department(raw_label)
@@ -194,10 +206,11 @@ def find_department_members(
     query: str = "",
     page: int = 1,
 ) -> MemberPage:
+    """Read current department membership without relying on cached counts."""
     _require_active_user(user)
     _validate_search_and_page(query, page)
     normalized_key = _department_key(department_key)
-    department = _department_summaries().get(normalized_key)
+    department = _department_summaries(live=True).get(normalized_key)
     if department is None:
         raise AssistantDirectoryNotFoundError(normalized_key)
 

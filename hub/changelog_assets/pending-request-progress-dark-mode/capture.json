@@ -1,0 +1,69 @@
+{
+  "recipe": "request-progress-dark-mode",
+  "before_revision": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "after_source": "Uncommitted working tree; not exact-release evidence.",
+  "fixture": "Synthetic Request progress in dark mode with the Christmas theme; no live data.",
+  "capture": "Offline Chromium 156.0.8078.4; scripts and external network disabled.",
+  "after_file_sha256": {
+    "static/css/app.css": "f39b5b8b4a405d4322bfbd17fcc039ffeb825b4a9996b0039b0c71ae331db854",
+    "static/css/request-progress.css": "bf1eeee6cc97cfd95d3900632d9de1290758011065dd7f4930e57e42c7884d45",
+    "templates/hub/request_manager_form.html": "3598903b2bf6ba5840628ee231d0e6cdb974db826e74f3d02add9312dd75e2dc",
+    "scripts/changelog_capture_scenes.py": "5feae27619274e69d897b955d754a40beb3a36d0c261a59d53f01c7b0f3ac54f",
+    "scripts/capture_release_changelog.py": "ba54afee4e38d3363ba9b63b2777d347887853ab3e94236cac0856ff3cb37dfa",
+    "hub/changelog_capture_recipes.json": "87b878217bb5d8a25ee75e0afd0030e71acbc26c9883841263fbacae676a2ad9"
+  },
+  "images": [
+    {
+      "file": "desktop-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "image_size": [
+        1152,
+        232
+      ],
+      "sha256": "c7e9ddd02f39a8b6069705f56aca66bb9ebbbd55f4a02d4382f1f9d11bace7c3"
+    },
+    {
+      "file": "desktop-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "image_size": [
+        1152,
+        232
+      ],
+      "sha256": "98823d187811d1bcd189d3447d3c909b8ee3a1baa36778c20aa8907b97165d41"
+    },
+    {
+      "file": "phone-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        327,
+        513
+      ],
+      "sha256": "db3b5187873a136d7ac996afbcd267f754efdbe1b21adcb916e81b8d509b6445"
+    },
+    {
+      "file": "phone-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        327,
+        513
+      ],
+      "sha256": "1d2e371c4af5f74b1bd62107699e420bf0154dd496da077866b5ddc14d2fe8ab"
+    }
+  ]
+}

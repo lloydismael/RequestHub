@@ -7,7 +7,13 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import MD5PasswordHasher
 from django.core.cache import cache
 from django.db import DatabaseError, connection, connections
-from django.test import RequestFactory, SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.test import (
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone

@@ -8,16 +8,18 @@ from django.urls import reverse
 
 
 class LiveRefreshScriptTests(SimpleTestCase):
-    def test_live_refresh_regressions(self):
+    def test_live_refresh_regressions(self) -> None:
+        """Run JavaScript regressions for live page refresh behavior."""
         import shutil
         import subprocess
+
         from django.conf import settings
         node = shutil.which('node')
         if not node:
             self.skipTest('Node.js is required for browser-script regression tests')
         result = subprocess.run([node, '--test',
             str(settings.BASE_DIR / 'tests' / 'js' / 'test_dashboard_refresh.js'),
-            str(settings.BASE_DIR / 'tests' / 'js' / 'test_sqr_refresh.js')], capture_output=True, text=True, encoding='utf-8')
+            str(settings.BASE_DIR / 'tests' / 'js' / 'test_sqr_refresh.js')], check=False, capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -25,7 +25,7 @@ class PmEsgEmailTests(SimpleTestCase):
             reference_code="SQR-1", customer_name="Customer & Co",
             customer_company="Company Group", project_title="Network upgrade",
             project_details="Review network\nUpdate quotation",
-            created_at=datetime(2026, 10, 22, 20, 30, tzinfo=timezone.utc),
+            created_at=datetime(2026, 10, 22, 20, 30, tzinfo=UTC),
         )
 
     def send(self):

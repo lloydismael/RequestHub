@@ -5,9 +5,9 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from unittest import mock
 
-from PIL import Image
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase
+from PIL import Image
 
 from accounts.models import StoredFile
 from hub.changelog_sync import sync_release
@@ -49,7 +49,8 @@ class EvidenceManifestTests(RepoMixin, SimpleTestCase):
         )])
         self.assertEqual(validate_manifest(valid_manifest(commits=[item]))["commits"], [item])
 
-    def test_validation_rejects_unsafe_image_paths_and_incomplete_pairs(self):
+    def test_validation_rejects_unsafe_image_paths_and_incomplete_pairs(self) -> None:
+        """Reject missing comparison fields and paths outside the evidence namespace."""
         invalid = [
             {"before_image": "../secret.png"},
             {"after_image": "C:\\secret.png"},
@@ -68,9 +69,11 @@ class EvidenceManifestTests(RepoMixin, SimpleTestCase):
                 with self.assertRaises(ManifestError):
                     validate_manifest(valid_manifest(commits=[item]))
         for fields in ({"requires_comparison": "yes"}, {"comparisons": "images"}):
-            with self.subTest(fields=fields):
-                with self.assertRaises(ManifestError):
-                    validate_manifest(valid_manifest(commits=[visual_commit(**fields)]))
+            with (
+                self.subTest(fields=fields),
+                self.assertRaises(ManifestError),
+            ):
+                validate_manifest(valid_manifest(commits=[visual_commit(**fields)]))
 
     def test_missing_evidence_tolerates_malformed_stored_commits(self):
         from hub.release_changelog import missing_comparisons
@@ -421,7 +424,8 @@ class PackagedV566ToV568EvidenceTests(TestCase):
 
 
 class PackagedV571ToV576EvidenceTests(SimpleTestCase):
-    def test_packaged_images_are_not_lost_in_the_ignored_capture_cache(self):
+    def test_packaged_images_are_not_lost_in_the_ignored_capture_cache(self) -> None:
+        """Keep versioned release images independent of the ignored capture cache."""
         from hub.release_changelog import ASSET_DIR, curated_manifests
 
         paths = [
@@ -434,12 +438,18 @@ class PackagedV571ToV576EvidenceTests(SimpleTestCase):
         self.assertTrue(paths)
         result = subprocess.run(
             ["git", "-C", str(ASSET_DIR.parent.parent), "check-ignore", "--no-index", "--", *paths],
+            check=False,
             capture_output=True, text=True, encoding="utf-8",
         )
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
 
     def test_recovered_releases_have_complete_exact_revision_evidence(self):
-        from hub.release_changelog import ASSET_DIR, comparison_kind, curated_manifests, missing_comparisons
+        from hub.release_changelog import (
+            ASSET_DIR,
+            comparison_kind,
+            curated_manifests,
+            missing_comparisons,
+        )
 
         expected = {
             "v57.1": {"bb2341fdf36cfe9518ad430765d6a6755d3e1f66"},
@@ -475,7 +485,11 @@ class PackagedV571ToV576EvidenceTests(SimpleTestCase):
 
 class PackagedV565EvidenceTests(SimpleTestCase):
     def test_release_has_complete_packaged_evidence_for_publication(self):
-        from hub.release_changelog import ASSET_DIR, curated_manifests, missing_comparisons
+        from hub.release_changelog import (
+            ASSET_DIR,
+            curated_manifests,
+            missing_comparisons,
+        )
 
         matches = [data for data in curated_manifests() if data["version"] == "v56.5"]
         self.assertEqual(len(matches), 1)

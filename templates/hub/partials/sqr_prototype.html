@@ -2,7 +2,12 @@
 <section id="sqr-proto" class="sqr-proto" data-sqr-view-panel="prototype" hidden
          data-endpoint="{% url 'hub:sqr-prototype-data' %}" data-csrf="{{ csrf_token }}"
          aria-label="SQR Tracker">
-    <div id="sqr-proto-filters" aria-label="Filter SQRs"></div>
+    <details class="sqr-proto__filter-disclosure">
+        <summary class="btn btn-outline-primary" aria-controls="sqr-proto-filters">
+            <i class="bi bi-funnel-fill" aria-hidden="true"></i> Filters
+        </summary>
+        <div id="sqr-proto-filters" aria-label="Filter SQRs"></div>
+    </details>
     <p id="sqr-proto-filter-notice" class="small text-secondary mb-2" role="status" hidden></p>
     <p id="sqr-proto-result-notice" class="small mb-2" role="status" hidden></p>
     <div class="sqr-proto__presentation" role="group" aria-label="Tracker presentation">

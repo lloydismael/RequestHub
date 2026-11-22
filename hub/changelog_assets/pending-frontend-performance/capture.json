@@ -1,0 +1,246 @@
+{
+  "before_source": "Frozen local pre-Phase-8 working tree, including earlier uncommitted edits.",
+  "after_source": "Matched local Phase 8 frontend implementation and initial tests, before this evidence was added.",
+  "base_head": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "comparison": {
+    "title": "Chart loading, reduced motion, and static caching",
+    "before_text": "Chart scripts blocked parsing on five chart pages. Login parallax still read layout after the system setting changed to reduced motion.",
+    "after_text": "Chart scripts defer on those pages. Login parallax pauses immediately on reduced motion and resumes with new pointer input. Query counts and cache headers are unchanged.",
+    "capture_note": "Offline Chromium and synthetic PostgreSQL data on matched local snapshots; not production timings or exact Git revision evidence.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "measurements": {
+    "before": {
+      "revision": "current-before",
+      "chromium": "156.0.8078.4",
+      "reports": {
+        "trials": [
+          {
+            "state": "loading",
+            "dom_interactive_ms": null
+          },
+          {
+            "state": "loading",
+            "dom_interactive_ms": null
+          },
+          {
+            "state": "loading",
+            "dom_interactive_ms": null
+          },
+          {
+            "state": "loading",
+            "dom_interactive_ms": null
+          },
+          {
+            "state": "loading",
+            "dom_interactive_ms": null
+          }
+        ],
+        "parsed_before_chart_release": 0,
+        "median_dom_interactive_ms": null
+      },
+      "login_parallax": {
+        "normal_layout_reads": 1,
+        "reduced_layout_reads": 1,
+        "resumed_layout_reads": 1
+      },
+      "pages": {
+        "Reports": {
+          "status": 200,
+          "queries": 12,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 4
+        },
+        "Activity Logs": {
+          "status": 200,
+          "queries": 12,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 4
+        },
+        "Requestor Dashboard": {
+          "status": 200,
+          "queries": 7,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 4
+        },
+        "Engineer Dashboard report": {
+          "status": 200,
+          "queries": 11,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 4
+        },
+        "SQR Reports": {
+          "status": 200,
+          "queries": 8,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 4
+        },
+        "Request Edit": {
+          "status": 200,
+          "queries": 8,
+          "chart_scripts": 0,
+          "parser_blocking_chart_scripts": 0
+        }
+      },
+      "static": {
+        "fingerprinted": {
+          "cache-control": "max-age=315360000, public, immutable",
+          "content-encoding": "gzip",
+          "vary": "Accept-Encoding"
+        },
+        "unversioned": {
+          "cache-control": "max-age=60, public",
+          "content-encoding": "gzip",
+          "vary": "Accept-Encoding"
+        }
+      }
+    },
+    "after": {
+      "revision": "candidate",
+      "chromium": "156.0.8078.4",
+      "reports": {
+        "trials": [
+          {
+            "state": "interactive",
+            "dom_interactive_ms": 201
+          },
+          {
+            "state": "interactive",
+            "dom_interactive_ms": 137
+          },
+          {
+            "state": "interactive",
+            "dom_interactive_ms": 197
+          },
+          {
+            "state": "interactive",
+            "dom_interactive_ms": 202
+          },
+          {
+            "state": "interactive",
+            "dom_interactive_ms": 141
+          }
+        ],
+        "parsed_before_chart_release": 5,
+        "median_dom_interactive_ms": 197
+      },
+      "login_parallax": {
+        "normal_layout_reads": 1,
+        "reduced_layout_reads": 0,
+        "resumed_layout_reads": 1
+      },
+      "pages": {
+        "Reports": {
+          "status": 200,
+          "queries": 12,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 0
+        },
+        "Activity Logs": {
+          "status": 200,
+          "queries": 12,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 0
+        },
+        "Requestor Dashboard": {
+          "status": 200,
+          "queries": 7,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 0
+        },
+        "Engineer Dashboard report": {
+          "status": 200,
+          "queries": 11,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 0
+        },
+        "SQR Reports": {
+          "status": 200,
+          "queries": 8,
+          "chart_scripts": 4,
+          "parser_blocking_chart_scripts": 0
+        },
+        "Request Edit": {
+          "status": 200,
+          "queries": 8,
+          "chart_scripts": 0,
+          "parser_blocking_chart_scripts": 0
+        }
+      },
+      "static": {
+        "fingerprinted": {
+          "cache-control": "max-age=315360000, public, immutable",
+          "content-encoding": "gzip",
+          "vary": "Accept-Encoding"
+        },
+        "unversioned": {
+          "cache-control": "max-age=60, public",
+          "content-encoding": "gzip",
+          "vary": "Accept-Encoding"
+        }
+      }
+    }
+  },
+  "changed_source_sha256": {
+    "hub/test_mobile_ui.py": {
+      "before": "4532b5b8af88994a9135dd8c7e95038678b1c3f70947637012245656b1774aa7",
+      "after": "4b03d6118ac4dd2a09ede1e4ed9197ac401fdab4e786ca80e6f674d8c4363673"
+    },
+    "static/js/liquid-glass.js": {
+      "before": "79c1bc0e21c089c22585c94e743cebf273c2ba5edeb65275ea4aa833f7fdec2b",
+      "after": "21c44e2aa8a73cb13cde2b54017aabfe621d45d05a6596f3ee4e68795a31d607"
+    },
+    "templates/base.html": {
+      "before": "daf695ea96ecfee2e2f3af3ede3780fe6bc8c7432e8c5d49242fe0f717191b94",
+      "after": "4140045249283b96f7e53f8d0bf8129cdbf3754d0eb608b8aaaadd2ef57e4865"
+    },
+    "templates/hub/activity_logs.html": {
+      "before": "8911288748416d4bcfb054c6f033b71b16b5145fbcdf23d81a13c88955050f90",
+      "after": "a6b0336d2fc84c0c126c5f41eb9484000de1a50682bc86a92d02ca3cc863efe8"
+    },
+    "templates/hub/dashboard.html": {
+      "before": "6505a89e087143738df31c495ef0c3e0e02395a56fb5fa18ce78c56b2388ea6d",
+      "after": "3af5f6bd83d777434eaaf2eee79e548bb4efce96f2506e80a5a49a6e7ee194b2"
+    },
+    "templates/hub/report.html": {
+      "before": "3e179fde8b57991a8856070e70d15030eac566da8a922442217d32f70c7b98d8",
+      "after": "364469f62e6a2d58edb159ff66553e8c1fee638e368679c45612aac37d5c73ae"
+    },
+    "templates/hub/request_manager_form.html": {
+      "before": "3598903b2bf6ba5840628ee231d0e6cdb974db826e74f3d02add9312dd75e2dc",
+      "after": "5711cd81f7a34430245af70b5a33dbff7dbd2e26685acd94816d2ce39a8e24ca"
+    },
+    "templates/hub/request_update.html": {
+      "before": "3480830fdc39d11bff66f39a93a7de53acbbe636ea092a2b01bd35ddb7f37c9f",
+      "after": "80e203a418fca8fc569cb158f94715787f55782beb7e18b91d750dc30c2e05de"
+    },
+    "templates/hub/sqr.html": {
+      "before": "c81481c6eb31e0757f87009e7d4e354cf5519152996b6f9de6150bb81fa4a9b3",
+      "after": "3bcd3a188981b94b90308cfa3e5bedfc1c6f7d7eb0e0fe040102ff3c3563fd20"
+    },
+    "tests/js/test_liquid_glass.cjs": {
+      "before": "f48d094bd94f3e9a54ef8b7ba632487b84cfe5403c6cf9b3da582d9552dd8d54",
+      "after": "676188a9e6cbf1b6d15df9bfa5782512e7f2f87b418481301aae1d0b1b0449a9"
+    }
+  },
+  "images": {
+    "report-before.png": {
+      "sha256": "d41128daf7646555c57798d56f76df3961c5a253a65aed3c18b672901a7a117e",
+      "bytes": 89210
+    },
+    "report-after.png": {
+      "sha256": "61099de3844734315a727c561a94e9e13ea4be74e40eef928fddd37fc2a8e810",
+      "bytes": 89545
+    }
+  },
+  "notifications_verification": {
+    "draft_hidden_from_reader": true,
+    "draft_report_and_images_return_404": true,
+    "published_via_local_admin_editor": true,
+    "published_report_link_under_technical_evidence": true,
+    "published_images_byte_exact_and_no_store": 2,
+    "local_fixture_rolled_back": true
+  }
+}
