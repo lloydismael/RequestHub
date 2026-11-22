@@ -1,4 +1,19 @@
 (() => {
+  const updates = new WeakMap();
+  const initializedForms = new WeakSet();
+
+  function refresh(form) {
+    const visibility = new Map();
+    function isVisible(input) {
+      if (!visibility.has(input)) {
+        visibility.set(input, false);
+        visibility.set(input, updates.get(input)?.(isVisible));
+      }
+      return visibility.get(input);
+    }
+    form.querySelectorAll('[data-form-custom="true"]').forEach(isVisible);
+  }
+
   function enhance(form) {
     const fields = Array.from(form.querySelectorAll('[data-form-custom="true"], [data-form-section], [data-form-width]'));
     if (!fields.length) return;
@@ -23,24 +38,22 @@
       anchors.forEach(anchor => anchor.remove());
     });
     fields.forEach(input => {
-      if (input.dataset.editorEnhanced === 'true') return;
-      input.dataset.editorEnhanced = 'true';
+      if (updates.has(input)) return;
       const row = input.closest('[data-editor-field], .mb-3, .mb-2, .col-md-6, .col-12') || input.parentElement;
       if (input.dataset.formWidth === 'half') row.classList.add('editor-field-half');
-      const label = input.id ? Array.from(form.querySelectorAll('label')).find(item => item.htmlFor === input.id) : null;
-      if (label && input.dataset.formLabel) label.textContent = input.dataset.formLabel;
+      const label = input.labels?.[0];
+      if (label && label.htmlFor === input.id && input.dataset.formLabel) label.textContent = input.dataset.formLabel;
       if (input.dataset.formSection && !row.querySelector('.editor-section')) {
         const heading = document.createElement('h6');
         heading.className = 'editor-section';
         heading.textContent = input.dataset.formSection;
         row.prepend(heading);
       }
-      const update = () => {
-        if (input.dataset.formCustom !== 'true') return;
-        let visible = input.dataset.formHidden !== 'true';
-        if (input.dataset.formCondition) {
-          const condition = JSON.parse(input.dataset.formCondition);
-          const prefix = input.name.includes('-') ? input.name.slice(0, input.name.lastIndexOf('-') + 1) : '';
+      const condition = input.dataset.formCondition && JSON.parse(input.dataset.formCondition);
+      const prefix = input.name.includes('-') ? input.name.slice(0, input.name.lastIndexOf('-') + 1) : '';
+      const update = isVisible => {
+        let visible = input.dataset.formArchived !== 'true' && input.dataset.formHidden !== 'true';
+        if (condition && input.dataset.formArchived !== 'true') {
           const dependency = form.elements.namedItem(prefix + condition.field) || form.elements.namedItem(condition.field);
           let values = [];
           if (dependency) {
@@ -51,18 +64,23 @@
           const expected = condition.value === null || condition.value === undefined ? '' :
             (typeof condition.value === 'boolean' ? (condition.value ? 'True' : 'False') : String(condition.value));
           const equal = values.includes(expected);
-          visible = ({equals: equal, not_equals: !equal, empty, not_empty: !empty})[condition.operator];
-          if (input.dataset.formArchived === 'true') visible = false;
+          const parentVisible = dependency?.dataset?.formCustom !== 'true' || isVisible(dependency);
+          visible = parentVisible && ({equals: equal, not_equals: !equal, empty, not_empty: !empty})[condition.operator];
         }
         row.hidden = !visible;
         input.disabled = !visible;
         if (!input.dataset.editorRequired) input.dataset.editorRequired = input.required ? 'true' : 'false';
         input.required = visible && input.dataset.editorRequired === 'true';
+        return visible;
       };
-      form.addEventListener('change', update);
-      form.addEventListener('input', update);
-      update();
+      updates.set(input, update);
     });
+    if (!initializedForms.has(form)) {
+      initializedForms.add(form);
+      form.addEventListener('change', () => refresh(form));
+      form.addEventListener('input', () => refresh(form));
+    }
+    refresh(form);
   }
   document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('form').forEach(enhance));
   document.addEventListener('form-editor-enhance', event => enhance(event.detail.form));

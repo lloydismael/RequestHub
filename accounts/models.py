@@ -1,10 +1,12 @@
 from datetime import date, datetime, time, timedelta
+from typing import ClassVar
 from uuid import uuid4
 
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
+
 from .storage import DatabaseMediaStorage
 from .themes import custom_theme_style, custom_theme_vars
 
@@ -26,7 +28,7 @@ class StoredFile(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-updated_at"]
+        ordering: ClassVar[list[str]] = ["-updated_at"]
 
     def __str__(self):
         return self.name
@@ -43,7 +45,7 @@ class BackupSnapshot(models.Model):
     status = models.CharField(max_length=20, default="ready")
 
     class Meta:
-        ordering = ["-created_at", "-pk"]
+        ordering: ClassVar[list[str]] = ["-created_at", "-pk"]
 
 
 class RecoveryEvent(models.Model):
@@ -55,7 +57,7 @@ class RecoveryEvent(models.Model):
     details = models.JSONField(default=dict)
 
     class Meta:
-        ordering = ["-created_at", "-pk"]
+        ordering: ClassVar[list[str]] = ["-created_at", "-pk"]
 
 
 class RecoveryPreview(models.Model):
@@ -111,7 +113,7 @@ class SignInLog(models.Model):
     device_type = models.CharField(max_length=20, blank=True)
 
     class Meta:
-        ordering = ["-started_at", "-pk"]
+        ordering: ClassVar[list[str]] = ["-started_at", "-pk"]
         verbose_name = "sign-in log"
         verbose_name_plural = "sign-in logs"
 
@@ -135,7 +137,7 @@ class User(AbstractUser):
     CUSTOM_THEME = "custom"
     CHRISTMAS_DEFAULT_START = date(2026, 11, 6)
     CHRISTMAS_DEFAULT_END = date(2026, 12, 31)
-    BANNER_GRADIENT_CHOICES = [
+    BANNER_GRADIENT_CHOICES: ClassVar[list[tuple[str, str]]] = [
         (DEFAULT_THEME, "Default"),
         ("blue", "Blue"),
         ("sunset", "Sunset"),

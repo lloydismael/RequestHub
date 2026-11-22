@@ -3,6 +3,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 import json
 import re
 
@@ -41,7 +42,8 @@ class SchemaValidationError(ValidationError):
     pass
 
 
-def is_baseline_build():
+def is_baseline_build() -> bool:
+    """Return whether this form is only being constructed for schema metadata."""
     return _BUILDING_BASELINE.get()
 
 
@@ -115,11 +117,12 @@ def baseline_form(form_key):
     return form
 
 
-def get_person_fields(form_key):
-    """Expose only allowlisted business selectors, never account-management controls."""
+def get_person_fields(form_key: str, *, form: forms.BaseForm | None = None) -> dict[str, Any]:
+    """Expose only allowlisted business selectors, optionally reusing a baseline form."""
     if form_key not in PERSON_FIELDS and form_key not in VALUE_FIELDS:
         return {}
-    form = baseline_form(form_key)
+    if form is None:
+        form = baseline_form(form_key)
     result = {}
     for key in PERSON_FIELDS.get(form_key, set()):
         field = form.fields.get(key)
@@ -136,8 +139,10 @@ def get_person_fields(form_key):
     return result
 
 
-def baseline_schema(form_key):
-    form = baseline_form(form_key)
+def baseline_schema(form_key: str, *, form: forms.BaseForm | None = None) -> dict[str, Any]:
+    """Build the default schema without rendering form choices."""
+    if form is None:
+        form = baseline_form(form_key)
     fields = []
     for key, field in form.fields.items():
         if key.startswith("_form_") or key.startswith("custom_"):
@@ -317,20 +322,28 @@ def validate_schema(form_key, schema):
     return result
 
 
-def get_definition(form_key):
+def get_definition(form_key: str, *, form: forms.BaseForm | None = None) -> FormDefinition:
+    """Load a definition and its live version, or use the existing unsaved default."""
     get_form_class(form_key)
     definition = FormDefinition.objects.select_related("published_version").filter(key=form_key).first()
-    return definition or FormDefinition(key=form_key, draft=baseline_schema(form_key), revision=0)
+    return definition or FormDefinition(key=form_key, draft=baseline_schema(form_key, form=form), revision=0)
 
 
 def get_published_version(form_key):
     return get_definition(form_key).published_version
 
 
-def get_schema(form_key, published=True):
-    definition = get_definition(form_key)
-    if published:
-        return deepcopy(definition.published_version.schema) if definition.published_version_id else baseline_schema(form_key)
+def get_schema(
+    form_key: str, published: bool = True, *, definition: FormDefinition | None = None,
+    form: forms.BaseForm | None = None,
+) -> dict[str, Any]:
+    """Return an independent schema, reusing an already loaded definition when available."""
+    if definition is None:
+        definition = get_definition(form_key, form=form)
+    if published and definition.published_version_id:
+        return deepcopy(definition.published_version.schema)
+    if published and definition.pk:
+        return baseline_schema(form_key, form=form)
     return deepcopy(definition.draft)
 
 

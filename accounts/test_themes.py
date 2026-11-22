@@ -3,7 +3,12 @@ from django.test import SimpleTestCase
 from PIL import Image
 
 from accounts.forms import ThemeForm
-from accounts.themes import contrast_ratio, custom_theme_style, custom_theme_vars, normalize_hex
+from accounts.themes import (
+    contrast_ratio,
+    custom_theme_style,
+    custom_theme_vars,
+    normalize_hex,
+)
 
 
 class ChristmasThemePreferenceTests(SimpleTestCase):

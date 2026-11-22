@@ -1,16 +1,21 @@
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django import forms
 from django.test import SimpleTestCase, TestCase
-from types import SimpleNamespace
 
 from accounts.models import User
-from . import form_editor as editor
-from .forms import RequestForm, SqrSubmissionForm, SqrDeliveryForm, SqrTrackerEditForm
-from .models import Account, Request, FormDefinition, FormVersion, SqrSubmission
 
-from .form_editor_runtime import TOKEN_FIELD, condition_matches, configure_form, editable_form
+from . import form_editor as editor
+from .form_editor_runtime import (
+    TOKEN_FIELD,
+    condition_matches,
+    configure_form,
+    editable_form,
+)
+from .forms import RequestForm, SqrDeliveryForm, SqrSubmissionForm, SqrTrackerEditForm
+from .models import Account, FormDefinition, FormVersion, Request, SqrSubmission
 
 
 @editable_form
@@ -46,6 +51,23 @@ class FormEditorRuntimeTests(SimpleTestCase):
         form = RuntimeExampleForm({"subject": "Test", "trigger": "yes"})
         self.assertFalse(form.is_valid())
         self.assertIn("custom_detail", form.errors)
+
+    def test_inactive_custom_dependency_does_not_require_its_descendant(self):
+        schema = {**self.schema, 'fields': [
+            *self.schema['fields'][:2],
+            {'key': 'custom_detail', 'type': 'text', 'required': True,
+             'condition': {'field': 'custom_parent', 'operator': 'not_equals', 'value': 'other'}},
+            {'key': 'custom_parent', 'type': 'text',
+             'condition': {'field': 'trigger', 'operator': 'equals', 'value': 'yes'}},
+        ]}
+        for parent in ({}, {'custom_parent': 'Retained value'}):
+            with self.subTest(parent=parent):
+                form = RuntimeExampleForm({'subject': 'Test', 'trigger': 'no', **parent}, _form_editor_skip=True)
+                configure_form(form, schema)
+                self.assertTrue(form.is_valid(), form.errors)
+        active = RuntimeExampleForm({'subject': 'Test', 'trigger': 'yes'}, _form_editor_skip=True)
+        configure_form(active, schema)
+        self.assertIn('custom_detail', active.errors)
 
     def test_hidden_conditional_field_remains_renderable(self):
         form = RuntimeExampleForm()

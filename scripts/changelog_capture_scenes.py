@@ -251,6 +251,40 @@ def _ui(snapshot, fixture):
             }]},
         ]},
     )
+    if fixture == "management_accounts":
+        from django.urls import reverse
+        from accounts.models import User
+        from hub.models import Account, FormDefinition
+        from hub.views import UserManagementView
+
+        class Directory(list):
+            # An ordered, already-materialized queryset for the historical formset and paginator.
+            ordered = totally_ordered = True
+
+            def __getitem__(self, key):
+                value = super().__getitem__(key)
+                return type(self)(value) if isinstance(key, slice) else value
+
+            def filter(self, *, name__icontains):
+                return type(self)(account for account in self if name__icontains.casefold() in account.name.casefold())
+
+        request = RequestFactory().get(
+            reverse("hub:management"), {"tab": "accounts", "account_q": "Summit"},
+            HTTP_HOST="changelog.capture.invalid",
+        )
+        request.user = User(pk=1, username="demo-admin", first_name="Demo", last_name="Admin", role=User.Roles.ADMIN)
+        request.META["CSRF_COOKIE"] = "0" * 32
+        names = [f"Demo Account {index:03}" for index in range(1, 128)] + ["Summit Research"]
+        directory = Directory(Account(pk=index, name=name, created_at=datetime(2026, 11, 20, 10, tzinfo=timezone.utc))
+                              for index, name in enumerate(names, start=1))
+        counts = {**context, "request": request, "active_tab": "accounts", "total_users": 1,
+                  "total_accounts": len(directory), "unread_count": 0}
+        with (patch.object(Account.objects, "order_by", return_value=directory),
+              patch.object(UserManagementView, "_tab_context", return_value=counts),
+              patch("hub.form_editor.get_definition", return_value=FormDefinition(key="account_management"))):
+            view = UserManagementView()
+            view.setup(request)
+            return view.get(request).content.decode("utf-8")
     if fixture == "management_monitoring":
         from django.core.paginator import Paginator
         from accounts.models import User

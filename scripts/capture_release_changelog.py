@@ -97,7 +97,7 @@ def load_recipes(path):
                     raise CaptureError("Documentation capture needs a selected text section.")
             elif scene.get("fixture") not in ({
                 "login", "seasonal_login", "profile", "admin_profile", "changelog", "changelog_editor",
-                "changelog_history", "changelog_feed", "management_monitoring", "sqr_tracker", "sqr_performance",
+                "changelog_history", "changelog_feed", "management_accounts", "management_monitoring", "sqr_tracker", "sqr_performance",
             } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             if scene.get("fixture") == "repository_change" and {"paths", "omitted_files", "revision"} & scene.keys():
@@ -275,6 +275,7 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
     fixture = scene.get("fixture")
     if fixture in {
         "admin_profile", "changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring",
+        "management_accounts",
     }:
         document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []
@@ -342,6 +343,11 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
                 raise CaptureError("The historical seasonal decoration did not render.")
         if failed_resources:
             raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
+        if fixture == "management_accounts":
+            # The old no-script page can be thousands of pixels tall.
+            page.locator("#accounts-pane").wait_for(state="visible")
+            page.screenshot(path=str(output), animations="disabled", timeout=15000)
+            return
         selector = {
             "login": ".login-hero", "seasonal_login": ".login-hero",
             "profile": "#profile-panel-avatar .profile-card, .profile-avatar-block",

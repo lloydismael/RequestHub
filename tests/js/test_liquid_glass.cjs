@@ -45,8 +45,13 @@ function start({ reducedMotion = false, preference = '' } = {}) {
         querySelectorAll: () => [],
         addEventListener(name, handler) { listeners.set(name, handler); },
     };
+    const motion = {
+        matches: reducedMotion,
+        listener: null,
+        addEventListener(name, handler) { if (name === 'change') this.listener = handler; },
+    };
     const window = {
-        matchMedia: query => ({ matches: query.includes('reduced-motion') && reducedMotion }),
+        matchMedia: query => query.includes('reduced-motion') ? motion : { matches: false },
         addEventListener() {},
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'liquid-glass.js'), 'utf8'), {
@@ -64,6 +69,7 @@ function start({ reducedMotion = false, preference = '' } = {}) {
         card, lens, sheen, frames, frame,
         layoutReads: () => layoutReads,
         hidden(value) { document.hidden = value; listeners.get('visibilitychange')?.(); },
+        reduceMotion(value) { motion.matches = value; motion.listener?.({ matches: value }); },
     };
 }
 
@@ -120,5 +126,40 @@ test('reduced-motion and reduced-effects preferences skip cursor animation', () 
         app.card.fire('pointermove', { clientX: 400, clientY: 420 });
         assert.equal(app.frames.size, 0);
         assert.equal(app.layoutReads(), 0);
+    }
+});
+
+test('enabling reduced motion cancels pending cursor work and discards stale samples', () => {
+    const app = start();
+    app.card.fire('pointermove', { clientX: 400, clientY: 420 });
+    app.frame();
+    app.card.fire('pointermove', { clientX: 140, clientY: 170 });
+    app.reduceMotion(true);
+
+    assert.equal(app.frames.size, 0);
+    assert.equal(app.sheen.style['--login-light-x'], '50.0%');
+    assert.equal(app.sheen.style['--login-light-y'], '18.0%');
+    app.card.fire('pointermove', { clientX: 500, clientY: 600 });
+    app.hidden(true);
+    app.hidden(false);
+    app.frame();
+    assert.equal(app.layoutReads(), 1, 'no additional layout while motion is reduced');
+
+    app.reduceMotion(false);
+    app.frame();
+    assert.equal(app.layoutReads(), 1, 'resuming does not replay stale input');
+    app.card.fire('pointermove', { clientX: 400, clientY: 420 });
+    app.frame();
+    assert.equal(app.layoutReads(), 2);
+    assert.equal(app.sheen.style['--login-light-x'], '54.0%');
+});
+
+test('disabling the OS preference enables motion only if the app has not opted out', () => {
+    for (const preference of ['', 'pref-reduce-motion', 'pref-reduce-effects']) {
+        const app = start({ reducedMotion: true, preference });
+        app.reduceMotion(false);
+        app.card.fire('pointermove', { clientX: 400, clientY: 420 });
+        app.frame();
+        assert.equal(app.layoutReads(), preference ? 0 : 1, preference);
     }
 });

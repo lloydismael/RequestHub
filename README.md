@@ -144,7 +144,7 @@ For maintenance, keep chart assets scoped to views that use them. Reuse [the cha
 - Forced password-change on first login or admin reset
 - **5-Minute Idle Timeout:** when enabled, Request Hub and Django admin warn after five idle minutes, and the server rejects the session after six even without JavaScript. Deliberate activity or confirming the warning renews a live session; background polling and page-load heartbeats do not. Saving it off cancels the warning across tabs, and a stale timer checks the server before taking the user away from their work. Manual sign-out remains available. Apply `accounts` migration `0031_sessionidledeadline` before deploying this change.
 - Microsoft Graph user sync via `fetch_phildata_users` management command
-- Management renders only the selected tab. Users search updates the rows, count and pagination without reloading the page. If a live search fails, the previous results stay visible and you can press Enter to retry. Accounts warns before you leave with unsaved edits.
+- Management renders only the selected tab. Users and Accounts search update the rows, count and pagination without reloading the page. If live search fails, the previous results stay visible and you can press Enter to retry. Accounts searches the whole directory and shows up to 50 rows per page. Drafts keep their original form fields across pages and searches. **Save Changes** applies the whole draft together; if it is too large, revert individual rows and retry. Without JavaScript, search and pagination still work; save edits before changing pages. See the [performance release notes](docs/cd-workflow-testing.md#unreleased-accounts-dashboard-and-sqr-performance).
 - **Management → Monitoring** lets Admins check Django and PostgreSQL health every five seconds while the tab is visible. App Service and database server metrics (including CPU, memory, used and free disk) use one-minute Azure samples. [Azure setup](docs/azure-app-service-deployment.md#optional-azure-metrics-for-management--monitoring) supports Azure CLI sign-in locally and managed identity on App Service. See the [Monitoring release notes and before/after captures](docs/unreleased-management-monitoring-changelog.md).
 
 ### Release changelogs and visual evidence
@@ -345,15 +345,15 @@ request-hub/
 
 +-- hub/                        # Core business logic app
    +-- models.py               #   Request, Account, StatusLog, SQR, ActivityLog
-   +-- views.py                #   Dashboard, requests, reports, SQR, activity logs
+   +-- views/                  #   Domain views plus the legacy import facade
    +-- notification_views.py   #   Notification pages, actions, and toast polling
-   +-- view_helpers.py         #   Shared view helpers and role constants
+   +-- view_helpers.py         #   Shared return URL and time-zone helpers
    +-- forms.py                #   RequestForm, AdminForm, ActivityLogForm
    +-- mixins.py               #   Role-based access mixins
    +-- signals.py              #   Notification triggers
    +-- constants.py            #   Shared choices / constants
    +-- urls.py
-   +-- services/
+   +-- services/               #   Workflows, reporting, email, and integrations
      +-- microsoft_graph.py  #   MS Graph API integration
    +-- management/commands/
        +-- check_sla.py        #   Daily SLA overdue checker
@@ -395,6 +395,8 @@ request-hub/
 +-- requirements-ci.txt        # test-only tooling (tblib)
 +-- LICENSE
 ```
+
+Keep existing view imports through the [compatibility facade](hub/views/__init__.py). Add new endpoints to the relevant module in [hub/views/](hub/views/), put business rules in [hub/services/](hub/services/), and share equivalent role checks through [mixins.py](hub/mixins.py).
 
 ---
 
@@ -480,6 +482,8 @@ docker compose exec web python manage.py migrate
 | `DB_PASSWORD` | Database password. Required when `DJANGO_DEBUG` is `False`. |
 | `DB_HOST` | Database host (e.g. Azure PostgreSQL hostname). Required when `DJANGO_DEBUG` is `False`. |
 | `DB_PORT` | Database port (default `5432`) |
+| `DB_CONN_MAX_AGE` | PostgreSQL connection lifetime in seconds (default `60`), with health checks on reused connections. |
+| `REDIS_LOOKUP_URL` | Optional TLS Redis connection for short-lived badge and department counts. Leave blank to use PostgreSQL. See [shared lookup setup](docs/azure-app-service-deployment.md#optional-shared-lookup-cache). |
 | `ACS_EMAIL_CONNECTION_STRING` | Azure Communication Services connection string |
 | `ACS_EMAIL_SENDER` | ACS sender address |
 | `PHILDATA_TENANT_ID` | Microsoft Entra tenant ID |

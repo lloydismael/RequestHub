@@ -84,7 +84,8 @@ class AssistantKnowledgeTests(TestCase):
             },
         )
 
-    def test_guide_audiences_match_existing_route_permissions(self):
+    def test_guide_audiences_match_existing_route_permissions(self) -> None:
+        """Do not expose guide entries outside the audience that can open their routes."""
         destination_access = {
             User.Roles.REQUESTOR: {"dashboard", "notifications", "profile"},
             User.Roles.REQUESTOR_ESS: {"dashboard", "notifications", "profile"},
@@ -100,10 +101,10 @@ class AssistantKnowledgeTests(TestCase):
 
         for role, allowed_keys in destination_access.items():
             user = self.make_user(role)
-            for guide_key in {
+            for guide_key in (
                 "dashboard", "activity_logs", "sqr", "management",
                 "reports", "notifications", "profile",
-            }:
+            ):
                 with self.subTest(role=role, guide=guide_key):
                     if guide_key in allowed_keys:
                         self.assertEqual(get_guide(user, guide_key).key, guide_key)
@@ -131,7 +132,8 @@ class AssistantKnowledgeTests(TestCase):
     def test_department_overviews_are_empty_until_facts_are_approved(self):
         self.assertEqual(approved_department_overviews(), ())
 
-    def test_catalog_rejects_noncanonical_department_keys(self):
+    def test_catalog_rejects_noncanonical_department_keys(self) -> None:
+        """Reject department keys that do not match the catalog format."""
         invalid_overview = DepartmentSummary(
             key="Engineering",
             name="Engineering",
@@ -143,9 +145,8 @@ class AssistantKnowledgeTests(TestCase):
             "hub.assistant_knowledge.DEPARTMENT_CATALOG",
             {"Engineering": invalid_overview},
             clear=True,
-        ):
-            with self.assertRaises(AssistantCatalogError):
-                validate_catalog()
+        ), self.assertRaises(AssistantCatalogError):
+            validate_catalog()
 
 
 class AssistantDirectoryTests(TestCase):

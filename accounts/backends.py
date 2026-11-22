@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from asgiref.sync import sync_to_async
-from django.contrib.auth import check_password_with_timing_attack_mitigation, get_user_model
+from django.contrib.auth import (
+    check_password_with_timing_attack_mitigation,
+    get_user_model,
+)
 from django.contrib.auth.backends import ModelBackend
 from django.views.decorators.debug import sensitive_variables
 

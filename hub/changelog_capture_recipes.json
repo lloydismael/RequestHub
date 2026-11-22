@@ -91,6 +91,35 @@
       ]
     },
     {
+      "id": "management-accounts",
+      "paths": ["static/hub/management-accounts.js", "templates/hub/partials/account_fields.html", "templates/hub/partials/account_error_links.html"],
+      "scenes": [
+        {
+          "kind": "ui",
+          "fixture": "management_accounts",
+          "title": "Management account search — desktop",
+          "before_text": "Without scripts, the Accounts pane loaded the complete directory and ignored the search URL.",
+          "after_text": "The same URL shows the matching account and result count even without scripts. Cross-page drafts require scripts.",
+          "viewport": {"width": 1200, "height": 900}
+        },
+        {
+          "kind": "ui",
+          "fixture": "management_accounts",
+          "title": "Management account search — phone",
+          "before_text": "The phone fallback also loaded the complete directory; search was browser-only.",
+          "after_text": "The phone fallback shows the single matching account and keeps the new-account field available.",
+          "viewport": {"width": 375, "height": 844}
+        },
+        {
+          "kind": "report",
+          "fixture": "repository_change",
+          "title": "Accounts, dashboard and SQR performance changes",
+          "before_text": "File fingerprints at the first-parent revision.",
+          "after_text": "File fingerprints cover the updated editor, query and write paths, documentation and tests. This is not a runtime benchmark."
+        }
+      ]
+    },
+    {
       "id": "management-monitoring",
       "paths": ["templates/hub/partials/monitoring.html", "static/hub/monitoring.css", "static/hub/monitoring.js"],
       "scenes": [

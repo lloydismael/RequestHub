@@ -1,9 +1,9 @@
 """Probe a disposable local container, including image-packaged static assets."""
 
 import argparse
-from html.parser import HTMLParser
 import json
 import time
+from html.parser import HTMLParser
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
 from urllib.request import Request, urlopen

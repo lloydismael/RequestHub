@@ -1,11 +1,12 @@
 import json
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
+from typing import Any
 
 from workflow_test_utils import read_run_block
 
@@ -13,7 +14,10 @@ BASH = os.environ.get("TEST_BASH") or shutil.which("bash")
 
 
 class CaptureWorkflowTests(unittest.TestCase):
-    def run_capture_step(self, setup="success", vendor_status=0, capture_status=0, complete=False):
+    def run_capture_step(
+        self, setup: str = "success", vendor_status: int = 0, capture_status: int = 0, complete: bool = False,
+    ) -> tuple[subprocess.CompletedProcess[str], dict[str, Any], str, str]:
+        """Run the capture workflow step with controlled outcomes and collect its outputs."""
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             (root / "hub").mkdir()
@@ -52,6 +56,7 @@ class CaptureWorkflowTests(unittest.TestCase):
             """
             script = read_run_block("container-security.yml", "Capture release changelog screenshots")
             result = subprocess.run([BASH, "-e", "-o", "pipefail", "-c", stub + script],
+                                    check=False,
                                     cwd=root, env=environment, capture_output=True, text=True)
             return (result, json.loads(path.read_text(encoding="utf-8")),
                     summary.read_text(encoding="utf-8") if summary.exists() else "",

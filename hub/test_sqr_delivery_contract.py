@@ -1,20 +1,19 @@
 import json
 from datetime import date, timedelta
-from io import BytesIO
-
-from openpyxl import Workbook
 from decimal import Decimal
+from io import BytesIO
 
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from openpyxl import Workbook
 
 from accounts.models import User
+from hub.form_editor_runtime import configure_form
 from hub.forms import SqrDeliveryForm, SqrTrackerEditForm
 from hub.models import SqrSubmission, SqrSubmissionChange, SqrSubmissionHistory
-from hub.form_editor_runtime import configure_form
-from hub.views import SqrImportView, _get_sqr_export_columns
 from hub.services import sqr_prototype
+from hub.views import SqrImportView, _get_sqr_export_columns
 
 
 class DeliveryDateContractTests(SimpleTestCase):
@@ -33,9 +32,10 @@ class DeliveryDateContractTests(SimpleTestCase):
                 self.assertIsNone(row.computed_warranty_end_date)
                 self.assertIsNone(row.computed_post_svc_warranty_end_date)
 
-    def test_manual_only_maintenance_respects_zero_amount_and_scope(self):
+    def test_manual_only_maintenance_respects_zero_amount_and_scope(self) -> None:
+        """Preserve an explicit zero and apply scope rules to manual maintenance dates."""
         start, end = date(2028, 2, 1), date(2028, 2, 8)
-        row = SqrSubmission(project_details="Support", managed_support_amount=Decimal("0"),
+        row = SqrSubmission(project_details="Support", managed_support_amount=Decimal(0),
                             delivery_actual_finish_date=start)
         self.assertIsNone(row.computed_support_start_date)
         self.assertIsNone(row.computed_managed_support_end_date)
@@ -80,12 +80,13 @@ class DeliveryDateContractTests(SimpleTestCase):
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class DeliveryEditorContractTests(TestCase):
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
+        """Create the shared tracker submission and its engineer and reviewer."""
         cls.pm = User.objects.create_user(username="delivery-contract-pm", role=User.Roles.PM_ESG)
         cls.engineer = User.objects.create_user(username="delivery-contract-eng", role=User.Roles.ENGINEER)
         cls.row = SqrSubmission.objects.create(engineer=cls.engineer, pm_esg_reviewer=cls.pm,
             customer_name="Contract Customer", project_title="Contract Project", project_details="Implementation",
-            proposal_status="closed_won", managed_support_amount=Decimal("0"))
+            proposal_status="closed_won", managed_support_amount=Decimal(0))
 
     def setUp(self):
         self.client.force_login(self.pm)
@@ -242,10 +243,11 @@ class DeliveryEditorContractTests(TestCase):
         self.assertIsNone(self.row.managed_support_start_date)
         self.assertIsNone(self.row.managed_support_end_date)
 
-    def test_classic_editor_and_read_only_rows_use_canonical_delivery(self):
+    def test_classic_editor_and_read_only_rows_use_canonical_delivery(self) -> None:
+        """Use the same delivery values in editable and read-only tracker rows."""
         SqrSubmission.objects.filter(pk=self.row.pk).update(
             schedule_performance="delayed", budget_effort_performance="at_risk", quality_performance="met",
-            delivery_actual_finish_date=date(2028, 2, 1), managed_support_amount=Decimal("0"),
+            delivery_actual_finish_date=date(2028, 2, 1), managed_support_amount=Decimal(0),
             managed_support_start_date=date(2028, 2, 4), managed_support_end_date=date(2028, 2, 8),
         )
         for user, editable in ((self.pm, True), (self.engineer, False)):

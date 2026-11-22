@@ -9,7 +9,11 @@ from functools import wraps
 from ipaddress import ip_address, ip_network
 
 from django.conf import settings
-from django.contrib.auth.signals import user_logged_in, user_logged_out, user_login_failed
+from django.contrib.auth.signals import (
+    user_logged_in,
+    user_logged_out,
+    user_login_failed,
+)
 from django.core.cache import cache
 from django.db import DatabaseError, transaction
 from django.db.models import Q

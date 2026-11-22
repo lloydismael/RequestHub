@@ -1,10 +1,11 @@
 import re
 from datetime import timedelta
+from typing import Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Max, Q
-from django.http import HttpResponseRedirect, JsonResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -14,7 +15,12 @@ from django.views.generic import ListView
 from .changelog_views import published_changelogs
 from .context_processors import request_notification_summary
 from .models import Notification
-from .services.notifications import TOAST_EVENT_TYPES, notification_summary, visible_notifications
+from .services.lookup_cache import invalidate_notification_badges
+from .services.notifications import (
+    TOAST_EVENT_TYPES,
+    notification_summary,
+    visible_notifications,
+)
 from .view_helpers import ADMIN_PANEL_ROLES, MANILA_TZ, _safe_return_url
 
 
@@ -75,7 +81,8 @@ class NotificationListView(LoginRequiredMixin, ListView):
     context_object_name = "notifications"
     paginate_by = 50
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:
+        """Render the live Activity timeline or the changelog list."""
         if request.GET.get("tab") != "changelogs":
             return super().get(request, *args, **kwargs)
         page = Paginator(published_changelogs(), 10).get_page(request.GET.get("page"))
@@ -129,9 +136,10 @@ class NotificationListView(LoginRequiredMixin, ListView):
 
         return queryset
 
-    def get_context_data(self, **kwargs):
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        """Capture live Activity state before pagination for the toast poller."""
         # A change during pagination must not make an older page look current to the poller.
-        summary = request_notification_summary(self.request)
+        summary = request_notification_summary(self.request, live=True)
         context = super().get_context_data(**kwargs)
         context["unread_count"] = summary["unread_count"]
         context["total_count"] = summary["total_count"]
@@ -201,6 +209,9 @@ class NotificationDeleteView(LoginRequiredMixin, View):
 
 
 class NotificationMarkAllReadView(LoginRequiredMixin, View):
-    def post(self, request):
-        request.user.notifications.filter(is_read=False).update(is_read=True)
+    def post(self, request: HttpRequest) -> HttpResponseRedirect:
+        """Mark unread notifications in one write, then invalidate the badge."""
+        unread = request.user.notifications.filter(is_read=False)
+        if unread.update(is_read=True):
+            invalidate_notification_badges((request.user.pk,), using=unread.db)
         return HttpResponseRedirect(_safe_return_url(request, "hub:notifications"))

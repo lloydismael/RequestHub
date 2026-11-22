@@ -114,10 +114,5 @@
         syncPreferredAssignee();
     })();
 </script>
-<script src="{% static 'js/account-autocomplete.js' %}?v=1"></script>
-<script>
-    if (window.initAccountAutocompletes) {
-        window.initAccountAutocompletes();
-    }
-</script>
+<script src="{% static 'js/account-autocomplete.js' %}?v=1" defer></script>
 {% endblock %}

@@ -2,11 +2,16 @@
 (function () {
     'use strict';
 
-    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-        (document.body && (document.body.classList.contains('pref-reduce-motion') ||
-            document.body.classList.contains('pref-reduce-effects')));
+    var motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var reduceAppMotion = document.body && (document.body.classList.contains('pref-reduce-motion') ||
+        document.body.classList.contains('pref-reduce-effects'));
     var coarsePointer = window.matchMedia('(pointer: coarse)').matches;
     var phoneViewport = window.matchMedia('(max-width: 767.98px)');
+
+    /** @returns {boolean} Whether the OS or app has disabled optional motion. */
+    function motionIsReduced() {
+        return motionPreference.matches || Boolean(reduceAppMotion);
+    }
 
     /* ---- Staggered entrance (CSS-driven, no dependency) ---- */
     function normalizeDelaySeconds(raw, index) {
@@ -21,10 +26,9 @@
         return Math.min(0.02, Math.max(0, delay));
     }
 
+    /** Mark page entrances ready, without staggering for reduced motion. */
     function primeEntrance() {
-        // Reduce Motion (OS setting or the app's pref-reduce-motion class):
-        // skip the stagger entirely — elements render visible with no animation.
-        if (reduceMotion) {
+        if (motionIsReduced()) {
             document.body.classList.add('lg-enter-ready');
             return;
         }
@@ -38,9 +42,11 @@
         });
     }
 
-    /* ---- Smoothed light vector; the pane stays stable while its optics move ---- */
+    /** Move only the card optics, and skip the effect on phones or with reduced app effects.
+     * @param {HTMLElement} card
+     */
     function bindCardMotion(card) {
-        if (reduceMotion || phoneViewport.matches) {
+        if (reduceAppMotion || phoneViewport.matches) {
             return;
         }
 
@@ -53,7 +59,20 @@
         var targetY = currentY;
         var lastOrientationSample = 0;
 
+        /** Update the optical layers without restyling the festive SVG descendants. */
+        function paintLight() {
+            for (var i = 0; i < lightLayers.length; i += 1) {
+                lightLayers[i].style.setProperty('--login-light-x', (currentX * 100).toFixed(1) + '%');
+                lightLayers[i].style.setProperty('--login-light-y', (currentY * 100).toFixed(1) + '%');
+            }
+        }
+
+        /** Consume the latest pointer input and ease toward its light vector. */
         function render() {
+            frame = null;
+            if (motionIsReduced()) {
+                return;
+            }
             if (pendingPointer) {
                 var rect = card.getBoundingClientRect();
                 targetX = Math.min(1, Math.max(0, (pendingPointer.x - rect.left) / rect.width));
@@ -62,28 +81,54 @@
             }
             currentX += (targetX - currentX) * 0.16;
             currentY += (targetY - currentY) * 0.16;
-            // Inherited properties on the card invalidate thousands of festive SVG nodes.
-            for (var i = 0; i < lightLayers.length; i += 1) {
-                lightLayers[i].style.setProperty('--login-light-x', (currentX * 100).toFixed(1) + '%');
-                lightLayers[i].style.setProperty('--login-light-y', (currentY * 100).toFixed(1) + '%');
-            }
+            paintLight();
 
             if (Math.abs(targetX - currentX) > 0.002 || Math.abs(targetY - currentY) > 0.002) {
+                requestRender();
+            }
+        }
+
+        /** Schedule at most one frame, and only while motion is allowed. */
+        function requestRender() {
+            if (frame === null && !document.hidden && !motionIsReduced()) {
                 frame = requestAnimationFrame(render);
-            } else {
+            }
+        }
+
+        /** Park a queued frame without dropping its input. */
+        function cancelRender() {
+            if (frame !== null) {
+                cancelAnimationFrame(frame);
                 frame = null;
             }
         }
 
-        function requestRender() {
-            if (frame === null && !document.hidden) {
-                frame = requestAnimationFrame(render);
+        /** Reset the optics immediately so no stale pointer input is replayed. */
+        function syncMotionPreference() {
+            if (!motionIsReduced()) {
+                return;
             }
+            cancelRender();
+            pendingPointer = null;
+            currentX = targetX = 0.5;
+            currentY = targetY = 0.18;
+            lastOrientationSample = 0;
+            paintLight();
+            card.classList.remove('is-pressed');
         }
 
+        if (motionPreference.addEventListener) {
+            motionPreference.addEventListener('change', syncMotionPreference);
+        } else if (motionPreference.addListener) {
+            motionPreference.addListener(syncMotionPreference);
+        }
+
+        /** @param {PointerEvent} event Latest pointer sample, consumed on the next frame. */
         function setPointerTarget(event) {
-            pendingPointer = { x: event.clientX, y: event.clientY };
-            requestRender();
+            if (!motionIsReduced()) {
+                pendingPointer = { x: event.clientX, y: event.clientY };
+                requestRender();
+            }
         }
 
         if (!coarsePointer) {
@@ -98,7 +143,9 @@
         }
 
         card.addEventListener('pointerdown', function () {
-            card.classList.add('is-pressed');
+            if (!motionIsReduced()) {
+                card.classList.add('is-pressed');
+            }
         });
 
         ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (eventName) {
@@ -107,8 +154,9 @@
             });
         });
 
+        /** @param {DeviceOrientationEvent} event Tilt sample from a supported device. */
         function handleOrientation(event) {
-            if (phoneViewport.matches || !coarsePointer || event.gamma === null || event.beta === null) {
+            if (motionIsReduced() || phoneViewport.matches || !coarsePointer || event.gamma === null || event.beta === null) {
                 return;
             }
             // Tilt is a slow input; sampling it every frame keeps the filtered
@@ -130,24 +178,23 @@
         }
 
         document.addEventListener('visibilitychange', function () {
-            if (document.hidden && frame !== null) {
-                cancelAnimationFrame(frame);
-                frame = null;
-            } else if (!document.hidden) {
+            if (document.hidden) {
+                cancelRender();
+            } else {
                 requestRender();
             }
         });
     }
 
-    /* ---- Error shake ---- */
+    /** @param {HTMLElement} card Login card whose errors may trigger a short shake. */
     function bindErrorShake(card) {
-        if (reduceMotion) {
-            return;
-        }
-        if (!card.querySelector('.alert, .invalid-feedback')) {
+        if (motionIsReduced() || !card.querySelector('.alert, .invalid-feedback')) {
             return;
         }
         requestAnimationFrame(function () {
+            if (motionIsReduced()) {
+                return;
+            }
             card.classList.add('login-card--shake');
             card.addEventListener('animationend', function handler(event) {
                 if (event.animationName === 'lg-shake') {

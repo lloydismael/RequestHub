@@ -1,0 +1,11 @@
+{% for field in form.visible_fields %}
+    {% for error in field.errors %}
+        <li><a href="#{{ field.id_for_label }}">{{ field.label }}{% if field.name != 'name' and form.name.value %} ({{ form.name.value }}){% endif %}: {{ error }}</a></li>
+    {% endfor %}
+{% endfor %}
+{% for error in form.non_field_errors %}
+    <li><a href="#{{ form.name.id_for_label }}">{% if form.name.value %}{{ form.name.value }}: {% endif %}{{ error }}</a></li>
+{% endfor %}
+{% for error in form.id.errors %}
+    <li><a href="#{{ form.name.id_for_label }}">{% if form.name.value %}{{ form.name.value }}: {% endif %}{{ error }}</a></li>
+{% endfor %}

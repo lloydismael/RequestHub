@@ -1,0 +1,99 @@
+{
+  "recipe": "management-accounts",
+  "before_revision": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "after_source": "Uncommitted working tree; not exact-release evidence.",
+  "fixture": "Same signed-in synthetic admin and 128 accounts on both sides; query account_q=Summit; no live data.",
+  "capture": "Offline Chromium 156.0.8078.4; scripts and external network disabled.",
+  "after_file_sha256": {
+    "README.md": "bbb4281a6d0181e26d9cf7ca0e64a388df17e76378cb2dd06818028c7659d87f",
+    "docs/cd-workflow-testing.md": "44bcd9da45d37aca130f7f20f54af41618cf913ca5024881e1817376aedc0202",
+    "hub/changelog_capture_recipes.json": "929db9da7f33c7e6a6f4a1394ef120e1c06566e6ef213ca3805d007b6373efe0",
+    "hub/form_editor_runtime.py": "b576cd0608fffc2fed625e9f2085e5c84286e2134d8f86eef4f7a18ab576b9ed",
+    "hub/forms.py": "07db657d95d4a47ccaa25272bfa80efd37cdc3804b23476207c369205075a74f",
+    "hub/test_dashboard_performance.py": "c9506da0ef83e643f53263836eb4ab562d6f48fc58e7f3775d5c36e7a028d60d",
+    "hub/test_form_editor_runtime.py": "7f35f348e991067dd642f251c6758e9fb5e01ec2168d7888ee2b20f44f12549f",
+    "hub/test_management_performance.py": "9a7dd31f695223bf2841741e3df8edc6eeaa7fea59cf1951e43227a275a69be0",
+    "hub/test_mobile_ui.py": "06581cae77e5591600a291f8e0608c452ed6cbaea2892f80e611a30a3f0f6347",
+    "hub/test_multiple_sqrs.py": "e095fa65a5ad7261e9d8f15f0803eb28f8a98d8ae873c5299daf3fdff3be53ce",
+    "hub/test_sqr_on_hold.py": "e9f0a678f259a23490f6fcc822f4f5d6368ab6fda90c61f3d987c68724633fb7",
+    "hub/views.py": "6608cd33fc9695fb0ae4ddb992091b4ca0db4cab731c12a8278e3fc66f0555e3",
+    "scripts/capture_release_changelog.py": "6dd5e0c447c196f4b623385deaf159c58ef58c0c774450ab6510f2db791deaa0",
+    "scripts/changelog_capture_scenes.py": "4c85fc230e71325fbe893be52faadddfba9deba14923a51e4c9b5601a1676ae8",
+    "scripts/test_capture_release_changelog.py": "863ad8b9be4874d5986ead0a72d7557e8a14878da25e6e4fba7db96eed6cb29c",
+    "static/css/app.css": "f39b5b8b4a405d4322bfbd17fcc039ffeb825b4a9996b0039b0c71ae331db854",
+    "static/hub/form_runtime.js": "c4a69d80fe78153bf2d42a201122c951aab1082cf5001acc89ffd12d5c569668",
+    "static/hub/management-accounts.js": "61fc2e94da0dfc350b6731c702e2cf1a673235cec1fa79660de3238488d9ef61",
+    "templates/hub/management.html": "0fe04c1e00392b515cadfdaa2a9275d6a2401b5d6113c25ac5ad1cd649cd0db3",
+    "templates/hub/partials/account_error_links.html": "a72957c5cb35386f02bc8997274aa0c086a360fcb9f022067802a7f8f7effb8d",
+    "templates/hub/partials/account_fields.html": "d403af79fd29c708083d55a42e7e8e6cce2b3ae4f9799492b56594c891f3fb1d",
+    "templates/hub/sqr.html": "b065f16fdc9450a60fa52b30f303192625e3c3ea60336760f40eeecb63f948fd"
+  },
+  "images": [
+    {
+      "file": "desktop-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "image_size": [
+        1200,
+        900
+      ],
+      "sha256": "a2bc893fe7972e380677c2a6015b7cb5629e360b07453eb3cb720b48acfee8c8"
+    },
+    {
+      "file": "desktop-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "image_size": [
+        1200,
+        900
+      ],
+      "sha256": "00bee2f7e36024eeff187a00febcd4a21536afe34dbc6794ae70d13e967e3446"
+    },
+    {
+      "file": "phone-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        375,
+        844
+      ],
+      "sha256": "c2f4d3a2c45dd0e56bcbdb439841939bcb47c0f25403d27e44537ac91b5d3cbd"
+    },
+    {
+      "file": "phone-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        375,
+        844
+      ],
+      "sha256": "1105fd1c1af8ace2b15abf11f4fea1672150731eee6c700a58667a315e3e9f6a"
+    }
+  ],
+  "notifications_verification": {
+    "distinct_capture_pairs": 2,
+    "reader_draft_visible": false,
+    "reader_draft_image_statuses": [
+      404,
+      404,
+      404,
+      404
+    ],
+    "reader_published_desktop_pair_inline": true,
+    "reader_published_phone_pair_on_demand": true,
+    "reader_published_images_byte_exact_and_no_store": 4,
+    "disposable_transaction_rolled_back": true
+  }
+}

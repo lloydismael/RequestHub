@@ -1,20 +1,18 @@
-import json
 import re
 from datetime import date
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import aauthenticate
-from django.core import serializers as django_serializers
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, RequestFactory, TestCase
 from django.templatetags.static import static
+from django.test import Client, RequestFactory, TestCase
 from django.urls import resolve, reverse
 
 from accounts.forms import LOGIN_FAILURE_MESSAGE
 from accounts.login_throttle import LOGIN_THROTTLE_LIMIT
-from accounts.models import StoredFile, User
+from accounts.models import User
 from accounts.themes import contrast_ratio, custom_theme_vars
 
 
@@ -629,7 +627,7 @@ class ProfileSmokeTests(TestCase):
 
 class SecretHygieneTests(TestCase):
     root = Path(__file__).resolve().parents[1]
-    secret_keys = {
+    secret_keys: ClassVar[set[str]] = {
         "DJANGO_SECRET_KEY",
         "DB_USER",
         "DB_PASSWORD",
