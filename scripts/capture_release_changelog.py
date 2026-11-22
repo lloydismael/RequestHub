@@ -106,8 +106,12 @@ def load_recipes(path):
                     raise CaptureError("Documentation capture needs a selected text section.")
             elif scene.get("fixture") not in ({
                 "login", "seasonal_login", "profile", "admin_profile", "changelog", "changelog_editor",
+<<<<<<< HEAD
                 "changelog_history", "changelog_feed", "management_accounts", "management_monitoring",
                 "sqr_tracker", "sqr_performance", "request_progress",
+=======
+                "changelog_history", "changelog_feed", "management_accounts", "management_monitoring", "sqr_tracker", "sqr_performance",
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
             } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             if scene.get("fixture") == "repository_change" and {"paths", "omitted_files", "revision"} & scene.keys():
@@ -286,7 +290,11 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
     fixture = scene.get("fixture")
     if fixture in {
         "admin_profile", "changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring",
+<<<<<<< HEAD
         "management_accounts", "request_progress",
+=======
+        "management_accounts",
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     }:
         document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []

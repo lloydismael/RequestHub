@@ -277,7 +277,10 @@ def _ui(snapshot, fixture):
     )
     if fixture == "management_accounts":
         from django.urls import reverse
+<<<<<<< HEAD
 
+=======
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
         from accounts.models import User
         from hub.models import Account, FormDefinition
         from hub.views import UserManagementView
@@ -300,7 +303,11 @@ def _ui(snapshot, fixture):
         request.user = User(pk=1, username="demo-admin", first_name="Demo", last_name="Admin", role=User.Roles.ADMIN)
         request.META["CSRF_COOKIE"] = "0" * 32
         names = [f"Demo Account {index:03}" for index in range(1, 128)] + ["Summit Research"]
+<<<<<<< HEAD
         directory = Directory(Account(pk=index, name=name, created_at=datetime(2026, 11, 20, 10, tzinfo=UTC))
+=======
+        directory = Directory(Account(pk=index, name=name, created_at=datetime(2026, 11, 20, 10, tzinfo=timezone.utc))
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
                               for index, name in enumerate(names, start=1))
         counts = {**context, "request": request, "active_tab": "accounts", "total_users": 1,
                   "total_accounts": len(directory), "unread_count": 0}

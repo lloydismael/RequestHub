@@ -253,6 +253,35 @@ class SharedLookupCacheTests(TransactionTestCase):
         Request.all_objects.filter(pk=item.pk).delete()
         self.assertEqual(self.badge(self.engineer), (0, 0))
 
+<<<<<<< HEAD
+=======
+    def test_cache_disabled_deletes_do_not_select_notification_rows(self) -> None:
+        """Queryset and cascade deletes stay set-based without shared lookups."""
+        item = Request.objects.create(
+            requestor=self.admin, account=Account.objects.create(name="Uncached cascade"),
+            description="Request to remove", account_manager="Fixture Manager",
+            product_category="Azure", engagement_type=Request.Engagement.SUPPORT,
+        )
+        Notification.objects.bulk_create([
+            Notification(recipient=self.engineer, related_request=item),
+            Notification(recipient=self.engineer, related_request=item),
+            Notification(recipient=self.admin),
+            Notification(recipient=self.admin),
+        ])
+        with override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}):
+            for label, queryset in (
+                ("queryset", self.admin.notifications.all()),
+                ("cascade", Request.all_objects.filter(pk=item.pk)),
+            ):
+                with self.subTest(delete=label):
+                    with CaptureQueriesContext(connection) as queries:
+                        _, deleted = queryset.delete()
+                    self.assertEqual(deleted.get(Notification._meta.label), 2)
+                    statements = [query["sql"].split(maxsplit=1)[0] for query in queries
+                                  if '"hub_notification"' in query["sql"]]
+                    self.assertEqual(statements, ["DELETE"])
+
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     def test_activity_and_poll_ignore_a_stale_badge(self) -> None:
         """Live notification state must not depend on a warm navigation summary."""
         event = self.engineer.notifications.create(event_type=Notification.EventType.MENTION)

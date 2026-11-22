@@ -289,7 +289,11 @@ class Request(models.Model):
     all_objects = models.Manager()
 
     class Meta:
+<<<<<<< HEAD
         ordering: ClassVar[list[str]] = ["-created_at"]
+=======
+        ordering = ["-created_at"]
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
         indexes = (
             models.Index(
                 "status", models.F("created_at").desc(nulls_last=True), models.F("id").desc(),
@@ -708,7 +712,11 @@ class EngineerActivityLog(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+<<<<<<< HEAD
         ordering: ClassVar[list[str]] = ["-request_date", "-created_at"]
+=======
+        ordering = ["-request_date", "-created_at"]
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
         indexes = (
             models.Index(fields=["engineer", "-request_date", "-created_at"], name="activity_eng_date_new_idx"),
         )
@@ -959,7 +967,11 @@ class SqrSubmission(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+<<<<<<< HEAD
         ordering: ClassVar[list[str]] = ["-created_at"]
+=======
+        ordering = ["-created_at"]
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
         indexes = (
             models.Index(fields=["-created_at", "-id"], name="sqr_new_idx"),
             models.Index(fields=["engineer", "-created_at", "-id"], name="sqr_engineer_new_idx"),

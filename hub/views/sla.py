@@ -11,7 +11,11 @@ from hub import views as legacy_views
 from hub.models import Request
 from hub.services import request_lifecycle
 from hub.views.common import _safe_return_url, logger
+<<<<<<< HEAD
 from hub.views.requests import (
+=======
+from hub.views.request_views import (
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     RequestCollaborativeManageView,
     RequestOutlookRedirectView,
     _microsoft_sign_in_redirect,

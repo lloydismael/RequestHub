@@ -80,6 +80,7 @@ class SqrTrackerSettingsTests(TestCase):
         self.assertContains(page, 'data-sqr-view-panel="prototype"')
         self.assertNotIn('proposal_submissions', page.context)
 
+<<<<<<< HEAD
     def test_ppt_opens_unfiltered_for_both_admin_account_types_when_classic_is_hidden(self):
         SqrTrackerSettings.objects.create(pk=1, show_classic_sqr_tracker=False)
         primary_admin = User.objects.create_superuser(username='visibility-primary-admin', role=User.Roles.ADMIN)
@@ -88,6 +89,15 @@ class SqrTrackerSettingsTests(TestCase):
                 self.client.force_login(admin)
                 page = self.client.get(reverse('hub:sqr'), {'view': 'performance'})
                 self.assertContains(page, 'data-default-mine="0"')
+=======
+    def test_admin_performance_defaults_to_my_assigned_when_classic_is_hidden(self) -> None:
+        """Keep the admin's initial Performance filter when Classic is hidden."""
+        SqrTrackerSettings.objects.create(pk=1, show_classic_sqr_tracker=False)
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse('hub:sqr'), {'view': 'performance'})
+        self.assertEqual(page.context['active_sqr_view'], 'performance')
+        self.assertContains(page, 'data-default-mine="1"')
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     def test_primary_and_explicit_authorized_bookmarks(self):
         self.client.force_login(self.admin)

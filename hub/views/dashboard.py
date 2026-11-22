@@ -1,5 +1,9 @@
 """Role-scoped request dashboard and live data views."""
 
+<<<<<<< HEAD
+=======
+from accounts.models import User
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Max, Q
@@ -9,8 +13,11 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
+<<<<<<< HEAD
 
 from accounts.models import User
+=======
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub import views as legacy_views
 from hub.forms import AdminRequestFilterForm, RequestForm
 from hub.models import Request, RequestCommunication, StatusLog
@@ -249,7 +256,11 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                         if getattr(comm, "user_id", None) == user.id:
                             teams_limited.add(comm.request_id)
             for req in requests:
+<<<<<<< HEAD
                 req.outlook_limit_reached = req.pk in outlook_limited
+=======
+                setattr(req, "outlook_limit_reached", req.pk in outlook_limited)
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
             today = timezone.now().astimezone(MANILA_TZ).date()
             metrics = {
                 "ongoing": sum(1 for req in requests if req.status == Request.Status.ONGOING),
@@ -363,8 +374,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         elif pm_esg_tab == "my_requests":
             queryset = queryset.filter(requestor=user)
         filter_form = AdminRequestFilterForm(self.request.GET or None)
+<<<<<<< HEAD
         from hub.context_processors import new_ticket_count
         from hub.services.dashboard_queries import dashboard_data
+=======
+        from hub.services.dashboard_queries import dashboard_data
+        from hub.context_processors import new_ticket_count
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
         data = dashboard_data(queryset, filter_form, self.request.GET, metric_filter,
                               timezone.now().astimezone(MANILA_TZ).date())

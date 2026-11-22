@@ -1,7 +1,11 @@
 """Admin-only presentation editor; previews never bind or save business records."""
 import json
 from importlib import import_module
+<<<<<<< HEAD
 from typing import Any, ClassVar
+=======
+from typing import Any
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpRequest, JsonResponse
@@ -100,12 +104,16 @@ class FormEditorDetailView(AdminRequiredMixin, View):
 
 def _people_state(key: str, *, definition: FormDefinition | None = None) -> dict[str, Any]:
     """Build the people directory from one baseline and one definition."""
+<<<<<<< HEAD
     from .form_editor import (
         baseline_form,
         get_definition,
         get_person_fields,
         get_schema,
     )
+=======
+    from .form_editor import baseline_form, get_definition, get_person_fields, get_schema
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     form = baseline_form(key)
     if definition is None:

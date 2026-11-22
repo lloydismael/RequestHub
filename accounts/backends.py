@@ -38,6 +38,8 @@ class CaseInsensitiveUsernameBackend(ModelBackend):
         source = client_ip(request) if request is not None else "unknown"
         user, reservation = reserve(source, username.casefold(), find_user)
         if reservation is None:
+            if request is not None:
+                setattr(request, "_login_throttle_rejected", True)
             return None
         allowed = (
             check_password_with_timing_attack_mitigation(user, password)

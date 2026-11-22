@@ -1,6 +1,10 @@
 import json
 from collections.abc import Iterable, Iterator
+<<<<<<< HEAD
 from typing import Any, ClassVar
+=======
+from typing import Any, List
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -11,6 +15,7 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 
 from accounts.models import User
+<<<<<<< HEAD
 
 from .form_editor import is_baseline_build
 from .models import (
@@ -21,6 +26,10 @@ from .models import (
     SqrSubmission,
     StatusLog,
 )
+=======
+from .form_editor import is_baseline_build
+from .models import Account, EngineerActivityLog, Request, SqrProjectPerformance, SqrSubmission, StatusLog
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 
 class AvatarSelect(forms.Select):

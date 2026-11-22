@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+from django.core.signals import setting_changed
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from django.db.models.signals import post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
@@ -97,13 +101,19 @@ def refresh_saved_notification_badges(
     invalidate_notification_badges(recipients, using=using)
 
 
+<<<<<<< HEAD
 @receiver(pre_delete, sender=Notification)
+=======
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 def refresh_deleted_notification_badges(
     sender: type[Notification], instance: Notification, using: str, origin: object, **kwargs: object,
 ) -> None:
     """Schedule invalidation while the recipient is still available in the database."""
+<<<<<<< HEAD
     if not shared_lookups_enabled():
         return
+=======
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     if origin is instance:
         recipient_id = sender.objects.using(using).filter(pk=instance.pk).values_list("recipient_id", flat=True).first()
     else:
@@ -112,6 +122,25 @@ def refresh_deleted_notification_badges(
         invalidate_notification_badges((recipient_id,), using=using)
 
 
+<<<<<<< HEAD
+=======
+def configure_notification_delete_signal() -> None:
+    """Register cache invalidation only when shared lookups are configured."""
+    # A delete listener disables Django's fast path even if it does nothing.
+    if shared_lookups_enabled():
+        pre_delete.connect(refresh_deleted_notification_badges, sender=Notification)
+    else:
+        pre_delete.disconnect(refresh_deleted_notification_badges, sender=Notification)
+
+
+@receiver(setting_changed)
+def refresh_notification_delete_signal(setting: str, **kwargs: object) -> None:
+    """Keep delete handling in sync when the cache settings are overridden."""
+    if setting == "CACHES":
+        configure_notification_delete_signal()
+
+
+>>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 @receiver(post_save, sender=User)
 def refresh_saved_department_counts(
     sender: type[User],

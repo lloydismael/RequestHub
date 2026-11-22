@@ -345,6 +345,15 @@ class SignInRecordingTests(TestCase):
         self.assertEqual(log.ip_address, "10.0.0.5")
         self.assertEqual(sign_in_status(log, timezone.now()), "failed")
 
+    def test_throttle_rejected_sign_in_does_not_create_audit_row(self):
+        for _ in range(LOGIN_THROTTLE_LIMIT):
+            self._login("wrong-password")
+
+        response = self._login("also-wrong")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(SignInLog.objects.filter(outcome=SignInLog.Outcome.FAILED).count(), LOGIN_THROTTLE_LIMIT)
+
     def test_sign_in_still_succeeds_when_activity_log_write_fails(self):
         with patch.object(SignInLog.objects, "create", side_effect=DatabaseError("log table unavailable")), \
                 self.assertLogs("accounts.sign_in_log", level="ERROR"):
