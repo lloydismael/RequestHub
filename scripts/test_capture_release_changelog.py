@@ -532,7 +532,6 @@ class HistoricalSceneTests(unittest.TestCase):
             with Image.open(output) as image:
                 self.assertEqual([color for _, color in image.convert("RGB").getcolors()], [(255, 255, 255)])
 
-<<<<<<< HEAD
     def test_dark_request_progress_text_blends_into_card_and_stays_readable(self):
         from playwright.sync_api import sync_playwright
 
@@ -593,8 +592,6 @@ class HistoricalSceneTests(unittest.TestCase):
                                 self.assertGreaterEqual(text["contrast"], 4.5, text["label"])
             browser.close()
 
-=======
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     def test_accounts_recipe_shows_server_search_without_scripts_or_a_database(self):
         recipes = load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
         recipe = next((recipe for recipe in recipes if recipe["id"] == "management-accounts"), None)

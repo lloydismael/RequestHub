@@ -1,9 +1,5 @@
 from collections.abc import Collection
-<<<<<<< HEAD
 from typing import TYPE_CHECKING, ClassVar
-=======
-from typing import TYPE_CHECKING
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib.auth.models import AnonymousUser

@@ -5,17 +5,12 @@ import json
 import re
 import threading
 import uuid
-<<<<<<< HEAD
 from copy import copy
 from functools import cache as memoize
 from functools import partial
 from typing import Any, ClassVar
 from urllib.parse import quote, urlencode
 
-=======
-from accounts.models import User
-from copy import copy
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -23,7 +18,6 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Q, QuerySet
-<<<<<<< HEAD
 from django.http import (
     Http404,
     HttpRequest,
@@ -31,9 +25,6 @@ from django.http import (
     HttpResponseRedirect,
     JsonResponse,
 )
-=======
-from django.http import Http404, HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from django.shortcuts import redirect
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
@@ -42,12 +33,8 @@ from django.utils.cache import patch_cache_control
 from django.utils.html import format_html, json_script
 from django.views import View
 from django.views.generic import DeleteView, TemplateView, UpdateView
-<<<<<<< HEAD
 
 from accounts.models import User
-=======
-from functools import cache as memoize, partial
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub import views as legacy_views
 from hub.form_editor import get_definition
 from hub.form_editor_runtime import configure_form
@@ -59,7 +46,6 @@ from hub.forms import (
     SqrRevenueOrderForm,
     SqrRevenueQuotationForm,
     SqrSubmissionForm,
-<<<<<<< HEAD
 )
 from hub.forms import (
     _refresh_sqr_request_account_map as _refresh_sqr_request_account_map,  # noqa: PLC0414
@@ -72,12 +58,6 @@ from hub.models import (
     SqrSubmissionChange,
     SqrSubmissionHistory,
 )
-=======
-    _refresh_sqr_request_account_map as _refresh_sqr_request_account_map,  # noqa: PLC0414
-)
-from hub.mixins import AdminOrPmEsgRequiredMixin, AdminRequiredMixin
-from hub.models import FormDefinition, Request, SqrSubmission, SqrSubmissionChange, SqrSubmissionHistory
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub.services import sqr_prototype, sqr_workflow
 from hub.services.notifications import notify_sqr_submission
 from hub.services.outlook_drafts import outlook_is_configured
@@ -88,7 +68,6 @@ from hub.services.sqr_email import (
 )
 from hub.services.sqr_exports import (
     _get_sqr_esg_export_columns as _get_sqr_esg_export_columns,
-<<<<<<< HEAD
 )
 from hub.services.sqr_exports import (
     _get_sqr_export_columns as _get_sqr_export_columns,
@@ -115,26 +94,12 @@ from hub.services.sqr_tracker_settings import (
     resolve_sqr_view,
     set_classic_visibility,
 )
-=======
-    _get_sqr_export_columns as _get_sqr_export_columns,
-    _get_sqr_performance_export_columns as _get_sqr_performance_export_columns,
-    build_sqr_export_workbook,
-)
-from hub.services.sqr_import import (
-    _build_choice_import_map as _build_choice_import_map,
-    _normalize_import_text as _normalize_import_text,
-    SqrWorkbookImport,
-)
-from hub.services.sqr_performance import build_sqr_performance_snapshot
-from hub.services.sqr_reports import build_sqr_report_context
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub.services.sqr_workflow import (
     SQR_FILING_QUOTE_FIELDS,
     SQR_REOPEN_MESSAGE,
     _can_review_sqr,
     _sqr_quote_locked,
     _sqr_status_choices,
-<<<<<<< HEAD
     get_sqr_history_field_label,
 )
 from hub.services.sqr_workflow import (
@@ -149,23 +114,6 @@ from hub.views.common import (
     _safe_return_url,
     logger,
 )
-=======
-    format_sqr_history_value as format_sqr_history_value,  # noqa: PLC0414
-    get_sqr_history_field_label,
-)
-from hub.services.sqr_tracker_settings import get_tracker_settings, resolve_sqr_view, set_classic_visibility
-from hub.views.common import (
-    _safe_return_url,
-    ADMIN_PANEL_ROLES,
-    ENGINEER_ACCESS_ROLES,
-    logger,
-    MANILA_TZ,
-    PM_ESG_ROLE,
-    SQR_ACCESS_ROLES,
-)
-from typing import Any
-from urllib.parse import quote, urlencode
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 
 def _sqr_link_choices(queryset: QuerySet[Request]) -> QuerySet[Request]:
@@ -257,11 +205,7 @@ def _sqr_queryset_for_user(user):
 
 
 class SqrTrackerSettingsView(AdminRequiredMixin, View):
-<<<<<<< HEAD
     http_method_names: ClassVar[list[str]] = ["get", "post", "head", "options"]
-=======
-    http_method_names = ["get", "post", "head", "options"]
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     def get(self, request, *args, **kwargs):
         try:
@@ -291,13 +235,8 @@ class SqrTrackerSettingsView(AdminRequiredMixin, View):
 class SqrListView(LoginRequiredMixin, TemplateView):
     template_name = "hub/sqr.html"
 
-<<<<<<< HEAD
     VALID_TABS: ClassVar[set[str]] = {"proposal", "delivery", "revenue-report", "reports"}
     PM_ONLY_TABS: ClassVar[set[str]] = {"delivery", "revenue-report", "reports"}
-=======
-    VALID_TABS = {"proposal", "delivery", "revenue-report", "reports"}
-    PM_ONLY_TABS = {"delivery", "revenue-report", "reports"}
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
@@ -360,11 +299,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
                     submission.can_review_sqr = _can_review_sqr(user, submission)
                     submission.quote_locked = _sqr_quote_locked(submission)
             else:
-<<<<<<< HEAD
                 context["default_my_assigned_filter"] = user.role == PM_ESG_ROLE
-=======
-                context["default_my_assigned_filter"] = can_review
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
                 context["sqr_reports_summary"] = None
             context.update({
                 "can_create_sqr": can_create, "can_review_sqr": can_review, "is_pm": is_pm,
@@ -477,11 +412,7 @@ class SqrListView(LoginRequiredMixin, TemplateView):
 class SqrPerformanceDataView(LoginRequiredMixin, View):
     """Lazy, authorized snapshot; never builds Tracker/Reports context."""
 
-<<<<<<< HEAD
     http_method_names: ClassVar[list[str]] = ["get"]
-=======
-    http_method_names = ["get"]
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and request.user.role not in ADMIN_PANEL_ROLES:
@@ -503,11 +434,7 @@ class SqrPerformanceDataView(LoginRequiredMixin, View):
 class SqrPrototypeDataView(LoginRequiredMixin, View):
     """Role-scoped records for the SQR Tracker Prototype; edits go through the inline-update endpoint."""
 
-<<<<<<< HEAD
     http_method_names: ClassVar[list[str]] = ["get"]
-=======
-    http_method_names = ["get"]
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     def dispatch(self, request, *args, **kwargs):
         if request.user.is_authenticated and request.user.role not in SQR_ACCESS_ROLES:
@@ -603,11 +530,7 @@ class SqrReportsDataView(LoginRequiredMixin, View):
 
 
 class SqrEngineerUpdateView(LoginRequiredMixin, UpdateView):
-<<<<<<< HEAD
     http_method_names: ClassVar[list[str]] = ["get", "post", "head", "options"]
-=======
-    http_method_names = ["get", "post", "head", "options"]
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
     def get(self, request, *args, **kwargs):
         if request.GET.get("format") == "form-editor":
@@ -895,16 +818,11 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
                 review_notes=data.get("review_notes"), hold_reason=data.get("hold_reason"),
                 lookup=lambda queryset, submission_pk: legacy_views.get_object_or_404(queryset, pk=submission_pk),
             )
-<<<<<<< HEAD
-        except sqr_workflow.SqrWorkflowError as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
-=======
         except sqr_workflow.InvalidSqrStatusError as exc:
             return JsonResponse({"ok": False, "error": "Invalid SQR status"}, status=exc.status)
         except sqr_workflow.SqrWorkflowError as exc:
             logger.exception("SQR inline save failed for submission %s", pk)
             return JsonResponse({"ok": False, "error": "Unable to process request"}, status=exc.status)
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 
 class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
@@ -941,12 +859,8 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
             try:
                 restore_fields = sqr_workflow.undo_inline_change(submission, change, request.user)
             except sqr_workflow.SqrWorkflowError as exc:
-<<<<<<< HEAD
-                return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
-=======
                 logger.exception("Failed to undo inline SQR change.", exc_info=exc)
                 return JsonResponse({"ok": False, "error": "Unable to undo change at this time."}, status=exc.status)
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
         response_data = self._build_inline_response(
             submission,
@@ -1034,15 +948,11 @@ class SqrHistoryRestoreView(LoginRequiredMixin, View):
             try:
                 restore_entry = sqr_workflow.restore_history_entry(submission, history, request.user)
             except sqr_workflow.SqrWorkflowError as exc:
-<<<<<<< HEAD
-                return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
-=======
                 logger.exception(
                     "Failed to restore SQR history entry",
                     extra={"submission_id": pk, "history_id": history_id, "user_id": request.user.pk},
                 )
                 return JsonResponse({"ok": False, "error": "Unable to restore history entry."}, status=exc.status)
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
         return JsonResponse({
             "ok": True,

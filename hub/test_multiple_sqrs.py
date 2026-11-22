@@ -15,7 +15,6 @@ from openpyxl import load_workbook
 
 from accounts.models import User
 from hub.forms import SqrSubmissionForm
-<<<<<<< HEAD
 from hub.models import (
     Account,
     Notification,
@@ -23,9 +22,6 @@ from hub.models import (
     SqrProjectPerformance,
     SqrSubmission,
 )
-=======
-from hub.models import Account, Notification, Request, SqrProjectPerformance, SqrSubmission
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub.views import (
     RequestCollaborativeManageView,
     SqrEngineerUpdateView,

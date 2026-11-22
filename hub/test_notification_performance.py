@@ -253,8 +253,6 @@ class SharedLookupCacheTests(TransactionTestCase):
         Request.all_objects.filter(pk=item.pk).delete()
         self.assertEqual(self.badge(self.engineer), (0, 0))
 
-<<<<<<< HEAD
-=======
     def test_cache_disabled_deletes_do_not_select_notification_rows(self) -> None:
         """Queryset and cascade deletes stay set-based without shared lookups."""
         item = Request.objects.create(
@@ -281,7 +279,6 @@ class SharedLookupCacheTests(TransactionTestCase):
                                   if '"hub_notification"' in query["sql"]]
                     self.assertEqual(statements, ["DELETE"])
 
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     def test_activity_and_poll_ignore_a_stale_badge(self) -> None:
         """Live notification state must not depend on a warm navigation summary."""
         event = self.engineer.notifications.create(event_type=Notification.EventType.MENTION)

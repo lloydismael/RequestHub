@@ -17,7 +17,6 @@ from django.utils import timezone
 from accounts.models import User
 from hub.form_editor_runtime import configure_form
 from hub.mixins import ADMIN_PANEL_ROLES
-<<<<<<< HEAD
 from hub.models import (
     MANILA_TZ,
     Request,
@@ -25,9 +24,6 @@ from hub.models import (
     SqrSubmissionChange,
     SqrSubmissionHistory,
 )
-=======
-from hub.models import MANILA_TZ, Request, SqrSubmission, SqrSubmissionChange, SqrSubmissionHistory
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub.services.sqr_maintenance import validate_manual_maintenance_dates
 
 
@@ -40,8 +36,6 @@ class SqrWorkflowError(Exception):
         self.status = status
 
 
-<<<<<<< HEAD
-=======
 class InvalidSqrStatusError(SqrWorkflowError):
     """An inline status value outside the supported choices."""
 
@@ -50,7 +44,6 @@ class InvalidSqrStatusError(SqrWorkflowError):
         super().__init__("Invalid SQR status", 400)
 
 
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 SQR_FILING_QUOTE_FIELDS = frozenset({
     "linked_request", "customer_company", "customer_contact", "pm_esg_reviewer", "customer_name",
     "project_title", "project_details", "sse_manhrs", "sqr_folder_link",
@@ -245,11 +238,7 @@ def format_sqr_history_value(
 
 def build_sqr_history_summary(field: str, old_values: dict[str, Any], new_values: dict[str, Any], action: str = "updated") -> str:
     """Describe a change to the primary field and related values."""
-<<<<<<< HEAD
     changed = [key for key in new_values if old_values.get(key) != new_values.get(key)]
-=======
-    changed = [key for key in new_values.keys() if old_values.get(key) != new_values.get(key)]
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     primary = field if field in changed else (changed[0] if changed else field)
     label = get_sqr_history_field_label(primary)
     if action == SqrSubmissionHistory.Action.RESTORED:
@@ -505,11 +494,7 @@ def save_inline_change(
 
     if field == "status":
         if not isinstance(value, str) or value not in SqrSubmission.Status.values:
-<<<<<<< HEAD
-            raise SqrWorkflowError("Invalid SQR status", 400)
-=======
             raise InvalidSqrStatusError()
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
         if value not in _sqr_status_choices(submission):
             raise SqrWorkflowError(SQR_REOPEN_MESSAGE, 409)
         if value == SqrSubmission.Status.ON_HOLD:
@@ -564,11 +549,7 @@ def save_inline_change(
     # Auto-recompute PM Amount (col O = col N × 3000) when pm_manhrs changes
     if field == "pm_manhrs":
         submission.pm_amount = (
-<<<<<<< HEAD
             (Decimal(str(coerced)) * Decimal(3000)).quantize(Decimal("0.01"))
-=======
-            (Decimal(str(coerced)) * Decimal("3000")).quantize(Decimal("0.01"))
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
             if coerced is not None else None
         )
         save_fields.append("pm_amount")
@@ -576,20 +557,12 @@ def save_inline_change(
     # Auto-recompute SSE Amount (col M = col L × 2000) when sse_manhrs changes
     if field == "sse_manhrs":
         submission.sse_amount = (
-<<<<<<< HEAD
             (Decimal(str(coerced)) * Decimal(2000)).quantize(Decimal("0.01"))
-=======
-            (Decimal(str(coerced)) * Decimal("2000")).quantize(Decimal("0.01"))
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
             if coerced is not None else None
         )
         submission.pm_manhrs = submission.recommended_pm_manhrs_for_sse(coerced)
         submission.pm_amount = (
-<<<<<<< HEAD
             (Decimal(str(submission.pm_manhrs)) * Decimal(3000)).quantize(Decimal("0.01"))
-=======
-            (Decimal(str(submission.pm_manhrs)) * Decimal("3000")).quantize(Decimal("0.01"))
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
             if submission.pm_manhrs is not None else None
         )
         save_fields.extend(["sse_amount", "pm_manhrs", "pm_amount"])

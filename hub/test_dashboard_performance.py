@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 from datetime import UTC, date, datetime
-=======
-from datetime import date, datetime, timezone as dt_timezone
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from importlib.util import find_spec
 from unittest.mock import patch
 from zoneinfo import ZoneInfo

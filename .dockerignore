@@ -42,6 +42,8 @@ docs/
 README.md
 Plan/
 scripts_check/
+scripts/forensics_906.py
+scripts/repair_906.py
 tests/
 .copilot-azure/
 .azure/deployment-plan.md

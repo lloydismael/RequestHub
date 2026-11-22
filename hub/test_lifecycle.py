@@ -336,8 +336,6 @@ class RequestLifecycleManagePageTests(TestCase):
         event = self.request.lifecycle_events.get(event_type=RequestLifecycleEvent.EventType.ASSIGNED, assignment_revision=2)
         self.assertEqual(event.metadata["previous_engineer_id"], self.primary.pk)
 
-<<<<<<< HEAD
-=======
     @skipUnlessDBFeature("has_select_for_update_of")
     def test_status_update_locks_the_request_before_saving(self) -> None:
         """Lock the request before any status write, not just while recording the event."""
@@ -372,7 +370,6 @@ class RequestLifecycleManagePageTests(TestCase):
         self.assertEqual(self.request.status, Request.Status.COMPLETED)
         self.assertEqual(self.request.end_date, completion)
 
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     def test_requestor_edit_rolls_back_if_lifecycle_recording_fails(self) -> None:
         """Roll back the request edit if its lifecycle event cannot be written."""
         self.client.force_login(self.requestor)

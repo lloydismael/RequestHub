@@ -6,11 +6,6 @@ from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
-<<<<<<< HEAD
-=======
-import json
-import re
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 from django import forms
 from django.contrib.auth import get_user_model

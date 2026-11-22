@@ -139,8 +139,6 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.status, SqrSubmission.Status.FOR_PROCESSING)
 
-<<<<<<< HEAD
-=======
     def test_inline_edit_keeps_internal_workflow_error_details_private(self) -> None:
         """Do not expose arbitrary workflow error details even for HTTP 400."""
         from hub.services.sqr_workflow import SqrWorkflowError
@@ -155,7 +153,6 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         self.assert_rejected_without_mutation(response, before, counts)
         self.assertEqual(response.json()["error"], "Unable to process request")
 
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     def test_pm_and_admin_can_hold(self):
         for user in (self.pm, self.admin):
             with self.subTest(role=user.role):

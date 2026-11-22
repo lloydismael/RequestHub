@@ -11,11 +11,8 @@ import mimetypes as mimetypes
 import re as re
 import threading as threading
 import uuid as uuid
-<<<<<<< HEAD
-=======
 
 import requests as requests
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from accounts.forms import UserManagementForm as UserManagementForm
 from accounts.models import SignInLog as SignInLog, User as User
 from accounts.sign_in_log import (
@@ -196,10 +193,6 @@ from hub.services.sqr_workflow import (
     build_sqr_history_summary as build_sqr_history_summary,
     record_sqr_history as record_sqr_history,
 )
-<<<<<<< HEAD
-from hub.views import requests as requests
-=======
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 from hub.views.admin_tools import (
     _can_manage_user as _can_manage_user,
     UserEditView as UserEditView,
@@ -240,11 +233,7 @@ from hub.views.reports import (
     ReportExportView as ReportExportView,
     RequestReportView as RequestReportView,
 )
-<<<<<<< HEAD
-from hub.views.requests import (
-=======
 from hub.views.request_views import (
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
     _microsoft_request_draft as _microsoft_request_draft,
     _microsoft_sign_in_redirect as _microsoft_sign_in_redirect,
     _request_connect_url as _request_connect_url,

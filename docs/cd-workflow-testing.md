@@ -133,7 +133,12 @@ Images are stored alongside each versioned manifest, not in the Git-ignored `hub
 
 `sync_release_changelog` enriches matching existing entries from these packaged manifests without relogging commits. System drafts publish when evidence is complete. Legacy/admin-held drafts still require an explicit publication choice; the v57.1 legacy draft was explicitly opted into publication during this authorized recovery. Existing release titles, summaries, dates and previous-version links are preserved.
 
-<<<<<<< HEAD
+### Unreleased: Django startup recovery (PR #163)
+
+- **Before:** A merge committed unresolved conflict markers. Django stopped importing its models with `SyntaxError: invalid decimal literal`, so both VS Code F5 launch configurations, Django Validation, and the Docker image's static collection step failed.
+- **After:** Resolved all 79 conflict blocks across 26 files. Kept the reconciled request views, including the row lock and rollback for status updates, as well as the SQR error handling and notification cache fixes. Preserved the pending PPT defaults, tracker controls, and Request Progress dark-mode changes and their regression coverage. Kept the relocated one-off database scripts out of the runtime image without running them. The repair adds no migration or database configuration change.
+- **Technical evidence:** The release capture uses the repair's exact Git parent and result to compare changed source, test, tooling, and documentation paths. This is a startup repair, not a visual redesign; the comparison belongs under **Notifications → Changelogs → Technical evidence**.
+
 ### Unreleased: Request progress in dark mode
 
 **Before:** Fixed navy rectangles behind the step names and statuses stood out against themed cards, including the Christmas theme's dark green card.
@@ -148,9 +153,6 @@ Images are stored alongside each versioned manifest, not in the Git-ignored `hub
 The [capture metadata](../hub/changelog_assets/pending-request-progress-dark-mode/capture.json) records the baseline, working-tree fingerprints, and image checksums. Both sides use the same synthetic request. The `request-progress-dark-mode` recipe captures the exact release revisions before publication. A Chromium regression check verifies that all five step labels and statuses sit on the card surface and have at least 4.5:1 contrast in the Default and Christmas dark themes at both widths. Light-mode captures were pixel-identical at both widths.
 
 In disposable PostgreSQL, **Notifications → Changelogs** hid an unpublished test release and all four images from a signed-in reader. After test publication, the desktop pair appeared in the feed, the phone pair opened on demand, and all images were served byte-for-byte with `no-store`. No live release was published.
-=======
-The performance comparisons below were recorded on separate local snapshots. They are not exact first-parent evidence for the `origin/dev` integration patch. Request Progress dark-mode, PPT navigation, and SQR tracker navigation, controls, and scrolling edits are outside this patch. Redis stays disabled by default.
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 
 ### Unreleased: Accounts, dashboard and SQR performance
 
@@ -197,11 +199,7 @@ The [capture metadata](../hub/changelog_assets/pending-view-service-split/captur
 | Change | Impact | Implementation |
 | --- | --- | --- |
 | Batch historical SQR assignee and linked-request labels instead of looking each ID up per row | High | [SQR workflow](../hub/services/sqr_workflow.py), [history view](../hub/views/sqr.py) |
-<<<<<<< HEAD
-| Calculate assignment capacity in one grouped query, join request participants, and reuse loaded lifecycle events and activity totals | High | [Request changes](../hub/services/request_changes.py), [request views](../hub/views/requests.py), [lifecycle](../hub/services/request_lifecycle.py) |
-=======
 | Calculate assignment capacity in one grouped query, join request participants, and reuse loaded lifecycle events and activity totals | High | [Request changes](../hub/services/request_changes.py), [request views](../hub/views/request_views.py), [lifecycle](../hub/services/request_lifecycle.py) |
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 | Reuse form choices, load account suggestions only when displayed, and reuse Form Editor metadata without losing the offline baseline render | High | [Forms](../hub/forms.py), [Form Editor](../hub/form_editor.py), [Form Editor runtime](../hub/form_editor_runtime.py), [people directory](../hub/form_editor_views.py), [SQR forms](../hub/views/sqr.py) |
 | Aggregate SLA health, turnaround, and activity hours in SQL; reuse grouped counts and retrieve only the fields the attention list displays | Medium | [Reports](../hub/services/reports.py) |
 | Insert ordinary edit notifications in one batch, preserving the status-log entry and deduplicated recipients | Medium | [Notifications service](../hub/services/notifications.py) |
@@ -278,13 +276,11 @@ Counts are SQL statements, not production timings. Cold badge and department rea
 
 The [capture metadata](../hub/changelog_assets/pending-shared-lookup-cache/capture.json) records the local snapshots, query comparisons, image checksums, and disposable **Notifications → Changelogs → Technical evidence** verification. These are technical reports, not UI screenshots or exact release revisions. Nothing was published live.
 
-<<<<<<< HEAD
-=======
 ### Unreleased: Phase 7 — repository cleanup
 
-> **Archived Phase 7 results.** This section describes the reviewed Phase 7 snapshot, not the integration patch. The patch carries retained lint hunks, but does not restore the incident-script moves, dependency layering, or reverted and ambiguous cleanup hunks. The script links below point to their current paths.
+> **Archived Phase 7 results.** This section describes the reviewed Phase 7 snapshot. The PR #163 recovery retains the incident-script move and container exclusions, but does not restore the archived dependency layering or the reverted and ambiguous cleanup hunks.
 
-Moved the incident 906 [inspection](../scripts_check/forensics_906.py) and [repair](../scripts_check/repair_906.py) scripts into `scripts/`, updated their run instructions, and kept both out of container builds. The four retired root inspection scripts were already absent, and the standalone JavaScript tests were already in `tests/js/`. No incident script was executed.
+Moved the incident 906 [inspection](../scripts/forensics_906.py) and [repair](../scripts/repair_906.py) scripts into `scripts/`, updated their run instructions, and kept both out of container builds. The four retired root inspection scripts were already absent, and the standalone JavaScript tests were already in `tests/js/`. No incident script was executed.
 
 [Supplemental dependency inputs](ci-workflow-testing.md#reproducible-dependencies-and-added-validation) now constrain against the runtime manifest and, where applicable, the exact runtime lock. The tooling lock aligns `requests` to runtime (`2.34.2` → `2.33.0`); the evidence lock adds a constraint provenance comment without changing its pin. The runtime, CI, Windows, and capture locks did not change.
 
@@ -303,7 +299,6 @@ The remaining 417 diagnostics are unchanged: 206 in historical migrations and 21
 
 The [capture metadata](../hub/changelog_assets/pending-repository-cleanup/capture.json) records the local source fingerprints, probe results, image hashes, and verification through **Notifications → Changelogs → Technical evidence** on disposable PostgreSQL. The reports are not UI screenshots or exact release revisions. Nothing was published live.
 
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 ### Unreleased: Phase 8 — chart loading and reduced motion
 
 Reports, Activity Logs, both Dashboard report variants, and SQR Reports defer Chart.js and its dependent scripts in order. The page shell, Reports table details, and Dashboard account autocomplete no longer wait for the chart CDN while the page is parsing. Chart controls still initialize in order, and exact values remain available if chart rendering fails. Request Edit and Request Management also defer the shared account autocomplete script. The admin reassignment test checks that the management form loads that script once and still saves the new account; Chromium covers keyboard selection.
@@ -325,11 +320,9 @@ In the held-CDN Chromium probe, the candidate's median `domInteractive` was 197 
 
 The [capture metadata](../hub/changelog_assets/pending-frontend-performance/capture.json) records the local snapshots and image checksums. A reader could not fetch the draft or its images. After local admin test publication, **Notifications → Changelogs → Technical evidence** linked to both byte-verified images with `no-store`; the transaction was rolled back. These reports are not screenshots of a visual redesign or exact Git first-parent evidence. Before release, attach evidence for the actual revision pair. Nothing was published live.
 
-<<<<<<< HEAD
-=======
 ### Unreleased: performance patch review corrections
 
-[Notification deletes](../hub/signals.py) use Django's set-based delete path when shared lookups are disabled. With shared lookups enabled, commit-time badge invalidation remains in place for direct deletes and request cascades. The [view facade](../hub/views/__init__.py) again exposes the Requests library under the legacy `hub.views.requests` binding; request views and URLs still resolve through their existing exports. The [SQR Performance view](../hub/views/sqr.py) keeps **My Assigned** as the admin default when Classic Tracker is hidden. The default with Classic visible remains **All Projects**. No permissions, migrations, or stored data changed.
+[Notification deletes](../hub/signals.py) use Django's set-based delete path when shared lookups are disabled. With shared lookups enabled, commit-time badge invalidation remains in place for direct deletes and request cascades. The [view facade](../hub/views/__init__.py) again exposes the Requests library under the legacy `hub.views.requests` binding; request views and URLs still resolve through their existing exports. This earlier review snapshot kept **My Assigned** for admins when Classic Tracker was hidden. The later [PPT navigation update](unreleased-ppt-navigation-changelog.md#admin-default-filters) makes both administrator account types start unfiltered and keeps the PM-ESG default. No permissions, migrations, or stored data changed.
 
 | Matched local observation | Before review fix | After review fix |
 | --- | --- | --- |
@@ -339,7 +332,6 @@ The [capture metadata](../hub/changelog_assets/pending-frontend-performance/capt
 
 [Before report](../hub/changelog_assets/pending-performance-review-fixes/report-before.png) · [After report](../hub/changelog_assets/pending-performance-review-fixes/report-after.png) · [Measurements and checksums](../hub/changelog_assets/pending-performance-review-fixes/capture.json). Counts are from identical synthetic fixtures, not production timings. The reports compare local patch snapshots; trusted release CI must capture exact first-parent evidence once revisions exist.
 
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
 ### Preparing screenshot evidence
 
 The non-blocking **Prepare release screenshot evidence** job runs only on trusted `master` pushes, alongside CI validation. It uses Python 3.12, installs the complete hash-verified `requirements-changelog-capture.txt` in an isolated virtual environment, and caches pip downloads, Chromium, verified vendor assets, and fingerprinted historical captures. It prepares SHA-256-checked Bootstrap assets and runs `scripts/capture_release_changelog.py`, bounded to eight minutes. Historical Chromium regression tests run in this environment too. Capture setup/failure does not turn successful required CI red; missing evidence retains every change as a draft with an actionable reason.

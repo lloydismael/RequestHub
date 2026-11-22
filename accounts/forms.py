@@ -7,11 +7,8 @@ from django.contrib.auth import authenticate, check_password_with_timing_attack_
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
-<<<<<<< HEAD
-from django.utils.functional import Promise
-=======
 from django.db import transaction
->>>>>>> 1a245b3068f52b9911c1d14f302d675a6a8dbbf1
+from django.utils.functional import Promise
 from django.views.decorators.debug import sensitive_variables
 
 from .models import User
