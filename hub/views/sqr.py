@@ -786,7 +786,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
                 lookup=lambda queryset, submission_pk: legacy_views.get_object_or_404(queryset, pk=submission_pk),
             )
         except sqr_workflow.SqrWorkflowError as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
+            logger.exception("SQR inline save failed for submission %s", pk)
+            return JsonResponse({"ok": False, "error": "Unable to process request"}, status=exc.status)
 
 
 class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
@@ -823,7 +824,8 @@ class SqrInlineFieldUndoView(SqrInlineFieldUpdateView):
             try:
                 restore_fields = sqr_workflow.undo_inline_change(submission, change, request.user)
             except sqr_workflow.SqrWorkflowError as exc:
-                return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
+                logger.exception("Failed to undo inline SQR change.", exc_info=exc)
+                return JsonResponse({"ok": False, "error": "Unable to undo change at this time."}, status=exc.status)
 
         response_data = self._build_inline_response(
             submission,
@@ -911,7 +913,11 @@ class SqrHistoryRestoreView(LoginRequiredMixin, View):
             try:
                 restore_entry = sqr_workflow.restore_history_entry(submission, history, request.user)
             except sqr_workflow.SqrWorkflowError as exc:
-                return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
+                logger.exception(
+                    "Failed to restore SQR history entry",
+                    extra={"submission_id": pk, "history_id": history_id, "user_id": request.user.pk},
+                )
+                return JsonResponse({"ok": False, "error": "Unable to restore history entry."}, status=exc.status)
 
         return JsonResponse({
             "ok": True,
