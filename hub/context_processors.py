@@ -1,38 +1,58 @@
 from __future__ import annotations
 
-from typing import Dict
-
 from django.conf import settings
 from django.http import HttpRequest
 from django.urls import reverse
+from django.utils.functional import SimpleLazyObject, empty
 
 from hub.assistant_knowledge import allowed_destinations
+from hub.services.lookup_cache import NOTIFICATION_BADGES, read_shared_lookup
 from hub.services.notifications import notification_summary
 
 
-def request_notification_summary(request: HttpRequest) -> dict[str, int]:
-    """Share the same scoped counts between a page and its navigation."""
+class _LazyBadgeNumber(SimpleLazyObject):
+    """Defer an integer while retaining numeric template localization."""
+
+    def __int__(self) -> int:
+        """Evaluate the wrapped integer for explicit conversions."""
+        if self._wrapped is empty:
+            self._setup()
+        return self._wrapped
+
+
+def request_notification_summary(request: HttpRequest, *, live: bool = False) -> dict[str, int]:
+    """Share one summary per request, using live data for the Activity timeline."""
     user = getattr(request, "user", None)
-    if not user or not user.is_authenticated:
+    if not getattr(user, "is_authenticated", False):
         return {"unread_count": 0, "total_count": 0, "latest_id": 0, "toast_cursor": 0}
-    identity = (user.pk, user.role)
+    using = user.notifications.all().db
+    identity = (using, user.pk, user.role)
     cached = getattr(request, "_notification_summary", None)
-    if cached is None or cached[0] != identity:
-        cached = (identity, notification_summary(user, include_toast_cursor=True))
-        request._notification_summary = cached
-    return cached[1]
+    if cached is not None and cached[0] == identity and (cached[1] or not live):
+        return cached[2]
+
+    def load() -> dict[str, int]:
+        """Read Activity counts and the broader toast cursor in one query."""
+        return notification_summary(user, include_toast_cursor=True)
+
+    summary = load() if live else read_shared_lookup(
+        NOTIFICATION_BADGES, load, using=using, scope=user.pk, variant=user.role,
+    )
+    request._notification_summary = (identity, live, summary)
+    return summary
 
 
 def new_ticket_count(request: HttpRequest) -> int:
+    """Return the current request's scoped unread badge count."""
     return request_notification_summary(request)["unread_count"]
 
 
-def notification_badges(request: HttpRequest) -> Dict[str, int | str]:
-    summary = request_notification_summary(request)
+def notification_badges(request: HttpRequest) -> dict[str, _LazyBadgeNumber | str]:
+    """Defer notification queries until a template needs a badge or cursor."""
     return {
-        "new_ticket_count": summary["unread_count"],
+        "new_ticket_count": _LazyBadgeNumber(lambda: new_ticket_count(request)),
         "app_version": settings.APP_VERSION,
-        "notification_toast_initial_cursor": summary["toast_cursor"],
+        "notification_toast_initial_cursor": _LazyBadgeNumber(lambda: request_notification_summary(request)["toast_cursor"]),
     }
 
 

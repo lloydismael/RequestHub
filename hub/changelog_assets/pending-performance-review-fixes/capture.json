@@ -1,0 +1,85 @@
+{
+  "pinned_origin_dev": "979e209607805c1277bdd73fa72a2c3af4956cd5",
+  "before_tree": "b5a2753fa9a82c4c3b2cd712eccb5ef947440ae2",
+  "before_patch_sha256": "1b2f8758fbd2b4f515bff97f2f1a668e4e9088653236df9d75fac1a7a4a09803",
+  "capture": "Offline technical reports on matched local snapshots, not exact first-parent revisions.",
+  "comparison": {
+    "title": "Notification deletes, legacy imports, and SQR defaults",
+    "before_text": "With shared lookups off, each 250-row notification delete selected rows before deleting in batches. The view facade exported its local module, and Performance defaulted to all projects for admins with Classic hidden.",
+    "after_text": "Each delete uses one notification SQL statement, the legacy import returns the Requests library, and the hidden-Classic admin view defaults to My Assigned.",
+    "capture_note": "Matched local PostgreSQL fixtures; shared lookups disabled. SQL counts, not timings or exact release evidence.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "measurements": {
+    "before": {
+      "snapshot": "previous",
+      "notice": "Matched local PostgreSQL fixtures, optional shared lookups disabled. SQL counts are not timings.",
+      "delete": {
+        "direct": {
+          "selects": 1,
+          "deletes": 3,
+          "rows": 250
+        },
+        "cascade": {
+          "selects": 1,
+          "deletes": 3,
+          "rows": 250
+        }
+      },
+      "requests_export": "hub.views.requests",
+      "requests_library_restored": false,
+      "sqr_default_mine": {
+        "classic_hidden": 0,
+        "classic_visible": 0
+      },
+      "rolled_back": true,
+      "inputs": {
+        "hub/apps.py": "0c02b57c36eaa72d170f822f32910e2fa630e1e8c404e2ac3e1f026c16040a0c",
+        "hub/signals.py": "43fcfb49ed7c474680db39920ce604dabb988b51d26a3e5bb68f760498825d65",
+        "hub/views/__init__.py": "cb02b08289cba8fa8f9639b109496735c5f3acb0088debd8d87e72e9bb71d5be",
+        "hub/views/sla.py": "110f5e16006ae866289113ed3b943c7ee029a5b9864ab2440a9e6b3c9a4a6627",
+        "hub/views/sqr.py": "252a8d6a4031c9e5ac0b389cbb0f70c769d692cb3e5ae78393550b41590e39e3",
+        "hub/views/requests.py": "11d69a4b6aacf026b600162790833262334fc8686fdba797b5f18e0f3effa192",
+        "templates/hub/partials/sqr_performance.html": "005c96c7acc43f5e56a80a6e0c50d6c5f7edff8a8c44d2662ce2c2e09f59a73f"
+      }
+    },
+    "after": {
+      "snapshot": "candidate",
+      "notice": "Matched local PostgreSQL fixtures, optional shared lookups disabled. SQL counts are not timings.",
+      "delete": {
+        "direct": {
+          "selects": 0,
+          "deletes": 1,
+          "rows": 250
+        },
+        "cascade": {
+          "selects": 0,
+          "deletes": 1,
+          "rows": 250
+        }
+      },
+      "requests_export": "requests",
+      "requests_library_restored": true,
+      "sqr_default_mine": {
+        "classic_hidden": 1,
+        "classic_visible": 0
+      },
+      "rolled_back": true,
+      "inputs": {
+        "hub/apps.py": "40a7d2f12d26625a828d52527d19501f310bc12f5967d2ea29bd38f99558db11",
+        "hub/signals.py": "2b1e33aa1c8d0deaf661f2ba90e4e1d5930301406fac94e0d9ca797629818f4b",
+        "hub/views/__init__.py": "62a9e405dbbeb7378cd2d5c57ce20a6645e65d865babf2ab2a1289796de13ec0",
+        "hub/views/sla.py": "27ff393377904c3450abce7c84543cd05a6123aa1ab07f8ce722db16b28ebf08",
+        "hub/views/sqr.py": "46d189bc661279104de4edfd79581c1a08dc7b3356a0b9ec40fb8cdee2a794d3",
+        "hub/views/request_views.py": "11d69a4b6aacf026b600162790833262334fc8686fdba797b5f18e0f3effa192",
+        "templates/hub/partials/sqr_performance.html": "005c96c7acc43f5e56a80a6e0c50d6c5f7edff8a8c44d2662ce2c2e09f59a73f"
+      }
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "1c258f0ae951651610768ef05c33cc8037aff31265d3bec3b3953876be52c649",
+    "report-after.png": "de2b5267ff4dfea2fd3cceabc56694128ced441d89a38b277bacf5a3fa84b462"
+  }
+}

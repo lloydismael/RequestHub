@@ -3,13 +3,11 @@ import io
 import json
 import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from unittest import mock
 
 from django.test import SimpleTestCase
 
-from . import release_changelog
 from .release_changelog import (
     ManifestError,
     build_manifest,
@@ -23,9 +21,11 @@ SHA_A = "a" * 40
 SHA_B = "b" * 40
 
 
-def git(repo, *args):
+def git(repo: Path | str, *args: str) -> str:
+    """Run Git in the test repository and return its text output."""
     result = subprocess.run(
         ["git", "-c", "user.name=t", "-c", "user.email=t@t.test", "-c", "commit.gpgsign=false", "-C", str(repo), *args],
+        check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -125,7 +125,8 @@ class ValidateManifestTests(SimpleTestCase):
         with self.assertRaises(ManifestError):
             validate_manifest(data)
 
-    def test_validate_manifest(self):
+    def test_validate_manifest(self) -> None:
+        """Validate the expected release manifest structure and rejection cases."""
         data = valid_manifest(extra="x")
         data["commits"][0]["author"] = "someone"
         result = validate_manifest(data)
@@ -148,9 +149,8 @@ class ValidateManifestTests(SimpleTestCase):
             valid_manifest(commits="nope"),
         ]
         for item in bad:
-            with self.subTest(item=item):
-                with self.assertRaises(ManifestError):
-                    validate_manifest(item)
+            with self.subTest(item=item), self.assertRaises(ManifestError):
+                validate_manifest(item)
 
         commit_item = {"sha": SHA_B, "type": "new", "title": "T"}
         validate_manifest(valid_manifest(commits=[commit_item] * 2))
@@ -229,7 +229,8 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
             "title": "Update guide", "requires_comparison": True,
         }])
 
-    def test_history_beyond_500_commits_is_not_silently_lost(self):
+    def test_history_beyond_500_commits_is_not_silently_lost(self) -> None:
+        """Include the full eligible history even after 500 commits."""
         repo = self.make_repo()
         base = commit(repo, "Baseline")
         records = []
@@ -243,6 +244,7 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
             )
         result = subprocess.run(
             ["git", "-C", str(repo), "fast-import", "--quiet"],
+            check=False,
             input="".join(records).encode("utf-8"), capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -250,7 +252,8 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         self.assertEqual(len(data["commits"]), 501)
         self.assertEqual(data["commits"][-1]["title"], "Change 0")
 
-    def test_commits_since_baseline_newest_first(self):
+    def test_commits_since_baseline_newest_first(self) -> None:
+        """List only eligible commits after the baseline in descending history order."""
         repo = self.make_repo()
         base = commit(repo, "Baseline")
         sha_a = commit(repo, "Feature - A")
@@ -260,7 +263,7 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         git(repo, "checkout", "main")
         git(repo, "merge", "--no-ff", "side", "-m", "Merge side")
         sha_c = commit(repo, "Fix - C")
-        now = datetime(2026, 11, 4, 12, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 11, 4, 12, 0, tzinfo=UTC)
 
         manifest = build_manifest("v55.2", "HEAD", repo, baseline=base, now=now)
 
@@ -309,7 +312,8 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         self.assertEqual(len(manifest["commits"]), 3)
         self.assertEqual([c["sha"] for c in manifest["commits"][:2]], [three, two])
 
-    def test_baseline_not_ancestor_or_missing_fails(self):
+    def test_baseline_not_ancestor_or_missing_fails(self) -> None:
+        """Reject missing and unrelated release baselines."""
         repo = self.make_repo()
         commit(repo, "Root")
         git(repo, "checkout", "-b", "side")
@@ -317,9 +321,11 @@ class BuildManifestTests(RepoMixin, SimpleTestCase):
         git(repo, "checkout", "main")
         commit(repo, "Main")
         for baseline in (side, "1" * 40):
-            with self.subTest(baseline=baseline):
-                with self.assertRaisesRegex(ManifestError, "ancestor"):
-                    build_manifest("v1", "HEAD", repo, baseline=baseline)
+            with (
+                self.subTest(baseline=baseline),
+                self.assertRaisesRegex(ManifestError, "ancestor"),
+            ):
+                build_manifest("v1", "HEAD", repo, baseline=baseline)
 
 
 class MainTests(RepoMixin, SimpleTestCase):

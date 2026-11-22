@@ -1,10 +1,14 @@
 from django.urls import path
 
-from .views import ProfileUpdateView, SignInHeartbeatView, StoredFileServeView
 from .recovery_views import (
-    BackupDataView, RestoreDataView, ValidateBackupView, SnapshotDownloadView,
-    SnapshotRestorePreviewView, DeletedRequestRecoveryView,
+    BackupDataView,
+    DeletedRequestRecoveryView,
+    RestoreDataView,
+    SnapshotDownloadView,
+    SnapshotRestorePreviewView,
+    ValidateBackupView,
 )
+from .views import ProfileUpdateView, SignInHeartbeatView, StoredFileServeView
 
 app_name = "accounts"
 

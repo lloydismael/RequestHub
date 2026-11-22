@@ -781,12 +781,7 @@
         updateDeploymentSummary();
     })();
 </script>
-<script src="{% static 'js/account-autocomplete.js' %}?v=2"></script>
-<script>
-    if (window.initAccountAutocompletes) {
-        window.initAccountAutocompletes();
-    }
-</script>
+<script src="{% static 'js/account-autocomplete.js' %}?v=2" defer></script>
 <script>
     (function () {
         const table = document.querySelector('.request-activity-table');

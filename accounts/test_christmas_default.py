@@ -1,10 +1,11 @@
 import json
 import re
 import subprocess
-from datetime import date, datetime, timezone as datetime_timezone
+from datetime import UTC, date, datetime
 from unittest.mock import patch
 
 from django.db import IntegrityError, connection, transaction
+from django.http import HttpResponse
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -32,13 +33,14 @@ class InlineScriptParserTests(SimpleTestCase):
 
 
 class ChristmasDefaultThemeTests(SimpleTestCase):
-    def test_default_window_uses_manila_dates_and_does_not_repeat_next_year(self):
+    def test_default_window_uses_manila_dates_and_does_not_repeat_next_year(self) -> None:
+        """Use Manila dates for the seasonal window and stop after the configured year."""
         cases = (
-            (datetime(2026, 11, 5, 15, 59, tzinfo=datetime_timezone.utc), "blue"),
-            (datetime(2026, 11, 5, 16, 0, tzinfo=datetime_timezone.utc), "christmas"),
-            (datetime(2026, 12, 31, 15, 59, tzinfo=datetime_timezone.utc), "christmas"),
-            (datetime(2026, 12, 31, 16, 0, tzinfo=datetime_timezone.utc), "blue"),
-            (datetime(2027, 12, 1, tzinfo=datetime_timezone.utc), "blue"),
+            (datetime(2026, 11, 5, 15, 59, tzinfo=UTC), "blue"),
+            (datetime(2026, 11, 5, 16, 0, tzinfo=UTC), "christmas"),
+            (datetime(2026, 12, 31, 15, 59, tzinfo=UTC), "christmas"),
+            (datetime(2026, 12, 31, 16, 0, tzinfo=UTC), "blue"),
+            (datetime(2027, 12, 1, tzinfo=UTC), "blue"),
         )
         for moment, expected in cases:
             with self.subTest(moment=moment), timezone.override("Asia/Manila"), patch(
@@ -201,7 +203,10 @@ class ChristmasDefaultAccountTests(TestCase):
         with patch("accounts.models.timezone.localdate", return_value=date(2027, 1, 1)):
             self.assert_page_theme(self.client.get(reverse("accounts:update")), "blue")
 
-    def browser_login_theme(self, account_page, moment, storage=None):
+    def browser_login_theme(
+        self, account_page: HttpResponse, moment: str, storage: dict[str, str] | None = None,
+    ) -> bool:
+        """Evaluate the login theme in Node with a fixed clock and browser storage."""
         login_page = Client().get(reverse("login"))
         scripts = []
         for response in (account_page, login_page):
@@ -235,7 +240,7 @@ class ChristmasDefaultAccountTests(TestCase):
             console.log(JSON.stringify(classes.has('login-christmas')));
         """
         result = subprocess.run(
-            ["node", "-e", program], input=json.dumps({
+            ["node", "-e", program], check=False, input=json.dumps({
                 "scripts": scripts, "moment": moment, "storage": storage or {},
             }), capture_output=True, text=True,
         )

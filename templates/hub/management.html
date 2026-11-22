@@ -7,6 +7,14 @@
     {% partial user-pager %}
 {% endpartialdef %}
 
+{% partialdef account-results %}
+    <div id="account-results" data-list-url="{{ account_list_url }}">
+        <span id="account-count-badge">{% partial account-count %}</span>
+        <table><tbody id="accounts-tbody">{% partial account-rows %}</tbody></table>
+        {% partial account-pager %}
+    </div>
+{% endpartialdef %}
+
 {% block title %}Management · Request Hub{% endblock %}
 {% block body_class %}management-page{% endblock %}
 {% block extra_head %}
@@ -16,6 +24,8 @@
 {% elif active_tab == 'monitoring' %}
 <link rel="stylesheet" href="{% static 'hub/monitoring.css' %}">
 <script src="{% static 'hub/monitoring.js' %}" defer></script>
+{% elif active_tab == 'accounts' %}
+<script src="{% static 'hub/management-accounts.js' %}" defer></script>
 {% endif %}
 {% endblock %}
 
@@ -458,117 +468,133 @@
     {# ══════════════════ ACCOUNTS PANE ══════════════════ #}
     <section class="tab-pane show active" id="accounts-pane" aria-labelledby="accounts-tab">
 
-        <form method="post" class="glass-card overflow-hidden p-0 lg-enter" data-lg-delay="40"{% if account_formset.is_bound %} data-unsaved-accounts{% endif %} novalidate>
-            {% csrf_token %}
-            <input type="hidden" name="active_tab" value="accounts">
-            {% for hidden in account_formset.management_form %}{{ hidden }}{% endfor %}
-
-            {% if account_formset.non_form_errors %}
-                <div class="alert alert-danger mx-4 mt-4">
-                    {% for error in account_formset.non_form_errors %}<div>{{ error }}</div>{% endfor %}
-                </div>
+        <div class="glass-card overflow-hidden p-0 lg-enter" data-lg-delay="40">
+            {% if not account_formset.is_bound %}
+                <form method="get" action="{% url 'hub:management' %}" id="account-search-form"
+                      class="mgmt-toolbar management-dashboard-toolbar" role="search">
+                    <input type="hidden" name="tab" value="accounts">
+                    <div class="mgmt-search-box">
+                        <i class="bi bi-search mgmt-search-icon" aria-hidden="true"></i>
+                        <input type="search" id="account-search" name="account_q" class="mgmt-search-input"
+                               aria-label="Search accounts" placeholder="Search accounts by name…"
+                               autocomplete="off" value="{{ account_search_query }}">
+                        <span class="mgmt-result-badge" id="account-count-badge" aria-live="polite">{% partialdef account-count inline %}{{ account_page_obj.paginator.count }} {% if account_search_query %}match{{ account_page_obj.paginator.count|pluralize:"es" }}{% else %}total{% endif %}{% endpartialdef %}</span>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Search</button>
+                    <span role="status" id="account-search-status" class="small text-muted"></span>
+                </form>
             {% endif %}
 
-            {# Toolbar: search + save #}
-            <div class="mgmt-toolbar management-dashboard-toolbar">
-                <div class="mgmt-search-box">
-                    <i class="bi bi-search mgmt-search-icon"></i>
-                    <input type="text" id="account-search" class="mgmt-search-input"
-                           placeholder="Search accounts by name…" autocomplete="off">
-                    <span class="mgmt-result-badge" id="account-count-badge"></span>
-                </div>
-                <button type="submit" class="btn btn-success btn-sm lg-btn lg-btn--ok" id="accounts-save-btn"{% if not account_formset.is_bound %} style="display:none"{% endif %}>
-                    <i class="bi bi-floppy-fill me-1"></i>Save Changes
-                </button>
-            </div>
+            <form method="post" action="{{ account_list_url }}" id="accounts-edit-form" novalidate
+                  {% if account_formset.is_bound %}data-unsaved-accounts{% endif %}
+                  {% if account_field_limit != None %}data-field-limit="{{ account_field_limit }}"{% endif %}>
+                {% csrf_token %}
+                <input type="hidden" name="active_tab" value="accounts">
+                {{ account_formset.management_form }}
 
-            {# Accounts table #}
-            <div class="table-responsive dashboard-table-wrapper mgmt-table-wrapper">
-                <table class="table mgmt-table align-middle mb-0">
-                    <thead class="mgmt-thead">
-                        <tr>
-                            <th scope="col" class="mgmt-th mgmt-th--account">Account Name</th>
-                            <th scope="col" class="mgmt-th mgmt-th--account-actions text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="accounts-tbody">
-                        {% for form in account_formset %}
-                            {% if form.instance.pk %}
-                                <tr class="mgmt-row align-middle"
-                                    data-search-text="{{ form.instance.name|lower }}">
-                                    <td>
-                                        {% for hidden in form.hidden_fields %}{% if hidden.name != '_form_version' %}{{ hidden }}{% endif %}{% endfor %}
-                                        {{ form.name }}
-                                        {% form_editor_extras form %}
-                                        {% for error in form.name.errors %}
-                                            <div class="invalid-feedback d-block">{{ error }}</div>
-                                        {% endfor %}
-                                        {% if form.non_field_errors %}
-                                            {% for error in form.non_field_errors %}
-                                                <div class="invalid-feedback d-block">{{ error }}</div>
-                                            {% endfor %}
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        <div class="d-inline-flex align-items-center gap-3 flex-wrap justify-content-end">
-                                            <label class="form-check mb-0 d-flex align-items-center gap-1">
-                                                {{ form.DELETE }}
-                                                <span class="form-check-label small text-danger fw-medium">Delete</span>
-                                            </label>
-                                            <span class="badge text-bg-secondary rounded-pill">
-                                                <i class="bi bi-calendar3 me-1"></i>
-                                                {{ form.instance.created_at|timezone:"Asia/Manila"|date:"M d, Y" }}
-                                            </span>
-                                        </div>
-                                        {% for error in form.DELETE.errors %}
-                                            <div class="invalid-feedback d-block">{{ error }}</div>
-                                        {% endfor %}
-                                    </td>
-                                </tr>
-                            {% else %}
-                                <tr class="mgmt-row-new align-middle">
-                                    <td>
-                                        {% for hidden in form.hidden_fields %}{% if hidden.name != '_form_version' %}{{ hidden }}{% endif %}{% endfor %}
-                                        {{ form.name }}
-                                        {% form_editor_extras form %}
-                                        {% for error in form.name.errors %}
-                                            <div class="invalid-feedback d-block">{{ error }}</div>
-                                        {% endfor %}
-                                        {% if form.non_field_errors %}
-                                            {% for error in form.non_field_errors %}
-                                                <div class="invalid-feedback d-block">{{ error }}</div>
-                                            {% endfor %}
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="badge text-bg-success">
-                                            <i class="bi bi-plus-circle-fill me-1"></i>New
-                                        </span>
-                                        <small class="text-muted ms-2">Leave blank to skip.</small>
-                                        {% for error in form.DELETE.errors %}
-                                            <div class="invalid-feedback d-block">{{ error }}</div>
-                                        {% endfor %}
-                                    </td>
-                                </tr>
+                {% if account_formset.is_bound %}
+                    <section class="alert alert-danger m-3" id="accounts-errors" tabindex="-1" aria-labelledby="accounts-errors-title">
+                        <h2 class="h6" id="accounts-errors-title">Changes not saved</h2>
+                        <p class="mb-2">No changes were applied. Review the submitted edits below.</p>
+                        {{ account_formset.non_form_errors }}
+                        <ul class="mb-0">
+                            {% for form in account_edit_rows %}
+                                {% include 'hub/partials/account_error_links.html' %}
+                            {% endfor %}
+                            {% if account_new_form %}
+                                {% include 'hub/partials/account_error_links.html' with form=account_new_form %}
                             {% endif %}
-                        {% empty %}
-                            <tr>
-                                <td colspan="2" class="text-center text-muted py-5">
-                                    <i class="bi bi-building display-6 d-block mb-2 opacity-50"></i>
-                                    No accounts found.
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                        </ul>
+                    </section>
+                {% endif %}
 
-            {# Card footer #}
-            <div class="mgmt-card-footer">
-                <span class="mgmt-limit-note" id="account-limit-note"></span>
-                <div class="mgmt-pagination" id="account-pagination"></div>
-            </div>
-        </form>
+                <div class="table-responsive dashboard-table-wrapper mgmt-table-wrapper" role="region"
+                     aria-label="{% if account_formset.is_bound %}Submitted account edits{% else %}Accounts on this page{% endif %}" tabindex="0">
+                    <table class="table mgmt-table align-middle mb-0">
+                        <thead class="mgmt-thead">
+                            <tr>
+                                <th scope="col" class="mgmt-th mgmt-th--account">Account Name</th>
+                                <th scope="col" class="mgmt-th mgmt-th--account-actions text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accounts-tbody">
+                            {% partialdef account-rows inline %}
+                            {% for form in account_edit_rows %}
+                                <tr class="mgmt-row align-middle" data-account-id="{{ form.instance.pk|default_if_none:'' }}"
+                                    data-account-prefix="{{ form.prefix }}">
+                                    <td>
+                                        {% include 'hub/partials/account_fields.html' %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if form.DELETE %}
+                                            <div class="d-inline-flex align-items-center gap-3 flex-wrap justify-content-end">
+                                                <label class="form-check mb-0 d-flex align-items-center gap-1">
+                                                    {{ form.DELETE }}
+                                                    <span class="form-check-label small text-danger fw-medium">Delete<span class="visually-hidden"> {{ form.name.value }}</span></span>
+                                                </label>
+                                                {% if form.instance.created_at %}
+                                                    <span class="badge text-bg-secondary rounded-pill">
+                                                        <i class="bi bi-calendar3 me-1" aria-hidden="true"></i>
+                                                        {{ form.instance.created_at|timezone:"Asia/Manila"|date:"M d, Y" }}
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+                                            {% for error in form.DELETE.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="2" class="text-center text-muted py-4">No accounts found.</td></tr>
+                            {% endfor %}
+                            {% endpartialdef %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if not account_formset.is_bound %}
+                    {% partialdef account-pager inline %}
+                    <div class="mgmt-card-footer" id="account-pager">
+                        <span class="small text-muted" id="account-limit-note" tabindex="-1">
+                            {% if account_page_obj.paginator.count %}Showing {{ account_page_obj.start_index }}–{{ account_page_obj.end_index }} of {{ account_page_obj.paginator.count }}{% else %}Showing 0 accounts{% endif %}
+                        </span>
+                        {% if account_page_obj.has_other_pages %}
+                            <nav class="mgmt-pagination" aria-label="Account pages">
+                                {% if account_page_obj.has_previous %}
+                                    <a class="btn btn-sm btn-outline-secondary mgmt-page-btn" href="{{ account_page_url }}&amp;account_page={{ account_page_obj.previous_page_number }}" aria-label="Previous page"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+                                {% endif %}
+                                <span class="mgmt-page-label">Page {{ account_page_obj.number }} / {{ account_page_obj.paginator.num_pages }}</span>
+                                {% if account_page_obj.has_next %}
+                                    <a class="btn btn-sm btn-outline-secondary mgmt-page-btn" href="{{ account_page_url }}&amp;account_page={{ account_page_obj.next_page_number }}" aria-label="Next page"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+                                {% endif %}
+                            </nav>
+                        {% endif %}
+                    </div>
+                    {% endpartialdef %}
+                {% endif %}
+
+                {% if account_new_form %}
+                    <div class="px-3 py-3 border-top" id="account-new-row" data-account-prefix="{{ account_new_form.prefix }}">
+                        <span class="form-label fw-semibold d-block">New account name</span>
+                        {% include 'hub/partials/account_fields.html' with form=account_new_form %}
+                        <small class="text-muted">Leave blank to skip.</small>
+                    </div>
+                {% endif %}
+                {% if account_native_save_blocked %}
+                    <p id="accounts-native-limit" class="alert alert-warning m-3" role="status">
+                        This page has too many fields to save without JavaScript. Enable JavaScript or narrow the search.
+                    </p>
+                {% endif %}
+                <div class="mgmt-card-footer">
+                    <span id="account-draft-status" class="small text-muted" role="status"></span>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ account_list_url }}" class="btn btn-sm btn-outline-secondary" id="accounts-discard"{% if not account_formset.is_bound %} hidden{% endif %}>Discard edits</a>
+                        <button type="submit" class="btn btn-success btn-sm lg-btn lg-btn--ok" id="accounts-save-btn"{% if account_native_save_blocked %} disabled{% endif %}>
+                            <i class="bi bi-floppy-fill me-1" aria-hidden="true"></i>Save Changes
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
     </section>
 
     {% elif active_tab == 'activity' %}
@@ -738,116 +764,11 @@
     {% endif %}
 </div>
 
-{% if active_tab == 'users' or active_tab == 'accounts' or active_tab == 'activity' %}
+{% if active_tab == 'users' or active_tab == 'activity' %}
 {# ── Search + pagination + Manage modal JS ── #}
 <script>
 (function () {
     'use strict';
-    var PAGE_SIZE = 50;
-
-    function initTab(tbodyId, searchId, badgeId, limitNoteId, paginationId, saveBtnId, formSelector) {
-        var tbody        = document.getElementById(tbodyId);
-        var searchInput  = document.getElementById(searchId);
-        var badge        = document.getElementById(badgeId);
-        var limitNote    = document.getElementById(limitNoteId);
-        var paginationEl = document.getElementById(paginationId);
-        var saveBtn      = document.getElementById(saveBtnId);
-        if (!tbody || !searchInput) return;
-
-        var rows = Array.from(tbody.querySelectorAll('tr.mgmt-row'));
-        var currentPage = 1;
-
-        function render() {
-            var q         = searchInput.value.trim().toLowerCase();
-            var filtered  = q ? rows.filter(function (r) {
-                return (r.dataset.searchText || '').toLowerCase().includes(q);
-            }) : rows;
-            var total        = rows.length;
-            var totalFiltered = filtered.length;
-            var totalPages   = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE));
-            if (currentPage > totalPages) currentPage = totalPages;
-            var start = (currentPage - 1) * PAGE_SIZE;
-            var end   = start + PAGE_SIZE;
-
-            rows.forEach(function (row) { row.style.display = 'none'; });
-            filtered.forEach(function (row, idx) {
-                row.style.display = (idx >= start && idx < end) ? '' : 'none';
-            });
-
-            if (badge) {
-                badge.textContent = q
-                    ? totalFiltered + ' match' + (totalFiltered !== 1 ? 'es' : '')
-                    : total + ' total';
-            }
-
-            if (limitNote) {
-                if (totalFiltered > 0 && totalPages > 1) {
-                    limitNote.textContent = 'Showing ' + (start + 1) + '\u2013' + Math.min(end, totalFiltered) + ' of ' + totalFiltered;
-                    limitNote.style.display = 'inline';
-                } else {
-                    limitNote.style.display = 'none';
-                }
-            }
-
-            if (paginationEl) {
-                if (totalPages > 1) {
-                    var prevId = paginationId + '-prev';
-                    var nextId = paginationId + '-next';
-                    paginationEl.innerHTML =
-                        '<button type="button" class="btn btn-sm btn-outline-secondary mgmt-page-btn" id="' + prevId + '"' + (currentPage <= 1 ? ' disabled' : '') + '>' +
-                            '<i class="bi bi-chevron-left"></i>' +
-                        '</button>' +
-                        '<span class="mgmt-page-label">Page ' + currentPage + ' / ' + totalPages + '</span>' +
-                        '<button type="button" class="btn btn-sm btn-outline-secondary mgmt-page-btn" id="' + nextId + '"' + (currentPage >= totalPages ? ' disabled' : '') + '>' +
-                            '<i class="bi bi-chevron-right"></i>' +
-                        '</button>';
-                    paginationEl.style.display = 'flex';
-                    document.getElementById(prevId).addEventListener('click', function () {
-                        if (currentPage > 1) { currentPage--; render(); }
-                    });
-                    document.getElementById(nextId).addEventListener('click', function () {
-                        if (currentPage < totalPages) { currentPage++; render(); }
-                    });
-                } else {
-                    paginationEl.innerHTML = '';
-                    paginationEl.style.display = 'none';
-                }
-            }
-        }
-
-        var debounce;
-        searchInput.addEventListener('input', function () {
-            currentPage = 1;
-            clearTimeout(debounce);
-            debounce = setTimeout(render, 120);
-        });
-
-        if (saveBtn && formSelector) {
-            var form = document.querySelector(formSelector);
-            if (form) {
-                function warnBeforeLeaving(event) {
-                    event.preventDefault();
-                    event.returnValue = '';
-                }
-
-                function markDirty(event) {
-                    if (event && event.target === searchInput) return;
-                    saveBtn.style.display = '';
-                    window.addEventListener('beforeunload', warnBeforeLeaving);
-                }
-
-                form.addEventListener('input', markDirty);
-                form.addEventListener('change', markDirty);
-                form.addEventListener('submit', function () {
-                    window.removeEventListener('beforeunload', warnBeforeLeaving);
-                });
-                if (form.hasAttribute('data-unsaved-accounts')) markDirty();
-            }
-        }
-
-        render();
-    }
-
     function initUserLiveSearch() {
         var form = document.querySelector('form.mgmt-search-box');
         var searchInput = document.getElementById('user-search');
@@ -1050,7 +971,6 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         initUserLiveSearch();
-        initTab('accounts-tbody', 'account-search', 'account-count-badge', 'account-limit-note', 'account-pagination', 'accounts-save-btn', '#accounts-pane form');
         var createUserModal = bindRequestorModal('create-user-modal', [
             'close-create-user-btn', 'cancel-create-user-btn', 'create-user-backdrop'
         ]);

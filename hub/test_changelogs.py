@@ -3,7 +3,6 @@ from datetime import timedelta
 from html import unescape
 from io import BytesIO
 
-from PIL import Image
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -12,6 +11,7 @@ from django.test import RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from accounts.models import StoredFile, User
 from accounts.storage import DatabaseMediaStorage
@@ -76,13 +76,13 @@ class ChangelogTests(TestCase):
         data.update(overrides)
         return self.model().objects.create(**data)
 
-    def test_release_sha_is_unique_but_nullable(self):
+    def test_release_sha_is_unique_but_nullable(self) -> None:
+        """Accept multiple manual entries but reject duplicate non-null release SHAs."""
         self.entry(release_sha=None)
         self.entry(release_sha=None)
         self.automatic(release_sha="a" * 40)
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                self.automatic(release_sha="a" * 40)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            self.automatic(release_sha="a" * 40)
 
     def test_is_automatic_and_has_comparison(self):
         manual = self.entry()

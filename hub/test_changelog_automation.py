@@ -4,13 +4,13 @@ from io import StringIO
 from pathlib import Path
 from unittest import mock
 
+from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.db import IntegrityError
 from django.test import TestCase
-from django.conf import settings
-from django import forms
 from django.urls import reverse
 from PIL import Image
 
@@ -107,10 +107,13 @@ class AutomaticEvidenceTests(TestCase):
                     entry.full_clean()
                 self.assertIn("is_published", caught.exception.message_dict)
 
-    def test_unrelated_database_failure_is_not_reported_as_nothing_new(self):
-        with mock.patch.object(Changelog.objects, "create", side_effect=IntegrityError("simulated database failure")):
-            with self.assertRaises(IntegrityError):
-                sync_release(release())
+    def test_unrelated_database_failure_is_not_reported_as_nothing_new(self) -> None:
+        """Surface a database failure instead of reporting that no release was found."""
+        with (
+            mock.patch.object(Changelog.objects, "create", side_effect=IntegrityError("simulated database failure")),
+            self.assertRaises(IntegrityError),
+        ):
+            sync_release(release())
 
     def test_manual_recovery_uses_exact_revisions_and_valid_images(self):
         entry = sync_release(release(error="No capture recipe configured."))

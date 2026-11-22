@@ -3,11 +3,11 @@ from unittest.mock import patch
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from accounts.models import User
-from hub.models import Account, EngineerActivityLog, Request, RequestLifecycleEvent
+from hub.models import Account, Request, RequestLifecycleEvent
 from hub.services import request_lifecycle
+from hub.services.outlook_drafts import OutlookSignInRequired
 
 
 class RequestLifecycleServiceTests(TestCase):
@@ -334,13 +334,16 @@ class RequestLifecycleManagePageTests(TestCase):
         event = self.request.lifecycle_events.get(event_type=RequestLifecycleEvent.EventType.ASSIGNED, assignment_revision=2)
         self.assertEqual(event.metadata["previous_engineer_id"], self.primary.pk)
 
-    def test_requestor_edit_rolls_back_if_lifecycle_recording_fails(self):
+    def test_requestor_edit_rolls_back_if_lifecycle_recording_fails(self) -> None:
+        """Roll back the request edit if its lifecycle event cannot be written."""
         self.client.force_login(self.requestor)
         url = reverse("hub:request-edit", args=[self.request.pk])
         previous_description = self.request.description
-        with patch.object(request_lifecycle, "record_assignment_change", side_effect=RuntimeError("recording failed")):
-            with self.assertRaisesRegex(RuntimeError, "recording failed"):
-                self.client.post(url, self._details_data(account_name=self.account.name))
+        with (
+            patch.object(request_lifecycle, "record_assignment_change", side_effect=RuntimeError("recording failed")),
+            self.assertRaisesRegex(RuntimeError, "recording failed"),
+        ):
+            self.client.post(url, self._details_data(account_name=self.account.name))
 
         self.request.refresh_from_db()
         self.assertEqual(self.request.description, previous_description)
@@ -466,6 +469,29 @@ class RequestLifecycleManagePageTests(TestCase):
         self.assertContains(response, "acknowledge%20your%20request")
         self.request.refresh_from_db()
         self.assertEqual(self.request.lifecycle_stage, Request.LifecycleStage.ONGOING)
+
+    def test_outlook_sign_in_redirect_precedes_any_acknowledgement_write(self) -> None:
+        """Use the legacy Outlook provider bindings before recording acknowledgement."""
+        self.request.refresh_from_db()
+        self.client.force_login(self.primary)
+        connect_url = reverse("hub:request-outlook-connect", args=[self.request.pk])
+        with (
+            patch("hub.views.outlook_is_configured", return_value=True),
+            patch("hub.views.require_configuration", return_value="test-session"),
+            patch("hub.views.access_token", side_effect=OutlookSignInRequired("Sign in")),
+        ):
+            response = self.client.post(
+                reverse("hub:request-lifecycle-acknowledge", args=[self.request.pk]),
+                {"assignment_revision": self.request.assignment_revision},
+            )
+            draft = self.client.post(reverse("hub:request-outlook", args=[self.request.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.startswith(f"{connect_url}?"))
+        self.assertEqual(draft.status_code, 302)
+        self.assertTrue(draft.url.startswith(f"{connect_url}?"))
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.lifecycle_stage, Request.LifecycleStage.ASSIGNED)
 
     def test_acknowledge_button_disables_until_reassignment(self):
         self.request.refresh_from_db()

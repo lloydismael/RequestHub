@@ -1,9 +1,10 @@
 from unittest.mock import Mock, patch
 
+import requests
 from cryptography.fernet import Fernet
 from django.contrib.messages import get_messages
 from django.http import HttpResponse
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import User
@@ -24,6 +25,14 @@ def graph_response(status, data):
 
 def search_filter(subject, draft):
     return f"subject eq '{subject}' and isDraft eq {'true' if draft else 'false'}"
+
+
+class RequestImportCompatibilityTests(SimpleTestCase):
+    def test_legacy_views_requests_binding_is_the_http_library(self) -> None:
+        """Keep existing callers and patch points bound to the Requests library."""
+        from hub.views import requests as legacy_requests
+
+        self.assertIs(legacy_requests, requests)
 
 
 @override_settings(SQR_OUTLOOK_TENANT_ID=TENANT, SQR_OUTLOOK_CLIENT_ID=CLIENT,

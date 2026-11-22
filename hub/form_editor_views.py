@@ -1,15 +1,17 @@
 """Admin-only presentation editor; previews never bind or save business records."""
 import json
 from importlib import import_module
+from typing import Any
 
 from django.core.exceptions import ValidationError
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.module_loading import import_string
 from django.views import View
 
 from .mixins import AdminRequiredMixin
+from .models import FormDefinition
 
 
 def catalog():
@@ -91,18 +93,20 @@ class FormEditorDetailView(AdminRequiredMixin, View):
                       "form_label": entry["label"], "editor_state": state})
 
 
-def _people_state(key):
+def _people_state(key: str, *, definition: FormDefinition | None = None) -> dict[str, Any]:
+    """Build the people directory from one baseline and one definition."""
     from .form_editor import baseline_form, get_definition, get_person_fields, get_schema
 
-    definition = get_definition(key)
-    schema = get_schema(key)
+    form = baseline_form(key)
+    if definition is None:
+        definition = get_definition(key, form=form)
+    schema = get_schema(key, definition=definition, form=form)
     specs = {field["key"]: field for field in schema["fields"]}
     fields = {}
-    for name, metadata in get_person_fields(key).items():
+    for name, metadata in get_person_fields(key, form=form).items():
         if metadata["property"] == "person_ids":
             fields[name] = {**metadata, "values": specs[name].get("person_ids")}
     if key == "sqr_submission":
-        form = baseline_form(key)
         groups = [{"value": str(value), "label": str(label)}
                   for value, label in form.fields["customer_company"].choices if value]
         defaults = [{"value": name, "label": name, "group": group}
@@ -129,7 +133,8 @@ class FormEditorPeopleView(AdminRequiredMixin, View):
     def get(self, request, key):
         return JsonResponse(_people_state(key))
 
-    def post(self, request, key):
+    def post(self, request: HttpRequest, key: str) -> JsonResponse:
+        """Publish directory changes under the existing definition revision lock."""
         from copy import deepcopy
         from django.db import transaction
         from . import form_editor as service
@@ -140,10 +145,10 @@ class FormEditorPeopleView(AdminRequiredMixin, View):
             with transaction.atomic():
                 service._authorize(request.user)
                 definition = service._locked_definition(key, revision)
-                schema = service.get_schema(key)
+                schema = service.get_schema(key, definition=definition)
                 if definition.draft != schema:
                     raise service.RevisionConflict("An advanced-editor draft exists. Publish or reset it before changing people.")
-                metadata = _people_state(key)["fields"]
+                metadata = _people_state(key, definition=definition)["fields"]
                 fields = payload.get("fields")
                 if not isinstance(fields, dict) or set(fields) != set(metadata):
                     raise ValidationError("Send every supported people field and no other fields.")
@@ -161,7 +166,7 @@ class FormEditorPeopleView(AdminRequiredMixin, View):
                         spec.pop("option_values", None)
                 schema = service.validate_schema(key, schema)
                 service._publish_schema(definition, schema, request.user, revision, "publish", source="people_directory")
-            return JsonResponse(_people_state(key))
+            return JsonResponse(_people_state(key, definition=definition))
         except service.RevisionConflict as error:
             return JsonResponse({"error": " ".join(error.messages)}, status=409)
         except ValidationError as error:

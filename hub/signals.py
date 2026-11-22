@@ -1,7 +1,15 @@
-from django.db.models.signals import post_save, pre_save
+from django.core.signals import setting_changed
+from django.db.models.signals import post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
+from accounts.models import User
+
 from .models import Notification, Request
+from .services.lookup_cache import (
+    invalidate_department_counts,
+    invalidate_notification_badges,
+    shared_lookups_enabled,
+)
 
 
 def _resolve_actor(instance):
@@ -49,6 +57,96 @@ def notify_on_completion(sender, instance, created, **kwargs):
                 actor=actor,
                 source=source,
             )
+
+
+@receiver(pre_save, sender=Notification)
+def capture_previous_notification_recipient(
+    sender: type[Notification],
+    instance: Notification,
+    using: str,
+    raw: bool,
+    **kwargs: object,
+) -> None:
+    """Find the stored recipient even when a partial save excludes that field."""
+    instance._previous_cache_recipient_id = None
+    if shared_lookups_enabled() and not raw and instance.pk is not None:
+        instance._previous_cache_recipient_id = (
+            sender.objects.using(using).filter(pk=instance.pk)
+            .values_list("recipient_id", flat=True).first()
+        )
+
+
+@receiver(post_save, sender=Notification)
+def refresh_saved_notification_badges(
+    sender: type[Notification],
+    instance: Notification,
+    using: str,
+    raw: bool,
+    update_fields: frozenset[str] | None,
+    **kwargs: object,
+) -> None:
+    """Invalidate only the recipients affected by the committed write."""
+    if raw or not shared_lookups_enabled():
+        return
+    previous = getattr(instance, "_previous_cache_recipient_id", None)
+    if previous is None:
+        recipients = (instance.recipient_id,)
+    elif update_fields is not None and update_fields.isdisjoint({"recipient", "recipient_id"}):
+        recipients = (previous,)
+    else:
+        recipients = (previous, instance.recipient_id)
+    invalidate_notification_badges(recipients, using=using)
+
+
+def refresh_deleted_notification_badges(
+    sender: type[Notification], instance: Notification, using: str, origin: object, **kwargs: object,
+) -> None:
+    """Schedule invalidation while the recipient is still available in the database."""
+    if origin is instance:
+        recipient_id = sender.objects.using(using).filter(pk=instance.pk).values_list("recipient_id", flat=True).first()
+    else:
+        recipient_id = instance.recipient_id
+    if recipient_id is not None:
+        invalidate_notification_badges((recipient_id,), using=using)
+
+
+def configure_notification_delete_signal() -> None:
+    """Register cache invalidation only when shared lookups are configured."""
+    # A delete listener disables Django's fast path even if it does nothing.
+    if shared_lookups_enabled():
+        pre_delete.connect(refresh_deleted_notification_badges, sender=Notification)
+    else:
+        pre_delete.disconnect(refresh_deleted_notification_badges, sender=Notification)
+
+
+@receiver(setting_changed)
+def refresh_notification_delete_signal(setting: str, **kwargs: object) -> None:
+    """Keep delete handling in sync when the cache settings are overridden."""
+    if setting == "CACHES":
+        configure_notification_delete_signal()
+
+
+@receiver(post_save, sender=User)
+def refresh_saved_department_counts(
+    sender: type[User],
+    instance: User,
+    using: str,
+    raw: bool,
+    created: bool,
+    update_fields: frozenset[str] | None,
+    **kwargs: object,
+) -> None:
+    """Refresh counts when a save can change department membership."""
+    if not raw and (created or update_fields is None or not update_fields.isdisjoint({"department", "is_active"})):
+        invalidate_department_counts(using=using)
+
+
+@receiver(post_delete, sender=User)
+def refresh_deleted_department_counts(
+    sender: type[User], instance: User, using: str, **kwargs: object,
+) -> None:
+    """Remove deleted users from the cached directory counts after commit."""
+    invalidate_department_counts(using=using)
 
 
 # Assignment notifications are created by hub.services.notifications.

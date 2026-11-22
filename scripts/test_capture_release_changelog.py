@@ -9,16 +9,29 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
+from capture_release_changelog import (
+    ROOT,
+    CaptureError,
+    _render,
+    _screenshot,
+    _select_recipe,
+    _snapshot,
+    capture_manifest,
+    load_recipes,
+    main,
+    prepare_assets,
+)
 from PIL import Image
 
-from capture_release_changelog import CaptureError, ROOT, _render, _screenshot, _select_recipe, _snapshot, capture_manifest, load_recipes, main, prepare_assets
 from hub.release_changelog import build_manifest
 
 
-def git(repo, *args):
+def git(repo: Path | str, *args: str) -> str:
+    """Run Git with a fixture identity in the synthetic capture repository."""
     result = subprocess.run(
         ["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid",
          "-c", "commit.gpgsign=false", "-C", str(repo), *args],
+        check=False,
         capture_output=True, text=True, encoding="utf-8",
     )
     if result.returncode:
@@ -388,24 +401,30 @@ class CaptureTests(unittest.TestCase):
         self.assertFalse((snapshot / "alias.md").exists())
         self.assertTrue((snapshot / "docs" / "guide.md").is_file())
 
-    def test_browser_external_resources_are_blocked_before_screenshot(self):
+    def test_browser_external_resources_are_blocked_before_screenshot(self) -> None:
+        """Refuse a screenshot when the offline browser sees an external resource."""
         from playwright.sync_api import sync_playwright
         output = self.repo / "blocked.png"
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             try:
-                with patch("capture_release_changelog._render", return_value="<html><body><img src='https://external.invalid/image.png'></body></html>"):
-                    with self.assertRaisesRegex(CaptureError, "external traffic"):
-                        _screenshot(browser, self.repo, self.recipe["scenes"][0], output, self.repo)
+                with (
+                    patch("capture_release_changelog._render", return_value="<html><body><img src='https://external.invalid/image.png'></body></html>"),
+                    self.assertRaisesRegex(CaptureError, "external traffic"),
+                ):
+                    _screenshot(browser, self.repo, self.recipe["scenes"][0], output, self.repo)
             finally:
                 browser.close()
         self.assertFalse(output.exists())
 
-    def test_vendor_integrity_failure_does_not_write_unverified_asset(self):
+    def test_vendor_integrity_failure_does_not_write_unverified_asset(self) -> None:
+        """Do not save evidence if a vendor asset fails its checksum."""
         vendor = self.repo / "vendor"
-        with patch("capture_release_changelog.urllib.request.urlopen", return_value=BytesIO(b"incorrect asset")):
-            with self.assertRaisesRegex(CaptureError, "integrity"):
-                prepare_assets(vendor)
+        with (
+            patch("capture_release_changelog.urllib.request.urlopen", return_value=BytesIO(b"incorrect asset")),
+            self.assertRaisesRegex(CaptureError, "integrity"),
+        ):
+            prepare_assets(vendor)
         self.assertEqual(list(vendor.iterdir()), [])
 
     def test_dependency_lock_changes_invalidate_capture_fingerprint(self):
@@ -444,7 +463,8 @@ class CaptureTests(unittest.TestCase):
 
 
 class HistoricalSceneTests(unittest.TestCase):
-    def test_ui_scene_explicitly_selects_accounts_config_without_database(self):
+    def test_ui_scene_explicitly_selects_accounts_config_without_database(self) -> None:
+        """Render an account fixture using explicit app configuration and no live database."""
         result = subprocess.run(
             [sys.executable, "-c", (
                 "import sys; from pathlib import Path; "
@@ -456,6 +476,7 @@ class HistoricalSceneTests(unittest.TestCase):
                 "assert config.get_model('User')._meta.app_config is config; "
                 "assert settings.DATABASES['default']['ENGINE'] == 'django.db.backends.dummy'"
             ), str(ROOT)],
+            check=False,
             cwd=ROOT / "scripts", capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -510,6 +531,15 @@ class HistoricalSceneTests(unittest.TestCase):
                 browser.close()
             with Image.open(output) as image:
                 self.assertEqual([color for _, color in image.convert("RGB").getcolors()], [(255, 255, 255)])
+
+    def test_accounts_recipe_shows_server_search_without_scripts_or_a_database(self):
+        recipes = load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+        recipe = next((recipe for recipe in recipes if recipe["id"] == "management-accounts"), None)
+        self.assertIsNotNone(recipe, "Accounts changes need a before/after screen capture")
+        document = _render(ROOT, recipe["scenes"][0])
+        self.assertIn('value="Summit Research"', document)
+        self.assertIn("Showing 1–1 of 1", document)
+        self.assertNotIn('value="Demo Account 001"', document)
 
     def test_monitoring_recipe_shows_the_actual_management_shell(self):
         path = ROOT / "hub" / "changelog_capture_recipes.json"

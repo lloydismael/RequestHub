@@ -71,17 +71,21 @@ class AssessmentSnapshotTests(SimpleTestCase):
         self.assertEqual(sqr_performance.normalize_sqr_project(row, today=date(2026, 11, 16))["portfolio_status"], "ongoing")
 
 
-    def test_preview_manual_dates_preserves_zero_amount_and_scope_eligibility(self):
+    def test_preview_manual_dates_preserves_zero_amount_and_scope_eligibility(self) -> None:
+        """Retain manual date and zero-value behavior while evaluating the selected scope."""
         from decimal import Decimal
-        from hub.management.commands.preview_sqr_unified_transition import build_transition_preview
+
+        from hub.management.commands.preview_sqr_unified_transition import (
+            build_transition_preview,
+        )
 
         rows = [
-            SqrSubmission(project_details="Implementation", managed_support_amount=Decimal("0"),
+            SqrSubmission(project_details="Implementation", managed_support_amount=Decimal(0),
                           delivery_completion_signed_date=date(2026, 11, 1)),
-            SqrSubmission(project_details="Implementation", managed_support_amount=Decimal("0"),
+            SqrSubmission(project_details="Implementation", managed_support_amount=Decimal(0),
                           managed_support_start_date=date(2026, 11, 5),
                           managed_support_end_date=date(2026, 11, 4)),
-            SqrSubmission(project_details="Staging and Configuration", managed_support_amount=Decimal("0"),
+            SqrSubmission(project_details="Staging and Configuration", managed_support_amount=Decimal(0),
                           delivery_completion_signed_date=date(2026, 11, 1)),
         ]
         report = build_transition_preview(rows)

@@ -1,6 +1,17 @@
 from datetime import timedelta
 
-from django.db.models import Case, Count, DateField, F, Func, IntegerField, Q, TextField, Value, When
+from django.db.models import (
+    Case,
+    Count,
+    DateField,
+    F,
+    Func,
+    IntegerField,
+    Q,
+    TextField,
+    Value,
+    When,
+)
 from django.db.models.functions import Coalesce, Concat, Lower, NullIf, Trim, TruncDate
 
 from hub.models import MANILA_TZ, Request

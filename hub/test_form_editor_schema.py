@@ -10,8 +10,15 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 
 from accounts.models import User
+
 from . import form_editor as editor
-from .models import Account, FormAnswerSet, FormDefinition, FormEditorAuditEvent, FormVersion
+from .models import (
+    Account,
+    FormAnswerSet,
+    FormDefinition,
+    FormEditorAuditEvent,
+    FormVersion,
+)
 
 
 class FormEditorSchemaTests(TestCase):
@@ -33,9 +40,11 @@ class FormEditorSchemaTests(TestCase):
         definition = editor.save_draft("account_management", self.schema(**custom), self.admin, 0)
         return editor.publish("account_management", self.admin, definition.revision)
 
-    def test_registry_covers_business_forms_and_excludes_auth(self):
-        from .forms import AccountManagementForm
+    def test_registry_covers_business_forms_and_excludes_auth(self) -> None:
+        """Expose configurable business forms without making authentication forms editable."""
         from accounts.forms import RoleAuthenticationForm
+
+        from .forms import AccountManagementForm
         self.assertEqual(editor.get_form_key(AccountManagementForm), "account_management")
         self.assertIsNone(editor.get_form_key(RoleAuthenticationForm))
         for key in editor.get_registry():
@@ -255,10 +264,13 @@ class FormEditorSchemaTests(TestCase):
             with self.assertRaises(ValidationError):
                 type(record).objects.filter(pk=record.pk).delete()
 
-    def test_atomic_audit_failure_rolls_back_everything(self):
-        with patch.object(editor, "_audit", side_effect=RuntimeError("audit unavailable")):
-            with self.assertRaises(RuntimeError):
-                editor.save_draft("account_management", self.schema(label="Notes"), self.admin, 0)
+    def test_atomic_audit_failure_rolls_back_everything(self) -> None:
+        """Do not publish a form version when recording its audit entry fails."""
+        with (
+            patch.object(editor, "_audit", side_effect=RuntimeError("audit unavailable")),
+            self.assertRaises(RuntimeError),
+        ):
+            editor.save_draft("account_management", self.schema(label="Notes"), self.admin, 0)
         self.assertFalse(FormDefinition.objects.exists())
 
     def answer_form(self, definition, **answers):

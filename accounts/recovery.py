@@ -14,6 +14,8 @@ from django.core.management.color import no_style
 from django.db import connection, models, transaction
 from django.utils import timezone
 
+from hub.services.lookup_cache import invalidate_all_notification_badges
+
 from .models import BackupSnapshot, RecoveryEvent, RecoveryPreview, User
 
 VERSION = "2"
@@ -399,7 +401,8 @@ def create_preview(actor, payload, snapshot=None):
         raise
 
 
-def restore_preview(actor, token):
+def restore_preview(actor: User, token: str | UUID) -> BackupSnapshot:
+    """Consume the preview and restore its validated hub records atomically."""
     require_admin(actor)
     if connection.in_atomic_block:
         raise RecoveryError("Restore must run outside a request-wide transaction so the safety snapshot is committed independently.")
@@ -442,6 +445,7 @@ def restore_preview(actor, token):
                 for sql in connection.ops.sequence_reset_sql(no_style(), hub_models()):
                     cursor.execute(sql)
             audit(actor, "restore", "success", safety, source_snapshot=preview.snapshot_id, counts=report["counts"])
+            invalidate_all_notification_badges(using=connection.alias)
         return safety
     except Exception as exc:
         audit(actor, "restore", "failed", safety, error=str(exc)[:1000])

@@ -1,54 +1,84 @@
+import json
+from collections.abc import Iterable, Iterator
+from typing import Any, List
+
 from django import forms
 from django.core.exceptions import ValidationError
-
+from django.db.models import Case, Q, QuerySet, Value, When
+from django.forms import BaseModelFormSet
+from django.forms.models import ModelChoiceIterator
 from django.utils import timezone
 from django.utils.functional import cached_property
 
-from typing import Iterable, List
-
-from django.db.models import Q
-
 from accounts.models import User
+from .form_editor import is_baseline_build
 from .models import Account, EngineerActivityLog, Request, SqrProjectPerformance, SqrSubmission, StatusLog
 
 
 class AvatarSelect(forms.Select):
     """Select widget that stores avatar metadata on each option."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, avatar_roles: tuple[str, ...] | None = None, **kwargs: Any) -> None:
+        """Accept optional metadata and restrict generated avatars to the original choice roles."""
         self.avatar_mapping = {}
         self.option_group_mapping = {}
+        self.avatar_roles = avatar_roles
         super().__init__(*args, **kwargs)
 
-    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+    def create_option(
+        self, name: str, value: Any, label: Any, selected: bool, index: int,
+        subindex: int | None = None, attrs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Render avatar and role metadata from the same user used for the option label."""
         option = super().create_option(name, value, label, selected, index, subindex=subindex, attrs=attrs)
         option_value = option.get("value")
         if option_value:
+            user = getattr(option_value, "instance", None)
             meta = self.avatar_mapping.get(str(option_value))
+            if meta is None and isinstance(user, User) and (self.avatar_roles is None or user.role in self.avatar_roles):
+                meta = _avatar_metadata(user)
             if meta:
                 if meta.get("url"):
                     option["attrs"]["data-avatar"] = meta["url"]
                 if meta.get("initial"):
                     option["attrs"]["data-initial"] = meta["initial"]
-            group = self.option_group_mapping.get(str(option_value))
+            group = self.option_group_mapping.get(str(option_value)) or getattr(user, "assignee_group", None)
             if group:
                 option["attrs"]["data-role-group"] = group
         return option
 
 
-def _build_avatar_mapping(users):
-    mapping = {}
-    for user in users:
-        display_name = (user.get_full_name() or user.username or "?").strip()
-        initial = display_name[:1].upper() if display_name else "?"
-        avatar_url = ""
-        if getattr(user, "profile_photo", None):
-            try:
-                avatar_url = user.profile_photo.url
-            except ValueError:
-                avatar_url = ""
-        mapping[str(user.pk)] = {"url": avatar_url, "initial": initial}
-    return mapping
+def _avatar_metadata(user: User) -> dict[str, str]:
+    """Preserve the initial and tolerate missing photos on user options."""
+    display_name = (user.get_full_name() or user.username or "?").strip()
+    initial = display_name[:1].upper() if display_name else "?"
+    avatar_url = ""
+    if user.profile_photo:
+        try:
+            avatar_url = user.profile_photo.url
+        except ValueError:
+            pass
+    return {"url": avatar_url, "initial": initial}
+
+
+def _build_avatar_mapping(users: Iterable[User]) -> dict[str, dict[str, str]]:
+    """Build metadata for callers supplying explicit widget option values."""
+    return {str(user.pk): _avatar_metadata(user) for user in users}
+
+
+class _CachedModelChoiceIterator(ModelChoiceIterator):
+    def __iter__(self) -> Iterator[tuple[Any, Any]]:
+        """Reuse the form's evaluated queryset when a widget also needs its metadata."""
+        if self.field.empty_label is not None:
+            yield "", self.field.empty_label
+        for instance in self.queryset:
+            yield self.choice(instance)
+
+
+class _MappedModelChoiceField(forms.ModelChoiceField):
+    """Use the form's queryset for choices as well as the associated widget map."""
+
+    iterator = _CachedModelChoiceIterator
 
 
 def _user_display(user):
@@ -56,21 +86,30 @@ def _user_display(user):
     return full_name or user.username
 
 
-def _engineer_queryset(*extra_users):
-    extra_ids = [user.pk for user in extra_users if user and getattr(user, "pk", None)]
-    queryset = User.objects.filter(role__in=User.ASSIGNABLE_ENGINEER_ROLES)
-    if extra_ids:
-        queryset = User.objects.filter(Q(role__in=User.ASSIGNABLE_ENGINEER_ROLES) | Q(pk__in=extra_ids))
-    return queryset.order_by("first_name", "last_name").distinct()
+def _assignee_scope(roles: Iterable[str], *extra_users: User | int | None) -> Q:
+    """Include current owners even if they no longer hold an eligible role."""
+    extra_ids = [getattr(user, "pk", user) for user in extra_users if user is not None]
+    return Q(role__in=roles) | Q(pk__in=extra_ids)
 
 
-def _admin_engineer_queryset(*extra_users):
-    """Like _engineer_queryset but includes ON_HOLD engineers so admins can assign them."""
-    extra_ids = [user.pk for user in extra_users if user and getattr(user, "pk", None)]
-    queryset = User.objects.filter(role__in=User.ENGINEER_ACCESS_ROLES)
-    if extra_ids:
-        queryset = User.objects.filter(Q(role__in=User.ENGINEER_ACCESS_ROLES) | Q(pk__in=extra_ids))
-    return queryset.order_by("first_name", "last_name").distinct()
+def _engineer_queryset(*extra_users: User | int | None) -> QuerySet[User]:
+    """Return assignable engineers in dropdown order."""
+    return _assignee_queryset(_assignee_scope(User.ASSIGNABLE_ENGINEER_ROLES, *extra_users))
+
+
+def _admin_engineer_queryset(*extra_users: User | int | None) -> QuerySet[User]:
+    """Include ON_HOLD engineers so admins can assign them."""
+    return _assignee_queryset(_assignee_scope(User.ENGINEER_ACCESS_ROLES, *extra_users))
+
+
+def _assignee_queryset(scope: Q) -> QuerySet[User]:
+    """Keep a model queryset in the established dropdown order."""
+    return User.objects.filter(scope).order_by("first_name", "last_name")
+
+
+def _used_account_name_suggestions() -> tuple[str, ...]:
+    """Return nonblank, trimmed names in the existing suggestion order."""
+    return tuple(name for raw in Account.used_queryset().values_list("name", flat=True) if (name := (raw or "").strip()))
 
 
 def _engineer_access_queryset():
@@ -167,7 +206,11 @@ class RequestForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
         }
 
-    def __init__(self, *args, actor_role=None, actor_user=None, collaborative_edit=False, **kwargs):
+    def __init__(
+        self, *args: Any, actor_role: str | None = None, actor_user: User | None = None,
+        collaborative_edit: bool = False, **kwargs: Any,
+    ) -> None:
+        """Configure assignee and date options for the actor and the current request."""
         self.actor_role = actor_role
         self.actor_user = actor_user
         super().__init__(*args, **kwargs)
@@ -176,7 +219,6 @@ class RequestForm(forms.ModelForm):
         # so the flag must be set here — before that validation runs.
         if actor_role in {User.Roles.ADMIN, User.Roles.PM_ESG}:
             self.instance._allow_capacity_override = True
-        self.project_manager_ids = set()
         include_backup = actor_role in User.ENGINEER_ACCESS_ROLES
         if not include_backup:
             self.fields.pop("backup_engineer", None)
@@ -194,37 +236,27 @@ class RequestForm(forms.ModelForm):
         if include_backup:
             desired_order.append("backup_engineer")
         self.order_fields(desired_order)
-        current_engineer = getattr(self.instance, "engineer", None)
-        current_backup_engineer = getattr(self.instance, "backup_engineer", None)
-        if actor_role in {User.Roles.ADMIN, User.Roles.PM_ESG}:
-            engineer_qs = _admin_engineer_queryset(current_engineer, current_backup_engineer)
-        else:
-            engineer_qs = _engineer_queryset(current_engineer, current_backup_engineer)
-        project_manager_qs = User.objects.filter(role=User.Roles.PM_ESG, is_active=True)
+        current_owners = (self.instance.engineer_id, self.instance.backup_engineer_id)
+        roles = (
+            User.ENGINEER_ACCESS_ROLES if actor_role in {User.Roles.ADMIN, User.Roles.PM_ESG}
+            else User.ASSIGNABLE_ENGINEER_ROLES
+        )
+        self._project_manager_scope = Q(role=User.Roles.PM_ESG, is_active=True)
         if actor_user and actor_user.pk:
-            project_manager_qs = project_manager_qs.exclude(pk=actor_user.pk)
-        project_manager_qs = project_manager_qs.order_by("first_name", "last_name")
-        self.project_manager_ids = set(project_manager_qs.values_list("id", flat=True))
+            self._project_manager_scope &= ~Q(pk=actor_user.pk)
 
         requestor_roles = {User.Roles.REQUESTOR, User.Roles.REQUESTOR_ESS, User.Roles.PM_ESS, User.Roles.PM_ESG, User.Roles.ADMIN}
         is_requestor_form = actor_role in requestor_roles
-        all_assignee_ids = set(engineer_qs.values_list("id", flat=True)) | self.project_manager_ids
-        assignee_qs = (
-            User.objects.filter(id__in=all_assignee_ids).order_by("first_name", "last_name")
-            if is_requestor_form
-            else engineer_qs
-        )
+        engineer_scope = _assignee_scope(roles, *current_owners)
+        if is_requestor_form:
+            assignee_qs = _assignee_queryset(engineer_scope | self._project_manager_scope).annotate(
+                assignee_group=Case(When(self._project_manager_scope, then=Value("project_manager")), default=Value("engineer")),
+            )
+        else:
+            assignee_qs = _engineer_queryset(*current_owners)
 
         engineer_field = self.fields["engineer"]
         engineer_field.queryset = assignee_qs
-        widget = engineer_field.widget
-        if isinstance(widget, AvatarSelect):
-            widget.avatar_mapping = _build_avatar_mapping(assignee_qs)
-            if is_requestor_form:
-                widget.option_group_mapping = {
-                    str(user_id): ("project_manager" if user_id in self.project_manager_ids else "engineer")
-                    for user_id in all_assignee_ids
-                }
         engineer_field.label_from_instance = _user_display
         if actor_role in User.ENGINEER_ACCESS_ROLES:
             engineer_field.label = "Turn Over Request"
@@ -255,10 +287,7 @@ class RequestForm(forms.ModelForm):
                 engineer_field.empty_label = "Select preferred project manager"
         if include_backup:
             backup_field = self.fields["backup_engineer"]
-            backup_field.queryset = engineer_qs
-            backup_widget = backup_field.widget
-            if isinstance(backup_widget, AvatarSelect):
-                backup_widget.avatar_mapping = _build_avatar_mapping(engineer_qs)
+            backup_field.queryset = assignee_qs
             backup_field.label_from_instance = _user_display
         priority_field = self.fields["priority"]
         if not self.is_bound:
@@ -330,15 +359,6 @@ class RequestForm(forms.ModelForm):
             deployment_start_field.initial = today
             deployment_end_field.initial = today
 
-        existing_accounts = Account.used_queryset().values_list("name", flat=True)
-        suggestions = []
-        for raw_name in existing_accounts:
-            cleaned = (raw_name or "").strip()
-            if not cleaned:
-                continue
-            suggestions.append(cleaned)
-        self.account_name_suggestions = tuple(suggestions)
-
         self._protect_request_details = (
             collaborative_edit and self.instance.pk is not None and actor_role in User.ENGINEER_ACCESS_ROLES
         )
@@ -347,6 +367,16 @@ class RequestForm(forms.ModelForm):
             self.editor_read_only_fields = frozenset({"account_name", "needed_by"})
             for name in self.editor_read_only_fields:
                 self.fields[name].disabled = True
+
+    @cached_property
+    def account_name_suggestions(self) -> tuple[str, ...]:
+        """Read account suggestions only when the form is presented."""
+        return _used_account_name_suggestions()
+
+    @cached_property
+    def project_manager_ids(self) -> set[int]:
+        """Return the approved IDs when validating a project-management assignment."""
+        return set(User.objects.filter(self._project_manager_scope).values_list("pk", flat=True))
 
     def full_clean(self):
         super().full_clean()
@@ -545,7 +575,8 @@ class RequestAdminForm(forms.ModelForm):
             "description": forms.Textarea(attrs={"class": "form-control", "rows": 4}),
         }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Set up management fields without fetching choices before they are rendered."""
         allow_capacity_override = kwargs.pop("allow_capacity_override", False)
         super().__init__(*args, **kwargs)
         # Flag used by Request.clean() to bypass engineer capacity validation when admin overrides.
@@ -569,40 +600,18 @@ class RequestAdminForm(forms.ModelForm):
         if self.instance and getattr(self.instance, "start_date", None):
             self.fields["request_date"].initial = self.instance.start_date
 
-        existing_accounts = Account.used_queryset().values_list("name", flat=True)
-        suggestions = []
-        for raw_name in existing_accounts:
-            cleaned = (raw_name or "").strip()
-            if cleaned:
-                suggestions.append(cleaned)
-        current_account_name = ""
-        if self.instance and getattr(self.instance, "account_id", None):
-            current_account_name = (self.instance.account.name or "").strip()
-            if current_account_name and current_account_name not in suggestions:
-                suggestions.insert(0, current_account_name)
-        self.account_name_suggestions = tuple(suggestions)
-        if current_account_name:
-            self.fields["account_name"].initial = current_account_name
+        self._current_account_name = (self.instance.account.name or "").strip() if self.instance.account_id else ""
+        if self._current_account_name:
+            self.fields["account_name"].initial = self._current_account_name
 
-        # Requestor field setup
-        self.fields["requestor"].queryset = self.fields["requestor"].queryset.order_by("first_name", "last_name")
-        req_widget = self.fields["requestor"].widget
-        if isinstance(req_widget, AvatarSelect):
-            req_widget.avatar_mapping = _build_avatar_mapping(self.fields["requestor"].queryset)
-        self.fields["requestor"].label_from_instance = _user_display
-        self.fields["engineer"].queryset = _admin_engineer_queryset(getattr(self.instance, "engineer", None))
-        widget = self.fields["engineer"].widget
-        if isinstance(widget, AvatarSelect):
-            widget.avatar_mapping = _build_avatar_mapping(self.fields["engineer"].queryset)
-        self.fields["engineer"].label_from_instance = _user_display
-        
-        # Setup backup engineer field
-        self.fields["backup_engineer"].queryset = _admin_engineer_queryset(getattr(self.instance, "backup_engineer", None))
-        backup_widget = self.fields["backup_engineer"].widget
-        if isinstance(backup_widget, AvatarSelect):
-            backup_widget.avatar_mapping = _build_avatar_mapping(self.fields["backup_engineer"].queryset)
-        self.fields["backup_engineer"].label_from_instance = _user_display
-        
+        requestor_field = self.fields["requestor"]
+        requestor_field.queryset = requestor_field.queryset.order_by("first_name", "last_name")
+        requestor_field.label_from_instance = _user_display
+        for name in ("engineer", "backup_engineer"):
+            field = self.fields[name]
+            field.queryset = _admin_engineer_queryset(getattr(self.instance, f"{name}_id"))
+            field.label_from_instance = _user_display
+
         due_field = self.fields["due_date"]
         due_field.required = False
         due_field.help_text = "Leave blank to keep the SLA-based due date."
@@ -615,6 +624,14 @@ class RequestAdminForm(forms.ModelForm):
                     class_list = existing_classes.split()
                     if "is-invalid" not in class_list:
                         widget.attrs["class"] = (existing_classes + " is-invalid").strip()
+
+    @cached_property
+    def account_name_suggestions(self) -> tuple[str, ...]:
+        """Retain the current account even when it is not a regular suggestion."""
+        suggestions = _used_account_name_suggestions()
+        if self._current_account_name and self._current_account_name not in suggestions:
+            return (self._current_account_name, *suggestions)
+        return suggestions
 
     def clean_account_name(self):
         value = (self.cleaned_data.get("account_name") or "").strip()
@@ -739,7 +756,7 @@ class SqrSubmissionForm(forms.ModelForm):
         label="Department",
     )
 
-    linked_request = forms.ModelChoiceField(
+    linked_request = _MappedModelChoiceField(
         queryset=Request.objects.select_related("account").only("id", "reference_code", "account__name").order_by("-id"),
         required=True,
         empty_label="— Select Request ID —",
@@ -760,10 +777,10 @@ class SqrSubmissionForm(forms.ModelForm):
         label="Scope of Services",
     )
 
-    pm_esg_reviewer = forms.ModelChoiceField(
+    pm_esg_reviewer = _MappedModelChoiceField(
         queryset=User.objects.filter(role=User.Roles.PM_ESG).order_by("first_name", "last_name"),
         required=True,
-        widget=AvatarSelect(attrs={"class": "form-select", "data-avatar-select": "true"}),
+        widget=AvatarSelect(avatar_roles=(User.Roles.PM_ESG,), attrs={"class": "form-select", "data-avatar-select": "true"}),
         label="Approver Name",
     )
 
@@ -816,12 +833,11 @@ class SqrSubmissionForm(forms.ModelForm):
             }),
         }
 
-    def __init__(self, *args, **kwargs):
-        import json
+    def __init__(self, *args: Any, linked_requests: QuerySet[Request] | None = None, **kwargs: Any) -> None:
+        """Set field metadata using the caller's filing or edit scope from the start."""
         super().__init__(*args, **kwargs)
-        self.account_name_options = list(
-            Account.used_queryset().values_list("name", flat=True).distinct()
-        )
+        if linked_requests is not None:
+            self.fields["linked_request"].queryset = linked_requests
         required_fields = ("linked_request", "pm_esg_reviewer", "sqr_folder_link")
         for field_name in required_fields:
             self.fields[field_name].required = True
@@ -839,35 +855,16 @@ class SqrSubmissionForm(forms.ModelForm):
                 else obj.reference_code or f"Request #{obj.pk}"
             )
         )
-        reviewer_qs = self.fields["pm_esg_reviewer"].queryset
         self.fields["pm_esg_reviewer"].label_from_instance = _user_display
-        widget = self.fields["pm_esg_reviewer"].widget
-        if isinstance(widget, AvatarSelect):
-            widget.avatar_mapping = _build_avatar_mapping(reviewer_qs)
         self.fields["project_title"].help_text = "Project Name / Engagement Name"
         self.fields["remarks"].help_text = "Optional: identify the proposed option or add filing context. Hold reasons are entered separately by PM/Admin."
 
-        # Build approver user-ID map: group → pk of matching PM user
-        approver_id_by_group = {}
-        for group, approver_name in self.APPROVER_BY_GROUP.items():
-            name_parts = approver_name.lower().split()
-            for user in reviewer_qs:
-                full = user.get_full_name().lower()
-                if all(p in full for p in name_parts):
-                    approver_id_by_group[group] = str(user.pk)
-                    break
-
-        request_account_map = {
-            str(req.pk): req.account.name
-            for req in self.fields["linked_request"].queryset
-            if getattr(req, "account", None) and req.account.name
-        }
-
-        # Attach JSON maps to the department widget for JS consumption
-        self.fields["customer_company"].widget.attrs["data-member-map"] = json.dumps(self.MEMBERS_BY_GROUP)
-        self.fields["customer_company"].widget.attrs["data-approver-map"] = json.dumps(approver_id_by_group)
-        self.fields["customer_company"].widget.attrs["data-sse-scopes"] = json.dumps(sorted(self.SSE_MANHRS_SCOPES))
-        self.fields["linked_request"].widget.attrs["data-account-map"] = json.dumps(request_account_map)
+        department_attrs = self.fields["customer_company"].widget.attrs
+        department_attrs["data-member-map"] = json.dumps(self.MEMBERS_BY_GROUP)
+        if not is_baseline_build():
+            department_attrs["data-approver-map"] = self._approver_map()
+            _refresh_sqr_request_account_map(self)
+        department_attrs["data-sse-scopes"] = json.dumps(sorted(self.SSE_MANHRS_SCOPES))
 
         # Populate member choices: all members + preserve any historical free-text value
         all_contacts = [("", "— Select Member —")]
@@ -887,6 +884,23 @@ class SqrSubmissionForm(forms.ModelForm):
             current_value = getattr(self.instance, field_name, "") if self.instance else ""
             if current_value and current_value not in dict(self.fields[field_name].choices):
                 self.fields[field_name].choices = tuple(self.fields[field_name].choices) + ((current_value, current_value),)
+
+    @cached_property
+    def account_name_options(self) -> list[str]:
+        """Fetch filing suggestions only for the template that displays them."""
+        return list(Account.used_queryset().values_list("name", flat=True).distinct())
+
+    def _approver_map(self) -> str:
+        """Keep the original group defaults, independent of a published selector restriction."""
+        reviewers = [(user.pk, user.get_full_name().lower()) for user in self.fields["pm_esg_reviewer"].queryset]
+        approvers = {}
+        for group, name in self.APPROVER_BY_GROUP.items():
+            name_parts = name.lower().split()
+            for user_id, full_name in reviewers:
+                if all(part in full_name for part in name_parts):
+                    approvers[group] = str(user_id)
+                    break
+        return json.dumps(approvers)
 
     def full_clean(self):
         read_only = getattr(self, "editor_read_only_fields", ())
@@ -933,6 +947,14 @@ class SqrSubmissionForm(forms.ModelForm):
         if normalized_scope in hidden_sse_scopes or normalized_scope not in sse_scopes:
             cleaned_data["sse_manhrs"] = None
         return cleaned_data
+
+
+def _refresh_sqr_request_account_map(form: SqrSubmissionForm) -> None:
+    """Rebuild account metadata from the same scoped queryset used for choices."""
+    field = form.fields["linked_request"]
+    field.widget.attrs["data-account-map"] = json.dumps({
+        str(req.pk): req.account.name for req in field.queryset if req.account_id and req.account.name
+    })
 
 
 class SqrImportForm(forms.Form):
@@ -1854,6 +1876,69 @@ class AccountManagementForm(forms.ModelForm):
         if not name:
             raise forms.ValidationError("Account name cannot be blank.")
         return name
+
+
+class AccountManagementFormSet(BaseModelFormSet):
+    def __init__(self, *args, definition=None, answers=None, **kwargs):
+        self.editor_definition = definition
+        self.editor_answers = answers or {}
+        super().__init__(*args, **kwargs)
+
+    def add_prefix(self, index):
+        if self.prefix == "account-page" and not self.is_bound and isinstance(index, int) and index < self.initial_form_count():
+            return f"{self.prefix}-{self.get_queryset()[index].pk}"
+        return super().add_prefix(index)
+
+    def submission_overhead(self):
+        return len(self.management_form.fields) + 2  # CSRF and active_tab.
+
+    @staticmethod
+    def submission_field_count(form):
+        return sum(
+            len(field.choices) if isinstance(field, forms.MultipleChoiceField) else 1
+            for field in form.fields.values() if not field.disabled
+        )
+
+    def add_fields(self, form, index):
+        from .form_editor_runtime import configure_form
+
+        super().add_fields(form, index)
+        if self.editor_definition is not None:
+            configure_form(
+                form, form_key="account_management", definition=self.editor_definition,
+                answers=self.editor_answers.get(form.instance.pk, {}),
+            )
+        is_new = self.data.get(form.add_prefix("id")) in (None, "") and not form.instance.pk
+        form.fields["name"].widget.attrs["aria-label"] = (
+            f'{form.fields["name"].label} for {form.instance.name}' if form.instance.pk
+            else "New account name" if is_new else form.fields["name"].label
+        )
+        if "DELETE" in form.fields:
+            form.fields["DELETE"].widget.attrs["class"] = "form-check-input"
+
+    def clean(self):
+        initial_count = self.initial_form_count()
+        if not 0 <= initial_count <= self.total_form_count():
+            raise ValidationError("The account edit batch is invalid. Discard the edits and reload.")
+        identities = set()
+        invalid_rows = False
+        for index, form in enumerate(self.forms):
+            if index < initial_count:
+                pk = form.instance.pk
+                if not pk:
+                    form.add_error(None, "This account is no longer available. Discard the edits and reload.")
+                    invalid_rows = True
+                elif pk in identities:
+                    form.add_error(None, "An account can only be submitted once per batch.")
+                    invalid_rows = True
+                identities.add(pk)
+            elif self.data.get(form.add_prefix("id")):
+                form.add_error(None, "An existing account cannot be submitted as a new account.")
+                invalid_rows = True
+        if invalid_rows:
+            # A checked DELETE would otherwise suppress these row errors.
+            raise ValidationError("The account edit batch contains invalid rows.")
+        super().clean()
 
 
 from .form_editor_runtime import editable_form

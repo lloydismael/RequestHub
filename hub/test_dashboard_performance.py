@@ -1,13 +1,49 @@
 from datetime import date, datetime, timezone as dt_timezone
+from importlib.util import find_spec
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.db import connection
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 
 from accounts.models import User
 from hub.models import Account, Request
 from hub.views import DashboardLiveDataView, DashboardView
+
+
+class DashboardImportCompatibilityTests(SimpleTestCase):
+    def test_domain_import_and_legacy_route_use_the_same_dashboard(self) -> None:
+        """Keep existing dashboard imports and routing bound to the same class."""
+        from django.urls import resolve, reverse
+
+        self.assertIsNotNone(find_spec('hub.views').submodule_search_locations)
+        from hub.views.dashboard import DashboardView as DomainDashboardView
+
+        self.assertIs(DomainDashboardView, DashboardView)
+        self.assertIs(resolve(reverse('hub:dashboard')).func.view_class, DashboardView)
+
+    def test_sla_working_seconds_skip_the_weekend_and_overnight(self) -> None:
+        """Apply the Manila working-hours calendar across a weekend."""
+        self.assertIsNotNone(find_spec('hub.services.sla'))
+        from hub.services.sla import working_seconds_between
+
+        manila = ZoneInfo('Asia/Manila')
+        friday = datetime(2026, 11, 20, 18, 15, tzinfo=manila)
+        monday = datetime(2026, 11, 23, 8, 45, tzinfo=manila)
+        self.assertEqual(working_seconds_between(friday, monday), 30 * 60)
+        self.assertEqual(working_seconds_between(monday, friday), 0)
+
+    def test_report_month_range_swaps_reversed_months_across_years(self) -> None:
+        """Keep the selected months inclusive even when the inputs are reversed."""
+        self.assertIsNotNone(find_spec('hub.services.reports'))
+        from hub.services.reports import resolve_month_filters
+
+        period = resolve_month_filters(' 2027-01 ', '2026-12')
+        self.assertEqual(period['start_month_date'], date(2026, 12, 1))
+        self.assertEqual(period['end_exclusive_date'], date(2027, 2, 1))
+        self.assertEqual(period['label'], 'December 2026 to January 2027')
+        self.assertTrue(period['range_swapped'])
 
 
 class DashboardPerformanceTests(TestCase):
@@ -55,6 +91,26 @@ class DashboardPerformanceTests(TestCase):
         with CaptureQueriesContext(connection) as large:
             self.context({'page_size': '100'})
         self.assertEqual(len(small), len(large))
+
+    def test_engineer_lookup_count_does_not_grow_on_assigned_or_backup_tabs(self):
+        engineer = User.objects.create(username='perf-engineer', role=User.Roles.ENGINEER, must_change_password=False)
+        peer = User.objects.create(username='perf-peer', role=User.Roles.ENGINEER)
+        self.client.force_login(engineer)
+        for tab in ('assigned', 'backup'):
+            with self.subTest(tab=tab):
+                eligible = {'engineer': engineer} if tab == 'assigned' else {'engineer': peer, 'backup_engineer': engineer}
+                Request.objects.update(engineer=None, backup_engineer=None)
+                Request.objects.filter(reference_code='PERF-000').update(**eligible)
+                with CaptureQueriesContext(connection) as small:
+                    response = self.client.get('/dashboard/', {'tab': tab})
+                self.assertContains(response, 'PERF-000')
+                Request.objects.filter(reference_code__lte='PERF-011').update(**eligible)
+                with CaptureQueriesContext(connection) as large:
+                    response = self.client.get('/dashboard/', {'tab': tab})
+                self.assertContains(response, 'PERF-011')
+                table = User._meta.db_table
+                user_only = lambda queries: sum(f'FROM "{table}"' in query['sql'] for query in queries)
+                self.assertEqual(user_only(small), user_only(large), 'Standalone user lookups grew with request rows')
 
     def test_metrics_cover_full_filtered_population(self):
         result = self.context({'page': '3', 'page_size': '25'})

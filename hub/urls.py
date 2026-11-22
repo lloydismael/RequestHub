@@ -1,7 +1,23 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
+from .assistant_views import (
+    assistant_conversation_reset,
+    assistant_departments,
+    assistant_guide,
+    assistant_members,
+    assistant_messages,
+    assistant_state,
+)
 from .changelog_views import ChangelogAdminPreviewView, ChangelogComparisonView
+from .form_editor_views import (
+    FormEditorActionView,
+    FormEditorCatalogView,
+    FormEditorDetailView,
+    FormEditorHistoryView,
+    FormEditorPeopleView,
+    FormEditorPreviewView,
+)
 from .monitoring_views import MonitoringLiveView, MonitoringPlatformView
 from .notification_views import (
     NotificationDeleteView,
@@ -11,66 +27,57 @@ from .notification_views import (
     NotificationReadView,
     NotificationToastDataView,
 )
+from .outlook_views import (
+    OutlookCallbackView,
+    OutlookDraftView,
+    RequestOutlookConnectView,
+)
 from .views import (
     DashboardLiveDataView,
     DashboardView,
+    EngineerActivityLogDeleteView,
     EngineerActivityLogView,
+    ReportExportView,
     RequestAdminUpdateView,
+    RequestClosingOutlookRedirectView,
+    RequestCollaborativeManageView,
     RequestDeleteView,
-    RequestRestoreView,
     RequestExportCSVView,
+    RequestLifecycleAcknowledgeView,
     RequestNudgeView,
     RequestOutlookRedirectView,
-    RequestClosingOutlookRedirectView,
-    EngineerActivityLogDeleteView,
+    RequestReportView,
+    RequestRestoreView,
     RequestStatusUpdateView,
     RequestTeamsRedirectView,
     RequestUpdateView,
-    RequestReportView,
-    ReportExportView,
-    SqrListView,
-    SqrTrackerSettingsView,
-    SqrReportsDataView,
-    SqrPerformanceDataView,
-    SqrPrototypeDataView,
+    SqrApprovalEmlDownloadView,
+    SqrApprovalFormattedDraftView,
+    SqrApprovalOutlookRedirectView,
     SqrDeliveryUpdateView,
-    SqrPerformanceUpdateView,
-    SqrToRevenueView,
     SqrEngineerDeleteView,
     SqrEngineerUpdateView,
-    SqrImportView,
-    SqrProposalUpdateView,
-    SqrHistoryView,
+    SqrExportView,
     SqrHistoryRestoreView,
-    SqrInlineFieldUpdateView,
+    SqrHistoryView,
+    SqrImportView,
     SqrInlineFieldUndoView,
+    SqrInlineFieldUpdateView,
+    SqrListView,
+    SqrPerformanceDataView,
+    SqrPerformanceUpdateView,
+    SqrProposalUpdateView,
+    SqrPrototypeDataView,
+    SqrReportsDataView,
     SqrRevenueTrackerUpdateView,
     SqrRevenueUpdateView,
-    SqrTeamsRedirectView,
-    SqrApprovalOutlookRedirectView,
-    SqrApprovalFormattedDraftView,
-    SqrApprovalEmlDownloadView,
     SqrReviewUpdateView,
-    SqrExportView,
+    SqrTeamsRedirectView,
+    SqrToRevenueView,
+    SqrTrackerSettingsView,
     StatusLogUpdateView,
     UserEditView,
     UserManagementView,
-    RequestCollaborativeManageView,
-    RequestLifecycleAcknowledgeView,
-)
-
-from .form_editor_views import (
-    FormEditorActionView, FormEditorCatalogView, FormEditorDetailView,
-    FormEditorHistoryView, FormEditorPreviewView, FormEditorPeopleView,
-)
-from .outlook_views import OutlookCallbackView, OutlookDraftView, RequestOutlookConnectView
-from .assistant_views import (
-    assistant_conversation_reset,
-    assistant_departments,
-    assistant_guide,
-    assistant_members,
-    assistant_messages,
-    assistant_state,
 )
 
 app_name = "hub"

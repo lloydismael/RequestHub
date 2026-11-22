@@ -80,6 +80,14 @@ class SqrTrackerSettingsTests(TestCase):
         self.assertContains(page, 'data-sqr-view-panel="prototype"')
         self.assertNotIn('proposal_submissions', page.context)
 
+    def test_admin_performance_defaults_to_my_assigned_when_classic_is_hidden(self) -> None:
+        """Keep the admin's initial Performance filter when Classic is hidden."""
+        SqrTrackerSettings.objects.create(pk=1, show_classic_sqr_tracker=False)
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse('hub:sqr'), {'view': 'performance'})
+        self.assertEqual(page.context['active_sqr_view'], 'performance')
+        self.assertContains(page, 'data-default-mine="1"')
+
     def test_primary_and_explicit_authorized_bookmarks(self):
         self.client.force_login(self.admin)
         for params, expected in (({}, 'prototype'), ({'view': 'unknown'}, 'prototype'),

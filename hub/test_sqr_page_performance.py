@@ -1,3 +1,5 @@
+from datetime import UTC
+
 from django.db import connection
 from django.test import RequestFactory, TestCase
 from django.test.utils import CaptureQueriesContext
@@ -64,9 +66,10 @@ class SqrPagePerformanceTests(TestCase):
         self.assertEqual(context['proposal_counts']['total'], 150)
         self.assertEqual(context['page_obj'].paginator.count, 150)
 
-    def test_prototype_stage_matches_delivery_completion_contract(self):
-        from datetime import date
+    def test_prototype_stage_matches_delivery_completion_contract(self) -> None:
+        """Classify completed delivery under the matching prototype pipeline stage."""
         import json
+        from datetime import date
         row = SqrSubmission.objects.get(reference_code='SQR-PERF-000')
         for health, signed, stage in [('completed', None, 'billing'), ('', date(2026, 11, 1), 'delivery')]:
             SqrSubmission.objects.filter(pk=row.pk).update(proposal_status='closed_won', status='reviewed',
@@ -83,24 +86,26 @@ class SqrPagePerformanceTests(TestCase):
         self.assertEqual([row.reference_code for row in context['proposal_submissions']], ['SQR-PERF-000'])
         self.assertEqual(self.context({'q': 'For Processing'})['page_obj'].paginator.count, 150)
 
-    def test_classic_search_matches_displayed_dates_and_money(self):
-        from datetime import datetime, timezone
+    def test_classic_search_matches_displayed_dates_and_money(self) -> None:
+        """Match the date and currency strings that Classic tracker users see."""
+        from datetime import datetime
         from decimal import Decimal
         SqrSubmission.objects.filter(reference_code='SQR-PERF-000').update(
-            created_at=datetime(2020, 3, 20, 1, tzinfo=timezone.utc), sse_amount=Decimal('10000'))
+            created_at=datetime(2020, 3, 20, 1, tzinfo=UTC), sse_amount=Decimal(10000))
         for query in ('Mar 20, 2020', '10,000.00'):
             context = self.context({'q': query})
             self.assertEqual([row.reference_code for row in context['proposal_submissions']], ['SQR-PERF-000'])
 
-    def test_summary_refresh_is_lightweight_and_reflects_price_changes(self):
+    def test_summary_refresh_is_lightweight_and_reflects_price_changes(self) -> None:
+        """Refresh totals after a price edit without requesting the full detail context."""
         import json
         from decimal import Decimal
-        SqrSubmission.objects.filter(reference_code='SQR-PERF-000').update(managed_support_amount=Decimal('100'))
+        SqrSubmission.objects.filter(reference_code='SQR-PERF-000').update(managed_support_amount=Decimal(100))
         request = RequestFactory().get('/sqr/prototype-data/', {'page': '1', 'summary': '1'})
         request.user = self.admin
         with CaptureQueriesContext(connection) as queries:
             data = json.loads(SqrPrototypeDataView.as_view()(request).content)
-        self.assertEqual(Decimal(data['pipeline']['all']['total']), Decimal('100'))
+        self.assertEqual(Decimal(data['pipeline']['all']['total']), Decimal(100))
         self.assertNotIn('records', data)
         self.assertLessEqual(len(queries), 2)
 

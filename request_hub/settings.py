@@ -166,9 +166,34 @@ DATABASES = {
         "HOST": DB_HOST,
         "PORT": DB_PORT,
         "CONN_MAX_AGE": DB_CONN_MAX_AGE,
+        "CONN_HEALTH_CHECKS": True,
         "OPTIONS": db_options,
     }
 }
+
+lookup_redis_url = os.getenv("REDIS_LOOKUP_URL", "").strip()
+if lookup_redis_url:
+    lookup_redis = urlsplit(lookup_redis_url)
+    if (
+        lookup_redis.scheme not in (("redis", "rediss") if DEBUG else ("rediss",))
+        or not lookup_redis.hostname
+        or lookup_redis.query
+        or lookup_redis.fragment
+    ):
+        raise ImproperlyConfigured("REDIS_LOOKUP_URL must be a Redis URL without a query or fragment (TLS is required outside DEBUG).")
+    CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+        "shared_lookups": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": [lookup_redis_url],
+            "KEY_PREFIX": "requesthub:lookups",
+            "OPTIONS": {
+                "serializer": "hub.services.lookup_cache.LookupSerializer",
+                "socket_connect_timeout": 0.2,
+                "socket_timeout": 0.2,
+            },
+        },
+    }
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

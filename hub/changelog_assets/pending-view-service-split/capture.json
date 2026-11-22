@@ -1,0 +1,205 @@
+{
+  "before_source": "Exact saved/reconstructed pre-split working-tree bytes for dirty files; HEAD blobs for clean files.",
+  "after_source": "Uncommitted Phase 2 working-tree bytes; not exact release evidence.",
+  "base_head": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "capture": "Offline Chromium 156.0.8078.4, repository path/size/fingerprint report, no live data.",
+  "files": {
+    "before": {
+      "README.md": {
+        "bytes": 60188,
+        "sha256": "bbb4281a6d0181e26d9cf7ca0e64a388df17e76378cb2dd06818028c7659d87f"
+      },
+      "docs/cd-workflow-testing.md": {
+        "bytes": 46996,
+        "sha256": "44bcd9da45d37aca130f7f20f54af41618cf913ca5024881e1817376aedc0202"
+      },
+      "hub/mixins.py": {
+        "bytes": 1398,
+        "sha256": "40e10beea02244365df69edd3a6fc0378a44a9999d847ed6fb295ff8781f2449"
+      },
+      "hub/services/csv_export.py": null,
+      "hub/services/notifications.py": {
+        "bytes": 4899,
+        "sha256": "a2f0e3357f80e3983b7089df1e1878b9b2ae9ab355f14f26fa744b29862a61a6"
+      },
+      "hub/services/reports.py": null,
+      "hub/services/request_changes.py": null,
+      "hub/services/request_email.py": null,
+      "hub/services/sla.py": null,
+      "hub/services/sqr_email.py": null,
+      "hub/services/sqr_exports.py": null,
+      "hub/services/sqr_import.py": null,
+      "hub/services/sqr_reports.py": null,
+      "hub/services/sqr_workflow.py": null,
+      "hub/test_dashboard_performance.py": {
+        "bytes": 6487,
+        "sha256": "c9506da0ef83e643f53263836eb4ab562d6f48fc58e7f3775d5c36e7a028d60d"
+      },
+      "hub/test_lifecycle.py": {
+        "bytes": 26948,
+        "sha256": "f9a1acbe4cabc4954996511ba06c320986719c50cfac9229af07579a4648f48e"
+      },
+      "hub/test_multiple_sqrs.py": {
+        "bytes": 16476,
+        "sha256": "e095fa65a5ad7261e9d8f15f0803eb28f8a98d8ae873c5299daf3fdff3be53ce"
+      },
+      "hub/test_sqr_on_hold.py": {
+        "bytes": 48157,
+        "sha256": "e9f0a678f259a23490f6fcc822f4f5d6368ab6fda90c61f3d987c68724633fb7"
+      },
+      "hub/view_helpers.py": {
+        "bytes": 543,
+        "sha256": "e6aa364f52cf5e98bd5092fd5ea862fb4f43b9882ee2679e09fcc71261f53457"
+      },
+      "hub/views.py": {
+        "bytes": 390040,
+        "sha256": "6608cd33fc9695fb0ae4ddb992091b4ca0db4cab731c12a8278e3fc66f0555e3"
+      },
+      "hub/views/__init__.py": null,
+      "hub/views/admin_tools.py": null,
+      "hub/views/common.py": null,
+      "hub/views/dashboard.py": null,
+      "hub/views/notifications.py": null,
+      "hub/views/reports.py": null,
+      "hub/views/requests.py": null,
+      "hub/views/sla.py": null,
+      "hub/views/sqr.py": null
+    },
+    "after": {
+      "README.md": {
+        "bytes": 60529,
+        "sha256": "36ea2c16452b2ee938389c323339d908f52326bb0834d8585a9b30af65b25cb9"
+      },
+      "docs/cd-workflow-testing.md": {
+        "bytes": 48737,
+        "sha256": "bcea9527a99c93249a123e21384538fa2615e776bbd000a4756ae293abdb1ffe"
+      },
+      "hub/mixins.py": {
+        "bytes": 2668,
+        "sha256": "68e4e90cdff6f8e204f4f5e6c27ab2c01da77498c8600dd07bc2616e8455f87f"
+      },
+      "hub/services/csv_export.py": {
+        "bytes": 8439,
+        "sha256": "aceee45a5675bdc3aeee47b2a97a6c745a2681a53d44411e4cdfb21f8ab39dfd"
+      },
+      "hub/services/notifications.py": {
+        "bytes": 7359,
+        "sha256": "bdaac60427e7677e1b392a56969d576ea275045f49e93c8af37d61e60af1b514"
+      },
+      "hub/services/reports.py": {
+        "bytes": 33100,
+        "sha256": "46c31190f89fdfcd478d7bfd1b4b4cf5d8e0f3a91761faeee78921ed4e4ba1b2"
+      },
+      "hub/services/request_changes.py": {
+        "bytes": 6165,
+        "sha256": "b52cf414aa9dae4b9a630dd9fe0494ed72bda4d96d8aa53be895bc224621a35e"
+      },
+      "hub/services/request_email.py": {
+        "bytes": 9105,
+        "sha256": "5790b4786e5049608fcd4ab0c95fd51966be83202aa06d01542b058c1019cb5b"
+      },
+      "hub/services/sla.py": {
+        "bytes": 7040,
+        "sha256": "b2ea7c781689d385f0a550ffe5cf9a5cb2f7701d63c1cb73db52e0a5671a15d2"
+      },
+      "hub/services/sqr_email.py": {
+        "bytes": 40309,
+        "sha256": "118de13de6598dc4ce61e6e64747f6cfc4b2104a7ded7058082a56b8942d8a2d"
+      },
+      "hub/services/sqr_exports.py": {
+        "bytes": 14171,
+        "sha256": "fa93930df99a388df7820e9a9769c89ea1035f5777965aa72ae7af02dbb4ffdf"
+      },
+      "hub/services/sqr_import.py": {
+        "bytes": 28493,
+        "sha256": "680ee7f88d49ecb2e815632096c7eb88b3b0dea03b6becb34c8ed64863a8fa98"
+      },
+      "hub/services/sqr_reports.py": {
+        "bytes": 18478,
+        "sha256": "bc2a6e7e7200ca7fba562b8d4891ac1c129d279ad23b39ee0a8376744f6549ad"
+      },
+      "hub/services/sqr_workflow.py": {
+        "bytes": 36892,
+        "sha256": "bd3dbbf91d9c0164f5a17f5888937fab0a3a47b3373a2d955d553413055bafed"
+      },
+      "hub/test_dashboard_performance.py": {
+        "bytes": 8395,
+        "sha256": "a5bb89b2da6c746e4bccecd6431506cecc4106f4858ca6eb49eea40c4556af2b"
+      },
+      "hub/test_lifecycle.py": {
+        "bytes": 28326,
+        "sha256": "d13f4a2edfde8487745e4094a5b18974a1cff5730ca08392469884dfbdccb725"
+      },
+      "hub/test_multiple_sqrs.py": {
+        "bytes": 18533,
+        "sha256": "fbf549dff689ead130aec4563646a0e9b868aa93ff5d2d4586fe6389a44a4a95"
+      },
+      "hub/test_sqr_on_hold.py": {
+        "bytes": 50387,
+        "sha256": "448ff5a5ecd6bfc84cce0ddcc513aa1d167b35b6fa11b720f7808ec8e223f04c"
+      },
+      "hub/view_helpers.py": {
+        "bytes": 525,
+        "sha256": "812aa7f55551e59c9504047783db9791edf615278ef6c970a6cdca00a32aea08"
+      },
+      "hub/views.py": null,
+      "hub/views/__init__.py": {
+        "bytes": 14103,
+        "sha256": "2f112f38a6a88dd4fb1c27c774a4725ee675971d821f3a7e8b51b6c5e577c49f"
+      },
+      "hub/views/admin_tools.py": {
+        "bytes": 30172,
+        "sha256": "01b612100b5e9a7b7a3deaa3327707d960c484d60566ef8db52c265ce73dc371"
+      },
+      "hub/views/common.py": {
+        "bytes": 1439,
+        "sha256": "65ba3b1e3859c9718b5ef913b42bead99772006cda9b24667ee9f663abec0bd6"
+      },
+      "hub/views/dashboard.py": {
+        "bytes": 29413,
+        "sha256": "6d0eef45c71d9c63df8523f0e7e9b6ad5cb9af5c1c58b0b851d208cfef34c635"
+      },
+      "hub/views/notifications.py": {
+        "bytes": 3928,
+        "sha256": "9b0f87821a2ee00f521c4d15be96c5750b322cc65fd6546eac9993dadddbc618"
+      },
+      "hub/views/reports.py": {
+        "bytes": 15438,
+        "sha256": "f3b1ea75520c22eb44de9bf67621766caf9d6310036fea1754f2fd43cc624330"
+      },
+      "hub/views/requests.py": {
+        "bytes": 50249,
+        "sha256": "ff82c6f0be52682f043ee337bd4e363aacfd21f13d4922ab1ca7824cb74eea01"
+      },
+      "hub/views/sla.py": {
+        "bytes": 4077,
+        "sha256": "8f4d2a013f5058e423145a9cb0b9b3d4a8e6c2f01de34ab4a215e9f8da5ebb21"
+      },
+      "hub/views/sqr.py": {
+        "bytes": 68199,
+        "sha256": "88bac2ff2ea6d8163abab791922875df18021b948e4e3d79b35a35fd02ca86cf"
+      }
+    }
+  },
+  "comparison": {
+    "title": "View and service split",
+    "before_text": "The local checkout had a single view module that also contained workflow, report and email code.",
+    "after_text": "Eight domain modules and a compatibility facade separate HTTP handling from shared service logic.",
+    "capture_note": "Local file fingerprints only: pre-split dirty checkout versus Phase 2 working tree. Not exact release revisions or UI screenshots.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "image_sha256": {
+    "report-before.png": "51e305afdc761e2c75cb72e555a47489fc27a736a930c6cbcf57ead20027c924",
+    "report-after.png": "152226f505ee815a749667f40b97692485bca6b1e8f9a3aa325e957a4aa17791"
+  },
+  "notifications_verification": {
+    "draft_hidden_from_reader": true,
+    "draft_report_and_images_return_404": true,
+    "published_via_local_admin_editor": true,
+    "published_report_link_under_technical_evidence": true,
+    "published_images_byte_exact_and_no_store": 2,
+    "local_fixture_rolled_back": true
+  }
+}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -9,8 +9,8 @@ from django.db.models import Max
 from django.urls import reverse
 from django.utils import timezone
 
+from accounts.models import User
 from hub.models import Request, RequestLifecycleEvent
-
 
 MANAGER_ROLES = {"admin", "pm_esg"}
 
@@ -274,7 +274,13 @@ def _action_label_for_stage(stage: str) -> str:
     return labels[stage]
 
 
-def _current_assignment_acknowledged(request: Request) -> bool:
+def _current_assignment_acknowledged(
+    request: Request, events: Iterable[RequestLifecycleEvent] | None = None,
+) -> bool:
+    """Check for an acknowledgement of the current assignment, reusing loaded events."""
+    if events is not None:
+        return any(event.event_type == RequestLifecycleEvent.EventType.ACKNOWLEDGED
+                   and event.assignment_revision == request.assignment_revision for event in events)
     return request.lifecycle_events.filter(
         event_type=RequestLifecycleEvent.EventType.ACKNOWLEDGED,
         assignment_revision=request.assignment_revision,
@@ -317,8 +323,17 @@ def reconcile_lifecycle_stage(request_id: int, source: str = "Reconcile") -> str
     return None
 
 
-def build_lifecycle_context(request: Request, actor) -> dict:
-    current_stage = resolve_current_stage(request)
+def build_lifecycle_context(request: Request, actor: User) -> dict:
+    """Build progress and acknowledgement state from the same ordered event snapshot."""
+    event_rows = list(request.lifecycle_events.select_related("actor").order_by("-sequence"))
+    current_stage = (event_rows[0].stage if event_rows else None) or request.lifecycle_stage
+    can_act = request.engineer_id == actor.pk and current_stage in {
+        Request.LifecycleStage.ASSIGNED,
+        Request.LifecycleStage.ACKNOWLEDGED,
+        Request.LifecycleStage.ONGOING,
+    }
+    can_act = bool(request.engineer_id and can_act)
+    acknowledged = can_act and _current_assignment_acknowledged(request, event_rows)
     stages = []
     for value, label in Request.LifecycleStage.choices:
         state = _stage_state(value, current_stage)
@@ -341,8 +356,7 @@ def build_lifecycle_context(request: Request, actor) -> dict:
         owner_label = _user_label(request.engineer) or "Unassigned"
 
     events = []
-    event_queryset: Iterable[RequestLifecycleEvent] = request.lifecycle_events.select_related("actor").order_by("-sequence")
-    for event in event_queryset:
+    for event in event_rows:
         events.append(
             {
                 "label": event.get_event_type_display(),
@@ -360,28 +374,8 @@ def build_lifecycle_context(request: Request, actor) -> dict:
         "current_owner_label": owner_label,
         "backup_support_label": _user_label(request.backup_engineer),
         "assignment_revision": request.assignment_revision,
-        "can_acknowledge": bool(
-            request.engineer_id
-            and actor.pk == request.engineer_id
-            and current_stage
-            in {
-                Request.LifecycleStage.ASSIGNED,
-                Request.LifecycleStage.ACKNOWLEDGED,
-                Request.LifecycleStage.ONGOING,
-            }
-            and not _current_assignment_acknowledged(request)
-        ),
-        "acknowledge_sent": bool(
-            request.engineer_id
-            and actor.pk == request.engineer_id
-            and _current_assignment_acknowledged(request)
-            and current_stage
-            in {
-                Request.LifecycleStage.ASSIGNED,
-                Request.LifecycleStage.ACKNOWLEDGED,
-                Request.LifecycleStage.ONGOING,
-            }
-        ),
+        "can_acknowledge": can_act and not acknowledged,
+        "acknowledge_sent": acknowledged,
         "acknowledge_url": reverse("hub:request-lifecycle-acknowledge", kwargs={"pk": request.pk}),
         "stages": stages,
         "events": events,

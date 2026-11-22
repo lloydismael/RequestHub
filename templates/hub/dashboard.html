@@ -956,12 +956,8 @@
 {% if is_requestor_ui or can_create_request %}
     {% if is_requestor_ui %}
         {{ request_report_data|json_script:"requestor-report-data" }}
-        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-        <script src="{% static 'js/chart-values.js' %}"></script>
-        <script src="{% static 'js/chart-theme.js' %}"></script>
-        <script src="{% static 'js/request-graphs.js' %}"></script>
     {% endif %}
-    <script src="{% static 'js/account-autocomplete.js' %}?v=1"></script>
+    <script src="{% static 'js/account-autocomplete.js' %}?v=1" defer></script>
     <script>
         (function () {
             const modal = document.getElementById("create-request-modal");
@@ -1179,21 +1175,12 @@
                     submitBtn.textContent = "Submitting...";
                 });
             }
-
-            // Guided account autocomplete (shared module).
-            if (typeof window.initAccountAutocompletes === "function") {
-                window.initAccountAutocompletes(modal);
-            }
         })();
     </script>
 {% endif %}
 
 {% if role == 'engineer' and active_tab == 'report' and engineer_report_data %}
     {{ engineer_report_data|json_script:"engineer-report-data" }}
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="{% static 'js/chart-values.js' %}"></script>
-    <script src="{% static 'js/chart-theme.js' %}"></script>
-    <script src="{% static 'js/request-graphs.js' %}"></script>
 {% endif %}
 
 {% if role == 'engineer' %}
@@ -1317,4 +1304,13 @@
     };
 })();
 </script>
+{% endblock %}
+
+{% block page_scripts %}
+{% if is_requestor_ui or role == 'engineer' and active_tab == 'report' and engineer_report_data %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <script src="{% static 'js/chart-values.js' %}" defer></script>
+    <script src="{% static 'js/chart-theme.js' %}" defer></script>
+    <script src="{% static 'js/request-graphs.js' %}" defer></script>
+{% endif %}
 {% endblock %}
