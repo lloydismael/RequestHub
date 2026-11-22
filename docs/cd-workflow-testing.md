@@ -133,7 +133,26 @@ Images are stored alongside each versioned manifest, not in the Git-ignored `hub
 
 `sync_release_changelog` enriches matching existing entries from these packaged manifests without relogging commits. System drafts publish when evidence is complete. Legacy/admin-held drafts still require an explicit publication choice; the v57.1 legacy draft was explicitly opted into publication during this authorized recovery. Existing release titles, summaries, dates and previous-version links are preserved.
 
-The performance comparisons below were recorded on separate local snapshots. They are not exact first-parent evidence for the `origin/dev` integration patch. Request Progress dark-mode, PPT navigation, and SQR tracker navigation, controls, and scrolling edits are outside this patch. Redis stays disabled by default.
+### Unreleased: Django startup recovery (PR #163)
+
+- **Before:** A merge committed unresolved conflict markers. Django stopped importing its models with `SyntaxError: invalid decimal literal`, so both VS Code F5 launch configurations, Django Validation, and the Docker image's static collection step failed.
+- **After:** Resolved all 79 conflict blocks across 26 files. Kept the reconciled request views, including the row lock and rollback for status updates, as well as the SQR error handling and notification cache fixes. Preserved the pending PPT defaults, tracker controls, and Request Progress dark-mode changes and their regression coverage. Kept the relocated one-off database scripts out of the runtime image without running them. The repair adds no migration or database configuration change.
+- **Technical evidence:** The [before report](../hub/changelog_assets/pr163-startup-recovery/01-before.png), [after report](../hub/changelog_assets/pr163-startup-recovery/01-after.png), and [manifest](../hub/changelog_assets/pr163-startup-recovery/manifest.json) use the repair's exact first parent and result. In disposable PostgreSQL, a reader could not access the draft or its images. After test publication, **Notifications → Changelogs → Technical evidence** opened the report and served both original PNGs with `no-store`. The transaction was rolled back; no live release was published.
+
+### Unreleased: Request progress in dark mode
+
+**Before:** Fixed navy rectangles behind the step names and statuses stood out against themed cards, including the Christmas theme's dark green card.
+
+**After:** Step names and statuses use the card background and theme-aware text. On wider screens, the connectors run between labels instead of behind them. The phone layout keeps its vertical connectors. Light mode and lifecycle behavior are unchanged.
+
+| Viewport | Before | After |
+| --- | --- | --- |
+| Desktop | [Before](../hub/changelog_assets/pending-request-progress-dark-mode/desktop-before.png) | [After](../hub/changelog_assets/pending-request-progress-dark-mode/desktop-after.png) |
+| Phone | [Before](../hub/changelog_assets/pending-request-progress-dark-mode/phone-before.png) | [After](../hub/changelog_assets/pending-request-progress-dark-mode/phone-after.png) |
+
+The [capture metadata](../hub/changelog_assets/pending-request-progress-dark-mode/capture.json) records the baseline, working-tree fingerprints, and image checksums. Both sides use the same synthetic request. The `request-progress-dark-mode` recipe captures the exact release revisions before publication. A Chromium regression check verifies that all five step labels and statuses sit on the card surface and have at least 4.5:1 contrast in the Default and Christmas dark themes at both widths. Light-mode captures were pixel-identical at both widths.
+
+In disposable PostgreSQL, **Notifications → Changelogs** hid an unpublished test release and all four images from a signed-in reader. After test publication, the desktop pair appeared in the feed, the phone pair opened on demand, and all images were served byte-for-byte with `no-store`. No live release was published.
 
 ### Unreleased: Accounts, dashboard and SQR performance
 
@@ -259,9 +278,9 @@ The [capture metadata](../hub/changelog_assets/pending-shared-lookup-cache/captu
 
 ### Unreleased: Phase 7 — repository cleanup
 
-> **Archived Phase 7 results.** This section describes the reviewed Phase 7 snapshot, not the integration patch. The patch carries retained lint hunks, but does not restore the incident-script moves, dependency layering, or reverted and ambiguous cleanup hunks. The script links below point to their current paths.
+> **Archived Phase 7 results.** This section describes the reviewed Phase 7 snapshot. The PR #163 recovery retains the incident-script move and container exclusions, but does not restore the archived dependency layering or the reverted and ambiguous cleanup hunks.
 
-Moved the incident 906 [inspection](../scripts_check/forensics_906.py) and [repair](../scripts_check/repair_906.py) scripts into `scripts/`, updated their run instructions, and kept both out of container builds. The four retired root inspection scripts were already absent, and the standalone JavaScript tests were already in `tests/js/`. No incident script was executed.
+Moved the incident 906 [inspection](../scripts/forensics_906.py) and [repair](../scripts/repair_906.py) scripts into `scripts/`, updated their run instructions, and kept both out of container builds. The four retired root inspection scripts were already absent, and the standalone JavaScript tests were already in `tests/js/`. No incident script was executed.
 
 [Supplemental dependency inputs](ci-workflow-testing.md#reproducible-dependencies-and-added-validation) now constrain against the runtime manifest and, where applicable, the exact runtime lock. The tooling lock aligns `requests` to runtime (`2.34.2` → `2.33.0`); the evidence lock adds a constraint provenance comment without changing its pin. The runtime, CI, Windows, and capture locks did not change.
 
@@ -303,7 +322,7 @@ The [capture metadata](../hub/changelog_assets/pending-frontend-performance/capt
 
 ### Unreleased: performance patch review corrections
 
-[Notification deletes](../hub/signals.py) use Django's set-based delete path when shared lookups are disabled. With shared lookups enabled, commit-time badge invalidation remains in place for direct deletes and request cascades. The [view facade](../hub/views/__init__.py) again exposes the Requests library under the legacy `hub.views.requests` binding; request views and URLs still resolve through their existing exports. The [SQR Performance view](../hub/views/sqr.py) keeps **My Assigned** as the admin default when Classic Tracker is hidden. The default with Classic visible remains **All Projects**. No permissions, migrations, or stored data changed.
+[Notification deletes](../hub/signals.py) use Django's set-based delete path when shared lookups are disabled. With shared lookups enabled, commit-time badge invalidation remains in place for direct deletes and request cascades. The [view facade](../hub/views/__init__.py) again exposes the Requests library under the legacy `hub.views.requests` binding; request views and URLs still resolve through their existing exports. This earlier review snapshot kept **My Assigned** for admins when Classic Tracker was hidden. The later [PPT navigation update](unreleased-ppt-navigation-changelog.md#admin-default-filters) makes both administrator account types start unfiltered and keeps the PM-ESG default. No permissions, migrations, or stored data changed.
 
 | Matched local observation | Before review fix | After review fix |
 | --- | --- | --- |
@@ -325,7 +344,7 @@ Recipes in `hub/changelog_capture_recipes.json` use schema 1, a unique `id`, and
 
 When an uncovered change touches templates, stylesheets, or browser scripts, it needs an explicit recipe or manual screenshots. Other uncovered changes can use a `repository_change` report from the exact parent and change snapshots. Reports show public paths, presence, byte counts, and fingerprints, but not file contents. Existing packaged reports remain usable as technical evidence when the UI cannot be recovered. The Notifications feed keeps reports and documentation under **Technical evidence** and screenshots under **Visual changes**. Each scene declares a bounded `title`, `before_text`, `after_text`, and optional `viewport` (`width` 320-1920; `height` 240-1600):
 
-- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, Admin profile tools, changelog display, editor, history preview or Notifications feed, Management Monitoring, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app. The `admin-profile-tools` recipe selects Personalization and captures the desktop and phone defaults with scripts disabled; the Create backup control shows its inline fallback. The `changelog-loading` recipe opens native disclosures with scripts disabled to capture the server-rendered fallback in Management and the mobile Notifications feed. These screenshots document the fallback, not load times. Monitoring captures show the shell before readings load.
+- `kind: "ui"` selects an allowlisted component: sign-in, seasonal sign-in, profile avatar, Admin profile tools, changelog display, editor, history preview or Notifications feed, Management Accounts or Monitoring, Request progress, or an SQR tracker/performance shell. Historical Django templates use synthetic, unsaved fixtures and a dummy database, not the deployed app. The `management-accounts` recipe compares the same Accounts search request without scripts at both revisions. The `request-progress-dark-mode` recipe captures the Christmas theme's dark-mode progress card on desktop and phone. The `admin-profile-tools` recipe selects Personalization and captures the desktop and phone defaults with scripts disabled; the Create backup control shows its inline fallback. The `changelog-loading` recipe opens native disclosures with scripts disabled to capture the server-rendered fallback in Management and the mobile Notifications feed. These screenshots document the fallback, not load times. Monitoring captures show the shell before readings load.
 - `kind: "document"` selects a repository-relative text `path` and Markdown `heading`. Code blocks and private configuration/credential paths are rejected.
 - `kind: "report"` selects the allowlisted `changelog_contract` behavior report or `repository_change` file fingerprint report. Fingerprints cover safe paths changed from the first parent and can accompany a UI scene to document related backend, configuration, documentation, and test changes. Neither report calls a live provider.
 
@@ -381,7 +400,7 @@ Local comparison against `b61e6ab` used the same synthetic PostgreSQL fixture an
 | Management → Changelogs | 125–146 ms → 41–53 ms | 381 KB → 59 KB | 8 → 7 |
 | Notifications → Changelogs | 179–184 ms → 69–102 ms | 367 KB → 216 KB | 9 → 5 |
 
-Management Sign-In Logs and Forms also served less HTML (about 176 KB and 59 KB, respectively, down from 1.11 MB each). Activity dropped from 14 queries to 6 and no longer makes an immediate duplicate page request. Dashboard, Reports, PPT, and Profile each used one fewer query; these runs did not establish a consistent speedup on those pages. Accounts dropped to 694 KB but still renders the full 350-row bulk formset, and its timing ranges overlapped.
+Management Sign-In Logs and Forms also served less HTML (about 176 KB and 59 KB, respectively, down from 1.11 MB each). Activity dropped from 14 queries to 6 and no longer makes an immediate duplicate page request. Dashboard, Reports, PPT, and Profile each used one fewer query; these runs did not establish a consistent speedup on those pages. At that benchmark revision, Accounts dropped to 694 KB but still rendered the full 350-row bulk formset, and its timing ranges overlapped. The [separate Accounts pagination comparison](#unreleased-accounts-dashboard-and-sqr-performance) measures the editor update.
 
 The after screenshots are working-tree captures, not exact Git revision evidence. Run trusted CI against the actual release revision and its first parent before packaging. Verify the numbered release and both sides of its comparisons in **Notifications → Changelogs** as a non-admin after authorized publication.
 

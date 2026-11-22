@@ -98,7 +98,7 @@ def notify_update(log, source_label, *, previous_message=None, email_feedback=No
         if previous_message is not None and not new_mention:
             continue
         if mentioned:
-            notification, created = Notification.objects.get_or_create(
+            _notification, created = Notification.objects.get_or_create(
                 recipient=user,
                 event_key=f"update:{log.pk}:mention:{user.pk}",
                 defaults={

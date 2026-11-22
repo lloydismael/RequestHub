@@ -1,0 +1,46 @@
+{
+  "status": "unreleased",
+  "git_base": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "before_revision": null,
+  "after_revision": null,
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "fixture_sha256": "57b4f979df869440db5b914001d8a1005cf48e79b24e534376620cf44ac06495",
+  "capture_note": "Matching working-tree captures using the real SQR template and controllers with Classic hidden and two synthetic records. Neither capture is an exact release revision.",
+  "before": {
+    "file": "sqr-tracker-navigation-before.png",
+    "sha256": "90eb77d772bd1dc31d49cfbbfbfdca836ad6fafe192e324090399221e2b34390",
+    "captured_at": "2026-11-22T07:52:49.968301+00:00",
+    "tracker_header_links": 1,
+    "reports_link_visible": true,
+    "tracker_current_in_primary_navigation": true,
+    "matching_records": 2,
+    "source_sha256": {
+      "templates/hub/sqr.html": "9655e55c786d28c4da2a6e766b26dc8d3dd16c8f8719f49694257438eaa5676b",
+      "templates/hub/partials/sqr_prototype.html": "27d22fe62dd415f056aafa9caade9787921339a23733fbf626cd09ee264f2399",
+      "static/css/sqr-tracker-prototype.css": "bbb0d6e4af4d60d354134698d80f6c15686149c7efef25ac195ea1558aab40d8",
+      "static/js/sqr-filter-core.js": "8a2b2c2928420bdef60ab052d133b369014d5b34975a4e45034ba3ba57c72acd",
+      "static/js/sqr-filter-controls.js": "4f8f2eade55238501861463208d24633f13c5e152e79c06c0813a8a7f6d54073",
+      "static/js/sqr-tracker-prototype.js": "ed1d3add6160aa7e20d75fb109224e0563f237ae7107d695aca91c8a60ace056"
+    }
+  },
+  "after": {
+    "file": "sqr-tracker-navigation-after.png",
+    "sha256": "44e6ad9d16845bb216ee0f15ea8c5f359ba4f04eb49cfaa318e1db6cbf4f78a4",
+    "captured_at": "2026-11-22T07:54:01.693783+00:00",
+    "tracker_header_links": 0,
+    "reports_link_visible": true,
+    "tracker_current_in_primary_navigation": true,
+    "matching_records": 2,
+    "source_sha256": {
+      "templates/hub/sqr.html": "c81481c6eb31e0757f87009e7d4e354cf5519152996b6f9de6150bb81fa4a9b3",
+      "templates/hub/partials/sqr_prototype.html": "27d22fe62dd415f056aafa9caade9787921339a23733fbf626cd09ee264f2399",
+      "static/css/sqr-tracker-prototype.css": "bbb0d6e4af4d60d354134698d80f6c15686149c7efef25ac195ea1558aab40d8",
+      "static/js/sqr-filter-core.js": "8a2b2c2928420bdef60ab052d133b369014d5b34975a4e45034ba3ba57c72acd",
+      "static/js/sqr-filter-controls.js": "4f8f2eade55238501861463208d24633f13c5e152e79c06c0813a8a7f6d54073",
+      "static/js/sqr-tracker-prototype.js": "ed1d3add6160aa7e20d75fb109224e0563f237ae7107d695aca91c8a60ace056"
+    }
+  }
+}

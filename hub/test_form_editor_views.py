@@ -4,6 +4,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 from accounts.models import User
+
 from .form_editor import baseline_schema, get_registry
 from .form_editor_views import catalog
 from .models import FormDefinition, FormVersion
@@ -92,9 +93,9 @@ class FormEditorViewTests(TestCase):
         self.assertIn("_form_version", payload["html"])
         self.assertIn(chosen, payload["selectors"]["customer_contact"])
         self.assertIn(removed, payload["selectors"]["customer_contact"])
-        self.assertIn('value="%s" selected' % previous.pk, payload["selectors"]["pm_esg_reviewer"])
-        self.assertIn('value="%s"' % approver.pk, payload["selectors"]["pm_esg_reviewer"])
-        self.assertNotIn('value="%s"' % excluded.pk, payload["selectors"]["pm_esg_reviewer"])
+        self.assertIn('value="{}" selected'.format(previous.pk), payload["selectors"]["pm_esg_reviewer"])
+        self.assertIn('value="{}"'.format(approver.pk), payload["selectors"]["pm_esg_reviewer"])
+        self.assertNotIn('value="{}"'.format(excluded.pk), payload["selectors"]["pm_esg_reviewer"])
         values = {value for group in json.loads(payload["member_map"]).values() for value in group}
         self.assertEqual(values, {chosen, removed})
         stranger = User.objects.create_user(username="modal-stranger", role="engineer", must_change_password=False)
@@ -119,8 +120,8 @@ class FormEditorViewTests(TestCase):
         self.assertEqual(response.context["active_tab"], "forms")
         self.assertInHTML(
             '<a class="nav-link active" id="forms-tab" '
-            'href="%s?tab=forms" aria-current="page">'
-            '<i class="bi bi-ui-checks me-1" aria-hidden="true"></i>Forms</a>' % reverse("hub:management"),
+            'href="{}?tab=forms" aria-current="page">'
+            '<i class="bi bi-ui-checks me-1" aria-hidden="true"></i>Forms</a>'.format(reverse("hub:management")),
             response.content.decode(),
         )
 
@@ -133,12 +134,12 @@ class FormEditorViewTests(TestCase):
                 self.assertContains(response, 'class="tab-pane show active"', count=1)
                 self.assertRegex(
                     response.content.decode(),
-                    r'class="tab-pane show active"\s+id="%s-pane"' % tab,
+                    r'class="tab-pane show active"\s+id="{}-pane"'.format(tab),
                 )
 
     def test_published_custom_answer_persists_and_reopens(self):
-        from .forms import AccountManagementForm
         from .form_editor import get_custom_answers
+        from .forms import AccountManagementForm
         schema = baseline_schema("account_management")
         schema["fields"].append({"key": "custom_notes", "type": "text", "label": "Notes", "required": True})
         self.assertEqual(self.post("draft", {"schema": schema, "expected_revision": 0}, "account_management").status_code, 200)

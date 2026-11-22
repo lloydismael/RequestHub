@@ -1,0 +1,16 @@
+body.dark-mode .rmf-progress__content { background: transparent; }
+body.dark-mode .rmf-progress__label { color: var(--rh-text-primary, #cbd5e1); }
+body.dark-mode .rmf-progress__state { color: var(--rh-text-secondary, #94a3b8); }
+body.dark-mode .rmf-progress__step--current .rmf-progress__label,
+body.dark-mode .rmf-progress__step--current .rmf-progress__state { color: var(--account-ink, #93c5fd); }
+
+@media (width > 768px) {
+    /* Put the connector after the text instead of masking a line drawn behind it. */
+    body.dark-mode .rmf-progress__step:not(:last-child) { padding-right: 0; }
+    body.dark-mode .rmf-progress__content { padding-right: 0; }
+    body.dark-mode .rmf-progress__step:not(:last-child)::after {
+        position: static;
+        order: 1;
+        flex: 1;
+    }
+}

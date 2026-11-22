@@ -17,7 +17,13 @@ from django.utils import timezone
 from accounts.models import User
 from hub.form_editor_runtime import configure_form
 from hub.mixins import ADMIN_PANEL_ROLES
-from hub.models import MANILA_TZ, Request, SqrSubmission, SqrSubmissionChange, SqrSubmissionHistory
+from hub.models import (
+    MANILA_TZ,
+    Request,
+    SqrSubmission,
+    SqrSubmissionChange,
+    SqrSubmissionHistory,
+)
 from hub.services.sqr_maintenance import validate_manual_maintenance_dates
 
 
@@ -232,7 +238,7 @@ def format_sqr_history_value(
 
 def build_sqr_history_summary(field: str, old_values: dict[str, Any], new_values: dict[str, Any], action: str = "updated") -> str:
     """Describe a change to the primary field and related values."""
-    changed = [key for key in new_values.keys() if old_values.get(key) != new_values.get(key)]
+    changed = [key for key in new_values if old_values.get(key) != new_values.get(key)]
     primary = field if field in changed else (changed[0] if changed else field)
     label = get_sqr_history_field_label(primary)
     if action == SqrSubmissionHistory.Action.RESTORED:
@@ -543,7 +549,7 @@ def save_inline_change(
     # Auto-recompute PM Amount (col O = col N × 3000) when pm_manhrs changes
     if field == "pm_manhrs":
         submission.pm_amount = (
-            (Decimal(str(coerced)) * Decimal("3000")).quantize(Decimal("0.01"))
+            (Decimal(str(coerced)) * Decimal(3000)).quantize(Decimal("0.01"))
             if coerced is not None else None
         )
         save_fields.append("pm_amount")
@@ -551,12 +557,12 @@ def save_inline_change(
     # Auto-recompute SSE Amount (col M = col L × 2000) when sse_manhrs changes
     if field == "sse_manhrs":
         submission.sse_amount = (
-            (Decimal(str(coerced)) * Decimal("2000")).quantize(Decimal("0.01"))
+            (Decimal(str(coerced)) * Decimal(2000)).quantize(Decimal("0.01"))
             if coerced is not None else None
         )
         submission.pm_manhrs = submission.recommended_pm_manhrs_for_sse(coerced)
         submission.pm_amount = (
-            (Decimal(str(submission.pm_manhrs)) * Decimal("3000")).quantize(Decimal("0.01"))
+            (Decimal(str(submission.pm_manhrs)) * Decimal(3000)).quantize(Decimal("0.01"))
             if submission.pm_manhrs is not None else None
         )
         save_fields.extend(["sse_amount", "pm_manhrs", "pm_amount"])

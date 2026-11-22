@@ -532,6 +532,66 @@ class HistoricalSceneTests(unittest.TestCase):
             with Image.open(output) as image:
                 self.assertEqual([color for _, color in image.convert("RGB").getcolors()], [(255, 255, 255)])
 
+    def test_dark_request_progress_text_blends_into_card_and_stays_readable(self):
+        from playwright.sync_api import sync_playwright
+
+        document = _render(ROOT, {"kind": "ui", "fixture": "request_progress"})
+        styles = ROOT / "static" / "css"
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(java_script_enabled=False)
+
+            def load_styles(route):
+                if match := re.fullmatch(r"http://fixture\.invalid/static/css/([\w-]+\.css)(?:\?.*)?", route.request.url):
+                    path = styles / match[1]
+                    if path.is_file():
+                        route.fulfill(path=path, content_type="text/css")
+                        return
+                route.abort()
+
+            page.route("**/*", load_styles)
+            page.set_content(document.replace("<head>", '<head><base href="http://fixture.invalid/">', 1))
+            steps = page.get_by_role("list", name="Request lifecycle stages")
+            self.assertEqual(steps.get_by_role("listitem").count(), 5)
+            for width in (1200, 375):
+                for theme in ("christmas", "default"):
+                    with self.subTest(width=width, theme=theme):
+                        page.set_viewport_size({"width": width, "height": 844})
+                        boxes = steps.evaluate("""(list, theme) => {
+                            const body = list.closest('body');
+                            body.dataset.accountTheme = theme;
+                            body.classList.toggle('account-themed', theme !== 'default');
+                            const canvas = body.ownerDocument.createElement('canvas').getContext('2d');
+                            function rgb(color, background) {
+                                canvas.clearRect(0, 0, 1, 1);
+                                if (background) {
+                                    canvas.fillStyle = background;
+                                    canvas.fillRect(0, 0, 1, 1);
+                                }
+                                canvas.fillStyle = color;
+                                canvas.fillRect(0, 0, 1, 1);
+                                return canvas.getImageData(0, 0, 1, 1).data;
+                            }
+                            function luminance([r, g, b]) {
+                                const linear = value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+                                return 0.2126 * linear(r / 255) + 0.7152 * linear(g / 255) + 0.0722 * linear(b / 255);
+                            }
+                            const card = getComputedStyle(list.closest('.rmf-progress-card'));
+                            const lightestCard = luminance(rgb(card.backgroundColor, '#fff'));
+                            return Array.from(list.querySelectorAll('.rmf-progress__content'), box => ({
+                                alpha: rgb(getComputedStyle(box).backgroundColor)[3],
+                                text: Array.from(box.children, element => ({
+                                    label: element.textContent,
+                                    contrast: (luminance(rgb(getComputedStyle(element).color)) + 0.05) / (lightestCard + 0.05),
+                                })),
+                            }));
+                        }""", theme)
+                        for box in boxes:
+                            self.assertEqual(box["alpha"], 0, "Step text must not have a separate background")
+                            for text in box["text"]:
+                                self.assertGreaterEqual(text["contrast"], 4.5, text["label"])
+            browser.close()
+
     def test_accounts_recipe_shows_server_search_without_scripts_or_a_database(self):
         recipes = load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
         recipe = next((recipe for recipe in recipes if recipe["id"] == "management-accounts"), None)

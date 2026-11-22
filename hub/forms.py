@@ -1,6 +1,6 @@
 import json
 from collections.abc import Iterable, Iterator
-from typing import Any, List
+from typing import Any, ClassVar
 
 from django import forms
 from django.core.exceptions import ValidationError
@@ -11,8 +11,16 @@ from django.utils import timezone
 from django.utils.functional import cached_property
 
 from accounts.models import User
+
 from .form_editor import is_baseline_build
-from .models import Account, EngineerActivityLog, Request, SqrProjectPerformance, SqrSubmission, StatusLog
+from .models import (
+    Account,
+    EngineerActivityLog,
+    Request,
+    SqrProjectPerformance,
+    SqrSubmission,
+    StatusLog,
+)
 
 
 class AvatarSelect(forms.Select):
@@ -189,7 +197,7 @@ class RequestForm(forms.ModelForm):
 
     class Meta:
         model = Request
-        fields = [
+        fields: ClassVar[list[str]] = [
             "account_name",
             "needed_by",
             "product_category",
@@ -199,7 +207,7 @@ class RequestForm(forms.ModelForm):
             "engineer",
             "backup_engineer",
         ]
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "product_category": forms.Select(attrs={"class": "form-select"}),
             "engagement_type": forms.Select(attrs={"class": "form-select"}),
             "priority": forms.Select(attrs={"class": "form-select", "data-priority-select": "true"}),
@@ -553,7 +561,7 @@ class RequestAdminForm(forms.ModelForm):
 
     class Meta:
         model = Request
-        fields = [
+        fields: ClassVar[list[str]] = [
             "account_name",
             "request_date",
             "requestor",
@@ -566,7 +574,7 @@ class RequestAdminForm(forms.ModelForm):
             "end_date",
             "description",
         ]
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "product_category": forms.Select(attrs={"class": "form-select", "aria-label": "Product category"}),
             "priority": forms.Select(attrs={"class": "form-select"}),
             "status": forms.Select(attrs={"class": "form-select"}),
@@ -660,7 +668,7 @@ class SqrSubmissionForm(forms.ModelForm):
         ("Other", "Other"),
     )
 
-    MEMBERS_BY_GROUP = {
+    MEMBERS_BY_GROUP: ClassVar[dict[str, list[str]]] = {
         "ESS": [
             "Aileen B. Gutierrez",
             "Leonarda G. Lucena",
@@ -710,7 +718,7 @@ class SqrSubmissionForm(forms.ModelForm):
         "Other": [],
     }
 
-    APPROVER_BY_GROUP = {
+    APPROVER_BY_GROUP: ClassVar[dict[str, str]] = {
         "ESS": "Marfelie Barcenas",
         "HP": "Princess Nicole Nacianceno",
         "Dell": "Jeram Zamora",
@@ -786,7 +794,7 @@ class SqrSubmissionForm(forms.ModelForm):
 
     class Meta:
         model = SqrSubmission
-        fields = [
+        fields: ClassVar[list[str]] = [
             "linked_request",
             "customer_company",
             "customer_contact",
@@ -798,7 +806,7 @@ class SqrSubmissionForm(forms.ModelForm):
             "sqr_folder_link",
             "remarks",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "customer_name": "Account Name",
             "customer_company": "Department",
             "customer_contact": "Account Manager",
@@ -807,7 +815,7 @@ class SqrSubmissionForm(forms.ModelForm):
             "sse_manhrs": "SSE Manhrs",
             "sqr_folder_link": "SQR Folder Link",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "customer_name": forms.TextInput(attrs={
                 "class": "form-control",
                 "placeholder": "Select or type account name",
@@ -1044,7 +1052,7 @@ class SqrTrackerEditForm(SqrMaintenanceFormMixin, forms.ModelForm):
 
     class Meta:
         model = SqrSubmission
-        fields = [
+        fields: ClassVar[list[str]] = [
             "pm_manhrs",
             "discount_rate",
             "status",
@@ -1065,7 +1073,7 @@ class SqrTrackerEditForm(SqrMaintenanceFormMixin, forms.ModelForm):
             "revenue_remarks",
             "revenue_declaration",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "status": "SQR Status (T)",
             "proposal_status": "Proposal Status (W)",
             "po_pnl_date": "PO / PNL Date (X)",
@@ -1084,7 +1092,7 @@ class SqrTrackerEditForm(SqrMaintenanceFormMixin, forms.ModelForm):
             "revenue_remarks": "Remarks (AP)",
             "revenue_declaration": "Revenue Declaration (AQ)",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "status": forms.Select(attrs={"class": "form-select"}),
             "proposal_status": forms.Select(attrs={"class": "form-select"}),
             "po_pnl_date": forms.DateInput(attrs={"class": "form-control", "type": "date"}),
@@ -1153,8 +1161,8 @@ class SqrReviewForm(forms.ModelForm):
 
     class Meta:
         model = SqrSubmission
-        fields = ["status", "review_notes"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["status", "review_notes"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "status": forms.Select(attrs={"class": "form-select"}),
             "review_notes": forms.Textarea(
                 attrs={
@@ -1169,8 +1177,8 @@ class SqrReviewForm(forms.ModelForm):
 class SqrRevenueQuotationForm(forms.ModelForm):
     class Meta:
         model = SqrSubmission
-        fields = ["quotation_total_price", "discount_rate"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["quotation_total_price", "discount_rate"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "quotation_total_price": forms.NumberInput(
                 attrs={
                     "class": "form-control form-control-sm",
@@ -1194,8 +1202,8 @@ class SqrRevenueQuotationForm(forms.ModelForm):
 class SqrRevenueOrderForm(forms.ModelForm):
     class Meta:
         model = SqrSubmission
-        fields = ["po_attachment_link", "revenue_overview"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["po_attachment_link", "revenue_overview"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "po_attachment_link": forms.URLInput(
                 attrs={
                     "class": "form-control form-control-sm",
@@ -1238,7 +1246,7 @@ class SqrProposalStatusForm(forms.ModelForm):
 
     class Meta:
         model = SqrSubmission
-        fields = [
+        fields: ClassVar[list[str]] = [
             "sse_manhrs",
             "sse_amount",
             "pm_manhrs",
@@ -1249,7 +1257,7 @@ class SqrProposalStatusForm(forms.ModelForm):
             "validity_due_date",
             "proposal_status",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "sse_manhrs": "SSE Manhours",
             "sse_amount": "SSE Amount (PHP)",
             "pm_manhrs": "PM Manhours",
@@ -1260,7 +1268,7 @@ class SqrProposalStatusForm(forms.ModelForm):
             "validity_due_date": "Validity Due Date",
             "proposal_status": "Proposal Status",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "sse_manhrs": forms.NumberInput(
                 attrs={"class": "form-control", "min": "0", "step": "1", "placeholder": "0"}
             ),
@@ -1297,7 +1305,7 @@ class SqrDeliveryForm(SqrMaintenanceFormMixin, forms.ModelForm):
 
     class Meta:
         model = SqrSubmission
-        fields = [
+        fields: ClassVar[list[str]] = [
             "po_pnl_date",
             "assigned_pm",
             "assigned_sse",
@@ -1312,7 +1320,7 @@ class SqrDeliveryForm(SqrMaintenanceFormMixin, forms.ModelForm):
             "managed_support_start_date",
             "managed_support_end_date",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "po_pnl_date": "PO / PNL Date",
             "assigned_pm": "Assigned PM",
             "assigned_sse": "Assigned SSE",
@@ -1327,7 +1335,7 @@ class SqrDeliveryForm(SqrMaintenanceFormMixin, forms.ModelForm):
             "managed_support_start_date": "Maintenance Start Date",
             "managed_support_end_date": "Maintenance End Date",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "po_pnl_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "assigned_pm": forms.Select(attrs={"class": "form-select"}),
             "assigned_sse": forms.Select(attrs={"class": "form-select"}),
@@ -1373,7 +1381,7 @@ class SqrPerformanceForm(forms.ModelForm):
 
     class Meta:
         model = SqrProjectPerformance
-        fields = [
+        fields: ClassVar[list[str]] = [
             "project_manager",
             "start_date",
             "finish_date",
@@ -1386,7 +1394,7 @@ class SqrPerformanceForm(forms.ModelForm):
             "budget_health",
             "recovery_action_remarks",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "project_manager": "Project Manager",
             "start_date": "Start Date",
             "finish_date": "Finish Date",
@@ -1399,7 +1407,7 @@ class SqrPerformanceForm(forms.ModelForm):
             "budget_health": "Budget Health",
             "recovery_action_remarks": "Recovery Action / Remarks",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "project_manager": forms.Select(attrs={"class": "form-select"}),
             "start_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "finish_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
@@ -1435,7 +1443,7 @@ class SqrRevenueForm(forms.ModelForm):
 
     class Meta:
         model = SqrSubmission
-        fields = [
+        fields: ClassVar[list[str]] = [
             "revenue_remarks",
             "revenue_source",
             "revenue_date",
@@ -1443,7 +1451,7 @@ class SqrRevenueForm(forms.ModelForm):
             "revenue_status",
             "revenue_overview",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "revenue_remarks": "PO Remarks",
             "revenue_source": "Billing Type",
             "revenue_date": "Billed Date",
@@ -1451,7 +1459,7 @@ class SqrRevenueForm(forms.ModelForm):
             "revenue_status": "Billing Status",
             "revenue_overview": "Billing Remarks",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "revenue_remarks": forms.Textarea(attrs={"class": "form-control", "rows": "3"}),
             "revenue_source": forms.Select(attrs={"class": "form-select"}),
             "revenue_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
@@ -1479,8 +1487,8 @@ class SqrRevenueForm(forms.ModelForm):
 class RequestStatusForm(forms.ModelForm):
     class Meta:
         model = Request
-        fields = ["status", "end_date"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["status", "end_date"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "status": forms.Select(attrs={"class": "form-select form-select-sm"}),
             "end_date": forms.DateInput(attrs={"type": "date", "class": "form-control form-control-sm"}),
         }
@@ -1544,9 +1552,9 @@ class StatusLogForm(forms.ModelForm):
 
     class Meta:
         model = StatusLog
-        fields = ["message"]
-        labels = {"message": "Add status update"}
-        widgets = {
+        fields: ClassVar[list[str]] = ["message"]
+        labels: ClassVar[dict[str, str]] = {"message": "Add status update"}
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "message": forms.Textarea(attrs={"class": "form-control", "rows": 3, "placeholder": "Add an update"}),
         }
 
@@ -1585,7 +1593,7 @@ class EngineerActivityLogForm(forms.ModelForm):
 
     class Meta:
         model = EngineerActivityLog
-        fields = [
+        fields: ClassVar[list[str]] = [
             "request_date",
             "request",
             "account",
@@ -1596,7 +1604,7 @@ class EngineerActivityLogForm(forms.ModelForm):
             "is_billable",
             "status",
         ]
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "request_date": "Date of Activity",
             "request": "Related Request",
             "account": "Account",
@@ -1605,7 +1613,7 @@ class EngineerActivityLogForm(forms.ModelForm):
             "location": "Work Location",
             "status": "Status",
         }
-        widgets = {
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "request_date": forms.DateInput(attrs={"type": "date", "class": "form-control"}),
             "request": forms.Select(attrs={"class": "form-select"}),
             "account": forms.Select(attrs={"class": "form-select"}),
@@ -1838,7 +1846,7 @@ class AdminRequestFilterForm(forms.Form):
             queryset = queryset.filter(due_date__lte=data["due_to"])
         return queryset
 
-    def filter_sequence(self, requests: Iterable[Request]) -> List[Request]:
+    def filter_sequence(self, requests: Iterable[Request]) -> list[Request]:
         if not self.is_valid():
             return list(requests)
         data = self.cleaned_data
@@ -1863,11 +1871,11 @@ class AdminRequestFilterForm(forms.Form):
 class AccountManagementForm(forms.ModelForm):
     class Meta:
         model = Account
-        fields = ["name"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["name"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Account name"}),
         }
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "name": "Account Name",
         }
 

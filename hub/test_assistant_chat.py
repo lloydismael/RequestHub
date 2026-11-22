@@ -1,21 +1,33 @@
-import time
 import json
+import time
 from dataclasses import asdict
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.core.exceptions import PermissionDenied
-from django.test import Client, RequestFactory, SimpleTestCase, TestCase, override_settings
+from django.test import (
+    Client,
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    override_settings,
+)
 from django.urls import reverse
+
 from accounts.models import User
 from hub.assistant_provider import (
     AssistantProviderError,
     FoundryProvider,
     provider_readiness,
 )
+from hub.assistant_service import (
+    AssistantToolError,
+    answer_message,
+    dispatch_tool,
+)
 from hub.assistant_types import (
-    AssistantReply,
     AssistantMessage,
+    AssistantReply,
     ConversationState,
     ProviderTurn,
     SystemMessage,
@@ -24,14 +36,11 @@ from hub.assistant_types import (
     ToolMessage,
     UserMessage,
 )
-from hub.assistant_views import AssistantApiValidationError, _handle_error
-from hub.assistant_service import (
-    AssistantToolError,
-    answer_message,
-    dispatch_tool,
+from hub.assistant_views import (
+    AssistantApiValidationError,
+    _handle_error,
+    assistant_state,
 )
-from hub.assistant_views import assistant_state
-
 
 BASE_URL = "https://request-hub.openai.azure.com/openai/v1/"
 DEPLOYMENT = "request-hub-assistant"
@@ -87,20 +96,21 @@ class AssistantProviderTests(SimpleTestCase):
         )
 
     def test_missing_or_disabled_configuration_never_builds_a_client(self):
-        with override_settings(AI_ASSISTANT_NATIVE_ENABLED=False):
-            with patch("hub.assistant_provider.OpenAI") as sdk_factory:
-                self.assertEqual(provider_readiness(), "not_configured")
-                with self.assertRaises(AssistantProviderError):
-                    FoundryProvider().complete((), (), deadline=time.monotonic() + 1)
-                sdk_factory.assert_not_called()
+        with (
+            override_settings(AI_ASSISTANT_NATIVE_ENABLED=False),
+            patch("hub.assistant_provider.OpenAI") as sdk_factory,
+        ):
+            self.assertEqual(provider_readiness(), "not_configured")
+            with self.assertRaises(AssistantProviderError):
+                FoundryProvider().complete((), (), deadline=time.monotonic() + 1)
+            sdk_factory.assert_not_called()
 
         with override_settings(
             AI_ASSISTANT_NATIVE_ENABLED=True,
             AZURE_AI_BASE_URL="",
-        ):
-            with patch("hub.assistant_provider.OpenAI") as sdk_factory:
-                self.assertEqual(provider_readiness(), "not_configured")
-                sdk_factory.assert_not_called()
+        ), patch("hub.assistant_provider.OpenAI") as sdk_factory:
+            self.assertEqual(provider_readiness(), "not_configured")
+            sdk_factory.assert_not_called()
 
     def test_configured_provider_uses_exact_endpoint_and_deployment(self):
         client = FakeClient(
@@ -122,14 +132,16 @@ class AssistantProviderTests(SimpleTestCase):
         client = FakeClient(
             response=SimpleNamespace(output_text="Hello", output=[], usage=None)
         )
-        with override_settings(AZURE_AI_AUTH_MODE="managed_identity", AZURE_AI_TOKEN_SCOPE=TOKEN_SCOPE):
-            with patch("hub.assistant_provider.ManagedIdentityCredential") as credential_factory:
-                with patch(
-                    "hub.assistant_provider.get_bearer_token_provider",
-                    return_value="token-provider",
-                ) as token_provider_factory:
-                    with patch("hub.assistant_provider.OpenAI", return_value=client) as sdk_factory:
-                        FoundryProvider()
+        with (
+            override_settings(AZURE_AI_AUTH_MODE="managed_identity", AZURE_AI_TOKEN_SCOPE=TOKEN_SCOPE),
+            patch("hub.assistant_provider.ManagedIdentityCredential") as credential_factory,
+        ):
+            with patch(
+                "hub.assistant_provider.get_bearer_token_provider",
+                return_value="token-provider",
+            ) as token_provider_factory:
+                with patch("hub.assistant_provider.OpenAI", return_value=client) as sdk_factory:
+                    FoundryProvider()
 
         credential_factory.assert_called_once_with()
         token_provider_factory.assert_called_once_with(
@@ -202,9 +214,11 @@ class AssistantProviderTests(SimpleTestCase):
             client = FakeClient(error=error)
             provider, _ = self.make_provider(client)
 
-            with self.assertLogs("hub.assistant_provider", level="WARNING") as logs:
-                with self.assertRaises(AssistantProviderError) as caught:
-                    provider.complete((), (), deadline=time.monotonic() + 10)
+            with (
+                self.assertLogs("hub.assistant_provider", level="WARNING") as logs,
+                self.assertRaises(AssistantProviderError) as caught,
+            ):
+                provider.complete((), (), deadline=time.monotonic() + 10)
 
             self.assertEqual(caught.exception.code, expected_code)
             self.assertNotIn("provider secret", "\n".join(logs.output))

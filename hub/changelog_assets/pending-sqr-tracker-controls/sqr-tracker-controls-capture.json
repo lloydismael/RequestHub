@@ -1,0 +1,45 @@
+{
+  "status": "unreleased",
+  "git_base": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "before_revision": null,
+  "after_revision": null,
+  "capture_note": "Both working-tree captures use the full SQR template, actual view and filter controllers, and the same two synthetic endpoint records with Classic hidden. Neither screenshot is an exact Git revision.",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "capture_height": 720,
+  "fixture_sha256": "bf56528a525c93557a09639c8232fbc25450e5099a18b7ff68ea1ff6b04fc6d5",
+  "before": {
+    "file": "sqr-tracker-controls-before.png",
+    "sha256": "7f3b4bf52102408de92ce54bc3e2f53c71d47d279c77d54521bab812986a59a5",
+    "captured_at": "2026-11-22T07:07:57.589738+00:00",
+    "selector_visible": true,
+    "funnel_visible": false,
+    "filter_toolbar_visible": true,
+    "matching_records": 2,
+    "source_sha256": {
+      "templates/hub/sqr.html": "b065f16fdc9450a60fa52b30f303192625e3c3ea60336760f40eeecb63f948fd",
+      "templates/hub/partials/sqr_prototype.html": "07f07632193d1a3642be34c25abea646378f1478c0ea45d2b7538c99a097213d",
+      "static/css/sqr-tracker-prototype.css": "5e25720386161da7afd0256fa476ced4b5fc7ea035531fd2e719bb7d7d6d3b53",
+      "static/js/sqr-tracker-prototype.js": "ed1d3add6160aa7e20d75fb109224e0563f237ae7107d695aca91c8a60ace056",
+      "static/js/sqr-filter-controls.js": "4f8f2eade55238501861463208d24633f13c5e152e79c06c0813a8a7f6d54073"
+    }
+  },
+  "after": {
+    "file": "sqr-tracker-controls-after.png",
+    "sha256": "935642c72349b0dd6a69497ce8b5c9dc238342cb032c8eee274ee79af9afdac2",
+    "captured_at": "2026-11-22T07:10:01.403058+00:00",
+    "selector_visible": false,
+    "funnel_visible": true,
+    "filter_toolbar_visible": false,
+    "matching_records": 2,
+    "source_sha256": {
+      "templates/hub/sqr.html": "1212f222cdf85ecd280983e4e075fee8700f9d1bff603bd2cffc1a8ce84e83d3",
+      "templates/hub/partials/sqr_prototype.html": "27d22fe62dd415f056aafa9caade9787921339a23733fbf626cd09ee264f2399",
+      "static/css/sqr-tracker-prototype.css": "ea3e8d8d767c43cbc85796d8ddd30372cea436e3b27b2b6ee6bf014d724239f9",
+      "static/js/sqr-tracker-prototype.js": "ed1d3add6160aa7e20d75fb109224e0563f237ae7107d695aca91c8a60ace056",
+      "static/js/sqr-filter-controls.js": "4f8f2eade55238501861463208d24633f13c5e152e79c06c0813a8a7f6d54073"
+    }
+  }
+}

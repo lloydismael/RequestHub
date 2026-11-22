@@ -1,0 +1,39 @@
+{
+  "status": "unreleased",
+  "git_base": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "before_revision": null,
+  "after_revision": null,
+  "capture_note": "Both screenshots use fresh Chromium contexts, the actual PPT controller and two synthetic projects in disposable PostgreSQL. Classic is hidden. Neither working-tree state is an exact Git revision.",
+  "viewport": {
+    "width": 1280,
+    "height": 720
+  },
+  "capture_height": 585,
+  "before": {
+    "file": "ppt-admin-default-before.png",
+    "sha256": "eb697f930f24ad2af6cc4f5ee36108ca01e45976b06f52856b71a3c35d4346f2",
+    "my_assigned": true,
+    "matching_records": 0,
+    "captured_at": "2026-11-22T06:31:44.277964+00:00",
+    "source_sha256": {
+      "hub/views/sqr.py": "88bac2ff2ea6d8163abab791922875df18021b948e4e3d79b35a35fd02ca86cf",
+      "templates/hub/partials/sqr_performance.html": "a49bdfb6e046a02a4a20bf7bd670c4dc3be287ddc3a8b1f8d1671269f087388a",
+      "static/js/sqr-performance.js": "f3cd4ea38b6884716da71f7d5e0632afd8ffa9f1374177be8012a60c06e24238",
+      "static/js/sqr-filter-controls.js": "4f8f2eade55238501861463208d24633f13c5e152e79c06c0813a8a7f6d54073"
+    }
+  },
+  "after": {
+    "file": "ppt-admin-default-after.png",
+    "sha256": "282cfc4cc30af66304519090fdc70b7ffc3251dda039b910be9576808d92a738",
+    "my_assigned": false,
+    "matching_records": 2,
+    "captured_at": "2026-11-22T06:31:49.432107+00:00",
+    "source_sha256": {
+      "hub/views/sqr.py": "07685f3745fce15332e6cdb7909a9a1a849f4bf7f8fafbd14cbf9ce6b0e162ff",
+      "templates/hub/partials/sqr_performance.html": "a49bdfb6e046a02a4a20bf7bd670c4dc3be287ddc3a8b1f8d1671269f087388a",
+      "static/js/sqr-performance.js": "f3cd4ea38b6884716da71f7d5e0632afd8ffa9f1374177be8012a60c06e24238",
+      "static/js/sqr-filter-controls.js": "4f8f2eade55238501861463208d24633f13c5e152e79c06c0813a8a7f6d54073"
+    }
+  },
+  "notifications": "Draft and images inaccessible to a signed-in reader; both images and descriptions verified in Notifications after synthetic publication. No live publication."
+}

@@ -1,3 +1,6 @@
+from io import BytesIO
+from typing import ClassVar
+
 from django import forms
 from django.contrib.admin.forms import AdminAuthenticationForm
 from django.contrib.auth import authenticate, check_password_with_timing_attack_mitigation, password_validation
@@ -5,9 +8,8 @@ from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.utils.functional import Promise
 from django.views.decorators.debug import sensitive_variables
-
-from io import BytesIO
 
 from .models import User
 from .login_throttle import finish, reserve
@@ -46,10 +48,10 @@ class ThemeForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary", *User.CHRISTMAS_EFFECT_FIELDS]
-        widgets = {"banner_gradient": forms.RadioSelect()}
-        labels = {"pref_christmas_santa": "Santa blanket transition"}
-        help_texts = {"pref_christmas_santa": "Santa drops gifts while pulling a festive blanket across the page when you switch light/dark mode."}
+        fields: ClassVar[list[str]] = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary", *User.CHRISTMAS_EFFECT_FIELDS]
+        widgets: ClassVar[dict[str, forms.Widget]] = {"banner_gradient": forms.RadioSelect()}
+        labels: ClassVar[dict[str, str]] = {"pref_christmas_santa": "Santa blanket transition"}
+        help_texts: ClassVar[dict[str, str]] = {"pref_christmas_santa": "Santa drops gifts while pulling a festive blanket across the page when you switch light/dark mode."}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -127,8 +129,8 @@ class ProfileForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "email", "phone_number", "department", "profile_photo", "banner_gradient"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["first_name", "last_name", "email", "phone_number", "department", "profile_photo", "banner_gradient"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "first_name": forms.TextInput(attrs={"class": "form-control"}),
             "last_name": forms.TextInput(attrs={"class": "form-control"}),
             "email": forms.EmailInput(attrs={"class": "form-control"}),
@@ -211,7 +213,7 @@ class ProfileForm(forms.ModelForm):
         stem = name.rsplit("/", 1)[-1].rsplit(".", 1)[0] or "profile"
         return ContentFile(buffer.read(), name=f"{stem}.jpg")
 
-    field_order = [
+    field_order: ClassVar[list[str]] = [
         "first_name",
         "last_name",
         "email",
@@ -302,7 +304,7 @@ class ProfileForm(forms.ModelForm):
 
 
 class RoleAuthenticationForm(AuthenticationForm):
-    error_messages = {**AuthenticationForm.error_messages, "invalid_login": LOGIN_FAILURE_MESSAGE}
+    error_messages: ClassVar[dict[str, str | Promise]] = {**AuthenticationForm.error_messages, "invalid_login": LOGIN_FAILURE_MESSAGE}
 
     def clean_username(self):
         username = self.cleaned_data["username"]
@@ -322,7 +324,7 @@ class RoleAuthenticationForm(AuthenticationForm):
 
 
 class StaffAuthenticationForm(AdminAuthenticationForm):
-    error_messages = {**AdminAuthenticationForm.error_messages, "invalid_login": LOGIN_FAILURE_MESSAGE}
+    error_messages: ClassVar[dict[str, str | Promise]] = {**AdminAuthenticationForm.error_messages, "invalid_login": LOGIN_FAILURE_MESSAGE}
 
     @sensitive_variables("password")
     def clean(self):
@@ -353,8 +355,8 @@ class UserManagementForm(forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["username", "first_name", "last_name", "email", "department", "role"]
-        widgets = {
+        fields: ClassVar[list[str]] = ["username", "first_name", "last_name", "email", "department", "role"]
+        widgets: ClassVar[dict[str, forms.Widget]] = {
             "username": forms.TextInput(attrs={"class": "form-control", "placeholder": "Username"}),
             "first_name": forms.TextInput(attrs={"class": "form-control", "placeholder": "First name"}),
             "last_name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Last name"}),
@@ -370,12 +372,12 @@ class UserManagementForm(forms.ModelForm):
                 ("Other", "Other"),
             ], attrs={"class": "form-select"}),
         }
-        labels = {
+        labels: ClassVar[dict[str, str]] = {
             "role": "Account Type",
             "department": "Department",
         }
 
-    field_order = [
+    field_order: ClassVar[list[str]] = [
         "first_name",
         "last_name",
         "username",

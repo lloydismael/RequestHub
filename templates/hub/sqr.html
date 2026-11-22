@@ -6,7 +6,7 @@
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/liquid-glass-sqr.css' %}?v=25">
 {% if active_sqr_tab != 'reports' %}
-<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'css/sqr-tracker-prototype.css' %}?v=7">
 <link rel="stylesheet" href="{% static 'css/sqr-filter-controls.css' %}?v=1">
 <script src="{% static 'js/sqr-filter-core.js' %}?v=3" defer></script>
 <script src="{% static 'js/sqr-filter-controls.js' %}?v=1" defer></script>
@@ -34,9 +34,11 @@
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     {% if is_pm %}
                         <div class="d-flex align-items-center gap-2">
-                            <a href="{% url 'hub:sqr' %}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent" data-sqr-tracker-link{% if active_sqr_tab != 'reports' and active_sqr_view != 'performance' %} aria-current="page"{% endif %}>
+                            {% if active_sqr_tab == 'reports' %}
+                            <a href="{% url 'hub:sqr' %}?view=prototype" class="btn btn-sm sqr-toggle-btn lg-btn btn-primary lg-btn--accent">
                                 <i class="bi bi-table me-1" aria-hidden="true"></i>To SQR Tracker
                             </a>
+                            {% endif %}
                             <a href="{% url 'hub:sqr' %}?tab=reports" class="btn btn-sm sqr-toggle-btn lg-btn btn-outline-primary lg-btn--ghost"{% if active_sqr_tab == 'reports' %} aria-current="page"{% endif %}>
                                 <i class="bi bi-bar-chart-line-fill me-1" aria-hidden="true"></i>To Reports
                             </a>
@@ -70,20 +72,17 @@
                 </div>
             </div>
             {% if sqr_view_notice %}<p class="alert alert-info mt-3 mb-0" role="status">{{ sqr_view_notice }}</p>{% endif %}
-            {% if active_sqr_tab != 'reports' %}
+            {% if active_sqr_tab != 'reports' and show_classic_sqr_tracker %}
             <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
                 <div class="sqr-view-toggle" role="group" aria-label="SQR tracker selector">
                     <button type="button" class="btn btn-sm{% if active_sqr_view == 'prototype' %} btn-primary{% else %} btn-outline-primary{% endif %}" data-sqr-view-button="prototype" aria-pressed="{% if active_sqr_view == 'prototype' %}true{% else %}false{% endif %}">
                         <i class="bi bi-stars me-1" aria-hidden="true"></i>SQR Tracker
                     </button>
-                    {% if show_classic_sqr_tracker %}
                     <button type="button" class="btn btn-sm{% if active_sqr_view == 'tracker' %} btn-primary{% else %} btn-outline-primary{% endif %}" data-sqr-view-button="tracker" aria-pressed="{% if active_sqr_view == 'tracker' %}true{% else %}false{% endif %}">
                         <i class="bi bi-table me-1" aria-hidden="true"></i>SQR Tracker (Classic)
                     </button>
-                    {% endif %}
                 </div>
             </div>
-            {% if show_classic_sqr_tracker %}
             <div class="collapse" id="sqr-table-filter-panel" data-sqr-tracker-only>
                 <div class="sqr-filter-toolbar">
                     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
@@ -248,7 +247,6 @@
                 </button>
                 {% endif %}
             </div>
-            {% endif %}
             {% endif %}
             {# SQR Tracker stage filters: rendered by sqr-tracker-prototype.js #}
             <div class="d-flex flex-wrap gap-2 mt-3" id="sqr-proto-pipeline" role="group" aria-label="Filter by pipeline stage" data-sqr-prototype-only hidden></div>
@@ -3170,8 +3168,7 @@
     var panels = document.querySelectorAll('[data-sqr-view-panel]');
     var header = document.querySelector('[data-sqr-header]');
     var navLinks = document.querySelectorAll('[data-sqr-nav-view]');
-    var trackerLinks = document.querySelectorAll('[data-sqr-tracker-link]');
-    if (!buttons.length || !panels.length) return;
+    if (!panels.length) return;
     var trackerControls = Array.from(document.querySelectorAll('[data-sqr-tracker-only]')).map(function (element) {
         return {element: element, wasHidden: element.hidden};
     });
@@ -3210,10 +3207,6 @@
                 link.removeAttribute('aria-current');
                 link.setAttribute('href', link.dataset.sqrNavUrl);
             }
-        });
-        trackerLinks.forEach(function (link) {
-            if (activeView !== 'performance') link.setAttribute('aria-current', 'page');
-            else link.removeAttribute('aria-current');
         });
         document.title = (activeView === 'performance' ? 'PPT' : 'SQR') + ' · Request Hub';
         try {

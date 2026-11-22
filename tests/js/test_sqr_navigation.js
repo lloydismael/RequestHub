@@ -24,9 +24,9 @@ function element(dataset = {}, hidden = false) {
 }
 
 function load({query = '', saved = 'tracker', performance = true, classic = true, initialView, blocked = false} = {}) {
-    const buttons = (classic ? ['tracker', 'prototype'] : ['prototype']).map(name => element({sqrViewButton: name}));
+    const buttons = (classic ? ['tracker', 'prototype'] : []).map(name => element({sqrViewButton: name}));
     const names = [...(classic ? ['tracker'] : []), ...(performance ? ['performance'] : []), 'prototype'];
-    const panels = names.map(name => element({sqrViewPanel: name}));
+    const panels = names.map(name => element({sqrViewPanel: name}, name !== 'tracker' || initialView !== 'tracker'));
     const nav = ['performance', 'prototype'].map(name => {
         const url = '/sqr/?view=' + name;
         const link = element({sqrNavView: name, sqrNavUrl: url});
@@ -36,9 +36,8 @@ function load({query = '', saved = 'tracker', performance = true, classic = true
         return link;
     });
     const header = element(initialView ? {sqrInitialView: initialView} : {});
-    const trackerLink = element();
     const trackerControls = [element(), element({}, true)];
-    const prototypeControls = [element()];
+    const prototypeControls = [element({}, true)];
     const events = [];
     const location = new URL('https://fixture.invalid/sqr/' + query);
     const storage = {
@@ -60,7 +59,6 @@ function load({query = '', saved = 'tracker', performance = true, classic = true
                 '[data-sqr-tracker-only]': trackerControls,
                 '[data-sqr-prototype-only]': prototypeControls,
                 '[data-sqr-nav-view]': nav,
-                '[data-sqr-tracker-link]': [trackerLink],
             }[selector] || [];
         },
         dispatchEvent(event) { events.push(event.detail.view); },
@@ -68,7 +66,7 @@ function load({query = '', saved = 'tracker', performance = true, classic = true
     class CustomEvent { constructor(_name, options) { this.detail = options.detail; } }
     vm.runInNewContext(source, {document, window, CustomEvent, URLSearchParams});
     return {
-        document, window, buttons, panels, nav, header, trackerLink, trackerControls, prototypeControls, events,
+        document, window, buttons, panels, nav, header, trackerControls, prototypeControls, events,
         panel(name) { return panels.find(panel => panel.dataset.sqrViewPanel === name); },
         navItem(name) { return nav.find(link => link.dataset.sqrNavView === name); },
         stored() { return saved; },
@@ -91,7 +89,6 @@ test('PPT link opens the performance panel even when tracker was saved', () => {
     assert.equal(app.header.hidden, true);
     assert.equal(app.trackerControls[0].hidden, true);
     assertCurrent(app, 'performance');
-    assert.equal(app.trackerLink.attributes['aria-current'], undefined);
     assert.equal(app.document.title, 'PPT · Request Hub');
     assert.equal(app.events.at(-1), 'performance');
 });
@@ -104,7 +101,6 @@ test('SQR link overrides an old performance preference and restores tracker cont
     assert.equal(app.trackerControls[0].hidden, false);
     assert.equal(app.trackerControls[1].hidden, true);
     assertCurrent(app, 'tracker');
-    assert.equal(app.trackerLink.attributes['aria-current'], 'page');
     assert.equal(app.stored(), 'tracker');
 });
 
@@ -158,7 +154,6 @@ test('saved preferences cannot override the server-resolved primary SQR view', (
         const app = load({saved, initialView: 'prototype'});
         assert.equal(app.panel('prototype').hidden, false);
         assertCurrent(app, 'prototype');
-        assert.equal(app.trackerLink.attributes['aria-current'], 'page');
     }
 });
 
@@ -166,10 +161,22 @@ test('hidden Classic cannot be resurrected by stored preferences, focus or manua
     const app = load({classic: false, saved: 'tracker', query: '?view=tracker&focus=42', initialView: 'prototype'});
     assert.equal(app.panel('tracker'), undefined);
     assert.equal(app.panel('prototype').hidden, false);
+    assert.equal(app.prototypeControls[0].hidden, false);
+    assert.equal(app.events.at(-1), 'prototype');
     app.window.setSqrView('tracker');
     assert.equal(app.panel('prototype').hidden, false);
     assert.equal(app.window.location.searchParams.get('view'), 'prototype');
     assertCurrent(app, 'prototype');
+});
+
+test('authorized PPT initializes without the tracker selector', () => {
+    const app = load({classic: false, query: '?view=performance', initialView: 'performance'});
+    assert.equal(app.panel('performance').hidden, false);
+    assert.equal(app.panel('prototype').hidden, true);
+    assert.equal(app.header.hidden, true);
+    assert.equal(app.prototypeControls[0].hidden, true);
+    assertCurrent(app, 'performance');
+    assert.equal(app.events.at(-1), 'performance');
 });
 
 test('unknown bookmarks fall back to unified SQR', () => {

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone as dt_timezone
+from datetime import UTC, date, datetime
 from importlib.util import find_spec
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -132,7 +132,7 @@ class DashboardPerformanceTests(TestCase):
 
     def test_date_weekend_boundaries_match_existing(self):
         Request.objects.update(start_date=date(2026, 10, 30), end_date=None)
-        with patch('django.utils.timezone.now', return_value=datetime(2026, 11, 5, 1, tzinfo=dt_timezone.utc)):
+        with patch('django.utils.timezone.now', return_value=datetime(2026, 11, 5, 1, tzinfo=UTC)):
             result = self.context({'days_min': '4', 'days_max': '4', 'sort': 'days'})
             self.assertEqual(result['requests_total_count'], 151)
             self.assertTrue(all(r.days_since_creation == 4 for r in result['requests']))

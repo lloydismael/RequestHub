@@ -1,5 +1,5 @@
 from collections.abc import Collection
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib.auth.models import AnonymousUser
@@ -48,7 +48,7 @@ class RoleRequiredMixin(UserPassesTestMixin):
 
 
 class RequestorRequiredMixin(RoleRequiredMixin):
-    required_roles = set(getattr(User, "REQUEST_CREATOR_ROLES", User.REQUESTOR_ROLES))
+    required_roles: ClassVar[set[str]] = set(getattr(User, "REQUEST_CREATOR_ROLES", User.REQUESTOR_ROLES))
 
 
 class EngineerRequiredMixin(RoleRequiredMixin):

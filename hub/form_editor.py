@@ -1,11 +1,11 @@
 """Allowlisted, versioned form presentation and custom-answer services."""
+import json
+import re
 from contextvars import ContextVar
 from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
-import json
-import re
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -14,9 +14,9 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max
 from django.utils import timezone
-from django.utils.module_loading import import_string
 from django.utils.encoding import force_str
 from django.utils.html import strip_tags
+from django.utils.module_loading import import_string
 
 from .models import FormAnswerSet, FormDefinition, FormEditorAuditEvent, FormVersion
 
@@ -145,7 +145,7 @@ def baseline_schema(form_key: str, *, form: forms.BaseForm | None = None) -> dic
         form = baseline_form(form_key)
     fields = []
     for key, field in form.fields.items():
-        if key.startswith("_form_") or key.startswith("custom_"):
+        if key.startswith(("_form_", "custom_")):
             continue
         fields.append({
             "key": key,
@@ -504,7 +504,7 @@ def save_custom_answers(form, instance):
                  else form.cleaned_data.get(target))
         return _condition_matches(condition, value)
 
-    for field_key, field in fields.items():
+    for field_key in fields.keys():
         if not is_active(field_key):
             continue
         if field_key in form.cleaned_data:

@@ -91,9 +91,9 @@ class MobileBrowserTests(SimpleTestCase):
                 'form': RoleAuthenticationForm() if anonymous else ProfileForm(instance=request.user),
                 'theme_form': None if anonymous else ThemeForm(instance=request.user)}
 
-    def page(self, width=390, height=844, template=None, dark=False, fixture=None, scripts=None):
+    def page(self, width=390, height=844, template=None, dark=False, fixture=None, scripts=None, *, mobile=True):
         context = self.browser.new_context(viewport={'width': width, 'height': height},
-                                           is_mobile=True, has_touch=True)
+                                           is_mobile=mobile, has_touch=mobile)
         self.addCleanup(context.close)
         page = context.new_page()
         page.set_default_timeout(3000)
@@ -1032,6 +1032,141 @@ class MobileBrowserTests(SimpleTestCase):
                 self.assertTrue(header.is_visible())
                 self.assertEqual(heading.count(), 1)
                 self.assertTrue(button.evaluate("el => { el.focus(); return document.activeElement === el; }"))
+
+    def test_unified_sqr_funnel_preserves_applied_filters_when_reopened(self):
+        from playwright.sync_api import expect
+
+        template = 'hub/sqr.html'
+        fixture = {**self.context(), 'active_sqr_view': 'prototype', 'show_classic_sqr_tracker': False}
+        view_script = next(script for attrs, script in extract_scripts(render_to_string(template, fixture))
+                           if 'src' not in attrs and '// ── SQR table view toggle' in script)
+        static_js = settings.BASE_DIR / 'static' / 'js'
+        for width, dark in ((375, True), (1280, False)):
+            with self.subTest(width=width, dark=dark):
+                page = self.page(width, template=template, dark=dark, fixture=fixture, scripts=(
+                    static_js / 'sqr-filter-core.js', static_js / 'sqr-filter-controls.js',
+                ))
+                page.evaluate(view_script)
+                page.evaluate('''() => {
+                    window.fetch = async () => new Response(JSON.stringify({
+                        viewer: {pk: 1, is_pm: true, is_engineer: false}, options: {},
+                        schema: {fields: [], stages: [['opportunity', 'Opportunity'], ['delivery', 'Delivery']]},
+                        records: ['opportunity', 'delivery'].map((stage, index) => ({
+                            pk: index + 1, ref: `SQR-DEMO-${index + 1}`, account: `Demo customer ${index + 1}`,
+                            service: 'Synthetic project', stage, attention: [], status: 'reviewed',
+                            created_at: '2026-01-01', total: '100', perms: {}, urls: {}
+                        }))
+                    }), {headers: {'Content-Type': 'application/json'}});
+                }''')
+                page.add_script_tag(path=static_js / 'sqr-tracker-prototype.js')
+                tracker = page.get_by_role('region', name='SQR Tracker', exact=True)
+                cards = tracker.locator('.sqr-proto__card')
+                expect(cards).to_have_count(2)
+                funnel = tracker.get_by_text('Filters', exact=True)
+                stage = tracker.get_by_role('button', name='Stage', exact=True)
+                expect(funnel).to_be_visible()
+                expect(stage).to_be_hidden()
+                funnel.focus()
+                page.keyboard.press('Enter')
+                expect(stage).to_be_visible()
+                page.keyboard.press('Tab')
+                expect(stage).to_be_focused()
+                stage.click()
+                tracker.get_by_role('checkbox', name='Delivery (1)').check()
+                tracker.get_by_role('button', name='Apply Stage', exact=True).click()
+                expect(cards).to_have_count(1)
+                expect(cards.first).to_contain_text('Demo customer 2')
+                funnel.click()
+                expect(stage).to_be_hidden()
+                expect(cards).to_have_count(1)
+                funnel.click()
+                expect(tracker.get_by_role('button', name='Remove Stage: Delivery')).to_be_visible()
+                self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), width)
+                tracker.get_by_role('button', name='Clear all', exact=True).click()
+                expect(cards).to_have_count(2)
+
+    def unified_sqr_scroll_page(self, *, mobile=False):
+        template = 'hub/sqr.html'
+        fixture = {**self.context(), 'active_sqr_view': 'prototype', 'show_classic_sqr_tracker': False,
+                   'csrf_token': '0' * 32}
+        view_script = next(script for attrs, script in extract_scripts(render_to_string(template, fixture))
+                           if 'src' not in attrs and '// ── SQR table view toggle' in script)
+        static_js = settings.BASE_DIR / 'static' / 'js'
+        page = self.page(390 if mobile else 1280, 620, template=template, fixture=fixture, mobile=mobile, scripts=(
+            static_js / 'smooth-scroll.js', static_js / 'sqr-filter-core.js', static_js / 'sqr-filter-controls.js',
+        ))
+        page.evaluate(view_script)
+        page.evaluate('''() => {
+            window.fetch = async () => new Response(JSON.stringify({
+                viewer: {pk: 1, is_pm: true, is_engineer: false}, options: {},
+                schema: {fields: [], stages: [['delivery', 'Delivery']]},
+                records: Array.from({length: 36}, (_, i) => ({
+                    pk: i + 1, ref: `SQR-DEMO-${i + 1}`, account: `Demo customer ${i + 1}`,
+                    service: 'Synthetic project', stage: 'delivery', attention: [], status: 'reviewed',
+                    created_at: '2026-01-01', total: '100', perms: {}, urls: {}
+                }))
+            }), {headers: {'Content-Type': 'application/json'}});
+        }''')
+        page.add_script_tag(path=static_js / 'sqr-tracker-prototype.js')
+        page.locator('.sqr-proto__card').first.wait_for()
+        return page
+
+    def test_unified_sqr_wheel_scrolls_the_page_at_list_edges(self):
+        for edge, delta in (('top', -160), ('bottom', 160)):
+            with self.subTest(edge=edge):
+                page = self.unified_sqr_scroll_page()
+                items = page.locator('#sqr-proto-items')
+                if edge == 'top':
+                    items.evaluate('''el => window.scrollTo({
+                        top: scrollY + el.getBoundingClientRect().top - 185, behavior: 'instant'
+                    })''')
+                else:
+                    items.evaluate('el => el.scrollTop = el.scrollHeight - el.clientHeight - 80')
+                box = items.bounding_box()
+                x, y = round(box['x'] + 80), round(box['y'] + 38)
+                self.assertTrue(items.evaluate('(el, point) => el.contains(document.elementFromPoint(...point))', [x, y]))
+                start = page.evaluate('scrollY')
+                self.assertGreater(page.evaluate('''delta => delta < 0 ? scrollY :
+                    document.scrollingElement.scrollHeight - innerHeight - scrollY''', delta), abs(delta))
+                page.mouse.move(x, y)
+                if edge == 'bottom':
+                    # Reach the compositor's actual limit with a wheel gesture rather than rounding scrollTop.
+                    page.mouse.wheel(0, 160)
+                    page.wait_for_function('el => el.scrollHeight - el.clientHeight - el.scrollTop <= 1',
+                                           arg=items.element_handle(), timeout=1500)
+                    self.assertEqual(page.evaluate('scrollY'), start)
+                inner = items.evaluate('el => el.scrollTop')
+                page.mouse.wheel(0, delta)
+                page.wait_for_function('([start, delta]) => (scrollY - start) * Math.sign(delta) > 40',
+                                       arg=[start, delta], timeout=1500)
+                self.assertAlmostEqual(items.evaluate('el => el.scrollTop'), inner, delta=1)
+
+    def test_unified_sqr_touch_scrolls_results_and_hands_off_at_list_edge(self):
+        for distance in (-160, 160):
+            with self.subTest(distance=distance):
+                page = self.unified_sqr_scroll_page(mobile=True)
+                items = page.locator('#sqr-proto-items')
+                items.evaluate('''el => window.scrollTo({
+                    top: scrollY + el.getBoundingClientRect().top - 185, behavior: 'instant'
+                })''')
+                box = items.bounding_box()
+                x, y = round(box['x'] + 80), round(box['y'] + 38)
+                self.assertTrue(items.evaluate('(el, point) => el.contains(document.elementFromPoint(...point))', [x, y]))
+                start = page.evaluate('scrollY')
+                self.assertGreater(start, 160)
+                cdp = page.context.new_cdp_session(page)
+                cdp.send('Input.dispatchTouchEvent', {'type': 'touchStart', 'touchPoints': [{'x': x, 'y': y}]})
+                for step in range(1, 9):
+                    cdp.send('Input.dispatchTouchEvent', {
+                        'type': 'touchMove', 'touchPoints': [{'x': x, 'y': y + distance * step // 8}],
+                    })
+                cdp.send('Input.dispatchTouchEvent', {'type': 'touchEnd', 'touchPoints': []})
+                if distance < 0:
+                    page.wait_for_function('el => el.scrollTop > 40', arg=items.element_handle(), timeout=1500)
+                    self.assertEqual(page.evaluate('scrollY'), start)
+                else:
+                    page.wait_for_function('start => scrollY < start - 40', arg=start, timeout=1500)
+                    self.assertEqual(items.evaluate('el => el.scrollTop'), 0)
 
     def test_navigation_remains_touch_and_keyboard_accessible(self):
         page = self.page(320, template='hub/dashboard.html')

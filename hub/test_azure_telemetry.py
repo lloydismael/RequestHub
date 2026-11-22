@@ -19,7 +19,9 @@ class AzureTelemetryTests(TestCase):
         self.telemetry = telemetry
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+            InMemorySpanExporter,
+        )
 
         self.exporter = InMemorySpanExporter()
         self.provider = TracerProvider()
@@ -32,10 +34,12 @@ class AzureTelemetryTests(TestCase):
         self.addCleanup(self.connections.close_all)
 
     def run_request(self, request, view, enabled=True):
-        with override_settings(AZURE_TELEMETRY_ENABLED=enabled):
-            with patch.object(self.telemetry, "get_tracer", return_value=self.tracer):
-                with patch.object(self.telemetry, "connections", self.connections):
-                    return self.telemetry.TelemetryMiddleware(view)(request)
+        with (
+            override_settings(AZURE_TELEMETRY_ENABLED=enabled),
+            patch.object(self.telemetry, "get_tracer", return_value=self.tracer),
+        ):
+            with patch.object(self.telemetry, "connections", self.connections):
+                return self.telemetry.TelemetryMiddleware(view)(request)
 
     def test_disabled_does_not_export(self):
         response = self.run_request(
@@ -69,7 +73,9 @@ class AzureTelemetryTests(TestCase):
         spans = self.exporter.get_finished_spans()
         self.assertEqual(len(spans), 2)
         self.assertEqual({span.name for span in spans}, {"safe-view", "database.query"})
-        from azure.monitor.opentelemetry.exporter.export.trace._exporter import _convert_span_to_envelope
+        from azure.monitor.opentelemetry.exporter.export.trace._exporter import (
+            _convert_span_to_envelope,
+        )
 
         envelopes = [_convert_span_to_envelope(span) for span in spans]
         request_envelope = next(item for item in envelopes if item.data.base_type == "RequestData")
@@ -98,7 +104,9 @@ class AzureTelemetryTests(TestCase):
         self.assertNotIn("exception-secret", spans[0].to_json())
 
     def test_client_error_is_reported_as_failed_request(self):
-        from azure.monitor.opentelemetry.exporter.export.trace._exporter import _convert_span_to_envelope
+        from azure.monitor.opentelemetry.exporter.export.trace._exporter import (
+            _convert_span_to_envelope,
+        )
 
         self.run_request(RequestFactory().get("/missing/"), lambda request: HttpResponse(status=404))
         envelope = _convert_span_to_envelope(self.exporter.get_finished_spans()[0])
@@ -125,15 +133,19 @@ class AzureTelemetryTests(TestCase):
         self.assertIn("_OTHER", payload)
 
     def test_enabled_configuration_requires_connection_string(self):
-        with override_settings(AZURE_TELEMETRY_ENABLED=True):
-            with patch.dict(os.environ, {"APPLICATIONINSIGHTS_CONNECTION_STRING": ""}):
-                with self.assertRaises(ImproperlyConfigured):
-                    self.telemetry.configure_telemetry()
+        with (
+            override_settings(AZURE_TELEMETRY_ENABLED=True),
+            patch.dict(os.environ, {"APPLICATIONINSIGHTS_CONNECTION_STRING": ""}),
+        ):
+            with self.assertRaises(ImproperlyConfigured):
+                self.telemetry.configure_telemetry()
 
     def test_disabled_configuration_does_not_initialize_exporter(self):
-        with override_settings(AZURE_TELEMETRY_ENABLED=False):
-            with patch.object(self.telemetry, "AzureMonitorTraceExporter") as exporter:
-                self.telemetry.configure_telemetry()
+        with (
+            override_settings(AZURE_TELEMETRY_ENABLED=False),
+            patch.object(self.telemetry, "AzureMonitorTraceExporter") as exporter,
+        ):
+            self.telemetry.configure_telemetry()
         exporter.assert_not_called()
 
     def test_wsgi_initializes_worker_and_exports_real_request(self):
@@ -171,7 +183,7 @@ with patch.object(telemetry, 'AzureMonitorTraceExporter', return_value=exporter)
             "PYTHON_DOTENV_DISABLED": "1",
         })
         result = subprocess.run(
-            [sys.executable, "-c", script], env=environment, capture_output=True, text=True, timeout=30
+            [sys.executable, "-c", script], check=False, env=environment, capture_output=True, text=True, timeout=30
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -195,7 +207,7 @@ with patch.object(telemetry, 'AzureMonitorTraceExporter'):
             "PYTHON_DOTENV_DISABLED": "1",
         })
         result = subprocess.run(
-            [sys.executable, "-c", script], env=environment, capture_output=True, text=True, timeout=30
+            [sys.executable, "-c", script], check=False, env=environment, capture_output=True, text=True, timeout=30
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -220,6 +232,6 @@ import request_hub.wsgi
             "PYTHON_DOTENV_DISABLED": "1",
         })
         result = subprocess.run(
-            [sys.executable, "-c", script], env=environment, capture_output=True, text=True, timeout=30
+            [sys.executable, "-c", script], check=False, env=environment, capture_output=True, text=True, timeout=30
         )
         self.assertEqual(result.returncode, 0, result.stderr)

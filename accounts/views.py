@@ -1,29 +1,36 @@
+from typing import ClassVar
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, LogoutView
 from django.http import Http404, HttpResponse, JsonResponse
-from django.utils import timezone
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.generic import RedirectView, UpdateView
 
-from accounts.idle_timeout import ACTIVITY_HEADER, IDLE_LOGOUT_REASON, check_idle_timeout, idle_expired_response
+from accounts.idle_timeout import (
+    ACTIVITY_HEADER,
+    IDLE_LOGOUT_REASON,
+    check_idle_timeout,
+    idle_expired_response,
+)
 from accounts.middleware import FORCE_PASSWORD_CHANGE_SESSION_KEY
 from accounts.models import StoredFile, User
 from accounts.sign_in_log import touch_sign_in_session
-from .recovery_views import recovery_context
 
 from .forms import (
     ProfileForm,
-    ThemeForm,
     RoleAuthenticationForm,
+    ThemeForm,
 )
+from .recovery_views import recovery_context
 
 _PROFILE_PHOTO_PREFIX = "profile_photos/"
 
@@ -153,7 +160,7 @@ class RoleLogoutView(LogoutView):
 class LegacyLoginRedirectView(RedirectView):
     pattern_name = "login"
     query_string = True
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "post", "head", "options"]
 
     def post(self, request, *args, **kwargs):
         # Old login forms must resend their POST body to the canonical route.
@@ -182,7 +189,7 @@ class RoleLoginView(LoginView):
 
 
 class SignInHeartbeatView(LoginRequiredMixin, View):
-    http_method_names = ["post"]
+    http_method_names: ClassVar[list[str]] = ["post"]
 
     def handle_no_permission(self):
         if "application/json" in self.request.headers.get("Accept", ""):
@@ -201,6 +208,7 @@ class StoredFileServeView(LoginRequiredMixin, View):
         is_changelog = name.startswith("changelogs/")
         if is_changelog:
             from django.db.models import Q
+
             from hub.models import Changelog
 
             entries = Changelog.objects.filter(

@@ -5,7 +5,7 @@ import html
 import mimetypes
 import re
 from decimal import Decimal
-from email.charset import Charset, QP
+from email.charset import QP, Charset
 from email.header import Header
 from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
@@ -13,7 +13,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from logging import getLogger
 from pathlib import Path
-from typing import Optional
 from urllib.parse import quote
 
 from django.conf import settings
@@ -102,7 +101,7 @@ def _get_sqr_approval_to_emails(submission: "SqrSubmission") -> list[str]:
     )
 
 
-def _get_sqr_logo_attachment() -> Optional[dict]:
+def _get_sqr_logo_attachment() -> dict | None:
     """Build the inline logo attachment when the image is available."""
     try:
         logo_bytes = SQR_APPROVAL_LOGO_PATH.read_bytes()
@@ -388,7 +387,7 @@ def _build_sqr_approval_html_markup(submission: "SqrSubmission", requestor_name:
             '<li>Monthly System Status Report</li>',
             '<li>Advisory Support</li>',
             '</ul></div>',
-            f'<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:12px 0 0;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;"><b>Quantity</b>: 1 Lot</span></p>',
+            '<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:12px 0 0;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;"><b>Quantity</b>: 1 Lot</span></p>',
             f'<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:8px 0 0;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;"><b>Approval Date</b> : {approval_date}</span></p>',
             f'<p class="elementToProof" style="direction:ltr;line-height:1.6;margin:8px 0 0;font-size:13px;color:rgb(16,24,40);"><span style="font-family:Arial,Helvetica,sans-serif;"><b>Quotation Validity Until</b>: {validity_date}</span></p>',
             '<div class="elementToProof" style="margin-top:24px;">',
@@ -507,8 +506,8 @@ def _send_sqr_new_submission_email(
     body_lines = [
         f"Hi {reviewer_name},",
         "",
-        f"A new SQR submission has been created and assigned to you for review.",
-        f"Please review it at your earliest convenience.",
+        "A new SQR submission has been created and assigned to you for review.",
+        "Please review it at your earliest convenience.",
         "",
         divider,
         "  SUBMISSION DETAILS",
@@ -576,7 +575,7 @@ def _send_sqr_new_submission_email(
             reviewer_email,
             submission.reference_code,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "SQR new-submission email send failed for %s to %s",
             submission.reference_code,
@@ -708,7 +707,7 @@ def _send_sqr_for_revision_email(
             engineer_email,
             submission.reference_code,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "SQR for-revision email send failed for %s to %s",
             submission.reference_code,
@@ -771,7 +770,7 @@ def _send_sqr_approved_email(
             ", ".join(to_emails),
             submission.reference_code,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "SQR approved email send failed for %s to %s",
             submission.reference_code,

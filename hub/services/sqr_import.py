@@ -5,7 +5,7 @@ from collections.abc import Callable, Iterable, Mapping
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from logging import getLogger
-from typing import Any, TypedDict
+from typing import Any, ClassVar, TypedDict
 
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -51,8 +51,8 @@ def _build_choice_import_map(choices: Iterable[tuple[str, object]]) -> dict[str,
 class SqrWorkbookImport:
     """Run the workbook job independently of its HTTP entry points."""
 
-    EXPECTED_HEADERS = [label for label, _ in _get_sqr_export_columns()]
-    LEGACY_POSITIONAL_HEADERS = [
+    EXPECTED_HEADERS: ClassVar[list[str]] = [label for label, _ in _get_sqr_export_columns()]
+    LEGACY_POSITIONAL_HEADERS: ClassVar[list[str]] = [
         "SQR Date", "SQR ID", "Account Name", "Service Description", "Scope of Services", "RQ ID",
         "Group Name", "Account Manager", "Requester Name", "Approver Name", "SQR Doc. Ref. Link",
         "SSE Man-hrs", "SSE Amount", "PM Man-hrs", "PM Amount", "Maintenance Amt.", "Discount Rate (%)",
@@ -205,6 +205,7 @@ class SqrWorkbookImport:
     ) -> list[_ImportRow]:
         """Read and validate all nonblank worksheet rows before any replacement."""
         import io
+
         from openpyxl import load_workbook
 
         try:

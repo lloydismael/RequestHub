@@ -7,7 +7,7 @@ import json
 import re
 import socket
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from html import escape
 from pathlib import Path, PurePosixPath
 from unittest.mock import patch
@@ -164,7 +164,7 @@ def _ui(snapshot, fixture):
     context = {"request": request, "assistant_widget": {"native_enabled": False}}
     if fixture in {"login", "seasonal_login"}:
         from accounts.views import RoleLoginView
-        with patch("django.utils.timezone.now", return_value=datetime(2026, 12, 31, 4, tzinfo=timezone.utc)):
+        with patch("django.utils.timezone.now", return_value=datetime(2026, 12, 31, 4, tzinfo=UTC)):
             response = RoleLoginView.as_view()(request)
             if fixture == "seasonal_login":
                 response.context_data["christmas_login_default"] = True
@@ -185,7 +185,7 @@ def _ui(snapshot, fixture):
             from accounts.recovery import EXCLUSIONS
 
             snapshot = BackupSnapshot(
-                pk=1, created_by=user, created_at=datetime(2026, 11, 20, 2, tzinfo=timezone.utc),
+                pk=1, created_by=user, created_at=datetime(2026, 11, 20, 2, tzinfo=UTC),
                 reason="Before an import", size=141_312,
             )
             context.update(show_classic_sqr_tracker=True, backup_snapshots=[snapshot], latest_backup=snapshot,
@@ -208,6 +208,30 @@ def _ui(snapshot, fixture):
             return document
         return document.replace('class="profile-panel" id="profile-panel-avatar"',
                                 'class="profile-panel profile-panel--active" id="profile-panel-avatar"', 1)
+    if fixture == "request_progress":
+        from accounts.models import User
+        from hub.models import Account, Request
+
+        request.user = User(username="demo-admin", role=User.Roles.ADMIN, banner_gradient="christmas",
+                            christmas_default_overridden=True)
+        progress = {
+            "current_stage_label": "Assigned",
+            "current_action_label": "The primary owner must acknowledge the request.",
+            "current_owner_label": "Demo engineer",
+            "stages": [
+                {"label": label, "state": state, "state_label": state.title(),
+                 "is_complete": state == "complete", "is_current": state == "current"}
+                for (_, label), state in zip(Request.LifecycleStage.choices,
+                                             ("complete", "current", "upcoming", "upcoming", "upcoming"))
+            ],
+        }
+        document = render_to_string("hub/request_manager_form.html", {
+            **context, "lifecycle": progress,
+            "object": Request(pk=1, reference_code="REQ-DEMO", account=Account(name="Demo account"),
+                              created_at=datetime(2026, 11, 20, 2, tzinfo=UTC)),
+        }, request=request)
+        return document.replace('class="bg-light request-manager-page',
+                                'class="bg-light dark-mode request-manager-page', 1)
     if fixture == "sqr_tracker":
         context["capture_component"] = render_to_string("hub/partials/sqr_prototype.html", {"sqr_active_view": "prototype"})
         template = engines["django"].from_string(
@@ -238,7 +262,7 @@ def _ui(snapshot, fixture):
     from hub.models import Changelog
     entry = Changelog(
         pk=1, title="Synthetic release fixture", previous_version="v0", new_version="v1",
-        release_date=date(2026, 11, 6), updated_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+        release_date=date(2026, 11, 6), updated_at=datetime(2026, 11, 6, tzinfo=UTC),
         summary="The same unsaved release fixture is rendered at both source revisions.",
         release_sha="1" * 40,
         changes={"commits": [
@@ -253,6 +277,7 @@ def _ui(snapshot, fixture):
     )
     if fixture == "management_accounts":
         from django.urls import reverse
+
         from accounts.models import User
         from hub.models import Account, FormDefinition
         from hub.views import UserManagementView
@@ -275,7 +300,7 @@ def _ui(snapshot, fixture):
         request.user = User(pk=1, username="demo-admin", first_name="Demo", last_name="Admin", role=User.Roles.ADMIN)
         request.META["CSRF_COOKIE"] = "0" * 32
         names = [f"Demo Account {index:03}" for index in range(1, 128)] + ["Summit Research"]
-        directory = Directory(Account(pk=index, name=name, created_at=datetime(2026, 11, 20, 10, tzinfo=timezone.utc))
+        directory = Directory(Account(pk=index, name=name, created_at=datetime(2026, 11, 20, 10, tzinfo=UTC))
                               for index, name in enumerate(names, start=1))
         counts = {**context, "request": request, "active_tab": "accounts", "total_users": 1,
                   "total_accounts": len(directory), "unread_count": 0}
@@ -287,6 +312,7 @@ def _ui(snapshot, fixture):
             return view.get(request).content.decode("utf-8")
     if fixture == "management_monitoring":
         from django.core.paginator import Paginator
+
         from accounts.models import User
         from hub.changelog_forms import ChangelogForm
 
@@ -303,6 +329,7 @@ def _ui(snapshot, fixture):
         }, request=request)
     if fixture in {"changelog_editor", "changelog_history"}:
         from django.core.paginator import Paginator
+
         from hub.changelog_forms import ChangelogForm
 
         if fixture == "changelog_editor":

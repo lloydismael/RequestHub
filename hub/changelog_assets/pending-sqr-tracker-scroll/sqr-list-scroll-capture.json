@@ -1,0 +1,64 @@
+{
+  "status": "unreleased",
+  "checkout_head": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "capture_note": "Working-tree comparison using the real unified SQR page and the same 36 synthetic records; neither image is an exact Git revision.",
+  "viewport": {
+    "width": 1280,
+    "height": 620
+  },
+  "gesture": {
+    "kind": "mouse wheel",
+    "delta_y_px": -160,
+    "pointer": [
+      105,
+      223
+    ],
+    "start": "top edge of the List"
+  },
+  "before": {
+    "file": "sqr-list-wheel-before.png",
+    "sha256": "69c2a544c88c48e4a7090f281933dee61c576a885b5a44b43fe7185c91c4395b",
+    "start": {
+      "page_scroll_y": 260,
+      "list_scroll_top": 0
+    },
+    "end": {
+      "page_scroll_y": 260,
+      "list_scroll_top": 0
+    },
+    "page_scroll_delta_px": 0,
+    "list_scroll_delta_px": 0,
+    "source_sha256": {
+      "templates/base.html": "daf695ea96ecfee2e2f3af3ede3780fe6bc8c7432e8c5d49242fe0f717191b94",
+      "templates/hub/sqr.html": "1212f222cdf85ecd280983e4e075fee8700f9d1bff603bd2cffc1a8ce84e83d3",
+      "templates/hub/partials/sqr_prototype.html": "27d22fe62dd415f056aafa9caade9787921339a23733fbf626cd09ee264f2399",
+      "static/css/sqr-tracker-prototype.css": "ea3e8d8d767c43cbc85796d8ddd30372cea436e3b27b2b6ee6bf014d724239f9",
+      "static/js/sqr-tracker-prototype.js": "ed1d3add6160aa7e20d75fb109224e0563f237ae7107d695aca91c8a60ace056",
+      "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+      "hub/test_mobile_ui.py": "2b3d6b0d9415174a8bf1e717bc7a44c25d7b1f24fd374327b6155795ef5e31dc"
+    }
+  },
+  "after": {
+    "file": "sqr-list-wheel-after.png",
+    "sha256": "5a66d4acebd18d4eea4fcab083c89f7caffc52954baefe8024c14b90d042d9c3",
+    "start": {
+      "page_scroll_y": 260,
+      "list_scroll_top": 0
+    },
+    "end": {
+      "page_scroll_y": 100,
+      "list_scroll_top": 0
+    },
+    "page_scroll_delta_px": -160,
+    "list_scroll_delta_px": 0,
+    "source_sha256": {
+      "templates/base.html": "daf695ea96ecfee2e2f3af3ede3780fe6bc8c7432e8c5d49242fe0f717191b94",
+      "templates/hub/sqr.html": "9655e55c786d28c4da2a6e766b26dc8d3dd16c8f8719f49694257438eaa5676b",
+      "templates/hub/partials/sqr_prototype.html": "27d22fe62dd415f056aafa9caade9787921339a23733fbf626cd09ee264f2399",
+      "static/css/sqr-tracker-prototype.css": "bbb0d6e4af4d60d354134698d80f6c15686149c7efef25ac195ea1558aab40d8",
+      "static/js/sqr-tracker-prototype.js": "ed1d3add6160aa7e20d75fb109224e0563f237ae7107d695aca91c8a60ace056",
+      "static/js/smooth-scroll.js": "c574307a8dcb38bd84bac005b12a940a81a9742fc8ee6e9c65e01e112e4c1778",
+      "hub/test_mobile_ui.py": "2794d298106df0461e902a3d14d2e9ad50204ffb736971737b3334d228723fde"
+    }
+  }
+}

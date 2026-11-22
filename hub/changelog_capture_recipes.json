@@ -52,6 +52,24 @@
       ]
     },
     {
+      "id": "request-progress-dark-mode",
+      "paths": ["static/css/request-progress.css"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "request_progress", "title": "Request progress in dark mode — desktop",
+          "before_text": "Fixed navy blocks behind the progress labels clashed with the Christmas theme's dark green card.",
+          "after_text": "Step names and statuses sit directly on the themed card, with readable text and connectors that stop before the labels.",
+          "viewport": {"width": 1200, "height": 900}
+        },
+        {
+          "kind": "ui", "fixture": "request_progress", "title": "Request progress in dark mode — phone",
+          "before_text": "The stacked steps showed the same mismatched navy blocks behind their text.",
+          "after_text": "The stacked steps use the card as their background while keeping the vertical progress line and current-step highlight.",
+          "viewport": {"width": 375, "height": 844}
+        }
+      ]
+    },
+    {
       "id": "changelog-display",
       "paths": ["templates/hub/notifications.html", "templates/hub/partials/changelog_entry.html", "templates/hub/partials/changelog_change_list.html", "templates/hub/partials/changelog_comparison.html", "static/hub/changelogs.css"],
       "scenes": [

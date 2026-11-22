@@ -8,7 +8,11 @@ from django.shortcuts import redirect
 from django.urls import Resolver404, resolve, reverse
 
 from accounts.idle_timeout import (
-    DATABASE_SESSIONS, REMAINING_HEADER, IdleAwareSessionStore, check_idle_timeout, idle_expired_response,
+    DATABASE_SESSIONS,
+    REMAINING_HEADER,
+    IdleAwareSessionStore,
+    check_idle_timeout,
+    idle_expired_response,
 )
 
 FORCE_PASSWORD_CHANGE_SESSION_KEY = "_force_password_change_prompt"
@@ -21,9 +25,7 @@ def _is_exempt(view_name: str) -> bool:
     exempt.update({"login", "legacy-login", "logout", "accounts:update", "healthz"})
     if view_name in exempt:
         return True
-    if view_name.startswith("admin:"):
-        return True
-    return False
+    return bool(view_name.startswith("admin:"))
 
 
 def _get_view_name(request):

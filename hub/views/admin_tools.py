@@ -1,14 +1,9 @@
 """Administrative user, account, and changelog management."""
 
 import re
-from accounts.forms import UserManagementForm
-from accounts.models import SignInLog, User
-from accounts.sign_in_log import (
-    annotate_sign_in_logs,
-    filter_sign_in_logs,
-    SIGN_IN_STATUS_CHOICES,
-    summarize_sign_ins,
-)
+from typing import Any
+from urllib.parse import urlencode
+
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -28,15 +23,21 @@ from django.utils import timezone
 from django.utils.cache import patch_cache_control, patch_vary_headers
 from django.utils.crypto import get_random_string
 from django.views import View
+
+from accounts.forms import UserManagementForm
+from accounts.models import SignInLog, User
+from accounts.sign_in_log import (
+    SIGN_IN_STATUS_CHOICES,
+    annotate_sign_in_logs,
+    filter_sign_in_logs,
+    summarize_sign_ins,
+)
 from hub import views as legacy_views
 from hub.changelog_forms import ChangelogForm
 from hub.form_editor_runtime import configure_form
 from hub.forms import AccountManagementForm, AccountManagementFormSet
 from hub.mixins import AdminRequiredMixin, can_manage_user
 from hub.models import Account, Changelog, FormAnswerSet, FormDefinition
-from typing import Any
-from urllib.parse import urlencode
-
 
 _can_manage_user = can_manage_user
 

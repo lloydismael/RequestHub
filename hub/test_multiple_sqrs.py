@@ -15,7 +15,13 @@ from openpyxl import load_workbook
 
 from accounts.models import User
 from hub.forms import SqrSubmissionForm
-from hub.models import Account, Notification, Request, SqrProjectPerformance, SqrSubmission
+from hub.models import (
+    Account,
+    Notification,
+    Request,
+    SqrProjectPerformance,
+    SqrSubmission,
+)
 from hub.views import (
     RequestCollaborativeManageView,
     SqrEngineerUpdateView,
@@ -52,7 +58,7 @@ class MultipleSqrFixtures:
             linked_request=rq or self.rq, engineer=engineer or self.engineer,
             pm_esg_reviewer=self.pm, customer_name=self.account.name,
             customer_company="ESS", project_title="Independent project",
-            project_details="Implementation", sse_manhrs=Decimal("20"),
+            project_details="Implementation", sse_manhrs=Decimal(20),
             sqr_folder_link="https://example.com/quotation",
         )
 
@@ -115,7 +121,7 @@ class MultipleSqrTests(MultipleSqrFixtures, TestCase):
         self.assertRedirects(response, url, fetch_redirect_response=False)
         submission = SqrSubmission.objects.get(linked_request=self.rq)
         self.assertEqual(submission.project_details, "Training")
-        self.assertEqual(submission.sse_manhrs, Decimal("20"))
+        self.assertEqual(submission.sse_manhrs, Decimal(20))
         self.assertIsNone(submission.managed_support_amount)
 
     def test_invalid_post_retains_reusable_request(self):

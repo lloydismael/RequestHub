@@ -1,7 +1,9 @@
 """Operational reports, activity logs, and CSV exports."""
 
-from accounts.models import User
 from datetime import datetime
+from typing import Any, ClassVar
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
@@ -11,6 +13,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 from django.views.generic import TemplateView
+
+from accounts.models import User
 from hub import views as legacy_views
 from hub.forms import EngineerActivityLogForm
 from hub.mixins import AdminOrPmEsgRequiredMixin, EngineerRequiredMixin
@@ -24,10 +28,18 @@ from hub.services.csv_export import (
     write_report_csv,
 )
 from hub.services.reports import (
-    _month_key as _month_key,
-    _month_label as _month_label,
-    _month_start as _month_start,
-    _next_month_start as _next_month_start,
+    _month_key as _month_key,  # noqa: PLC0414 - Legacy re-export.
+)
+from hub.services.reports import (
+    _month_label as _month_label,  # noqa: PLC0414 - Legacy re-export.
+)
+from hub.services.reports import (
+    _month_start as _month_start,  # noqa: PLC0414 - Legacy re-export.
+)
+from hub.services.reports import (
+    _next_month_start as _next_month_start,  # noqa: PLC0414 - Legacy re-export.
+)
+from hub.services.reports import (
     build_activity_log_context,
     build_engineer_activity_log_context,
     build_operational_context,
@@ -39,12 +51,10 @@ from hub.services.reports import (
     resolve_month_filters,
 )
 from hub.views.common import _csv_safe_cell
-from typing import Any, Optional
-from urllib.parse import urlencode
 
 
 class EngineerActivityLogView(EngineerRequiredMixin, LoginRequiredMixin, TemplateView):
-    required_roles = {User.Roles.ENGINEER, User.Roles.ADMIN}
+    required_roles: ClassVar[set[str]] = {User.Roles.ENGINEER, User.Roles.ADMIN}
     template_name = "hub/activity_logs.html"
     form_class = EngineerActivityLogForm
 
@@ -220,7 +230,7 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
             return "operational"
         return report_view
 
-    def _get_requested_edit_log(self) -> Optional[EngineerActivityLog]:
+    def _get_requested_edit_log(self) -> EngineerActivityLog | None:
         edit_log_id = (self.request.GET.get("edit_activity") or "").strip()
         if not edit_log_id:
             return None
@@ -251,7 +261,7 @@ class RequestReportView(AdminOrPmEsgRequiredMixin, LoginRequiredMixin, TemplateV
         *,
         start_month: str = "",
         end_month: str = "",
-        edit_activity: Optional[int] = None,
+        edit_activity: int | None = None,
     ) -> str:
         params = {"report_view": "activity"}
         if start_month:

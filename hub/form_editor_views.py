@@ -1,7 +1,7 @@
 """Admin-only presentation editor; previews never bind or save business records."""
 import json
 from importlib import import_module
-from typing import Any
+from typing import Any, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpRequest, JsonResponse
@@ -17,9 +17,9 @@ from .models import FormDefinition
 def catalog():
     from .form_editor import FORM_CATEGORIES, get_registry
 
-    forms = [dict(key=key, label=entry["label"],
-                  group=entry["group"] if entry["group"] in FORM_CATEGORIES else "Others",
-                  url=reverse("hub:form-editor-detail", args=[key]))
+    forms = [{"key": key, "label": entry["label"],
+                  "group": entry["group"] if entry["group"] in FORM_CATEGORIES else "Others",
+                  "url": reverse("hub:form-editor-detail", args=[key])}
              for key, entry in get_registry().items()]
     return [{"name": name, "description": description,
              "forms": [form for form in forms if form["group"] == name]}
@@ -37,7 +37,12 @@ def _entry(key):
 
 
 def _state(key):
-    from .form_editor import baseline_schema, get_definition, get_protected_fields, get_person_fields
+    from .form_editor import (
+        baseline_schema,
+        get_definition,
+        get_person_fields,
+        get_protected_fields,
+    )
 
     definition = get_definition(key)
     versions = definition.versions.select_related("actor").order_by("-number") if definition.pk else []
@@ -75,14 +80,14 @@ def _revision(payload):
 
 
 class FormEditorCatalogView(AdminRequiredMixin, View):
-    http_method_names = ["get", "head", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "head", "options"]
 
     def get(self, request):
         return render(request, "hub/form_editor_catalog.html", {"form_catalog": catalog()})
 
 
 class FormEditorDetailView(AdminRequiredMixin, View):
-    http_method_names = ["get", "head", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "head", "options"]
 
     def get(self, request, key):
         entry = _entry(key)
@@ -95,7 +100,12 @@ class FormEditorDetailView(AdminRequiredMixin, View):
 
 def _people_state(key: str, *, definition: FormDefinition | None = None) -> dict[str, Any]:
     """Build the people directory from one baseline and one definition."""
-    from .form_editor import baseline_form, get_definition, get_person_fields, get_schema
+    from .form_editor import (
+        baseline_form,
+        get_definition,
+        get_person_fields,
+        get_schema,
+    )
 
     form = baseline_form(key)
     if definition is None:
@@ -123,7 +133,7 @@ def _people_state(key: str, *, definition: FormDefinition | None = None) -> dict
 
 
 class FormEditorPeopleView(AdminRequiredMixin, View):
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "post", "head", "options"]
 
     def dispatch(self, request, *args, **kwargs):
         if kwargs.get("key") not in {"request", "sqr_submission"}:
@@ -136,7 +146,9 @@ class FormEditorPeopleView(AdminRequiredMixin, View):
     def post(self, request: HttpRequest, key: str) -> JsonResponse:
         """Publish directory changes under the existing definition revision lock."""
         from copy import deepcopy
+
         from django.db import transaction
+
         from . import form_editor as service
 
         try:
@@ -174,7 +186,7 @@ class FormEditorPeopleView(AdminRequiredMixin, View):
 
 
 class FormEditorHistoryView(AdminRequiredMixin, View):
-    http_method_names = ["get", "head", "options"]
+    http_method_names: ClassVar[list[str]] = ["get", "head", "options"]
 
     def get(self, request, key):
         _entry(key)
@@ -182,7 +194,7 @@ class FormEditorHistoryView(AdminRequiredMixin, View):
 
 
 class FormEditorActionView(AdminRequiredMixin, View):
-    http_method_names = ["post", "options"]
+    http_method_names: ClassVar[list[str]] = ["post", "options"]
     action = "draft"
 
     def post(self, request, key):
@@ -212,7 +224,7 @@ class FormEditorActionView(AdminRequiredMixin, View):
 
 
 class FormEditorPreviewView(AdminRequiredMixin, View):
-    http_method_names = ["post", "options"]
+    http_method_names: ClassVar[list[str]] = ["post", "options"]
 
     def post(self, request, key):
         from .form_editor import validate_schema

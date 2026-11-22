@@ -23,7 +23,16 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from hub.release_changelog import EVIDENCE_POLICY, MANIFEST_PATH, MAX_COMPARISONS, SHA_RE, TEXT_MAX, missing_comparisons, repository_report_only, validate_manifest
+from hub.release_changelog import (
+    EVIDENCE_POLICY,
+    MANIFEST_PATH,
+    MAX_COMPARISONS,
+    SHA_RE,
+    TEXT_MAX,
+    missing_comparisons,
+    repository_report_only,
+    validate_manifest,
+)
 
 LOGGER = logging.getLogger(__name__)
 RECIPES_PATH = ROOT / "hub" / "changelog_capture_recipes.json"
@@ -97,7 +106,8 @@ def load_recipes(path):
                     raise CaptureError("Documentation capture needs a selected text section.")
             elif scene.get("fixture") not in ({
                 "login", "seasonal_login", "profile", "admin_profile", "changelog", "changelog_editor",
-                "changelog_history", "changelog_feed", "management_accounts", "management_monitoring", "sqr_tracker", "sqr_performance",
+                "changelog_history", "changelog_feed", "management_accounts", "management_monitoring",
+                "sqr_tracker", "sqr_performance", "request_progress",
             } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             if scene.get("fixture") == "repository_change" and {"paths", "omitted_files", "revision"} & scene.keys():
@@ -111,7 +121,7 @@ def load_recipes(path):
 
 
 def _git(repo, *args):
-    result = subprocess.run(["git", "-c", "core.quotePath=false", "-C", str(repo), *args], capture_output=True)
+    result = subprocess.run(["git", "-c", "core.quotePath=false", "-C", str(repo), *args], check=False, capture_output=True)
     if result.returncode:
         LOGGER.error("Historical Git operation failed: %s", result.stderr.decode("utf-8", errors="replace"))
         raise CaptureError("Historical revision could not be read.")
@@ -256,6 +266,7 @@ def _render(snapshot, scene):
     environment.update(PYTHONUTF8="1", PYTHONDONTWRITEBYTECODE="1")
     result = subprocess.run(
         [sys.executable, str(Path(__file__).with_name("changelog_capture_scenes.py")), "--snapshot", str(snapshot)],
+        check=False,
         input=json.dumps({key: scene[key] for key in ("kind", "fixture", "path", "heading", "paths", "omitted_files", "revision") if key in scene}),
         capture_output=True, text=True, encoding="utf-8", cwd=snapshot, env=environment, timeout=30,
     )
@@ -275,7 +286,7 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
     fixture = scene.get("fixture")
     if fixture in {
         "admin_profile", "changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring",
-        "management_accounts",
+        "management_accounts", "request_progress",
     }:
         document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []
@@ -354,7 +365,8 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
             "admin_profile": ".settings-admin-wrap",
             "changelog": ".cl-entry", "changelog_editor": ".cl-editor",
             "changelog_history": ".cl-history-entry", "changelog_feed": ".cl-technical-evidence",
-            "management_monitoring": "main", "sqr_tracker": "#sqr-proto", "sqr_performance": "#sqr-performance-dashboard",
+            "management_monitoring": "main", "sqr_tracker": "#sqr-proto",
+            "sqr_performance": "#sqr-performance-dashboard", "request_progress": ".rmf-progress-card",
         }.get(fixture, "body")
         component = page.locator(selector)
         # Native disclosures work with page scripts disabled at both revisions.
@@ -484,7 +496,8 @@ def capture_manifest(manifest, repo, recipes_path, *, vendor_dir=None, failure=N
         return validate_manifest(result), failures
     try:
         from PIL import Image
-        from playwright.sync_api import Error as BrowserError, sync_playwright
+        from playwright.sync_api import Error as BrowserError
+        from playwright.sync_api import sync_playwright
     except ImportError:
         LOGGER.exception("Playwright capture dependency is unavailable.")
         for item, _ in pending:

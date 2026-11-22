@@ -1,12 +1,15 @@
 """One-off DB forensics for REQ-00906 (pk 906). Safe, read-only."""
-import django, os, sys
+import os
+import sys
+
+import django
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, BASE)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'request_hub.settings')
 django.setup()
 
-from hub.models import Request, RequestLifecycleEvent, RequestCommunication
+from hub.models import Request, RequestCommunication, RequestLifecycleEvent
 
 r = Request.objects.get(pk=906)
 print('=== REQUEST 906 ===')
@@ -23,12 +26,8 @@ print()
 print('=== LIFECYCLE EVENTS ===')
 for e in RequestLifecycleEvent.objects.filter(request_id=906).order_by('sequence'):
     print(
-        'seq={seq} event={ev} stage={st} prev={pv} rev={rev} source={src} '
-        'synthetic={syn} key={key} actor={actor} at={at}'.format(
-            seq=e.sequence, ev=e.event_type, st=e.stage, pv=e.previous_stage,
-            rev=e.assignment_revision, src=e.source, syn=e.is_synthetic,
-            key=e.idempotency_key, actor=e.actor, at=e.occurred_at,
-        )
+        f'seq={e.sequence} event={e.event_type} stage={e.stage} prev={e.previous_stage} rev={e.assignment_revision} source={e.source} '
+        f'synthetic={e.is_synthetic} key={e.idempotency_key} actor={e.actor} at={e.occurred_at}'
     )
 
 print()

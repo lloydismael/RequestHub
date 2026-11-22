@@ -4,7 +4,12 @@ from django.core.management.base import BaseCommand, CommandError
 
 from hub.changelog_sync import load_manifest, sync_release
 from hub.models import Changelog
-from hub.release_changelog import ASSET_DIR, MANIFEST_PATH, ManifestError, curated_manifests
+from hub.release_changelog import (
+    ASSET_DIR,
+    MANIFEST_PATH,
+    ManifestError,
+    curated_manifests,
+)
 
 
 class Command(BaseCommand):
