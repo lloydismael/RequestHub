@@ -1,0 +1,30 @@
+{
+  "version": "next",
+  "revision": "ddffd3837c66933cd31fff03ba33c5307ab21599",
+  "generated_at": "2026-11-22T17:59:53.242133+00:00",
+  "commits": [
+    {
+      "sha": "ddffd3837c66933cd31fff03ba33c5307ab21599",
+      "type": "fixed",
+      "title": "Restore Django startup after dev merge",
+      "parent_sha": "3cc0690a7f7230dc7cccbc61f4f57c95ca33bdfb",
+      "requires_comparison": true,
+      "before_text": "Unresolved markers in the merge commit prevented Django from importing its models. VS Code F5 and container startup validation failed.",
+      "after_text": "The repair resolves all 79 conflict blocks across 26 files, preserves the intended changes, and restores Django startup. The runtime image excludes the one-off database scripts.",
+      "comparisons": [
+        {
+          "title": "Repository change report",
+          "before_text": "Verified file presence, sizes and fingerprints at this change's exact first-parent revision.",
+          "after_text": "Verified file presence, sizes and fingerprints after this exact change. Source code and private configuration are not displayed.",
+          "before_image": "pr163-startup-recovery/01-before.png",
+          "after_image": "pr163-startup-recovery/01-after.png",
+          "before_revision": "3cc0690a7f7230dc7cccbc61f4f57c95ca33bdfb",
+          "after_revision": "ddffd3837c66933cd31fff03ba33c5307ab21599",
+          "capture_note": "Packaged report capture, recipe repository-change. Exact Git snapshots; synthetic fixtures; external traffic blocked. Page scripts disabled. Repository change report; not a UI screenshot. No source code or live data is displayed.",
+          "evidence_kind": "report"
+        }
+      ]
+    }
+  ],
+  "evidence_policy": "all_changes"
+}

@@ -137,7 +137,7 @@ Images are stored alongside each versioned manifest, not in the Git-ignored `hub
 
 - **Before:** A merge committed unresolved conflict markers. Django stopped importing its models with `SyntaxError: invalid decimal literal`, so both VS Code F5 launch configurations, Django Validation, and the Docker image's static collection step failed.
 - **After:** Resolved all 79 conflict blocks across 26 files. Kept the reconciled request views, including the row lock and rollback for status updates, as well as the SQR error handling and notification cache fixes. Preserved the pending PPT defaults, tracker controls, and Request Progress dark-mode changes and their regression coverage. Kept the relocated one-off database scripts out of the runtime image without running them. The repair adds no migration or database configuration change.
-- **Technical evidence:** The release capture uses the repair's exact Git parent and result to compare changed source, test, tooling, and documentation paths. This is a startup repair, not a visual redesign; the comparison belongs under **Notifications → Changelogs → Technical evidence**.
+- **Technical evidence:** The [before report](../hub/changelog_assets/pr163-startup-recovery/01-before.png), [after report](../hub/changelog_assets/pr163-startup-recovery/01-after.png), and [manifest](../hub/changelog_assets/pr163-startup-recovery/manifest.json) use the repair's exact first parent and result. In disposable PostgreSQL, a reader could not access the draft or its images. After test publication, **Notifications → Changelogs → Technical evidence** opened the report and served both original PNGs with `no-store`. The transaction was rolled back; no live release was published.
 
 ### Unreleased: Request progress in dark mode
 
