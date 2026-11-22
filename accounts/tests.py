@@ -419,6 +419,24 @@ class ProfileSmokeTests(TestCase):
         self.assertEqual(self.user.first_name, "Smoke")
         self.assertEqual(self.user.department, "ESS")
 
+    def test_profile_password_change_uses_login_throttle(self):
+        url = reverse("accounts:update")
+        opened = self.client.get(url)
+        form_version = opened.context["form"].initial["_form_version"]
+        for _ in range(6):
+            response = self.client.post(url, {
+                "first_name": "Smoke",
+                "banner_gradient": "default",
+                "current_password": "wrong-password",
+                "new_password1": "Replacement-Synthetic-921!",
+                "new_password2": "Replacement-Synthetic-921!",
+                "_form_version": form_version,
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("current_password", response.context["form"].errors)
+        self.user.refresh_from_db()
+        self.assertFalse(self.user.check_password("Replacement-Synthetic-921!"))
+
     def test_non_admin_profile_save_keeps_the_stored_department(self):
         self.user.role = User.Roles.ENGINEER
         self.user.department = "HP"

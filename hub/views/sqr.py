@@ -785,6 +785,8 @@ class SqrInlineFieldUpdateView(LoginRequiredMixin, View):
                 review_notes=data.get("review_notes"), hold_reason=data.get("hold_reason"),
                 lookup=lambda queryset, submission_pk: legacy_views.get_object_or_404(queryset, pk=submission_pk),
             )
+        except sqr_workflow.InvalidSqrStatusError as exc:
+            return JsonResponse({"ok": False, "error": "Invalid SQR status"}, status=exc.status)
         except sqr_workflow.SqrWorkflowError as exc:
             logger.exception("SQR inline save failed for submission %s", pk)
             return JsonResponse({"ok": False, "error": "Unable to process request"}, status=exc.status)

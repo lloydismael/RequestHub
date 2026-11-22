@@ -30,6 +30,14 @@ class SqrWorkflowError(Exception):
         self.status = status
 
 
+class InvalidSqrStatusError(SqrWorkflowError):
+    """An inline status value outside the supported choices."""
+
+    def __init__(self) -> None:
+        """Set the fixed, user-facing validation message and status."""
+        super().__init__("Invalid SQR status", 400)
+
+
 SQR_FILING_QUOTE_FIELDS = frozenset({
     "linked_request", "customer_company", "customer_contact", "pm_esg_reviewer", "customer_name",
     "project_title", "project_details", "sse_manhrs", "sqr_folder_link",
@@ -480,7 +488,7 @@ def save_inline_change(
 
     if field == "status":
         if not isinstance(value, str) or value not in SqrSubmission.Status.values:
-            raise SqrWorkflowError("Invalid SQR status", 400)
+            raise InvalidSqrStatusError()
         if value not in _sqr_status_choices(submission):
             raise SqrWorkflowError(SQR_REOPEN_MESSAGE, 409)
         if value == SqrSubmission.Status.ON_HOLD:
