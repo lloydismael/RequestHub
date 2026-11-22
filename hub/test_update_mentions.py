@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from django.core import mail
 from django.contrib.messages import get_messages
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 

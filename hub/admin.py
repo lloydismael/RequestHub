@@ -1,13 +1,24 @@
+from typing import ClassVar
+
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 
-from .models import Account, EngineerActivityLog, Notification, Request, SqrProjectPerformance, SqrSubmission, SqrSubmissionHistory, StatusLog
+from .models import (
+    Account,
+    EngineerActivityLog,
+    Notification,
+    Request,
+    SqrProjectPerformance,
+    SqrSubmission,
+    SqrSubmissionHistory,
+    StatusLog,
+)
 
 
 @admin.register(Account)
 class AccountAdmin(admin.ModelAdmin):
-    search_fields = ["name"]
+    search_fields: ClassVar[list[str]] = ["name"]
     list_display = ("name", "created_at")
 
 

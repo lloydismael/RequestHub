@@ -1,16 +1,19 @@
 """Apply published presentation schemas without replacing domain validation."""
+import json
 from collections import OrderedDict
+from collections.abc import Iterable
 from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal
-from functools import wraps
-import json
+from functools import cache, wraps
 
 from django import forms
-from django.db.models import Q
 from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
+
+from .models import FormDefinition
 
 TOKEN_FIELD = "_form_version"
 TOKEN_SALT = "hub.form-editor.version"
@@ -65,17 +68,19 @@ def _custom_field(spec, historical=False):
     return field
 
 
-def _configure_allowed_values(form, key, field, spec, form_key):
+def _configure_allowed_values(form: forms.BaseForm, key: str, field: forms.Field, spec: dict, form_key: str) -> None:
+    """Apply selector restrictions without loading related objects merely to read their IDs."""
     from .form_editor import PERSON_FIELDS, VALUE_FIELDS
 
     instance = getattr(form, "instance", None)
-    current = getattr(instance, key, None) if instance is not None and instance.pk else None
-    current = getattr(current, "pk", current)
+    saved = instance is not None and instance.pk is not None
     if "person_ids" in spec and key in PERSON_FIELDS.get(form_key, set()) and isinstance(field, forms.ModelChoiceField):
+        current_id = getattr(instance, f"{key}_id", None) if saved else None
         allowed = Q(pk__in=spec["person_ids"])
-        if current not in (None, ""):
-            allowed |= Q(pk=current)
+        if current_id not in (None, ""):
+            allowed |= Q(pk=current_id)
         field.queryset = field.queryset.filter(allowed)
+    current = getattr(instance, key, None) if saved and key in VALUE_FIELDS.get(form_key, set()) else None
     if "member_options" in spec and form_key == "sqr_submission" and key == "customer_contact":
         options = spec["member_options"]
         names = list(dict.fromkeys(option["value"] for option in options))
@@ -104,9 +109,14 @@ def _configure_allowed_values(form, key, field, spec, form_key):
             })
 
 
-def configure_form(form, schema=None, *, definition=None, answers=None, read_only_fields=()):
+def configure_form(
+    form: forms.BaseForm, schema: dict | None = None, *, form_key: str | None = None,
+    definition: FormDefinition | None = None, answers: dict | None = None,
+    read_only_fields: Iterable[str] = (),
+) -> forms.BaseForm:
+    """Apply the current or signed schema while retaining model form validation."""
     from . import form_editor
-    key = form_editor.get_form_key(form)
+    key = form_key or form_editor.get_form_key(form)
     if not key:
         return form
     explicit = schema is not None
@@ -131,7 +141,7 @@ def configure_form(form, schema=None, *, definition=None, answers=None, read_onl
         except (signing.BadSignature, ValueError, TypeError, KeyError, ObjectDoesNotExist):
             pin_error = "This form has expired or changed. Reload the page and submit again."
     if schema is None:
-        schema = deepcopy(version.schema) if version else form_editor.baseline_schema(key)
+        schema = form_editor.get_schema(key, definition=definition) if definition is not None else form_editor.baseline_schema(key)
     form.editor_enabled = True
     form.editor_key = key
     form.editor_version = version
@@ -148,6 +158,7 @@ def configure_form(form, schema=None, *, definition=None, answers=None, read_onl
         existing = deepcopy(answers) if answers is not None else form_editor.get_custom_answers(key, instance)
     core = OrderedDict((name, field) for name, field in form.fields.items() if name != TOKEN_FIELD and not name.startswith("custom_"))
     ordered = OrderedDict()
+    custom_specs = {}
     for spec in schema.get("fields", []):
         name = spec["key"]
         custom = name not in core
@@ -177,36 +188,48 @@ def configure_form(form, schema=None, *, definition=None, answers=None, read_onl
         field.widget.attrs["data-form-section"] = spec.get("section", "")
         field.widget.attrs["data-form-width"] = spec.get("width", "full")
         if custom:
-            field.widget.attrs["data-form-custom"] = "true"
-            visible = not spec.get("hidden", False) and not spec.get("archived", False)
-            condition = spec.get("condition")
-            if condition:
-                field.widget.attrs["data-form-condition"] = json.dumps(condition)
-                dependency = form.add_prefix(condition["field"])
-                dependency_field = ordered.get(condition["field"]) or form.fields.get(condition["field"])
-                dependency_spec = next((item for item in schema["fields"] if item["key"] == condition["field"]), {})
-                multiple = isinstance(dependency_field, forms.MultipleChoiceField) or dependency_spec.get("type") in ("multiselect", "multiple_choice")
-                if condition["field"] in read_only_fields:
-                    value = form.initial.get(condition["field"])
-                elif form.is_bound:
-                    value = form.data.getlist(dependency) if multiple and hasattr(form.data, "getlist") else form.data.get(dependency)
-                    if isinstance(dependency_field, forms.BooleanField) or dependency_spec.get("type") in ("checkbox", "boolean"):
-                        value = forms.BooleanField(required=False).to_python(value)
-                else:
-                    value = form.initial.get(condition["field"], existing.get(condition["field"]))
-                visible = visible and condition_matches(condition, value)
-            field.widget.attrs["data-editor-required"] = "true" if field.required else "false"
-            field.widget.attrs["data-form-archived"] = "true" if spec.get("hidden", False) or spec.get("archived", False) else "false"
-            if not visible:
-                field.required = False
-                if form.is_bound:
-                    field.disabled = True
-                field.widget.attrs["data-form-hidden"] = "true"
-            else:
-                form.editor_visible_custom_keys.append(name)
+            custom_specs[name] = spec
         ordered[name] = field
     ordered.update(core)
     form.fields = ordered
+
+    @cache
+    def is_visible(name):
+        spec = custom_specs[name]
+        if spec.get("hidden") or spec.get("archived"):
+            return False
+        condition = spec.get("condition")
+        if not condition:
+            return True
+        target = condition["field"]
+        if target in custom_specs and not is_visible(target):
+            return False
+        field = form.fields.get(target)
+        if target in form.editor_read_only_fields or not form.is_bound:
+            value = form.initial.get(target, field.initial if field is not None else None)
+        elif field is not None:
+            value = field.widget.value_from_datadict(form.data, form.files, form.add_prefix(target))
+            if isinstance(field, forms.BooleanField):
+                value = field.to_python(value)
+        else:
+            value = form.data.get(form.add_prefix(target))
+        return condition_matches(condition, value)
+
+    for name, spec in custom_specs.items():
+        field = form.fields[name]
+        attrs = field.widget.attrs
+        attrs["data-form-custom"] = "true"
+        attrs["data-editor-required"] = "true" if field.required else "false"
+        attrs["data-form-archived"] = "true" if spec.get("hidden") or spec.get("archived") else "false"
+        if condition := spec.get("condition"):
+            attrs["data-form-condition"] = json.dumps(condition)
+        if is_visible(name):
+            form.editor_visible_custom_keys.append(name)
+        else:
+            field.required = False
+            if form.is_bound:
+                field.disabled = True
+            attrs["data-form-hidden"] = "true"
     if key in {"sqr_tracker_edit", "sqr_delivery"}:
         form.apply_maintenance_notice()
     token = signing.dumps({"key": key, "version": version.pk if version else None}, salt=TOKEN_SALT)

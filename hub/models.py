@@ -280,6 +280,17 @@ class Request(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = (
+            models.Index(
+                "status", models.F("created_at").desc(nulls_last=True), models.F("id").desc(),
+                condition=Q(is_deleted=False), name="req_active_status_new_idx",
+            ),
+            models.Index(
+                fields=["due_date", "priority", "reference_code"],
+                condition=Q(is_deleted=False, status="ongoing", due_date__isnull=False),
+                name="req_ongoing_sla_idx",
+            ),
+        )
 
     def get_absolute_url(self):
         from django.urls import reverse
@@ -688,6 +699,9 @@ class EngineerActivityLog(models.Model):
 
     class Meta:
         ordering = ["-request_date", "-created_at"]
+        indexes = (
+            models.Index(fields=["engineer", "-request_date", "-created_at"], name="activity_eng_date_new_idx"),
+        )
 
     def __str__(self) -> str:
         engineer_name = self.engineer.get_full_name() or self.engineer.username or "Engineer"
@@ -936,6 +950,11 @@ class SqrSubmission(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = (
+            models.Index(fields=["-created_at", "-id"], name="sqr_new_idx"),
+            models.Index(fields=["engineer", "-created_at", "-id"], name="sqr_engineer_new_idx"),
+            models.Index(fields=["pm_esg_reviewer", "-created_at", "-id"], name="sqr_reviewer_new_idx"),
+        )
 
     def __str__(self) -> str:
         return self.reference_code or f"SQR draft #{self.pk}"
@@ -1368,6 +1387,7 @@ class Notification(models.Model):
         ]
         indexes = [
             models.Index(fields=["recipient", "event_type", "id"], name="notif_rec_evt_id"),
+            models.Index(fields=["recipient", "is_read", "-created_at"], name="notif_rec_read_new_idx"),
         ]
 
     def __str__(self) -> str:

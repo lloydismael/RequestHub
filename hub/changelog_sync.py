@@ -10,7 +10,19 @@ from django.db import IntegrityError, transaction
 
 from .changelog_forms import ScreenshotField
 from .models import MANILA_TZ, Changelog
-from .release_changelog import ASSET_DIR, COMPARISON_FIELDS, EVIDENCE_POLICY, GROUPS, MANIFEST_PATH, MAX_COMPARISONS, ManifestError, capture_metadata, comparison_kind, missing_comparisons, validate_manifest
+from .release_changelog import (
+    ASSET_DIR,
+    COMPARISON_FIELDS,
+    EVIDENCE_POLICY,
+    GROUPS,
+    MANIFEST_PATH,
+    MAX_COMPARISONS,
+    ManifestError,
+    capture_metadata,
+    comparison_kind,
+    missing_comparisons,
+    validate_manifest,
+)
 
 
 def load_manifest(path: Path = MANIFEST_PATH) -> dict | None:

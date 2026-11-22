@@ -1,15 +1,17 @@
 import base64
+import itertools
 import os
 import re
+from datetime import UTC, date
+from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest import skipUnless
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
-from datetime import date
-from decimal import Decimal
-from types import SimpleNamespace
-
+from django import forms
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.core.paginator import Paginator
@@ -19,6 +21,9 @@ from django.test import RequestFactory, SimpleTestCase, override_settings
 from accounts.forms import ProfileForm, RoleAuthenticationForm, ThemeForm
 from accounts.models import User
 from request_hub.test_html_helpers import extract_scripts, omit_script_elements
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Page, Route
 
 
 class MobileTemplateTests(SimpleTestCase):
@@ -162,14 +167,15 @@ class MobileBrowserTests(SimpleTestCase):
         page.evaluate('location.hash = "#backup"')
         expect(recovery).to_be_visible()
 
-    def test_admin_create_backup_dialog_restores_keyboard_focus(self):
+    def test_admin_create_backup_dialog_restores_keyboard_focus(self) -> None:
+        """Return focus to the backup trigger after closing the keyboard-operated dialog."""
         from playwright.sync_api import expect
 
         page = self.admin_profile_page()
-        opener = page.get_by_role('button', name=re.compile('^create backup$', re.I))
+        opener = page.get_by_role('button', name=re.compile('^create backup$', re.IGNORECASE))
         opener.press('Enter')
         dialog = page.get_by_role('dialog', name='Create backup')
-        note = dialog.get_by_role('textbox', name=re.compile('note', re.I))
+        note = dialog.get_by_role('textbox', name=re.compile('note', re.IGNORECASE))
         expect(dialog).to_be_visible()
         expect(note).to_be_focused()
         note.fill('Before import')
@@ -217,10 +223,11 @@ class MobileBrowserTests(SimpleTestCase):
         expect(hidden).to_be_visible()
         expect(root.get_by_role('status')).to_contain_text('Try again', ignore_case=True)
 
-    def test_monitoring_renders_metrics_and_stops_when_session_ends(self):
-        from datetime import datetime, timedelta, timezone
+    def test_monitoring_renders_metrics_and_stops_when_session_ends(self) -> None:
+        """Render monitoring data and stop refreshing it once authentication expires."""
+        from datetime import datetime, timedelta
 
-        current = datetime.now(timezone.utc).replace(microsecond=0)
+        current = datetime.now(UTC).replace(microsecond=0)
         older = (current - timedelta(minutes=2)).isoformat()
         latest = (current - timedelta(minutes=1)).isoformat()
         tick = current.isoformat()
@@ -1049,25 +1056,29 @@ class MobileBrowserTests(SimpleTestCase):
         page.keyboard.press('Escape')
         self.assertEqual(menu.get_attribute('aria-hidden'), 'true')
 
-    def test_reports_navigation_toggles_while_chart_script_is_loading(self):
-        fixture = {**self.report_fixture(), 'csrf_token': '0' * 32}
-        html = render_to_string('hub/report.html', fixture)
+    def page_with_pending_chart(self, template: str, fixture: dict, path: str) -> 'tuple[Page, Route]':
+        """Serve a full rendered page with Chart.js held and all other assets local."""
+        html = render_to_string(template, {**fixture, 'csrf_token': '0' * 32})
         page = self.browser.new_page(viewport={'width': 792, 'height': 912}, reduced_motion='reduce')
         self.addCleanup(page.close)
-        url = 'http://request-hub.test/reports/'
+        page.set_default_timeout(3000)
+        url = 'http://request-hub.test' + path
         pending = []
 
-        def serve(route):
+        def serve(route: 'Route') -> None:
+            """Delay only Chart.js while serving synthetic fixtures offline."""
             request_url = route.request.url
-            path = urlsplit(request_url).path
+            asset_path = urlsplit(request_url).path
             if request_url == url:
                 route.fulfill(body=html, content_type='text/html')
-            elif path.endswith('/chart.umd.min.js'):
+            elif asset_path.endswith('/chart.umd.min.js'):
                 pending.append(route)
-            elif path.endswith('/bootstrap.min.css'):
+            elif asset_path.endswith('/bootstrap.min.css'):
                 route.fulfill(body=self.bootstrap, content_type='text/css')
-            elif request_url.startswith('http://request-hub.test/') and path.startswith(settings.STATIC_URL):
-                asset = settings.BASE_DIR / 'static' / path[len(settings.STATIC_URL):]
+            elif asset_path.endswith('/bootstrap.bundle.min.js'):
+                route.fulfill(path=Path(os.environ['MOBILE_BOOTSTRAP_JS']))
+            elif request_url.startswith('http://request-hub.test/') and asset_path.startswith(settings.STATIC_URL):
+                asset = settings.BASE_DIR / 'static' / asset_path[len(settings.STATIC_URL):]
                 if asset.is_file():
                     route.fulfill(path=asset)
                 else:
@@ -1076,24 +1087,82 @@ class MobileBrowserTests(SimpleTestCase):
                 route.abort()
 
         page.route('**/*', serve)
-        try:
-            with page.expect_request('**/chart.umd.min.js', timeout=3000):
-                page.goto(url, wait_until='commit')
-            page.locator('script[src$="/chart.umd.min.js"]').wait_for(state='attached', timeout=3000)
-            toggle = page.get_by_role('button', name='Toggle navigation')
-            drawer = page.locator('#navbarNav')
-            self.assertEqual(page.evaluate('document.readyState'), 'loading')
-            toggle.click(timeout=3000)
-            self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
-            drawer.get_by_role('link', name='Dashboard', exact=True).wait_for(state='visible', timeout=3000)
-            toggle.press('Enter', timeout=3000)
-            self.assertEqual(toggle.get_attribute('aria-expanded'), 'false')
-            drawer.wait_for(state='hidden', timeout=3000)
-            self.assertEqual(len(pending), 1)
-            self.assertEqual(page.evaluate('document.readyState'), 'loading')
-        finally:
-            for route in pending:
-                route.abort()
+        with page.expect_request('**/chart.umd.min.js'):
+            page.goto(url, wait_until='commit')
+        page.locator('script[src$="/chart.umd.min.js"]').wait_for(state='attached')
+        self.assertEqual(len(pending), 1)
+        return page, pending[0]
+
+    def test_reports_shell_finishes_parsing_before_chart_cdn_responds(self) -> None:
+        """Keep navigation and report details usable before charts load or fail."""
+        from playwright.sync_api import expect
+
+        fixture = self.report_fixture()
+        fixture['attention_requests'] = [
+            {'reference': f'REQ-{n:05}', 'account': 'North Ops', 'engineer': 'Report Engineer',
+             'priority': 'High', 'due_date': date(2026, 8, 15), 'is_overdue': True, 'days': 3,
+             'url': f'/requests/{n}/'} for n in range(1, 8)
+        ]
+        for cdn_available in (True, False):
+            with self.subTest(cdn_available=cdn_available):
+                page, chart = self.page_with_pending_chart('hub/report.html', fixture, '/reports/')
+                page.wait_for_function('document.readyState === "interactive"')
+                toggle = page.get_by_role('button', name='Toggle navigation')
+                drawer = page.locator('#navbarNav')
+                toggle.click()
+                expect(toggle).to_have_attribute('aria-expanded', 'true')
+                expect(drawer.get_by_role('link', name='Dashboard', exact=True)).to_be_visible()
+                toggle.press('Enter')
+                expect(drawer).to_be_hidden()
+
+                attention = page.get_by_role('article', name='Needs Attention')
+                attention.get_by_role('button', name='Load more').click()
+                dialog = page.get_by_role('dialog', name='Needs Attention')
+                expect(dialog.get_by_role('link', name='REQ-00007')).to_be_visible()
+                page.keyboard.press('Escape')
+                self.assertEqual(page.evaluate('document.readyState'), 'interactive')
+
+                if cdn_available:
+                    chart.fulfill(path=Path(os.environ['MOBILE_CHART_JS']), content_type='application/javascript')
+                    page.wait_for_function('window.Chart?.getChart("requestTrendChart")')
+                else:
+                    chart.abort()
+                card = page.locator('article').filter(has=page.locator('#requestTrendChart'))
+                card.locator('summary').click()
+                expect(card.locator('tbody td')).to_have_text(['0', '0', '—', '1', '4', '3'])
+                fallback = card.get_by_text('Chart unavailable. Exact values are available below.')
+                if cdn_available:
+                    expect(fallback).to_be_hidden()
+                else:
+                    expect(fallback).to_be_visible()
+
+    def test_requestor_can_select_an_account_before_chart_cdn_responds(self) -> None:
+        """Enhance and open the request form without waiting for Chart.js."""
+        from playwright.sync_api import expect
+
+        class RequestFixtureForm(forms.Form):
+            """Render an account field with the production autocomplete data hook."""
+
+            account_name = forms.CharField(widget=forms.TextInput(attrs={'list': 'account-name-options'}))
+
+        fixture = {**self.graph_fixture(True), 'form': RequestFixtureForm(),
+                   'account_name_choices': ['North Operations', 'Other Account']}
+        page, chart = self.page_with_pending_chart('hub/dashboard.html', fixture, '/dashboard/')
+        page.get_by_role('button', name='New Request').click()
+        dialog = page.get_by_role('dialog', name='Create Request')
+        account = dialog.get_by_role('combobox', name='Account name', exact=True)
+        account.fill('North')
+        account.press('ArrowDown')
+        account.press('Enter')
+        expect(account).to_have_value('North Operations')
+        self.assertEqual(page.evaluate('document.readyState'), 'interactive')
+
+        graph = page.get_by_role('tab', name='Request Report Graph')
+        page.get_by_role('button', name='Cancel', exact=True).click()
+        graph.click()
+        expect(graph).to_have_attribute('aria-selected', 'true')
+        chart.fulfill(path=Path(os.environ['MOBILE_CHART_JS']), content_type='application/javascript')
+        page.wait_for_function('window.Chart?.getChart("requestor-status-chart")')
 
     def management_page(self, tab, **fixture):
         html = render_to_string('hub/management.html', {**self.context(), 'active_tab': tab, **fixture})
@@ -1102,6 +1171,9 @@ class MobileBrowserTests(SimpleTestCase):
         page.route('**/*', lambda route: route.abort())
         url = f'http://request-hub.test/management/?tab={tab}'
         page.route(url, lambda route: route.fulfill(body=html, content_type='text/html'))
+        if tab == 'accounts':
+            script = settings.BASE_DIR / 'static' / 'hub' / 'management-accounts.js'
+            page.route('**/static/hub/management-accounts.js', lambda route: route.fulfill(path=script))
         page.goto(url)
         return page
 
@@ -1135,9 +1207,9 @@ class MobileBrowserTests(SimpleTestCase):
         from hub.models import Account
         from hub.views import UserManagementView
 
-        page = self.management_page('accounts', account_formset=UserManagementView.account_form_class(
-            queryset=Account.objects.none(),
-        ))
+        formset = UserManagementView.account_form_class(queryset=Account.objects.none())
+        page = self.management_page('accounts', account_formset=formset, account_new_form=formset[0],
+                                    account_list_url='?tab=accounts')
         accounts_url = page.url
         users = page.locator('#users-tab')
         save = page.get_by_role('button', name='Save Changes', include_hidden=True)
@@ -1233,7 +1305,8 @@ class MobileBrowserTests(SimpleTestCase):
         page.evaluate(self.navbar_script)
         return page
 
-    def test_phone_and_profile_preview_keep_navigation_controls_on_one_row(self):
+    def test_phone_and_profile_preview_keep_navigation_controls_on_one_row(self) -> None:
+        """Keep navigation controls together at narrow widths in both rendering paths."""
         for width, preview, font_size in ((320, False, 16), (320, False, 20), (375, False, 16), (992, False, 16), (1440, True, 16)):
             with self.subTest(width=width, preview=preview, font_size=font_size):
                 page = self.navigation_page(width, font_size=font_size)
@@ -1249,7 +1322,7 @@ class MobileBrowserTests(SimpleTestCase):
                 )]
                 self.assertLessEqual(max(box['y'] for box in boxes),
                                      min(box['y'] + box['height'] for box in boxes), boxes)
-                for left, right in zip(boxes, boxes[1:]):
+                for left, right in itertools.pairwise(boxes):
                     self.assertLessEqual(left['x'] + left['width'], right['x'] + 1, boxes)
                 self.assertLessEqual(max(box['y'] + box['height'] for box in boxes), drawer.bounding_box()['y'])
                 for control in boxes[1:]:

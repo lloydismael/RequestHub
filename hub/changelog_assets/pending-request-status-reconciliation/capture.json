@@ -1,0 +1,32 @@
+{
+  "pinned_dev": "20ef298cb5d1c33fdcb427fa78eb2b72fe01e801",
+  "pinned_master": "878c282ef9eb4940db54b284d467abfb70fe999d",
+  "comparison": {
+    "title": "Request status reconciliation",
+    "before_text": "The first read did not lock the row. A simulated lifecycle write failure left the changed status and completion date saved.",
+    "after_text": "The first read locks the row. A simulated lifecycle write failure rolls back the status and completion date.",
+    "capture_note": "Matched synthetic PostgreSQL 16 tests. Not exact release-revision evidence.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "measurements": {
+    "before": {
+      "first_read_locks_row": false,
+      "status_and_date_rolled_back": false,
+      "regressions_failed": 2,
+      "handler_sha256": "11d69a4b6aacf026b600162790833262334fc8686fdba797b5f18e0f3effa192"
+    },
+    "after": {
+      "first_read_locks_row": true,
+      "status_and_date_rolled_back": true,
+      "regressions_passed": 2,
+      "handler_sha256": "568cca4353e29f6efee98c473689d6ec1de3fe27a0b31f61d5c55c8eedd91559"
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "25da49ea438f77eb4c2a62f5933a68ac667ba3b099951778bff88d71ca254816",
+    "report-after.png": "a0a601e5faf9e7d806c846483bdedfbe5ccf7670020b18a77e757fc5e9b8a44e"
+  },
+  "exact_first_parent_release_evidence": false
+}

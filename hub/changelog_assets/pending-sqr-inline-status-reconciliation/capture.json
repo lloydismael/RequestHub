@@ -1,0 +1,46 @@
+{
+  "pinned_dev": "20ef298cb5d1c33fdcb427fa78eb2b72fe01e801",
+  "pinned_master": "878c282ef9eb4940db54b284d467abfb70fe999d",
+  "pre_followup_merge_tree": "4363f7c87799b30a6a2b358b3fee633cb677b4f3",
+  "comparison": {
+    "title": "SQR inline status error response",
+    "before_text": "An unsupported status returned HTTP 400 with \"Unable to process request\".",
+    "after_text": "An unsupported status returns HTTP 400 with \"Invalid SQR status\". Other workflow errors still hide internal details.",
+    "capture_note": "Matched synthetic PostgreSQL tests using the same regression selectors. Not exact release-revision evidence.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "measurements": {
+    "before": {
+      "invalid_status_http": 400,
+      "invalid_status_response": "Unable to process request",
+      "legacy_lookup_regression_passed": false,
+      "unexpected_workflow_detail_hidden": true,
+      "matched_tests_passed": 1,
+      "log_sha256": "9ddc3cabf47f3c5a64b9dd44c5603459896b890fe60c78374e59a25e8eeedeea",
+      "source_sha256": {
+        "hub/services/sqr_workflow.py": "27c3db75aecb2189f873ff9cb116a37f73ba1769bf671c3ddc88102966b4df57",
+        "hub/views/sqr.py": "73eb403477d6bc9e6577ef8a6f79b966e352755dd8c7a056fccb4c2a385b8552"
+      }
+    },
+    "after": {
+      "invalid_status_http": 400,
+      "invalid_status_response": "Invalid SQR status",
+      "legacy_lookup_regression_passed": true,
+      "unexpected_workflow_detail_hidden": true,
+      "matched_tests_passed": 2,
+      "log_sha256": "3449e5b59ff612eb01d98b63de384def8e6a06cf0a1f1c585a949b431e0d0d52",
+      "source_sha256": {
+        "hub/services/sqr_workflow.py": "bf165eb50ed82e28399e3d9790f8714afca88df48a10d2be0779e88bd6b26ec4",
+        "hub/views/sqr.py": "2517fc0e4b9ac614cc41f63bbd3e00dd24b1e686bd1fa53d49558669d41a971f"
+      },
+      "regression_test_sha256": "43505be1b9d5e903c50342c2c80e2ba06531d3391a7604b5649e199d0ffce115"
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "96d1b16f29ece4f31e751dd8df728da20ff379595d95be654bb5f6db5d979058",
+    "report-after.png": "adb20f3afa594eb2273fb77df2258a2f017b1b32b9ca4af4eddbf3c231f8ae7a"
+  },
+  "exact_first_parent_release_evidence": false
+}

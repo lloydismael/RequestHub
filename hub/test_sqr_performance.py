@@ -1,7 +1,7 @@
 """Frozen-date normalization and isolated read-only snapshot endpoint regressions."""
 
 import json
-from datetime import date, datetime, timedelta, timezone as dt_timezone
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import patch
 
 from django.db import connection
@@ -11,12 +11,14 @@ from django.urls import reverse
 
 from accounts.models import User
 from hub.models import SqrProjectPerformance, SqrSubmission, SqrSubmissionHistory
-from hub.services.sqr_performance import build_sqr_performance_snapshot, normalize_sqr_project
+from hub.services.sqr_performance import (
+    build_sqr_performance_snapshot,
+    normalize_sqr_project,
+)
 from hub.views import SqrListView, SqrPerformanceDataView, _sqr_queryset_for_user
 
-
 TODAY = date(2026, 9, 28)
-FETCHED_AT = datetime(2026, 9, 27, 16, 30, tzinfo=dt_timezone.utc)
+FETCHED_AT = datetime(2026, 9, 27, 16, 30, tzinfo=UTC)
 PROJECT_KEYS = {
     "pk", "reference_code", "project_name", "customer_name", "pm_id", "pm_name",
     "pm_fallback", "sse_name", "status_key", "status_label",
@@ -455,14 +457,17 @@ class SqrPerformanceEndpointTests(TestCase):
                 self.assertEqual(response["Allow"], "GET")
                 self.assertIn("no-store", response["Cache-Control"])
 
-    def test_no_writes_no_history_or_legacy_reads_no_full_context(self):
+    def test_no_writes_no_history_or_legacy_reads_no_full_context(self) -> None:
+        """Keep the performance endpoint read-only and independent of history and full context."""
         before = list(SqrSubmission.objects.values())
         legacy_before = list(SqrProjectPerformance.objects.values())
         history_before = list(SqrSubmissionHistory.objects.values())
         self.client.force_login(self.pm)
-        with patch.object(SqrListView, "get_context_data", side_effect=AssertionError("Full context called")):
-            with CaptureQueriesContext(connection) as queries:
-                response = self.client.get(self.url)
+        with (
+            patch.object(SqrListView, "get_context_data", side_effect=AssertionError("Full context called")),
+            CaptureQueriesContext(connection) as queries,
+        ):
+            response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         for query in queries:
             sql = query["sql"].upper()

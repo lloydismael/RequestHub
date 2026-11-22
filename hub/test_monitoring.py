@@ -1,6 +1,6 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from threading import Event
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -8,10 +8,10 @@ from unittest.mock import patch
 from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import CredentialUnavailableError
 from django.db import OperationalError
-from requests import Response, Timeout
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils.dateparse import parse_datetime
+from requests import Response, Timeout
 
 from accounts.models import User
 
@@ -107,11 +107,12 @@ class PlatformMetricsTests(SimpleTestCase):
         }
 
     @override_settings(AZURE_MONITOR_ON_APP_SERVICE=False)
-    def test_only_explicit_cli_mode_uses_the_cli_identity(self):
+    def test_only_explicit_cli_mode_uses_the_cli_identity(self) -> None:
+        """Use local CLI credentials only in the explicitly selected authentication mode."""
         from hub.monitoring_azure import POSTGRES, AzureMetrics, _credential
 
         self.addCleanup(_credential.cache_clear)
-        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 1, 1, tzinfo=UTC)
         provider = AzureMetrics(POSTGRES)
 
         def metrics_response(_url, *, headers, **_kwargs):
@@ -140,12 +141,13 @@ class PlatformMetricsTests(SimpleTestCase):
         self.assertEqual(local["metrics"]["cpu_percent"]["value"], 23)
 
     @override_settings(AZURE_MONITOR_AUTH_MODE="azure_cli", AZURE_MONITOR_ON_APP_SERVICE=False)
-    def test_cli_metrics_use_each_resources_subscription(self):
+    def test_cli_metrics_use_each_resources_subscription(self) -> None:
+        """Read metrics in the subscription of each configured resource."""
         from hub.monitoring_azure import POSTGRES, AzureMetrics, _credential
 
         first = "00000000-0000-0000-0000-000000000000"
         second = "11111111-1111-1111-1111-111111111111"
-        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 1, 1, tzinfo=UTC)
 
         def cli_identity(*, subscription=None, **_kwargs):
             return SimpleNamespace(get_token=lambda _scope: SimpleNamespace(token=subscription or "default-tenant"))
@@ -187,10 +189,11 @@ class PlatformMetricsTests(SimpleTestCase):
                 credential.assert_not_called()
 
     @override_settings(AZURE_MONITOR_AUTH_MODE="managed_identity")
-    def test_credential_errors_are_not_resource_denials_and_drop_cached_readings(self):
+    def test_credential_errors_are_not_resource_denials_and_drop_cached_readings(self) -> None:
+        """Discard cached readings on credential failure without mislabeling the cause."""
         from hub.monitoring_azure import POSTGRES, AzureMetrics
 
-        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 1, 1, tzinfo=UTC)
         response = Response()
         response.status_code = 200
         response._content = json.dumps({"value": [
@@ -215,10 +218,11 @@ class PlatformMetricsTests(SimpleTestCase):
                     self.assertNotIn("private", json.dumps(result))
             self.assertEqual(get.call_count, 2)
 
-    def test_missing_and_stale_samples_do_not_hide_a_reported_zero(self):
-        from hub.monitoring_azure import POSTGRES, NORMAL_REFRESH_SECONDS, AzureMetrics
+    def test_missing_and_stale_samples_do_not_hide_a_reported_zero(self) -> None:
+        """Distinguish valid zero readings from data that is stale or unavailable."""
+        from hub.monitoring_azure import NORMAL_REFRESH_SECONDS, POSTGRES, AzureMetrics
 
-        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 1, 1, tzinfo=UTC)
         recent = (now - timedelta(minutes=2)).isoformat()
         old = (now - timedelta(minutes=10)).isoformat()
         provider = AzureMetrics(POSTGRES)
@@ -247,7 +251,12 @@ class PlatformMetricsTests(SimpleTestCase):
         AZURE_MONITOR_WEB_APP_RESOURCE_ID="/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/example/providers/Microsoft.Web/sites/example-app",
     )
     def test_concurrent_requests_share_one_nonblocking_azure_refresh_slot(self):
-        from hub.monitoring_azure import POSTGRES, WEB_APP, AzureMetrics, platform_snapshot
+        from hub.monitoring_azure import (
+            POSTGRES,
+            WEB_APP,
+            AzureMetrics,
+            platform_snapshot,
+        )
 
         entered, release = Event(), Event()
 
@@ -277,7 +286,8 @@ class PlatformMetricsTests(SimpleTestCase):
         self.assertEqual(refreshed["postgres"]["metrics"]["cpu_percent"]["value"], 12)
         self.assertEqual(refreshed["web_app"]["metrics"]["Requests"]["value"], 42)
 
-    def test_metric_errors_preserve_timestamped_samples_unless_access_is_lost(self):
+    def test_metric_errors_preserve_timestamped_samples_unless_access_is_lost(self) -> None:
+        """Retain a timestamped sample on transient errors but clear it on access loss."""
         from hub.monitoring_azure import POSTGRES, AzureMetrics
 
         def response(status, *metrics):
@@ -287,7 +297,7 @@ class PlatformMetricsTests(SimpleTestCase):
             result._content_consumed = True
             return result
 
-        now = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+        now = datetime(2025, 1, 1, 1, tzinfo=UTC)
         sample_time = (now - timedelta(minutes=1)).isoformat()
         cpu = self.metric("cpu_percent", "average", **{sample_time: 0})
         disk = self.metric("storage_free", "average", **{sample_time: 21474836480})

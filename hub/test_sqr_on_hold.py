@@ -5,11 +5,13 @@ import json
 from datetime import timedelta
 from decimal import Decimal
 from html.parser import HTMLParser
-from unittest.mock import patch
+from importlib.util import find_spec
+from unittest.mock import MagicMock, patch
 
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase, TransactionTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -17,7 +19,12 @@ from openpyxl import load_workbook
 from accounts.models import User
 from hub import form_editor
 from hub.form_editor_runtime import TOKEN_FIELD
-from hub.models import Notification, SqrSubmission, SqrSubmissionChange, SqrSubmissionHistory
+from hub.models import (
+    Notification,
+    SqrSubmission,
+    SqrSubmissionChange,
+    SqrSubmissionHistory,
+)
 from hub.test_multiple_sqrs import MultipleSqrFixtures
 from hub.views import SqrImportView
 
@@ -92,6 +99,59 @@ class SqrOnHoldTests(MultipleSqrFixtures, TestCase):
         self.assertTrue(SqrSubmission._meta.get_field("hold_reason").blank)
         self.assertEqual(SqrSubmission._meta.get_field("hold_reason").get_internal_type(), "TextField")
         self.assertEqual(self.submission.hold_reason, "")
+
+    def test_approval_service_preserves_metadata_when_pausing_an_approved_quote(self) -> None:
+        """Pausing approval must retain the original validity and assigned PM."""
+        self.assertIsNotNone(find_spec('hub.services.sqr_workflow'))
+        from hub.services.sqr_workflow import save_inline_change
+
+        _, field, old_status, _, change = save_inline_change(
+            self.submission.pk, self.pm, 'status', SqrSubmission.Status.APPROVED,
+        )
+        self.assertEqual((field, old_status), ('status', SqrSubmission.Status.FOR_PROCESSING))
+        self.assertIsNotNone(change)
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.assigned_pm, self.pm)
+        self.assertIsNotNone(self.submission.reviewed_at)
+        self.assertIsNotNone(self.submission.validity_due_date)
+        approved_dates = self.submission.reviewed_at, self.submission.validity_due_date
+
+        save_inline_change(
+            self.submission.pk, self.pm, 'status', SqrSubmission.Status.ON_HOLD,
+            hold_reason='Waiting for the customer',
+        )
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, SqrSubmission.Status.ON_HOLD)
+        self.assertEqual(self.submission.hold_reason, 'Waiting for the customer')
+        self.assertEqual((self.submission.reviewed_at, self.submission.validity_due_date), approved_dates)
+
+    def test_inline_edit_keeps_legacy_submission_lookup(self) -> None:
+        """Apply status validation to the submission resolved by the legacy lookup."""
+        with patch("hub.views.get_object_or_404", return_value=self.submission):
+            response = self.client.post(
+                reverse("hub:sqr-inline-update", args=[self.submission.pk + 10000]),
+                data=json.dumps({"field": "status", "value": "unknown"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "Invalid SQR status")
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.status, SqrSubmission.Status.FOR_PROCESSING)
+
+    def test_inline_edit_keeps_internal_workflow_error_details_private(self) -> None:
+        """Do not expose arbitrary workflow error details even for HTTP 400."""
+        from hub.services.sqr_workflow import SqrWorkflowError
+
+        before, counts = self.snapshot(), self.mutation_counts()
+        with patch(
+            "hub.services.sqr_workflow.save_inline_change",
+            side_effect=SqrWorkflowError("Synthetic internal detail", 400),
+        ):
+            response = self.update_status(SqrSubmission.Status.ON_HOLD, hold_reason="Awaiting approval")
+
+        self.assert_rejected_without_mutation(response, before, counts)
+        self.assertEqual(response.json()["error"], "Unable to process request")
 
     def test_pm_and_admin_can_hold(self):
         for user in (self.pm, self.admin):
@@ -603,7 +663,8 @@ class SqrApprovalPolicyTests(MultipleSqrFixtures, TestCase):
         self.assertEqual(form_editor.get_custom_answers(key, self.row), {"custom_filing_note": "Filed"})
 
     @patch("hub.views._send_sqr_for_revision_email")
-    def test_assigned_reviewer_explicitly_reopens_approved_hold_for_owner(self, revision_email):
+    def test_assigned_reviewer_explicitly_reopens_approved_hold_for_owner(self, revision_email: MagicMock) -> None:
+        """Let the owner revise an approved hold only after its assigned reviewer reopens it."""
         self.approve()
         self.assertEqual(self.inline("status", "on_hold", hold_reason="Awaiting decision").status_code, 200)
         before = self.state()
@@ -616,7 +677,7 @@ class SqrApprovalPolicyTests(MultipleSqrFixtures, TestCase):
         response = self.client.post(self.edit_url(), {**self.payload, "sse_manhrs": "36"})
         self.assertEqual(response.status_code, 302)
         self.row.refresh_from_db()
-        self.assertEqual(self.row.sse_manhrs, Decimal("20"))
+        self.assertEqual(self.row.sse_manhrs, Decimal(20))
         self.assertEqual(self.state()[1:], before[1:])
         self.client.force_login(self.pm)
         before = self.state()
@@ -633,7 +694,7 @@ class SqrApprovalPolicyTests(MultipleSqrFixtures, TestCase):
         response = self.client.post(self.edit_url(), {**self.payload, "sse_manhrs": "36"})
         self.assertEqual(response.status_code, 302)
         self.row.refresh_from_db()
-        self.assertEqual(self.row.sse_manhrs, Decimal("36"))
+        self.assertEqual(self.row.sse_manhrs, Decimal(36))
 
     def test_nonreviewer_reads_grid_and_history_but_only_edits_delivery(self):
         self.client.force_login(self.pm)
@@ -722,6 +783,30 @@ class SqrApprovalPolicyTests(MultipleSqrFixtures, TestCase):
             self.assertEqual(self.state(), before)
         listed = self.client.get(self.history_url()).json()["entries"]
         self.assertFalse(next(entry for entry in listed if entry["id"] == revision_entry.pk)["restorable"])
+
+    @patch("hub.views._send_sqr_for_revision_email")
+    def test_history_reuses_quote_edits_without_changing_restore_decisions(self, revision_email):
+        self.approve()
+        self.assertEqual(self.inline("status", "for_revision", review_notes="Revise estimate").status_code, 200)
+        revision = self.row.history_entries.latest("pk")
+        older = self.row.history_entries.create(
+            actor=self.pm, field=revision.field, old_values=revision.old_values,
+            new_values=revision.new_values, metadata=revision.metadata,
+        )
+        same_time = self.row.history_entries.create(
+            actor=self.pm, field="pm_manhrs", old_values={"pm_manhrs": "16"}, new_values={"pm_manhrs": "24"},
+        )
+        self.row.history_entries.filter(pk=same_time.pk).update(created_at=older.created_at)
+        self.row.history_entries.create(
+            actor=self.pm, field="pm_manhrs", old_values={"pm_manhrs": "16"}, new_values={"pm_manhrs": "16"},
+        )
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self.history_url())
+        flags = {entry["id"]: entry["restorable"] for entry in response.json()["entries"]}
+        self.assertFalse(flags[revision.pk])
+        self.assertTrue(flags[older.pk])
+        reads = [query for query in queries if f'FROM "{SqrSubmissionHistory._meta.db_table}"' in query["sql"]]
+        self.assertEqual(len(reads), 2)
 
     def test_approved_proposal_saves_configured_answer_from_saved_price(self):
         key = "sqr_proposal_status"

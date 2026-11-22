@@ -1,0 +1,309 @@
+{
+  "base_head": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "before_source": "Frozen local pre-Phase-5 inputs, including earlier uncommitted work.",
+  "after_source": "Local Phase 5 working tree; not an exact release commit.",
+  "capture": "Offline Chromium 156.0.8078.4. Measured technical reports, not UI screenshots.",
+  "comparison": {
+    "title": "Lookup query counts and source fingerprints",
+    "before_text": "The badge context always queried PostgreSQL. Each department lookup also repeated the grouped count.",
+    "after_text": "Unused badges skip SQL. Warm Redis hits skip badge and department SQL; Activity and polling stay live.",
+    "capture_note": "Same synthetic PostgreSQL fixture. Counts are SQL statements, not timings. Redis is opt-in.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "files": {
+    "before": {
+      ".env.example": {
+        "sha256": "68e31d3622e14ab4509adb9cd1ccb36ef181f4839fb9bd675cbd5190c4bc4761",
+        "bytes": 3503
+      },
+      "README.md": {
+        "sha256": "1e08bf159e2b966794ff7c53040f9be984be677cdb2cda6e2191936cc40774d1",
+        "bytes": 61016
+      },
+      "accounts/recovery.py": {
+        "sha256": "823b88c599219d6724063f421b7ebb9c5878b6e89c21303af126de820cc0d660",
+        "bytes": 24246
+      },
+      "docs/azure-app-service-deployment.md": {
+        "sha256": "1dbd6b0c8ece7c96f187bab1fd9aafea43b3aba510449212d4dcb8a6a00af8fb",
+        "bytes": 13581
+      },
+      "docs/cd-workflow-testing.md": {
+        "sha256": "45c17c3c287290fceae0747fed7be7319a43474b6198cd01c58b6d043cd76c47",
+        "bytes": 56965
+      },
+      "hub/assistant_directory.py": {
+        "sha256": "a2d051198feef10bb47c5998fd45160806e322b706eaa27d8d86de35f883d192",
+        "bytes": 7946
+      },
+      "hub/context_processors.py": {
+        "sha256": "7d52ce290a2159ebbcb93b32dac7770f47cafb6f4d9ffd6564e88c7d2945769e",
+        "bytes": 2782
+      },
+      "hub/notification_views.py": {
+        "sha256": "89f42773651922aa58f086a78c8709d2598605d8303a68efcf4f45f412a51fc8",
+        "bytes": 9062
+      },
+      "hub/services/notifications.py": {
+        "sha256": "df9be475f756335274e09e84257ff625fd43a0746d7af99f792fbe1703c6b79a",
+        "bytes": 7242
+      },
+      "hub/signals.py": {
+        "sha256": "c2216e594ea8a8e8ef480e01d85519812ac6ba9190f4cc47f555e840a7f5c6b7",
+        "bytes": 1944
+      },
+      "hub/test_notification_performance.py": {
+        "sha256": "2a05a8b4ac9801732a1d068fae998a9994944998ecd131546a68cd66fda2f21d",
+        "bytes": 4840
+      },
+      "hub/test_query_performance.py": {
+        "sha256": "909cd1a72efe3b3f30cf1ecce95fb6e8235104924b2ac546b585fba494791261",
+        "bytes": 12604
+      },
+      "request_hub/settings.py": {
+        "sha256": "898096681ed1f7e2d1c67b1ba05ca4f2f4e38704720f5723a097efbdcff7401b",
+        "bytes": 11900
+      },
+      "requirements-changelog-capture.txt": {
+        "sha256": "6fcd6095b89feb769b057dd007a1cc7ebb83e05d2e5f1ecfea58a45635bebbd7",
+        "bytes": 91908
+      },
+      "requirements.lock": {
+        "sha256": "aab147c47616b17716b50e169f7c398d054039574cfef2e4169ce06662a57531",
+        "bytes": 82803
+      },
+      "requirements.txt": {
+        "sha256": "748fc2bf5b68bec69e2ee35fa5a9ce2b06d1fa361cc6a631fd2d8799ebd41419",
+        "bytes": 408
+      },
+      "hub/services/lookup_cache.py": null
+    },
+    "after": {
+      ".env.example": {
+        "sha256": "95b7de50efdcc3866a052381b27575e91d9e99388d40a05b84d514f818277951",
+        "bytes": 3714
+      },
+      "README.md": {
+        "sha256": "26c1c927f7d014170a6c07a4055e47c61bf71a273e50d2037f33173478b80cde",
+        "bytes": 61367
+      },
+      "accounts/recovery.py": {
+        "sha256": "5ae2c12885fa8177f67ac55fb6af1dc3f7b07b0399cb01901b3f2036c6e6af1f",
+        "bytes": 24511
+      },
+      "docs/azure-app-service-deployment.md": {
+        "sha256": "795b5b37038bd12b830951185deff7934f1b31b32b1589fa1e3065b2cb3bc6e7",
+        "bytes": 14878
+      },
+      "docs/cd-workflow-testing.md": {
+        "sha256": "e4a4d47f104605e048415aa39ae35d02ae4a8a783931c84474731470a2c01deb",
+        "bytes": 60125
+      },
+      "hub/assistant_directory.py": {
+        "sha256": "ffcda289b5edbfc6e570112668f43b2ed99718613eab935a4e0af3a783751d7f",
+        "bytes": 8576
+      },
+      "hub/context_processors.py": {
+        "sha256": "0c5d98887d43332fa4a07b3f1f730130575386a38f6083597740d65917c94149",
+        "bytes": 3813
+      },
+      "hub/notification_views.py": {
+        "sha256": "0e627fdc79aa35a99d7a00f650e7463263e05510862832c071c21d016bcdc4c8",
+        "bytes": 9658
+      },
+      "hub/services/notifications.py": {
+        "sha256": "914f713c452ef7e10aea539fd6aa6e5f32f52615e9f9d7b5bea66ed803468edb",
+        "bytes": 7582
+      },
+      "hub/signals.py": {
+        "sha256": "e925a876859bf835d93dad5096f491bc0066c92c1f444716561cb665b099a25e",
+        "bytes": 5006
+      },
+      "hub/test_notification_performance.py": {
+        "sha256": "c38b19328894f4e4a34d7a3bd5d1b5a429d97c2567eb7a1dfd831f89c371b18a",
+        "bytes": 16779
+      },
+      "hub/test_query_performance.py": {
+        "sha256": "907040ee001acf3dd9f9deb1ae83f99924a6de114b6f2d2008fe3d4692805cdf",
+        "bytes": 12604
+      },
+      "request_hub/settings.py": {
+        "sha256": "adcc578c058c2fc1c422dc16e2226c8aabad5fad6db1bac3f9b9a4953788a344",
+        "bytes": 12930
+      },
+      "requirements-changelog-capture.txt": {
+        "sha256": "af20181518a10b418948dc0fb2b234e50b5c1ebcf729d39e0d362630d2b4e74a",
+        "bytes": 92126
+      },
+      "requirements.lock": {
+        "sha256": "aa74b0480f7046846ae95f4cab45d76d73d3d505ba9f93714efa260a9942117a",
+        "bytes": 83020
+      },
+      "requirements.txt": {
+        "sha256": "6a67a0a11ed2cedc8c3632a708415687fb3be5b781e626b69feb878e0faa63cf",
+        "bytes": 425
+      },
+      "hub/services/lookup_cache.py": {
+        "sha256": "79537995047c5735a22d65fc05fdd6b27e6e597ce3dd0d2335663f5eae8378fd",
+        "bytes": 4177
+      }
+    }
+  },
+  "metrics": {
+    "matched_operations": [
+      {
+        "operation": "unused_context",
+        "label": "Badge context, values unused",
+        "before": 1,
+        "no_redis": 0,
+        "redis": 0,
+        "response_sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+      },
+      {
+        "operation": "badge_cold",
+        "label": "Badge and toast cursor, cold",
+        "before": 1,
+        "no_redis": 1,
+        "redis": 1,
+        "response_sha256": "e718fe8edf8a7c2917cd7444286b7048042a74abf5208f1d70933c08dbd6b7e9"
+      },
+      {
+        "operation": "badge_warm",
+        "label": "Badge and toast cursor, warm",
+        "before": 1,
+        "no_redis": 1,
+        "redis": 0,
+        "response_sha256": "e718fe8edf8a7c2917cd7444286b7048042a74abf5208f1d70933c08dbd6b7e9"
+      },
+      {
+        "operation": "departments_cold",
+        "label": "Grouped department counts, cold",
+        "before": 1,
+        "no_redis": 1,
+        "redis": 1,
+        "response_sha256": "f8201151ad7aaf26649f8ed3577e6223f5c51362c1af73463ed9dfa70eb3e9db"
+      },
+      {
+        "operation": "departments_warm",
+        "label": "Grouped department counts, warm",
+        "before": 1,
+        "no_redis": 1,
+        "redis": 0,
+        "response_sha256": "f8201151ad7aaf26649f8ed3577e6223f5c51362c1af73463ed9dfa70eb3e9db"
+      },
+      {
+        "operation": "request_edit",
+        "label": "Request Edit",
+        "before": 9,
+        "no_redis": 8,
+        "redis": 8,
+        "response_sha256": "d9695f449866a16ab7fa1839811942bc96aa2fee57509328619e569359c0e6a4"
+      },
+      {
+        "operation": "dashboard_warm",
+        "label": "Admin dashboard, warm",
+        "before": 13,
+        "no_redis": 13,
+        "redis": 12,
+        "response_sha256": "4e2188869e99998cfadaa64fd21cee8ee9acebb8d716a0cc6d0d82134984e0a2"
+      },
+      {
+        "operation": "changelogs_warm",
+        "label": "Changelogs, warm",
+        "before": 5,
+        "no_redis": 5,
+        "redis": 4,
+        "response_sha256": "f1665466d17084c4fbb3571b365bebd0c0e55b6de1327158c027aac5e4ec96f9"
+      },
+      {
+        "operation": "activity",
+        "label": "Notifications Activity",
+        "before": 6,
+        "no_redis": 6,
+        "redis": 6,
+        "response_sha256": "79c5482879fbbb2cdc8f391eb3f20d3d7bbb82a448c841a7d6e861ad647327a1"
+      },
+      {
+        "operation": "toast_poll",
+        "label": "Toast polling",
+        "before": 4,
+        "no_redis": 4,
+        "redis": 4,
+        "response_sha256": "af5a2e6cc79dfcd8ec6807dd52015e881dd67fddc2dbc51df30ade6af44f39b4"
+      },
+      {
+        "operation": "department_endpoint_warm",
+        "label": "Department list (JSON), warm",
+        "before": 3,
+        "no_redis": 3,
+        "redis": 2,
+        "response_sha256": "f3f81bcc97dc0c7b395cab41649d49128df489082ecfec3a8d76bbdae2e5c58b"
+      },
+      {
+        "operation": "members_endpoint",
+        "label": "Department members (JSON)",
+        "before": 6,
+        "no_redis": 6,
+        "redis": 6,
+        "response_sha256": "8f09384bfff5ad79b4e200eba04c83a6bf105e6d898d9705edb95642bf5ffac9"
+      }
+    ],
+    "cross_process": {
+      "warm_before_write": {
+        "queries": 0,
+        "notification_queries": 0,
+        "department_queries": 0,
+        "result": [
+          1,
+          1
+        ]
+      },
+      "cold_after_write": {
+        "queries": 2,
+        "notification_queries": 1,
+        "department_queries": 1,
+        "result": [
+          0,
+          0
+        ]
+      },
+      "warm_after_write": {
+        "queries": 0,
+        "notification_queries": 0,
+        "department_queries": 0,
+        "result": [
+          0,
+          0
+        ]
+      },
+      "outage": {
+        "sql_fallback": true,
+        "write_committed": true,
+        "elapsed_ms": 1878
+      }
+    },
+    "measurement_sha256": {
+      "before": "f0caa5c64695a303b7abec8a6637350fe8a06dd0802bc273aea67eb8f43a9616",
+      "no_redis": "e1ee3d906fe78fe1850a2fb0a0ce7f0361b8f2f00744c98b573ce48ec36d2f15",
+      "redis": "5433b3ebcaa7d5e1b6c7cc39677cd796c14e04ff853201d789e34ca0bbe816c8"
+    },
+    "ruff": {
+      "before": 952,
+      "after": 948
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "455bc6af6183256c02415256d250775487eb2939b5c2b75fa100ac24869d92b2",
+    "report-after.png": "58aa4df8ae3723af7cfdb9622016e022cd66d46b77b8fd36015686e6bdc020d6"
+  },
+  "notifications_verification": {
+    "draft_hidden_from_reader": true,
+    "draft_report_and_images_return_404": true,
+    "published_via_local_admin_editor": true,
+    "published_report_link_under_technical_evidence": true,
+    "published_images_byte_exact_and_no_store": 2,
+    "local_fixture_rolled_back": true
+  }
+}

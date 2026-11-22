@@ -553,8 +553,11 @@
 </script>
 
 {{ activity_report_data|json_script:"activity-report-data" }}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="{% static 'js/chart-values.js' %}"></script>
-<script src="{% static 'js/chart-theme.js' %}"></script>
-<script src="{% static 'js/request-graphs.js' %}"></script>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+<script src="{% static 'js/chart-values.js' %}" defer></script>
+<script src="{% static 'js/chart-theme.js' %}" defer></script>
+<script src="{% static 'js/request-graphs.js' %}" defer></script>
 {% endblock %}

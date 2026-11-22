@@ -258,11 +258,6 @@
             <div id="sqr-reports-root" class="lg-enter" data-lg-delay="40" data-refresh-url="{% url 'hub:sqr-reports-data' %}">
                 {% include 'hub/partials/sqr_reports.html' %}
             </div>
-
-            <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-            <script src="{% static 'js/chart-values.js' %}"></script>
-            <script src="{% static 'js/chart-theme.js' %}?v=3"></script>
-            <script src="{% static 'js/sqr-report-charts.js' %}?v=2"></script>
         {% else %}
         {% if show_classic_sqr_tracker %}
         {# ── Main Tracker Table ────────────────────────────────────────────── #}
@@ -1750,7 +1745,7 @@
 
             // Re-evaluate SSE manhrs visibility
             var scopeSel = document.getElementById('edit_project_details');
-            if (scopeSel) scopeSel.dispatchEvent(new Event('change'));
+            if (scopeSel) scopeSel.dispatchEvent(new Event('change', { bubbles: true }));
 
             // Show modal
             editModal.classList.add('requestor-modal--visible');
@@ -3832,4 +3827,13 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block page_scripts %}
+{% if is_pm and active_sqr_tab == 'reports' %}
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js" defer></script>
+    <script src="{% static 'js/chart-values.js' %}" defer></script>
+    <script src="{% static 'js/chart-theme.js' %}?v=3" defer></script>
+    <script src="{% static 'js/sqr-report-charts.js' %}?v=2" defer></script>
+{% endif %}
 {% endblock %}

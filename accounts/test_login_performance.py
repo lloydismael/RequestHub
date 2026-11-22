@@ -1,16 +1,15 @@
 from html.parser import HTMLParser
 from pathlib import Path
 
-from PIL import Image
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.staticfiles import finders
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.templatetags.static import static
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 
 from accounts.models import User
-
 
 FULL_PROFILE_ASSETS = (
     "css/liquid-glass-dashboard.css", "css/account-themes.css", "hub/form_runtime.css",

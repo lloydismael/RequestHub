@@ -1,9 +1,9 @@
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 try:
     from analyze_actions_runs import summarize_runs
@@ -89,8 +89,9 @@ class AnalyzeRunsTests(unittest.TestCase):
         self.assertIsNone(record['job_execution_seconds'])
         self.assertEqual(record['evidence'], 'incomplete-jobs')
 
-    def test_running_and_reversed_timestamps_do_not_enter_latency_samples(self):
-        for changes in [dict(status='in_progress'), dict(updated_at='2026-11-04T19:59:00Z')]:
+    def test_running_and_reversed_timestamps_do_not_enter_latency_samples(self) -> None:
+        """Exclude incomplete and negative durations from latency measurements."""
+        for changes in [{'status': 'in_progress'}, {'updated_at': '2026-11-04T19:59:00Z'}]:
             record = self.summarize([self.run_fixture(**changes)], {'1': [self.job_fixture()]})
             self.assertIsNone(record['runs'][0]['elapsed_seconds'])
             self.assertEqual(record['groups'][0]['success_samples'], 0)
@@ -171,7 +172,8 @@ class AnalyzeRunsTests(unittest.TestCase):
         self.assertIsNone(result['runs'][0]['job_execution_seconds'])
         self.assertEqual(result['groups'][0]['success_samples'], 0)
 
-    def test_cli_reads_metadata_without_network(self):
+    def test_cli_reads_metadata_without_network(self) -> None:
+        """Analyze the saved workflow metadata without requesting a live run."""
         self.assertIsNotNone(summarize_runs, 'Timing analyzer is not implemented')
         with tempfile.TemporaryDirectory() as directory:
             runs = Path(directory, 'runs.json')
@@ -181,7 +183,7 @@ class AnalyzeRunsTests(unittest.TestCase):
             completed = subprocess.run([
                 sys.executable, str(Path(__file__).with_name('analyze_actions_runs.py')),
                 '--runs', str(runs), '--jobs', str(jobs),
-            ], capture_output=True, text=True)
+            ], check=False, capture_output=True, text=True)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(json.loads(completed.stdout)['runs'][0]['elapsed_seconds'], 120)
 

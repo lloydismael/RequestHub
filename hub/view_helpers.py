@@ -1,11 +1,8 @@
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from accounts.models import User
-
-from .models import MANILA_TZ as MANILA_TZ
-
-ADMIN_PANEL_ROLES = {User.Roles.ADMIN, User.Roles.PM_ESG}
+from .mixins import ADMIN_PANEL_ROLES as ADMIN_PANEL_ROLES  # noqa: PLC0414 - Legacy re-export.
+from .models import MANILA_TZ as MANILA_TZ  # noqa: PLC0414 - Legacy re-export.
 
 
 def _safe_return_url(request, fallback_name):

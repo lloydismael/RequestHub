@@ -3,8 +3,9 @@ import logging
 import math
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, Sequence
+from typing import Literal
 from urllib.parse import urlsplit
 
 from azure.core.exceptions import ClientAuthenticationError
@@ -16,13 +17,12 @@ from hub.assistant_types import (
     AssistantMessage,
     ProviderMessage,
     ProviderTurn,
+    SystemMessage,
     ToolCall,
     ToolDefinition,
     ToolMessage,
-    SystemMessage,
     UserMessage,
 )
-
 
 logger = logging.getLogger("hub.assistant_provider")
 MAX_PROVIDER_INPUT_BYTES = 64 * 1024

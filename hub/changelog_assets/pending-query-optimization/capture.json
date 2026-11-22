@@ -1,0 +1,232 @@
+{
+  "base_head": "ff89314745e078d4f0ab45b562eb7994d6671167",
+  "before_source": "Saved pre-Phase-3 local source including earlier changes",
+  "after_source": "Uncommitted Phase 3 working tree, not an exact release revision",
+  "capture": "Offline Chromium 156.0.8078.4. Synthetic SQL counts and file fingerprints only.",
+  "comparison": {
+    "title": "Rendered SQL counts and source fingerprints",
+    "before_text": "Historical relation labels and capacity checks repeated database reads. Form metadata, timelines, and reports fetched overlapping data.",
+    "after_text": "Batch lookups, joined relations, SQL aggregates, and reused choice data reduced 36 of 122 measured query counts; 86 were unchanged.",
+    "capture_note": "Synthetic PostgreSQL; saved local working trees, not production timings, UI screenshots, or release revisions.",
+    "evidence_kind": "report",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png"
+  },
+  "files": {
+    "before": {
+      "docs/cd-workflow-testing.md": {
+        "bytes": 48737,
+        "sha256": "bcea9527a99c93249a123e21384538fa2615e776bbd000a4756ae293abdb1ffe"
+      },
+      "hub/form_editor.py": {
+        "bytes": 25226,
+        "sha256": "20c6b9f4b22d9736619b75c59f6904004611a373c306e8e867e85ffa3a7f0a52"
+      },
+      "hub/form_editor_runtime.py": {
+        "bytes": 13561,
+        "sha256": "b576cd0608fffc2fed625e9f2085e5c84286e2134d8f86eef4f7a18ab576b9ed"
+      },
+      "hub/form_editor_views.py": {
+        "bytes": 11745,
+        "sha256": "bb101b97d57e1cf327a9e3b5c43ff5155c1c15050ee20a45745a489aa803ac6e"
+      },
+      "hub/forms.py": {
+        "bytes": 84593,
+        "sha256": "07db657d95d4a47ccaa25272bfa80efd37cdc3804b23476207c369205075a74f"
+      },
+      "hub/services/notifications.py": {
+        "bytes": 7359,
+        "sha256": "bdaac60427e7677e1b392a56969d576ea275045f49e93c8af37d61e60af1b514"
+      },
+      "hub/services/reports.py": {
+        "bytes": 33100,
+        "sha256": "46c31190f89fdfcd478d7bfd1b4b4cf5d8e0f3a91761faeee78921ed4e4ba1b2"
+      },
+      "hub/services/request_changes.py": {
+        "bytes": 6165,
+        "sha256": "b52cf414aa9dae4b9a630dd9fe0494ed72bda4d96d8aa53be895bc224621a35e"
+      },
+      "hub/services/request_lifecycle.py": {
+        "bytes": 16046,
+        "sha256": "927e46e0f567322bab88375177affed158ad956cec0bfd2ba60585fdb5d63767"
+      },
+      "hub/services/sqr_workflow.py": {
+        "bytes": 36892,
+        "sha256": "bd3dbbf91d9c0164f5a17f5888937fab0a3a47b3373a2d955d553413055bafed"
+      },
+      "hub/views/requests.py": {
+        "bytes": 50249,
+        "sha256": "ff82c6f0be52682f043ee337bd4e363aacfd21f13d4922ab1ca7824cb74eea01"
+      },
+      "hub/views/sqr.py": {
+        "bytes": 68199,
+        "sha256": "88bac2ff2ea6d8163abab791922875df18021b948e4e3d79b35a35fd02ca86cf"
+      },
+      "hub/test_query_performance.py": null
+    },
+    "after": {
+      "docs/cd-workflow-testing.md": {
+        "bytes": 52527,
+        "sha256": "73687ef2eeb7288a282ee6b200815d9dcd59f03b52ddca2abc734c3bc470a229"
+      },
+      "hub/form_editor.py": {
+        "bytes": 26070,
+        "sha256": "fb22c7c7a72116bc8c52d1d3f3a130f924ebe61dc5598eb80f30fcfc764dcfb1"
+      },
+      "hub/form_editor_runtime.py": {
+        "bytes": 14165,
+        "sha256": "19a253a3a6c0e87e925c4f80991b504f60ad7f176025885c172e594be19b977d"
+      },
+      "hub/form_editor_views.py": {
+        "bytes": 12235,
+        "sha256": "6b4a33fdc5e5e92078cde27ed55ae45cfb39703b4571f46aef29074e64326a76"
+      },
+      "hub/forms.py": {
+        "bytes": 85459,
+        "sha256": "785768d505cc6cd588a2f4d78faf368ec7c48f88909b857e6766dfb806f3a722"
+      },
+      "hub/services/notifications.py": {
+        "bytes": 7242,
+        "sha256": "df9be475f756335274e09e84257ff625fd43a0746d7af99f792fbe1703c6b79a"
+      },
+      "hub/services/reports.py": {
+        "bytes": 33075,
+        "sha256": "8bd827e1fcf7a479aae47f39897125b7ab534becede863d487ea61860a75d537"
+      },
+      "hub/services/request_changes.py": {
+        "bytes": 6485,
+        "sha256": "6138b4aab336efbc7d3d01d9a4220c4d8a90d9fcf0694c7234a4df5f4db6f9d1"
+      },
+      "hub/services/request_lifecycle.py": {
+        "bytes": 16185,
+        "sha256": "0ce3d6f4782ae28d236348c098715d9d9d7d44b6b6310eb5b5e0df578cf30545"
+      },
+      "hub/services/sqr_workflow.py": {
+        "bytes": 39082,
+        "sha256": "27c3db75aecb2189f873ff9cb116a37f73ba1769bf671c3ddc88102966b4df57"
+      },
+      "hub/views/requests.py": {
+        "bytes": 50670,
+        "sha256": "11d69a4b6aacf026b600162790833262334fc8686fdba797b5f18e0f3effa192"
+      },
+      "hub/views/sqr.py": {
+        "bytes": 67753,
+        "sha256": "252a8d6a4031c9e5ac0b389cbb0f70c769d692cb3e5ae78393550b41590e39e3"
+      },
+      "hub/test_query_performance.py": {
+        "bytes": 12604,
+        "sha256": "909cd1a72efe3b3f30cf1ecce95fb6e8235104924b2ac546b585fba494791261"
+      }
+    }
+  },
+  "metrics": {
+    "matched": 122,
+    "changes": {
+      "improved": 36,
+      "unchanged": 86,
+      "regressed": 0
+    },
+    "query_counts_at_120_rows": [
+      {
+        "label": "SQR history: relationship labels",
+        "before": 244,
+        "after": 6
+      },
+      {
+        "label": "Admin request management",
+        "before": 79,
+        "after": 18
+      },
+      {
+        "label": "Engineer collaborative detail",
+        "before": 34,
+        "after": 19
+      },
+      {
+        "label": "Engineer Classic SQR",
+        "before": 33,
+        "after": 13
+      },
+      {
+        "label": "Admin dashboard search",
+        "before": 25,
+        "after": 14
+      },
+      {
+        "label": "Requestor edit",
+        "before": 21,
+        "after": 9
+      },
+      {
+        "label": "SQR edit",
+        "before": 21,
+        "after": 9
+      },
+      {
+        "label": "Operational report / SLA",
+        "before": 20,
+        "after": 12
+      },
+      {
+        "label": "Form Editor people directory",
+        "before": 19,
+        "after": 4
+      },
+      {
+        "label": "Engineer activity logs",
+        "before": 18,
+        "after": 12
+      }
+    ],
+    "history_6_to_120_rows": {
+      "before": [
+        16,
+        244
+      ],
+      "after": [
+        6,
+        6
+      ]
+    },
+    "capacity_22_to_42_engineers": {
+      "before": [
+        79,
+        119
+      ],
+      "after": [
+        18,
+        18
+      ]
+    },
+    "fixture_date": "2026-11-22",
+    "database_version": 160016,
+    "known_excluded_errors": [
+      {
+        "scenario": "SQR approval mailto",
+        "dataset": 6,
+        "error": "AssertionError(\"SQR approval mailto: HTTP 400, location=''\")"
+      },
+      {
+        "scenario": "SQR approval mailto",
+        "dataset": 120,
+        "error": "AssertionError(\"SQR approval mailto: HTTP 400, location=''\")"
+      }
+    ],
+    "probe_sha256": {
+      "before": "5675167963ab27c6f29ed1ae467793c1a139e031b8e7833b923b3af54f347220",
+      "after": "bfd1dfd8114bc2b5d8057eed88172bd6ec2aa9c6ce559c301c9208c94283c828"
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "f51e970d3c859c40922f32ea156b185909b87ed763e9f64bb6ff2333146b8122",
+    "report-after.png": "cb9a10cd459fb8118869f6bb72876f80fbd4f53e37a74dabf86b129d1664557b"
+  },
+  "notifications_verification": {
+    "draft_hidden_from_reader": true,
+    "draft_report_and_images_return_404": true,
+    "published_via_local_admin_editor": true,
+    "published_report_link_under_technical_evidence": true,
+    "published_images_byte_exact_and_no_store": 2,
+    "local_fixture_rolled_back": true
+  }
+}

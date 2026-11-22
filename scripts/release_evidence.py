@@ -1,17 +1,24 @@
 """Transfer screenshot evidence, never executable content, from the exact CI run."""
 
 import argparse
-from copy import deepcopy
-from hashlib import sha256
-from io import BytesIO
 import json
-from pathlib import Path
 import re
 import sys
 import warnings
+from copy import deepcopy
+from hashlib import sha256
+from io import BytesIO
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from hub.release_changelog import EVIDENCE_POLICY, ManifestError, comparison_kind, missing_comparisons, repository_report_only, validate_manifest
+from hub.release_changelog import (
+    EVIDENCE_POLICY,
+    ManifestError,
+    comparison_kind,
+    missing_comparisons,
+    repository_report_only,
+    validate_manifest,
+)
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_BUNDLE_BYTES = 100 * 1024 * 1024

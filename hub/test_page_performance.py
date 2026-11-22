@@ -15,13 +15,14 @@ class PagePerformanceTests(SimpleTestCase):
     def setUp(self):
         self.request = RequestFactory().get('/private/search/?q=secret-value')
 
-    def test_staging_diagnostics_emit_log_records(self):
+    def test_staging_diagnostics_emit_log_records(self) -> None:
+        """Emit the expected request and query diagnostics when staging logging is enabled."""
         environment = os.environ.copy()
         environment.update(DJANGO_SETTINGS_MODULE='request_hub.settings', DJANGO_DEBUG='False',
             DJANGO_ENVIRONMENT='staging', DJANGO_PAGE_PERFORMANCE_ENABLED='true',
             DJANGO_SECRET_KEY='disposable-staging-test-key', DB_HOST='127.0.0.1', DB_USER='postgres', DB_PASSWORD='disposable')
         script = "from django.conf import settings; from django.utils.log import configure_logging; import logging; configure_logging(settings.LOGGING_CONFIG, settings.LOGGING); logging.getLogger('hub.performance').info('safe-diagnostic-marker')"
-        result = subprocess.run([sys.executable, '-c', script], env=environment, capture_output=True, text=True)
+        result = subprocess.run([sys.executable, '-c', script], check=False, env=environment, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('safe-diagnostic-marker', result.stderr)
 

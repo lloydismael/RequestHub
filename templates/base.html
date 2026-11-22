@@ -540,7 +540,7 @@
     <script src="{% static 'js/christmas-theme.js' %}?v=17" defer></script>
     <script src="{% static 'js/christmas-lights.js' %}?v=6" defer></script>
     {% endif %}
-    <script src="{% static 'js/liquid-glass.js' %}?v=7" defer></script>
+    <script src="{% static 'js/liquid-glass.js' %}?v=8" defer></script>
     {% if not login_asset_profile %}
     <script src="{% static 'js/smooth-scroll.js' %}?v=12" defer></script>
     <script src="{% static 'js/notification-toasts.js' %}?v=7" defer></script>
@@ -870,5 +870,6 @@
     {% endif %}
 
     {% include "includes/idle_timeout.html" %}
+    {% block page_scripts %}{% endblock %}
 </body>
 </html>
