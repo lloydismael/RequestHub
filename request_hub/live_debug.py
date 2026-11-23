@@ -44,14 +44,17 @@ def select_source() -> tuple[bool, frozenset[tuple[str, str]]]:
         raise LiveDebugError("Invalid local release snapshot configuration.")
     revision = config.get("revision")
     names = config.get("historical_migrations", [])
-    if (
-        not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision)
-        or not isinstance(names, list) or any(
-            not isinstance(name, str) or not re.fullmatch(r"[a-z_]+\.[0-9]{4}_[a-z0-9_]+", name)
-            for name in names
-        )
+    if not isinstance(names, list) or any(
+        not isinstance(name, str) or not re.fullmatch(r"[a-z_]+\.[0-9]{4}_[a-z0-9_]+", name)
+        for name in names
     ):
-        raise LiveDebugError("Invalid local release snapshot revision or migration list.")
+        raise LiveDebugError("Invalid local historical migration list.")
+    historical_migrations = frozenset(tuple(name.split(".", 1)) for name in names)
+    if config.get("source") == "workspace" and "revision" not in config:
+        sys.path.insert(0, str(WORKSPACE))
+        return False, historical_migrations
+    if "source" in config or not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{40}", revision):
+        raise LiveDebugError("Invalid local release snapshot source or revision.")
     source = SNAPSHOT_ROOT / revision
     if not (source / "request_hub" / "settings.py").is_file():
         raise LiveDebugError("Local release snapshot is missing. Restore it or remove the local snapshot configuration.")
@@ -59,7 +62,7 @@ def select_source() -> tuple[bool, frozenset[tuple[str, str]]]:
         raise LiveDebugError("Start the live debugger by script path to use the local release snapshot.")
     sys.path.insert(0, str(source))
     os.environ["APP_REVISION"] = revision
-    return True, frozenset(tuple(name.split(".", 1)) for name in names)
+    return True, historical_migrations
 
 
 def database_environment(path: Path) -> dict[str, str]:

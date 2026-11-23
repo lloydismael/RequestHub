@@ -203,6 +203,12 @@ The [capture metadata](../hub/changelog_assets/pending-evergreen-login/capture.j
 - **Verification:** A disposable Chromium preview refreshed after actual template, static-file, and Python saves. Normal Django settings and `DEBUG=False` did not expose the event stream. No Azure migration or release publication was performed.
 - **Technical evidence:** [Before](../hub/changelog_assets/pending-local-browser-reload/report-before.png) · [After](../hub/changelog_assets/pending-local-browser-reload/report-after.png) · [Checksums](../hub/changelog_assets/pending-local-browser-reload/capture.json). The reports show working-tree fingerprints, not exact-release captures. A disposable PostgreSQL check confirmed that **Notifications → Changelogs → Technical evidence** hid the draft and its reports from a signed-in reader, then served both original images with `no-store` after fixture publication. Release CI captures the exact revisions.
 
+### Unreleased: F5 recovery after a pinned release goes stale
+
+- **Before:** The pinned release was missing two account migrations already applied in Azure. Removing the pin alone also blocked startup because the checkout no longer contains nine older `hub` migrations recorded in Azure.
+- **After:** The ignored F5 manifest can [select the workspace](local-development.md#run-with-live-azure-postgresql-no-docker) while retaining its previously verified historical migration list. The read-only preflight still rejects unexpected records, pending migrations, and missing columns.
+- **Technical evidence:** On Windows, both the stale pin and the unconfigured workspace failed the migration guard before binding. Workspace mode passed the same guard with exactly the recorded historical entries and served the login page on loopback. A Python watcher event replaced the Django process and refreshed the open Chromium tab. No migrations or live data changes were made. Release CI generates the exact-revision technical report for Notifications when the change ships.
+
 ### Unreleased: Docker-free VS Code debugging with live Azure PostgreSQL
 
 - **Before:** The local F5 setup depended on loopback PostgreSQL and could not show live records. Restoring the Azure connection exposed a second blocker: the working tree required `accounts.0032_user_christmas_light_flow`, which was not applied in Azure.

@@ -121,6 +121,18 @@ class LiveDebugTests(TestCase):
         check.assert_called_once_with(frozenset({("hub", "0014_retired")}))
         run.assert_called_once_with("runserver", "127.0.0.1:8000")
 
+    def test_workspace_manifest_keeps_verified_history_without_pinning_source(self):
+        self.snapshot_root.mkdir()
+        (self.snapshot_root / "release.json").write_text(json.dumps({
+            "source": "workspace", "historical_migrations": ["hub.0014_retired"],
+        }), encoding="utf-8")
+
+        pinned, historical = self.launcher.select_source()
+
+        self.assertFalse(pinned)
+        self.assertEqual(Path(sys.path[0]), self.launcher.WORKSPACE)
+        self.assertEqual(historical, frozenset({("hub", "0014_retired")}))
+
     def test_invalid_snapshot_fails_without_falling_back_to_working_tree(self):
         root = self.env_file.parent / "request-hub-f5"
         root.mkdir()

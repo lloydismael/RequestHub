@@ -35,7 +35,7 @@ Startup and each Python reload check migration history and required model column
 
 If the live schema is behind your checkout, the same profile can temporarily run a verified release snapshot. When `.venv\request-hub-f5\release.json` is present, the launcher uses the Git export under that directory named by the manifest's `revision`, with the manifest's explicitly verified extra migration records for that revision. Credentials still come from the workspace `.env`. Auto-reload watches the running copy, so edits in the main checkout do not appear in this session. The [local release endpoint](http://127.0.0.1:8000/release/) reports the running revision.
 
-Once the live schema and migration history match the checkout, stop debugging, remove the local `release.json`, and press F5 to run the checkout again. The normal release workflow, not the debugger, applies any required migration.
+To switch back once the checkout matches the live schema, stop debugging. Remove the local `release.json` if Azure has no extra migration records. If the manifest lists previously verified legacy records that Azure still has, replace its `revision` field with `"source": "workspace"` and keep `historical_migrations` unchanged. Press F5 to run and reload your workspace files. The preflight still blocks unknown migration records, pending migrations, and missing columns. The normal release workflow, not the debugger, applies any required migration.
 
 ## Configure an isolated development database (optional)
 
