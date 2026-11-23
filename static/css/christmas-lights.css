@@ -14,7 +14,18 @@
     user-select: none;
 }
 .seasonal-lights-overlay * { pointer-events: none; }
-.navbar:not(.seasonal-lights) > .seasonal-lights-overlay { display: none; }
+.navbar:not(.seasonal-lights) > :is(.seasonal-lights-overlay, .seasonal-canopy-rays) { display: none; }
+.seasonal-canopy-rays {
+    position: absolute;
+    z-index: 2;
+    pointer-events: none;
+    user-select: none;
+}
+.seasonal-lights-overlay--rays .seasonal-light-bulb { visibility: hidden; }
+.navbar.rh-primary-nav:has(> .seasonal-canopy-rays) > .container-fluid {
+    position: relative;
+    z-index: 3;
+}
 .seasonal-light-wire {
     fill: none;
     stroke: #183f31;
@@ -40,14 +51,26 @@ body.dark-mode .seasonal-light-emitter { --light-glow: 4.5px; --light-halo: 14px
     0%, 100% { opacity: 1; }
     50% { opacity: 0.7; }
 }
-.seasonal-lights-overlay--paused .seasonal-light-emitter { animation: none; }
+.seasonal-lights-overlay--paused .seasonal-light-emitter,
+.seasonal-lights-overlay--canopy .seasonal-light-emitter { animation: none; }
+.seasonal-cord-hit {
+    position: absolute;
+    top: -12px;
+    inset-inline: max(36px, 12%);
+    height: 12px;
+    z-index: 2;
+    cursor: grab;
+    touch-action: none;
+}
+.seasonal-cord-hit--lower { top: auto; bottom: -14px; height: 14px; }
+.seasonal-cord-hit.is-grabbing { cursor: grabbing; }
 body.pref-reduce-effects .seasonal-light-emitter { animation: none; filter: none; }
 @media (prefers-reduced-motion: reduce) {
     .seasonal-light-emitter { animation: none; }
 }
 @media (max-width: 479px) {
-    .seasonal-lights-overlay { display: none; }
+    :is(.seasonal-lights-overlay, .seasonal-canopy-rays, .seasonal-cord-hit) { display: none; }
 }
 @media print {
-    .seasonal-lights-overlay { display: none !important; }
+    :is(.seasonal-lights-overlay, .seasonal-canopy-rays, .seasonal-cord-hit) { display: none !important; }
 }

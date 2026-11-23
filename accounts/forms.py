@@ -44,11 +44,23 @@ class ThemeForm(forms.ModelForm):
 
     CUSTOM_FIELDS = ("custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary")
     CHRISTMAS_FIELDS = User.CHRISTMAS_EFFECT_FIELDS
+    LIGHT_FLOW_FIELD = "pref_christmas_light_flow"
     CHRISTMAS_PREFERENCES_MARKER = "christmas_preferences_present"
+
+    pref_christmas_light_flow = forms.IntegerField(
+        label="Light flow", min_value=0, max_value=User.CHRISTMAS_LIGHT_FLOW_MAX,
+        widget=forms.NumberInput(attrs={
+            "type": "range", "step": 1, "id": "christmas-light-flow",
+            "aria-describedby": "christmas-light-flow-help",
+        }),
+    )
 
     class Meta:
         model = User
-        fields: ClassVar[list[str]] = ["banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary", *User.CHRISTMAS_EFFECT_FIELDS]
+        fields: ClassVar[list[str]] = [
+            "banner_gradient", "custom_theme_primary", "custom_theme_secondary", "custom_theme_tertiary",
+            *User.CHRISTMAS_EFFECT_FIELDS, "pref_christmas_light_flow",
+        ]
         widgets: ClassVar[dict[str, forms.Widget]] = {"banner_gradient": forms.RadioSelect()}
         labels: ClassVar[dict[str, str]] = {"pref_christmas_santa": "Santa blanket transition"}
         help_texts: ClassVar[dict[str, str]] = {"pref_christmas_santa": "Santa drops gifts while pulling a festive blanket across the page when you switch light/dark mode."}
@@ -57,11 +69,15 @@ class ThemeForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.instance.pk:
             self.initial["banner_gradient"] = self.instance.account_theme
-        # Seed legacy bound forms so validation retries retain saved checkbox choices.
-        if self.is_bound and not self.data.get(self.CHRISTMAS_PREFERENCES_MARKER):
-            self.data = self.data.copy()
-            for name in self.CHRISTMAS_FIELDS:
-                self.data[name] = getattr(self.instance, name)
+        if self.is_bound:
+            legacy = not self.data.get(self.CHRISTMAS_PREFERENCES_MARKER)
+            if legacy or self.LIGHT_FLOW_FIELD not in self.data:
+                self.data = self.data.copy()
+                # Disabled ranges are omitted; validation retries must keep the saved speed.
+                self.data[self.LIGHT_FLOW_FIELD] = getattr(self.instance, self.LIGHT_FLOW_FIELD)
+                if legacy:
+                    for name in self.CHRISTMAS_FIELDS:
+                        self.data[name] = getattr(self.instance, name)
         for name in self.CHRISTMAS_FIELDS:
             key = name[len("pref_christmas_"):]
             self.fields[name].widget.attrs.update({

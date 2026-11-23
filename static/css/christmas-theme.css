@@ -147,6 +147,21 @@ body.account-themed.authenticated[data-account-theme="christmas"] table .lg-btn 
 .christmas-option:has(input:checked) { border-color: var(--account-accent); }
 .christmas-option:focus-within, .christmas-controls__master:focus-within { outline: 2px solid var(--account-accent); outline-offset: 3px; }
 .christmas-option__content { display: flex; flex-direction: column; gap: .2rem; min-width: 0; }
+.christmas-flow {
+    padding: .9rem;
+    border: 1px solid var(--rh-border);
+    border-radius: 12px;
+    background: var(--rh-surface-panel);
+}
+.christmas-flow__label { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; }
+.christmas-flow input[type="range"] {
+    display: block;
+    width: 100%;
+    min-height: 32px;
+    margin-block: .3rem;
+    accent-color: var(--account-ink);
+}
+.christmas-flow input[type="range"]:focus-visible { outline: 2px solid var(--account-ink); outline-offset: 2px; }
 .christmas-frame, .christmas-snow, .christmas-burst {
     pointer-events: none;
     user-select: none;

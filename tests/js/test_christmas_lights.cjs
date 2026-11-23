@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 
-function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas', flag = true, radius = '999px' } = {}) {
+function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas', flag = true, radius = '999px', speed = 0 } = {}) {
     const listeners = {};
     const observers = [];
     const frames = new Map();
@@ -12,10 +12,13 @@ function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas'
     let removals = 0;
     let resize;
     let nextId = 1;
+    let clock = 0;
+    const media = { matches: false, addEventListener(_, callback) { this.change = callback; } };
     function element(tag) {
         const classes = new Set();
         const node = {
-            tag, children: [], dataset: {}, attributes: {}, style: {},
+            tag, children: [], dataset: {}, attributes: {}, style: {}, events: {},
+            addEventListener(name, callback) { this.events[name] = callback; },
             classList: {
                 contains: name => classes.has(name),
                 add: name => classes.add(name), remove: name => classes.delete(name),
@@ -26,40 +29,57 @@ function start({ width = 1280, height = 76, viewport = 1440, theme = 'christmas'
             remove() { if (classes.has('seasonal-lights-overlay')) removals++; this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1); },
             // Mirrors the real navbar:offsetWidth/Height are the untransformed layout
             // box, while the decoration class shifts the border box via top/margin.
+            get firstElementChild() { return this.children[0]; },
             get offsetWidth() { return width; },
             get offsetHeight() { return height; },
             getBoundingClientRect() { return { width, height: height - (classes.has('seasonal-lights--active') ? 16 : 0) }; },
         };
         node.style.setProperty = (name, value) => { node.style[name] = value; };
+        node.style.removeProperty = name => { delete node.style[name]; };
         return node;
     }
     const body = element('body');
     body.dataset.accountTheme = theme;
+    body.dataset.christmasLightFlow = String(speed);
     body.classList.add('christmas-effects-on');
+    const nudge = element('button');
     const nav = element('nav');
     nav.dataset.seasonalLightsTheme = 'christmas';
     if (flag) nav.classList.add('seasonal-lights');
     const document = {
         body, hidden: false,
         querySelectorAll: () => [nav], createElementNS: (ns, tag) => element(tag),
+        getElementById: id => id === 'christmas-nudge-cord' ? nudge : null,
         addEventListener(name, callback) { listeners[name] = callback; },
     };
     const window = {
         innerWidth: viewport,
+        matchMedia: () => media,
         getComputedStyle: () => ({ borderTopLeftRadius: radius }),
         requestAnimationFrame(callback) { const id = nextId++; frames.set(id, callback); return id; },
         cancelAnimationFrame(id) { frames.delete(id); },
         addEventListener(name, callback) { listeners[name] = callback; },
     };
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', 'christmas-lights.js'), 'utf8'), {
+    const context = vm.createContext({
         document, window, Math,
         MutationObserver: class { constructor(callback) { observers.push(callback); } observe() {} },
         ResizeObserver: class { constructor(callback) { resize = callback; } observe() {} },
     });
-    function flush() { const callbacks = [...frames.values()]; frames.clear(); callbacks.forEach(callback => callback()); }
+    for (const source of ['christmas-cord.js', 'christmas-lights.js']) {
+        vm.runInContext(fs.readFileSync(path.join(__dirname, '..', '..', 'static', 'js', source), 'utf8'), context);
+    }
+    function flush() {
+        clock += 1000 / 60;
+        const callbacks = [...frames.values()];
+        frames.clear();
+        callbacks.forEach(callback => callback(clock));
+    }
     flush();
     return {
-        body, nav, document, window,
+        body, nav, document, window, nudge,
+        advance(count) { for (let index = 0; index < count; index++) flush(); },
+        get pendingFrames() { return frames.size; },
+        reduced(value) { media.matches = value; media.change?.(); flush(); },
         update() { observers.forEach(callback => callback()); flush(); },
         stats() { return { builds, removals }; },
         reset() { builds = 0; removals = 0; },
@@ -200,7 +220,7 @@ test('under 480px and zero-size navbars remove the overlay; wider sizes restore 
 
 test('removing the flag or changing account themes removes lights without altering the navbar', () => {
     const app = start();
-    assert.equal(Object.keys(app.nav.style).length, 1);
+    assert.deepEqual(Object.keys(app.nav.style).filter(name => typeof app.nav.style[name] !== 'function'), []);
     assert.equal(Object.keys(app.nav.attributes).length, 0);
     app.nav.classList.remove('seasonal-lights');
     app.update();
@@ -231,6 +251,61 @@ test('preferences and hidden tabs pause twinkle without rebuilding or moving bul
     assert.equal(app.overlay.classList.contains('seasonal-lights-overlay--paused'), false);
     app.visibility(true);
     assert.ok(app.overlay.classList.contains('seasonal-lights-overlay--paused'));
+});
+
+test('a faster traveling glow reaches later sockets sooner without changing geometry', () => {
+    const fast = start({ speed: 20 });
+    const slow = start({ speed: 5 });
+    const strength = (app, index) => Number(app.bulbs[index].children[0].style.opacity);
+    const wire = fast.overlay.children[0].attributes.d;
+    const transforms = fast.bulbs.map(bulb => bulb.attributes.transform);
+    assert.ok(strength(fast, 0) > strength(fast, 7));
+    fast.advance(39);
+    slow.advance(39);
+    assert.ok(strength(fast, 7) > strength(fast, 0));
+    assert.ok(strength(fast, 7) > strength(slow, 7));
+    assert.equal(fast.overlay.children[0].attributes.d, wire);
+    assert.deepEqual(fast.bulbs.map(bulb => bulb.attributes.transform), transforms);
+    fast.body.dataset.christmasLightFlow = '0';
+    fast.update();
+    assert.ok(fast.bulbs.every(bulb => Number(bulb.children[0].style.opacity) === 1));
+    assert.equal(fast.pendingFrames, 0);
+});
+
+test('nudge flexes the wire and sockets together and settles without a background loop', () => {
+    const app = start();
+    const wires = app.overlay.children.slice(0, 2);
+    const rest = wires.map(w => w.attributes.d);
+    const transform = app.bulbs[7].attributes.transform;
+    const end = app.bulbs[16].attributes.transform;
+    app.nudge.events.click?.();
+    app.advance(12);
+    assert.ok(wires.every((w, index) => w.attributes.d !== rest[index]));
+    assert.notEqual(app.bulbs[7].attributes.transform, transform);
+    assert.equal(app.bulbs[16].attributes.transform, end);
+    app.advance(480);
+    assert.equal(app.pendingFrames, 0);
+    assert.deepEqual(wires.map(w => w.attributes.d), rest);
+    assert.equal(app.bulbs[7].attributes.transform, transform);
+});
+
+test('reduced motion and a hidden page shut down flow and reset cord motion', () => {
+    const app = start({ speed: 20 });
+    const wire = app.overlay.children[0];
+    const rest = wire.attributes.d;
+    app.nudge.events.click?.();
+    app.advance(12);
+    assert.notEqual(wire.attributes.d, rest);
+    app.reduced(true);
+    assert.equal(wire.attributes.d, rest);
+    assert.equal(app.nudge.disabled, true);
+    assert.ok(app.bulbs.every(bulb => Number(bulb.children[0].style.opacity) === 1));
+    assert.equal(app.pendingFrames, 0);
+    app.reduced(false);
+    app.visibility(true);
+    assert.equal(app.pendingFrames, 0);
+    app.visibility(false);
+    assert.equal(app.pendingFrames, 1);
 });
 
 test('tall expanded navbars and non-pill rounded corners remain finite', () => {

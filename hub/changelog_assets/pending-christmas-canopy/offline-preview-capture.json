@@ -1,0 +1,27 @@
+{
+  "fixture": "Synthetic account; default dark offline preview at Steady speed.",
+  "capture": "Offline Chromium 156.0.8078.4 with software WebGL; working-tree evidence, not an exact release pair.",
+  "working_tree_base": "83276d28b58488b0944b64487d2a57957620e539",
+  "images": [
+    {
+      "file": "offline-preview-before.webp",
+      "side": "before",
+      "description": "The offline mock opened on the sign-in-card concept.",
+      "image_size": [
+        1440,
+        1040
+      ],
+      "sha256": "1c9e019b3978b701629aeb3cd9b210047f4ecaa4c5fe86324881f401fbbe3f96"
+    },
+    {
+      "file": "offline-preview-after.webp",
+      "side": "after",
+      "description": "The offline mock opens on the production signed-in navbar with the same canopy renderer.",
+      "image_size": [
+        1440,
+        1040
+      ],
+      "sha256": "e426e2157a39d8f6c2dcf54ab77fc70ffe87387ae368d6da994dc8ba8c93fa40"
+    }
+  ]
+}

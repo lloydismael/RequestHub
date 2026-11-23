@@ -10,6 +10,13 @@ class Node {
         this.textContent = text; this.style = {}; this.events = new Map();
     }
     get attributes() { return Object.entries(this.attrs).map(([name, value]) => ({ name, value })); }
+    get classList() {
+        const names = (this.attrs.class || '').split(/\s+/).filter(Boolean);
+        return {
+            contains: name => names.includes(name),
+            remove: name => { this.attrs.class = names.filter(value => value !== name).join(' '); },
+        };
+    }
     get outerHTML() { return `<${this.tagName.toLowerCase()}${Object.entries(this.attrs).map(([k, v]) => ` ${k}="${v}"`).join('')}>${this.textContent}${this.children.map(n => n.outerHTML).join('')}</${this.tagName.toLowerCase()}>`; }
     setAttribute(name, value) { this.attrs[name] = String(value); }
     getAttribute(name) { return this.attrs[name] ?? null; }

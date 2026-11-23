@@ -41,6 +41,11 @@
             });
             const canvases = document.querySelectorAll('canvas');
             root.querySelectorAll('canvas').forEach((copy, index) => {
+                // The ray buffer is not retained after compositing; the cloned SVG is its snapshot.
+                if (copy.classList.contains('seasonal-canopy-rays')) {
+                    copy.remove();
+                    return;
+                }
                 try {
                     const canvas = canvases[index];
                     const image = document.createElement('img');
@@ -54,6 +59,7 @@
                     copy.replaceWith(image);
                 } catch (_) { copy.remove(); }
             });
+            root.querySelectorAll('.seasonal-lights-overlay--rays').forEach(node => node.classList.remove('seasonal-lights-overlay--rays'));
             root.querySelectorAll('script, iframe, frame, object, embed, audio, video, meta[http-equiv], .christmas-santa, .christmas-gifts, .christmas-frozen-viewport, .theme-reveal-overlay').forEach(node => node.remove());
             const head = root.querySelector('head');
             Array.from(head.children).forEach(node => {

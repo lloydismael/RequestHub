@@ -63,6 +63,7 @@ html.login-christmas body.page-login .login-hero::after {
 .xmas-scene::before,
 .xmas-scene::after,
 .xmas-scene__glow,
+.xmas-light-spill,
 .xmas-scene .xmas-snow {
     position: absolute;
     inset: 0;
@@ -100,10 +101,22 @@ html.login-christmas body.page-login .login-hero::after {
     opacity: 0.85;
 }
 
+.xmas-light-spill,
 .xmas-scene .xmas-snow {
-    z-index: 3;
     width: 100%;
     height: 100%;
+}
+
+.xmas-light-spill {
+    z-index: 3;
+    display: none;
+    mix-blend-mode: screen;
+}
+
+.xmas-scene .xmas-snow { z-index: 4; }
+
+@media (min-width: 480px) {
+    body.dark-mode .xmas-light-spill { display: block; }
 }
 
 .xmas-filter-defs {
@@ -183,164 +196,85 @@ html.login-christmas body.page-login.dark-mode .login-card > .xmas-card-frost.xm
     opacity: 0.32;
 }
 
-/* SVG overlay (snow, wire, bulbs) built by login-christmas.js */
-html.login-christmas body.page-login .login-card > .xmas-card-deco.xmas-only {
+/* Override the glass card's in-flow content rule so decoration cannot resize the card. */
+html.login-christmas body.page-login .login-card.login-card--glass > :is(.seasonal-lights-overlay, .seasonal-canopy-rays, .seasonal-cord-hit) {
     position: absolute;
-    inset: calc(var(--xmas-deco-pad, 60px) * -1);
-    z-index: 4;
-    pointer-events: none;
+    z-index: 2;
 }
 
-.xmas-card-deco svg {
-    position: absolute;
-    inset: 0;
-    display: block;
-    overflow: visible;
+/* The twisted cord crosses the rim; extend the grab bands into the card padding. */
+html.login-christmas body.page-login .login-card > .seasonal-cord-hit { height: 26px; }
+html.login-christmas body.page-login .login-card > .seasonal-cord-hit[hidden] { display: none; }
+
+html.login-christmas body.page-login .login-hero {
+    flex-direction: column;
+    gap: 2rem;
 }
 
-/* Cache the filtered snow/wire and glass bulbs independently of the glow layers. */
-.xmas-deco-static,
-.xmas-deco-lights {
-    will-change: transform;
+.xmas-controls {
+    position: relative;
+    z-index: 2;
+    width: min(420px, 100%);
+    color: var(--xc-ink);
+    font-size: .875rem;
+    text-align: center;
 }
 
-.xmas-frost-specks,
-.xmas-crystals {
-    fill: #ffffff;
+.xmas-controls summary,
+.xmas-controls__panel {
+    border: 1px solid var(--xc-divider);
+    background: #f4f8ff;
+    box-shadow: 0 6px 24px rgba(5, 13, 35, .18);
 }
 
-.xmas-snow {
-    fill: url(#xmas-puff);
+body.dark-mode :is(.xmas-controls summary, .xmas-controls__panel) { background: #17263e; }
+
+.xmas-controls summary {
+    width: fit-content;
+    max-width: 100%;
+    min-height: 44px;
+    margin-inline: auto;
+    padding: .65rem .9rem;
+    border-radius: 24px;
+    cursor: pointer;
 }
 
-.xmas-frost {
-    opacity: 0.6;
+.xmas-controls summary .bi { margin-inline-end: .2rem; }
+
+.xmas-controls__panel {
+    display: grid;
+    gap: .65rem;
+    margin-top: .5rem;
+    padding: .85rem;
+    border-radius: 16px;
+    text-align: start;
 }
 
-body.dark-mode .xmas-frost {
-    opacity: 0.22;
+.xmas-controls__lights { display: grid; gap: .25rem; }
+.xmas-controls__label { display: flex; justify-content: space-between; gap: .5rem; }
+.xmas-controls__label span { color: var(--xc-muted); }
+.xmas-controls input[type="range"] { width: 100%; min-height: 28px; accent-color: var(--xc-focus); }
+
+.xmas-controls button {
+    min-height: 44px;
+    padding: .35rem .75rem;
+    border: 1px solid var(--xc-divider);
+    border-radius: 10px;
+    background: var(--xc-input-bg);
+    color: var(--xc-ink);
+    text-align: center;
 }
 
-.xmas-cap-shadow {
-    fill: rgba(46, 72, 128, 0.34);
+.xmas-controls button:disabled { opacity: .65; }
+.xmas-controls :is(summary, input, button):focus-visible { outline: 2px solid var(--xc-focus); outline-offset: 2px; }
+.xmas-controls p { margin: 0; color: var(--xc-muted); }
+
+@media (max-width: 479px) {
+    .xmas-controls__lights { display: none; }
 }
 
-.xmas-wire {
-    fill: none;
-    stroke: #0e2a17;
-    stroke-width: 2.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.xmas-wire--back {
-    stroke: #04100a;
-}
-
-.xmas-wire-highlight {
-    fill: none;
-    stroke: #6fa47a;
-    stroke-width: 0.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    opacity: 0.55;
-}
-
-.xmas-wire-shadow {
-    fill: none;
-    stroke: rgba(18, 36, 70, 0.32);
-    stroke-width: 3.4;
-}
-
-.xmas-socket-ribs {
-    fill: none;
-    stroke: rgba(0, 0, 0, 0.45);
-    stroke-width: 0.45;
-}
-
-.xmas-bulb__facets {
-    fill: none;
-    stroke: rgba(255, 255, 255, 0.22);
-    stroke-width: 0.45;
-}
-
-.xmas-bulb__rim {
-    fill: none;
-    stroke: rgba(255, 255, 255, 0.55);
-    stroke-width: 0.7;
-    stroke-linecap: round;
-}
-
-.xmas-bulb__filament {
-    fill: none;
-    stroke: #ffffff;
-    stroke-width: 0.5;
-    stroke-linejoin: round;
-    opacity: 0.95;
-}
-
-.xmas-bulb__shine {
-    fill: rgba(255, 255, 255, 0.78);
-}
-
-.xmas-bulb {
-    filter: drop-shadow(0 1.2px 1.2px rgba(10, 20, 45, 0.35));
-}
-
-.xmas-bulb__glint {
-    fill: #ffffff;
-}
-
-.xmas-bulb__bloom {
-    opacity: 0.3;
-}
-
-body.dark-mode .xmas-bulb__bloom {
-    opacity: 0.5;
-}
-
-.xmas-halos {
-    opacity: 1;
-}
-
-.xmas-deco-glows {
-    will-change: opacity;
-    animation: xmas-twinkle var(--twinkle-duration, 3s) ease-in-out var(--twinkle-delay, 0s) infinite;
-}
-
-/* At night the light adds onto the scene instead of painting over it. */
-body.dark-mode .xmas-deco-glows {
-    mix-blend-mode: screen;
-}
-
-html.xmas-effects-paused .xmas-deco-glows {
-    animation-play-state: paused;
-}
-
-body.dark-mode .xmas-halos {
-    opacity: 1;
-}
-
-body.dark-mode .xmas-frost-specks {
-    opacity: 0.45;
-}
-
-body.dark-mode .xmas-cap-shadow {
-    fill: rgba(0, 6, 24, 0.5);
-}
-
-body.dark-mode .xmas-wire-shadow {
-    stroke: rgba(0, 0, 0, 0.45);
-}
-
-/* Incandescent flicker: mostly steady, a quick dip and a soft recovery. */
-@keyframes xmas-twinkle {
-    0%, 100% { opacity: 1; }
-    38% { opacity: 0.96; }
-    46% { opacity: 0.42; }
-    50% { opacity: 0.7; }
-    56% { opacity: 0.5; }
-    70% { opacity: 0.94; }
+@media print {
+    .xmas-controls, .xmas-light-spill, .xmas-scene .xmas-snow { display: none !important; }
 }
 
 /* --------------------------------------------------------------------------
@@ -563,11 +497,6 @@ html.login-christmas body.page-login .login-card .login-card__snowflake {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .xmas-deco-glows {
-        animation: none;
-        will-change: auto;
-    }
-
     html.login-christmas body.page-login .login-card .login-card__submit-arrow {
         transition: none;
     }

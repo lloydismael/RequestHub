@@ -37,6 +37,7 @@ from hub.release_changelog import (
 LOGGER = logging.getLogger(__name__)
 RECIPES_PATH = ROOT / "hub" / "changelog_capture_recipes.json"
 ORIGIN = "http://changelog.capture.invalid"
+SWIFTSHADER_ARGS = ("--use-angle=swiftshader", "--enable-unsafe-swiftshader")
 VENDOR_ASSETS = {
     "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css": "bootstrap.min.css",
     "https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css": "bootstrap-icons.css",
@@ -105,9 +106,9 @@ def load_recipes(path):
                 if source.suffix.lower() not in {".md", ".txt", ".rst"} or not isinstance(scene.get("heading"), str) or not scene["heading"].strip():
                     raise CaptureError("Documentation capture needs a selected text section.")
             elif scene.get("fixture") not in ({
-                "login", "seasonal_login", "profile", "admin_profile", "changelog", "changelog_editor",
-                "changelog_history", "changelog_feed", "management_accounts", "management_monitoring",
-                "sqr_tracker", "sqr_performance", "request_progress",
+                "login", "seasonal_login", "profile", "profile_avatar_shortcut", "admin_profile", "changelog",
+                "changelog_editor", "changelog_history", "changelog_feed", "management_accounts", "management_monitoring",
+                "sqr_tracker", "sqr_performance", "request_progress", "christmas_canopy",
             } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             if scene.get("fixture") == "repository_change" and {"paths", "omitted_files", "revision"} & scene.keys():
@@ -278,6 +279,88 @@ def _render(snapshot, scene):
     return result.stdout
 
 
+def _enhance_profile_avatar(page, snapshot):
+    # Only run the historical form runtime, not the page's other scripts.
+    runtime = snapshot / "static" / "hub" / "form_runtime.js"
+    if runtime.is_file():
+        page.evaluate("""source => {
+            (0, eval)(source);
+            document.dispatchEvent(new Event('DOMContentLoaded'));
+        }""", runtime.read_text(encoding="utf-8"))
+
+
+def _enhance_christmas_canopy(page, snapshot):
+    scripts = snapshot / "static" / "js"
+    sources = [(scripts / name).read_text(encoding="utf-8") for name in (
+        "christmas-theme.js", "christmas-cord.js", "christmas-canopy.js", "christmas-lights.js",
+    ) if (scripts / name).is_file()]
+    page.evaluate("""sources => {
+        const context = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, options) {
+            return context.call(this, type, type === 'webgl2' ? {...options, failIfMajorPerformanceCaveat: false} : options);
+        };
+        document.body.classList.add('dark-mode');
+        document.querySelector('.rh-primary-nav').dataset.navSurface = 'dark';
+        document.querySelector('.profile-panel--active')?.classList.remove('profile-panel--active');
+        document.querySelector('#profile-panel-themes').classList.add('profile-panel--active');
+        document.querySelector('.profile-tab--active')?.classList.remove('profile-tab--active');
+        document.querySelector('[data-profile-tab="themes"]').classList.add('profile-tab--active');
+        for (const source of sources) (0, eval)(source);
+    }""", sources)
+    page.locator(".seasonal-lights-overlay").wait_for(state="attached", timeout=6000)
+    if (scripts / "christmas-canopy.js").is_file():
+        page.locator("canvas.seasonal-canopy-rays").wait_for(state="visible", timeout=10000)
+    page.locator("#christmas-controls").evaluate("section => window.scrollBy(0, section.getBoundingClientRect().top - 124)")
+
+
+def _enhance_seasonal_login(page, snapshot):
+    shared_lights = bool(page.locator("#login-light-flow").count())
+    names = ("christmas-cord.js", "christmas-canopy.js", "christmas-lights.js") if shared_lights else ()
+    scripts = (snapshot / "static" / "js").resolve()
+    sources = []
+    for name in (*names, "login-christmas.js"):
+        script = (scripts / name).resolve()
+        if not script.is_relative_to(snapshot.resolve()) or not script.is_relative_to(scripts) or not script.is_file():
+            raise CaptureError("Required seasonal login script is unavailable inside the snapshot.")
+        sources.append(script.read_text(encoding="utf-8"))
+    if shared_lights:
+        page.emulate_media(reduced_motion="no-preference")
+    # Render a fixed first frame on both sides; don't enable the snapshot's page scripts.
+    page.evaluate("""sources => {
+        document.documentElement.dataset.theme = 'dark';
+        document.documentElement.style.colorScheme = 'dark';
+        document.body.classList.add('dark-mode');
+        const toggle = document.getElementById('theme-checkbox');
+        if (toggle) toggle.checked = true;
+        const nav = document.querySelector('.navbar[data-nav-surface]');
+        if (nav) nav.dataset.navSurface = nav.dataset.navDefaultSurface = 'dark';
+        let seed = 421, id = 0;
+        Math.random = () => (seed = Math.imul(1664525, seed) + 1013904223 >>> 0) / 4294967296;
+        const frames = new Map();
+        window.requestAnimationFrame = callback => { frames.set(++id, callback); return id; };
+        window.cancelAnimationFrame = frame => frames.delete(frame);
+        const context = HTMLCanvasElement.prototype.getContext;
+        HTMLCanvasElement.prototype.getContext = function (type, options) {
+            return context.call(this, type, type === 'webgl2' ? {...options, failIfMajorPerformanceCaveat: false} : options);
+        };
+        for (const source of sources) (0, eval)(source);
+        for (const now of [10, 20, 30]) {
+            for (const frame of [...frames.keys()]) {
+                const callback = frames.get(frame);
+                frames.delete(frame);
+                callback?.(now);
+            }
+        }
+    }""", sources)
+    if not page.locator(".xmas-scene canvas.xmas-snow").is_visible():
+        raise CaptureError("The seasonal login snow did not render.")
+    if not shared_lights and not page.locator(".xmas-deco-static").count():
+        raise CaptureError("The historical seasonal decoration did not render.")
+    if shared_lights and page.viewport_size["width"] >= 480:
+        for selector in (".login-card canvas.seasonal-canopy-rays", ".xmas-light-spill"):
+            page.locator(selector).wait_for(state="visible", timeout=10000)
+
+
 def _screenshot(browser, snapshot, scene, output, vendor_dir):
     document = _render(snapshot, scene) + (
         "<style>*,*::before,*::after{animation:none!important;transition:none!important}"
@@ -285,14 +368,18 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
     )
     fixture = scene.get("fixture")
     if fixture in {
-        "admin_profile", "changelog", "changelog_editor", "changelog_history", "changelog_feed", "management_monitoring",
-        "management_accounts", "request_progress",
+        "profile_avatar_shortcut", "admin_profile", "changelog", "changelog_editor", "changelog_history",
+        "changelog_feed", "management_monitoring", "management_accounts", "request_progress",
     }:
         document += "<style>.navbar{position:static!important}</style>"
     failed_resources = []
     context = browser.new_context(
         viewport=scene.get("viewport", {"width": 1200, "height": 900}),
-        java_script_enabled=False, reduced_motion="reduce", service_workers="block",
+        # Chromium won't composite scripted canvases with JS disabled. The CSP
+        # below still blocks page scripts; only the selected renderers are evaluated.
+        java_script_enabled=fixture in {"profile_avatar_shortcut", "christmas_canopy", "seasonal_login"},
+        reduced_motion="no-preference" if fixture == "christmas_canopy" else "reduce",
+        service_workers="block",
     )
     try:
         def serve(route):
@@ -337,23 +424,18 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         context.route("**/*", serve)
         page = context.new_page()
         page.goto(ORIGIN, wait_until="networkidle", timeout=15000)
-        if scene.get("fixture") == "seasonal_login" and not failed_resources:
-            # Run only the historical decoration script; page scripts and network remain blocked.
-            script = snapshot / "static" / "js" / "login-christmas.js"
-            page.evaluate("""source => {
-                let seed = 421;
-                Math.random = () => (seed = Math.imul(1664525, seed) + 1013904223 >>> 0) / 4294967296;
-                const frames = [];
-                window.requestAnimationFrame = callback => frames.push(callback);
-                (0, eval)(source);
-                for (let frame = 0; frame < 3; frame++) {
-                    for (const callback of frames.splice(0)) callback(frame * 16);
-                }
-            }""", script.read_text(encoding="utf-8"))
-            if not page.locator(".xmas-deco-static").count():
-                raise CaptureError("The historical seasonal decoration did not render.")
+        if fixture == "seasonal_login" and not failed_resources:
+            _enhance_seasonal_login(page, snapshot)
         if failed_resources:
             raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
+        if fixture == "profile_avatar_shortcut":
+            _enhance_profile_avatar(page, snapshot)
+        if fixture == "christmas_canopy":
+            _enhance_christmas_canopy(page, snapshot)
+            if failed_resources:
+                raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
+            page.screenshot(path=str(output), animations="disabled", timeout=15000)
+            return
         if fixture == "management_accounts":
             # The old no-script page can be thousands of pixels tall.
             page.locator("#accounts-pane").wait_for(state="visible")
@@ -362,6 +444,7 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         selector = {
             "login": ".login-hero", "seasonal_login": ".login-hero",
             "profile": "#profile-panel-avatar .profile-card, .profile-avatar-block",
+            "profile_avatar_shortcut": ".profile-hero",
             "admin_profile": ".settings-admin-wrap",
             "changelog": ".cl-entry", "changelog_editor": ".cl-editor",
             "changelog_history": ".cl-history-entry", "changelog_feed": ".cl-technical-evidence",
@@ -431,8 +514,12 @@ def _capture_change(browser, repo, item, recipe, assets, vendor_dir):
                     "before_revision": parents[1], "after_revision": item["sha"],
                     "capture_note": (
                         f"Automatic {scene['kind']} capture, recipe {recipe['id']}. Exact Git snapshots; synthetic fixtures; external traffic blocked."
-                        + (" Only the historical decoration script rendered a reduced-motion frame."
-                           if scene.get("fixture") == "seasonal_login" else " Page scripts disabled.")
+                        + (" Only the seasonal decoration scripts rendered a fixed dark-mode frame."
+                           if scene.get("fixture") == "seasonal_login"
+                           else " Only the historical form runtime updated the profile labels."
+                           if scene.get("fixture") == "profile_avatar_shortcut"
+                           else " Only the historical theme and navbar scripts rendered the steady lights."
+                           if scene.get("fixture") == "christmas_canopy" else " Page scripts disabled.")
                         + (" Repository change report; not a UI screenshot. No source code or live data is displayed."
                            if scene.get("fixture") == "repository_change" else "")
                     ),
@@ -503,9 +590,13 @@ def capture_manifest(manifest, repo, recipes_path, *, vendor_dir=None, failure=N
         for item, _ in pending:
             failed(item, "Capture dependency unavailable; install requirements-changelog-capture.txt.")
         return validate_manifest(result), failures
+    needs_webgl = any(scene.get("fixture") in {"christmas_canopy", "seasonal_login"}
+                      for _, recipe in pending for scene in recipe["scenes"])
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch()
+            browser = playwright.chromium.launch(
+                args=list(SWIFTSHADER_ARGS) if needs_webgl else [],
+            )
             try:
                 for item, recipe in pending:
                     try:

@@ -18,7 +18,7 @@ Unsaved changes require confirmation before switching forms or leaving. Concurre
 Expand **Advanced form customization** to access the full registered-form catalog.
 
 1. Use the category filters (**Request**, **SQR**, **Management**, **Others**) or the search box in **Advanced form editors** to find a registered form, including New Request or New SQR Submission.
-2. Search the field list and select one field to edit its label and help text. Open Advanced settings for placeholders, sections, widths, and conditions. Use Move up/down for keyboard-friendly ordering.
+2. Search the field list and select one field to edit its label and help text. Label changes apply inside the form, not to shortcuts such as the camera icon in the Settings header. Open Advanced settings for placeholders, sections, widths, and conditions. Use Move up/down for keyboard-friendly ordering.
 3. Add custom text, long-text, number, email, URL, date, checkbox, single-select, or multi-select fields. Edit dropdown options in separate value/label rows; values are stable storage keys.
 4. For supported people dropdowns, leave All eligible selected or search and check the people to display. New Request supports preferred engineers; Request Admin also supports requestors and backup engineers. SQR Submission supports approvers and Account Manager names. Use the primary Forms workspace to add names and assign departments; the advanced editor can narrow its baseline member list. Delivery and Performance person fields support the same controls when those forms are used. These lists do not rename or modify user accounts.
 5. Core field type, requiredness, visibility, and business validation remain locked. Other built-in dropdowns are protected.

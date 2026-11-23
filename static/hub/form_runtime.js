@@ -41,8 +41,8 @@
       if (updates.has(input)) return;
       const row = input.closest('[data-editor-field], .mb-3, .mb-2, .col-md-6, .col-12') || input.parentElement;
       if (input.dataset.formWidth === 'half') row.classList.add('editor-field-half');
-      const label = input.labels?.[0];
-      if (label && label.htmlFor === input.id && input.dataset.formLabel) label.textContent = input.dataset.formLabel;
+      const label = Array.from(input.labels || []).find(item => item.htmlFor === input.id && form.contains(item));
+      if (label && input.dataset.formLabel) label.textContent = input.dataset.formLabel;
       if (input.dataset.formSection && !row.querySelector('.editor-section')) {
         const heading = document.createElement('h6');
         heading.className = 'editor-section';

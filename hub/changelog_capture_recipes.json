@@ -8,17 +8,17 @@
         {
           "kind": "ui",
           "fixture": "seasonal_login",
-          "title": "Seasonal sign-in — desktop",
-          "before_text": "The previous rendered sign-in screen with the seasonal theme selected.",
-          "after_text": "The updated sign-in screen with the same theme selected. This static view does not show animation.",
+          "title": "Seasonal sign-in in dark mode — desktop",
+          "before_text": "The previous seasonal sign-in in the same dark appearance and viewport.",
+          "after_text": "The updated seasonal sign-in in the same dark appearance and viewport. This still does not show animation.",
           "viewport": {"width": 1200, "height": 900}
         },
         {
           "kind": "ui",
           "fixture": "seasonal_login",
-          "title": "Seasonal sign-in — mobile",
-          "before_text": "The previous rendered sign-in screen on a narrow viewport.",
-          "after_text": "The updated sign-in screen on the same narrow viewport.",
+          "title": "Seasonal sign-in in dark mode — phone",
+          "before_text": "The previous seasonal sign-in on the same narrow viewport.",
+          "after_text": "The updated seasonal sign-in on the same narrow viewport.",
           "viewport": {"width": 375, "height": 844}
         }
       ]
@@ -32,6 +32,33 @@
         "after_text": "The updated avatar settings on the same mobile viewport; no photo was uploaded.",
         "viewport": {"width": 375, "height": 844}
       }]
+    },
+    {
+      "id": "profile-avatar-shortcut",
+      "paths": ["static/hub/form_runtime.js"],
+      "scenes": [{
+        "kind": "ui", "fixture": "profile_avatar_shortcut", "title": "Profile photo shortcut",
+        "before_text": "The Form Editor replaced the camera icon with the upload field label, which overflowed the badge.",
+        "after_text": "The camera icon stays visible and opens the photo picker. The upload field keeps its own label.",
+        "viewport": {"width": 375, "height": 844}
+      }]
+    },
+    {
+      "id": "christmas-canopy",
+      "paths": ["static/js/christmas-canopy.js"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "christmas_canopy", "title": "Christmas navbar and Light flow settings",
+          "before_text": "The original SVG lights and Christmas toggles, without a flow speed or cord control.",
+          "after_text": "The same wrapped layout now has ray-traced bulbs and reflections. Light flow and Nudge cord are available in Themes. This still shows the default Steady setting.",
+          "viewport": {"width": 1440, "height": 1040}
+        },
+        {
+          "kind": "report", "fixture": "repository_change", "title": "Christmas canopy account and renderer changes",
+          "before_text": "File fingerprints at the first-parent revision.",
+          "after_text": "File fingerprints for the saved preference, migration, renderers, transition fallback, tests, and release documentation. This is not a performance benchmark."
+        }
+      ]
     },
     {
       "id": "admin-profile-tools",

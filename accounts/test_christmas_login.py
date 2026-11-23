@@ -112,21 +112,28 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertContains(response, "localStorage.getItem('reqHubLoginTheme') === 'christmas'")
         self.assertContains(response, "document.documentElement.classList.add('login-christmas')")
         self.assertContains(response, 'class="xmas-scene xmas-only" aria-hidden="true"')
-        self.assertContains(response, 'class="xmas-card-deco xmas-only" aria-hidden="true" data-xmas-card-deco')
+        self.assertContains(response, '<span class="xmas-card-frost xmas-only" aria-hidden="true"></span>', html=True)
+        self.assertContains(response, 'class="xmas-controls xmas-only" hidden')
         self.assertContains(response, '<i class="bi bi-person-fill login-form__icon xmas-only" aria-hidden="true"></i>', html=True)
         self.assertContains(response, '<i class="bi bi-lock-fill login-form__icon xmas-only" aria-hidden="true"></i>', html=True)
 
-    def test_login_loads_shared_snowflake_and_santa_effect_assets(self):
+    def test_login_loads_shared_santa_and_canopy_assets_before_their_consumers(self):
         response = self.client.get(reverse("login"))
-
-        self.assertContains(response, static("css/christmas-theme.css") + "?v=")
-        self.assertContains(response, static("js/christmas-theme.js") + "?v=")
-        self.assertContains(response, static("js/christmas-theme-snapshot.js") + "?v=")
         html = response.content.decode()
-        self.assertLess(html.index(static("js/christmas-theme-snapshot.js")), html.index(static("js/christmas-theme.js")))
-        self.assertEqual(html.count(static("js/christmas-theme-snapshot.js")), 1)
+
+        for stylesheet in ("christmas-theme.css", "christmas-lights.css"):
+            self.assertContains(response, static(f"css/{stylesheet}") + "?v=", count=1)
+        for chain in (
+            ("christmas-theme-snapshot.js", "christmas-theme.js"),
+            ("christmas-cord.js", "christmas-canopy.js", "christmas-lights.js", "login-christmas.js"),
+        ):
+            positions = []
+            for script in chain:
+                url = static(f"js/{script}")
+                self.assertContains(response, url + "?v=", count=1)
+                positions.append(html.index(url))
+            self.assertEqual(positions, sorted(positions))
         self.assertContains(response, f'rel="preload" as="image" href="{static("images/christmas-santa-sleigh.svg")}"')
-        self.assertNotContains(response, static("js/christmas-lights.js"))
 
     def test_signed_in_pages_load_the_snapshot_helper_before_santa(self):
         response = self.signed_in_page("santa-snapshot-wiring", banner_gradient="christmas")
@@ -156,8 +163,11 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertNotContains(response, "login-christmas")
         self.assertNotContains(response, "reqHubLoginTheme")
         self.assertNotContains(response, "xmas-")
-        self.assertNotContains(response, static("css/christmas-theme.css"))
-        self.assertNotContains(response, static("js/christmas-theme.js"))
+        for asset in (
+            "css/christmas-theme.css", "css/christmas-lights.css", "js/christmas-theme.js",
+            "js/christmas-lights.js", "js/christmas-cord.js", "js/christmas-canopy.js",
+        ):
+            self.assertNotContains(response, static(asset))
         self.assertContains(response, 'class="login-card login-card--glass lg-surface lg-enter"')
 
     def test_signed_in_christmas_account_is_remembered_for_the_login_page(self):

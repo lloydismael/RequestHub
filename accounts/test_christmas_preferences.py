@@ -39,7 +39,7 @@ class ChristmasPreferencesTests(TestCase):
         )
         self.client.force_login(self.user)
 
-    def preferences(self, client: Client | None = None, url: str | None = None) -> dict[str, bool]:
+    def preferences(self, client: Client | None = None, url: str | None = None, *, include_flow=False) -> dict[str, bool | int]:
         """Read the saved effects settings emitted to the requested page."""
         response = (client or self.client).get(url or reverse("accounts:update"))
         self.assertEqual(response.status_code, 200)
@@ -48,7 +48,10 @@ class ChristmasPreferencesTests(TestCase):
             response.content.decode(), re.DOTALL,
         )
         self.assertIsNotNone(match, "Saved Christmas preferences must be supplied to every page")
-        return json.loads(match.group(1))
+        preferences = json.loads(match.group(1))
+        if not include_flow:
+            preferences.pop("light_flow", None)
+        return preferences
 
     def save_preferences(self, preferences, **overrides):
         data = {
@@ -84,6 +87,36 @@ class ChristmasPreferencesTests(TestCase):
 
     def test_new_accounts_start_with_all_christmas_effects_enabled(self):
         self.assertEqual(self.preferences(), {key: True for key in self.KEYS})
+
+    def test_light_flow_starts_steady_and_range_has_an_accessible_label(self):
+        response = self.client.get(reverse("accounts:update"))
+        self.assertContains(response, 'for="christmas-light-flow"')
+        self.assertContains(response, 'type="range" name="pref_christmas_light_flow"')
+        self.assertEqual(self.preferences(include_flow=True).get("light_flow"), 0)
+
+    def test_light_flow_follows_the_account_even_when_lights_are_disabled(self):
+        effects = {key: key not in ("enabled", "lights") for key in self.KEYS}
+        response = self.save_preferences(effects, pref_christmas_light_flow="17")
+        self.assertRedirects(response, reverse("accounts:update") + "#themes")
+        # Older clients and disabled form controls can omit the speed.
+        self.assertEqual(self.save_preferences(effects).status_code, 302)
+        self.assertEqual(self.client.post(reverse("accounts:update"), {
+            "save_theme": "1", "banner_gradient": "blue",
+            "pref_christmas_light_flow": "3",
+        }).status_code, 302)
+        second_device = Client()
+        second_device.force_login(self.user)
+        self.assertEqual(self.preferences(second_device, reverse("hub:dashboard"), include_flow=True).get("light_flow"), 17)
+
+    def test_invalid_light_flow_does_not_overwrite_saved_speed(self):
+        effects = {key: True for key in self.KEYS}
+        self.save_preferences(effects, pref_christmas_light_flow="8")
+        for invalid in ("-1", "21", "3.5", "fast", ""):
+            with self.subTest(speed=invalid):
+                response = self.save_preferences(effects, pref_christmas_light_flow=invalid)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("pref_christmas_light_flow", response.context["theme_form"].errors)
+                self.assertEqual(self.preferences(include_flow=True).get("light_flow"), 8)
 
     def test_each_switch_saves_independently_on_the_account(self):
         for key in self.KEYS:

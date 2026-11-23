@@ -3,7 +3,7 @@ from typing import ClassVar
 from uuid import uuid4
 
 from django.contrib.auth.models import AbstractUser
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, RegexValidator
 from django.db import models
 from django.utils import timezone
 
@@ -222,6 +222,10 @@ class User(AbstractUser):
         default=True, verbose_name="Navbar lights",
         help_text="Multicolour lights around the navigation bar.",
     )
+    CHRISTMAS_LIGHT_FLOW_MAX = 20
+    pref_christmas_light_flow = models.PositiveSmallIntegerField(
+        default=0, db_default=0, validators=[MaxValueValidator(CHRISTMAS_LIGHT_FLOW_MAX)],
+    )
     pref_christmas_cursor = models.BooleanField(
         default=True, verbose_name="Snowflake cursor",
         help_text="Use a snowflake pointer on clickable controls.",
@@ -236,8 +240,11 @@ class User(AbstractUser):
     )
 
     @property
-    def christmas_effects_preferences(self) -> dict[str, bool]:
-        return {name[len("pref_christmas_"):]: getattr(self, name) for name in self.CHRISTMAS_EFFECT_FIELDS}
+    def christmas_effects_preferences(self) -> dict[str, bool | int]:
+        return {
+            **{name[len("pref_christmas_"):]: getattr(self, name) for name in self.CHRISTMAS_EFFECT_FIELDS},
+            "light_flow": self.pref_christmas_light_flow,
+        }
 
     @property
     def custom_theme_colors(self):
