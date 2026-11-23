@@ -162,14 +162,15 @@ def _ui(snapshot, fixture):
     request.user = AnonymousUser()
     request.META["CSRF_COOKIE"] = "0" * 32
     context = {"request": request, "assistant_widget": {"native_enabled": False}}
-    if fixture in {"login", "seasonal_login"}:
+    if fixture in {"login", "seasonal_login", "christmas_toggle_toast"}:
         from accounts.views import RoleLoginView
+        seasonal = fixture in {"seasonal_login", "christmas_toggle_toast"}
         with patch("django.utils.timezone.now", return_value=datetime(2026, 12, 31, 4, tzinfo=UTC)):
             response = RoleLoginView.as_view()(request)
-            if fixture == "seasonal_login":
+            if seasonal:
                 response.context_data["christmas_login_default"] = True
             document = response.render().content.decode("utf-8")
-        if fixture == "seasonal_login":
+        if seasonal:
             # Older templates applied this same preference via localStorage and inline JS.
             document = re.sub(r"<html\b[^>]*>", lambda match: _seasonal_root(match[0]), document, count=1)
         return document

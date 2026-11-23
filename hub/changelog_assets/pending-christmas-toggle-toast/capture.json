@@ -1,0 +1,30 @@
+{
+  "checkout_base_revision": "f6beb652d2c120fe3ae357c622be107819a78df7",
+  "after_revision": null,
+  "source": "Before: exact Git snapshot. After: that snapshot with the working-tree feature files. Not exact-release evidence.",
+  "capture": "Chromium 156.0.8078.4; actual Christmas sign-in template with five clicks on its light/dark control, from light to dark. Reduced motion, synthetic data, only the historical theme switch and its Christmas helper evaluated. Other page scripts and external traffic blocked.",
+  "viewport": {
+    "width": 375,
+    "height": 844
+  },
+  "toast_after_five_flips": {
+    "before": null,
+    "after": "Are you bored?"
+  },
+  "after_source_sha256": {
+    "templates/base.html": "99b8a905bedd658e99f5cefb94295c39867e47e1f6369ade6181b24bb44c52f4",
+    "templates/accounts/login.html": "46a55165f7af63b2a6be5246255704ef5e000cb407ab9cfbde0ebb630c4c23ab",
+    "static/css/christmas-theme.css": "0d5bb43e3d3ef3358703e61c0ae5931a64be2b6e6a3c46c7a527510695faf9ad",
+    "static/js/christmas-theme.js": "85724d2919c184825485525b341f15a82ec7ef8612b873062a3553587e0b20fe"
+  },
+  "images": [
+    {
+      "file": "before.png",
+      "sha256": "d07871d44e9b071b47dc698f98ca15b19450f06b617b1d28d372de250fbdd4fd"
+    },
+    {
+      "file": "after.png",
+      "sha256": "ba32f4a68866601744e9a7d075146a98bff74577d3fd95d78ef6959b40259fa4"
+    }
+  ]
+}

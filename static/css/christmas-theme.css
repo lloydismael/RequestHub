@@ -35,6 +35,25 @@ body.account-themed.authenticated.dark-mode[data-account-theme="christmas"] {
     --account-btn-gradient: linear-gradient(135deg, #a51d38, #81162c);
     --account-btn-gradient-hover: linear-gradient(135deg, #8c1930, #691226);
 }
+.christmas-toggle-toast {
+    position: fixed;
+    z-index: 2060;
+    inset-inline: 1rem;
+    bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+    width: fit-content;
+    margin-inline: auto;
+    pointer-events: none;
+}
+.christmas-toggle-toast:not(:empty) {
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--rh-border);
+    border-radius: 1rem;
+    background: var(--rh-surface-solid);
+    color: var(--rh-text-primary);
+    box-shadow: var(--rh-shadow-panel);
+    font-weight: 600;
+}
+
 body.account-themed.authenticated[data-account-theme="christmas"] .ambient-mesh { opacity: 0.25; }
 body.account-themed.authenticated[data-account-theme="christmas"] .navbar[data-nav-surface] {
     --nav-ink: #102843;

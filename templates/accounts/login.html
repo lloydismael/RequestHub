@@ -5,7 +5,7 @@
 {% block body_class %}page-login{% endblock %}
 {% block extra_head %}
 {% if christmas_login_enabled %}
-{% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=13">
+{% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=17">
 <link rel="preload" as="image" href="{% static 'images/christmas-santa-sleigh.svg' %}">{% endif %}
 <link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=15">
 <script>
@@ -98,7 +98,7 @@
 </section>
 {% if christmas_login_enabled and not request.user.is_authenticated %}
 <script src="{% static 'js/christmas-theme-snapshot.js' %}?v=3" defer></script>
-<script src="{% static 'js/christmas-theme.js' %}?v=19" defer></script>
+<script src="{% static 'js/christmas-theme.js' %}?v=20" defer></script>
 {% endif %}
 <script>
     window.addEventListener('pageshow', function (event) {

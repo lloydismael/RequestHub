@@ -15,6 +15,10 @@ The remembered Christmas login uses the same transition. Other account themes ke
 
 OS reduced motion, account reduced-motion/reduced-effects preferences, the festive master switch, and the Santa-specific switch take priority over the animation. Hiding the tab, resizing, or changing those preferences during a pass cancels decorative motion and retains the current selected theme. Rapid reversals replace the previous pass instead of stacking effects.
 
+## Light/dark Easter egg
+
+On Christmas sign-in and signed-in Christmas pages, the fifth light/dark switch shows **“Are you bored?”** after the current theme transition. The toast dismisses itself without taking focus and appears only once per page. Leaving the Christmas theme resets an unfinished count. The toast also works with reduced motion or festive effects disabled.
+
 ## Consistent rendering on desktop and phones
 
 Where supported, View Transitions animate the new-theme snapshot, the sleigh, and individual gift layers with shared timing. Phone width and coarse pointers no longer select a different Christmas animation. A successful native transition never mounts a second viewport document.

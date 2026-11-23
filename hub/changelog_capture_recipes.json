@@ -24,6 +24,16 @@
       ]
     },
     {
+      "id": "christmas-toggle-toast",
+      "paths": ["hub/changelog_assets/pending-christmas-toggle-toast/capture.json"],
+      "scenes": [{
+        "kind": "ui", "fixture": "christmas_toggle_toast", "title": "Christmas light/dark Easter egg",
+        "before_text": "Five light/dark switches on Christmas sign-in changed the appearance without showing a message.",
+        "after_text": "After the fifth switch, “Are you bored?” appears briefly without interrupting sign-in. It appears only once per page.",
+        "viewport": {"width": 375, "height": 844}
+      }]
+    },
+    {
       "id": "profile-avatar",
       "paths": ["templates/accounts/profile_form.html", "static/css/profile-settings.css"],
       "scenes": [{

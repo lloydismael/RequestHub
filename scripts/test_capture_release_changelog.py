@@ -147,6 +147,26 @@ class CaptureTests(unittest.TestCase):
             ["seasonal_login", "seasonal_login", "christmas_canopy", "repository_change"],
         )
 
+    def test_christmas_toggle_capture_does_not_relabel_other_sign_in_changes(self):
+        recipes = load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+        login = self.repo / "templates" / "accounts" / "login.html"
+        login.parent.mkdir(parents=True)
+        login.write_text("<title>Christmas sign-in</title>", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "fix: update sign-in layout")
+        legacy = git(self.repo, "rev-parse", "HEAD")
+        chosen = _select_recipe(self.repo, {"sha": legacy, "parent_sha": self.after}, recipes)
+        self.assertEqual(chosen["id"], "login-layout")
+
+        login.write_text("<title>Christmas sign-in with updated assets</title>", encoding="utf-8")
+        evidence = self.repo / "hub" / "changelog_assets" / "pending-christmas-toggle-toast" / "capture.json"
+        evidence.parent.mkdir(parents=True)
+        evidence.write_text("{}", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "feat: add Christmas toggle toast")
+        chosen = _select_recipe(self.repo, {"sha": git(self.repo, "rev-parse", "HEAD"), "parent_sha": legacy}, recipes)
+        self.assertIn("christmas_toggle_toast", {scene["fixture"] for scene in chosen["scenes"] if scene["kind"] == "ui"})
+
     def test_unmapped_template_needs_a_screen_capture_instead_of_a_file_report(self):
         (self.repo / "templates").mkdir()
         (self.repo / "templates" / "export.html").write_text("<h1>Export</h1>", encoding="utf-8")
@@ -571,6 +591,27 @@ class HistoricalSceneTests(unittest.TestCase):
                                     red, green, blue = ImageChops.difference(new.convert("RGB"), hidden.convert("RGB")).split()
                                     delta = ImageChops.lighter(ImageChops.lighter(red, green), blue)
                                     self.assertGreater(sum(delta.histogram()[12:]), 100, f"{selector} didn't paint visible pixels")
+
+    def test_christmas_toggle_capture_shows_the_change_after_five_flips(self):
+        from playwright.sync_api import sync_playwright
+
+        vendor = Path(os.environ.get("CHANGELOG_CAPTURE_VENDOR_DIR") or ROOT / ".changelog-capture-vendor")
+        if not vendor.is_dir():
+            self.skipTest("Prepare offline vendor assets with capture_release_changelog.py --prepare-assets.")
+        scene = {"kind": "ui", "fixture": "christmas_toggle_toast", "viewport": {"width": 375, "height": 844}}
+        with tempfile.TemporaryDirectory() as temporary, sync_playwright() as playwright:
+            directory = Path(temporary)
+            parent = directory / "parent"
+            parent.mkdir()
+            _snapshot(ROOT, "f6beb652d2c120fe3ae357c622be107819a78df7", parent)
+            before, after = directory / "before.png", directory / "after.png"
+            with playwright.chromium.launch() as browser:
+                _screenshot(browser, parent, scene, before, vendor)
+                _screenshot(browser, ROOT, scene, after, vendor)
+            with Image.open(before) as old, Image.open(after) as new:
+                self.assertEqual(old.size, (375, 844))
+                self.assertEqual(old.size, new.size)
+                self.assertIsNotNone(ImageChops.difference(old.convert("RGB"), new.convert("RGB")).getbbox())
 
     def test_changelog_loading_recipe_renders_both_disclosure_fallbacks(self):
         recipe = next(

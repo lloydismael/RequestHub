@@ -94,6 +94,26 @@ class ChristmasLoginBrowserTests(unittest.TestCase):
         expect(self.page.locator("body")).to_have_class(re.compile(r"\bdark-mode\b"))
         self.assertEqual(self.page.locator("html").evaluate("el => el.classList.contains('login-christmas')"), seasonal)
 
+    def test_toggle_toast_is_only_for_christmas_sign_in(self):
+        self.page.emulate_media(reduced_motion="reduce")
+        self.open_login(seasonal=False)
+        toast = self.page.get_by_text("Are you bored?", exact=True)
+        label = self.page.locator('label[for="theme-checkbox"]')
+        for _ in range(5):
+            label.click()
+        expect(toast).to_have_count(0)
+
+        self.page.evaluate("localStorage.setItem('reqHubLoginTheme', 'christmas')")
+        self.page.reload()
+        password = self.page.locator('.login-form input[type="password"]')
+        password.fill("synthetic-input")
+        for _ in range(4):
+            label.click()
+            expect(toast).to_have_count(0)
+        label.click()
+        expect(toast).to_be_visible(timeout=1500)
+        expect(password).to_have_value("synthetic-input")
+
     def sample(self, selector):
         return self.page.evaluate(CANVAS_SAMPLE, selector)
 

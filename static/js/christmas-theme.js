@@ -8,6 +8,8 @@
     const panel = document.getElementById('christmas-controls');
     const toggle = document.getElementById('christmas-effects-toggle');
     const status = document.getElementById('christmas-effects-status');
+    const modeToggle = document.getElementById('theme-checkbox');
+    const modeToast = document.getElementById('christmas-toggle-toast');
     const flow = document.getElementById('christmas-light-flow');
     const flowReadout = document.getElementById('christmas-light-flow-value');
     const flowHelp = document.getElementById('christmas-light-flow-help');
@@ -464,4 +466,28 @@
         if (!settings && !login && event.key === storageKey) { preferences.enabled = event.newValue !== 'off'; reconcile(); }
     });
     reconcile();
+
+    if (modeToggle && modeToast) {
+        let flips = 0;
+        let shown = false;
+        let previousMode = modeToggle.checked;
+        function updateToast() {
+            if (!isChristmas()) {
+                flips = 0;
+                modeToast.textContent = '';
+            } else if (!shown && flips === 5 && !switching() && !document.hidden) {
+                shown = true;
+                modeToast.textContent = 'Are you bored?';
+                window.setTimeout(() => { modeToast.textContent = ''; }, 5000);
+            }
+        }
+        modeToggle.addEventListener('change', () => {
+            const currentMode = modeToggle.checked;
+            if (isChristmas() && !shown && flips < 5 && currentMode !== previousMode) flips++;
+            previousMode = currentMode;
+            updateToast();
+        });
+        new MutationObserver(updateToast).observe(body, { attributes: true, attributeFilter: ['data-account-theme', 'class'] });
+        document.addEventListener('visibilitychange', updateToast);
+    }
 })();

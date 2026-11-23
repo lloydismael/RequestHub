@@ -108,7 +108,7 @@ def load_recipes(path):
             elif scene.get("fixture") not in ({
                 "login", "seasonal_login", "profile", "profile_avatar_shortcut", "admin_profile", "changelog",
                 "changelog_editor", "changelog_history", "changelog_feed", "management_accounts", "management_monitoring",
-                "sqr_tracker", "sqr_performance", "request_progress", "christmas_canopy",
+                "sqr_tracker", "sqr_performance", "request_progress", "christmas_canopy", "christmas_toggle_toast",
             } if scene["kind"] == "ui" else {"changelog_contract", "repository_change"}):
                 raise CaptureError("Unsupported synthetic capture fixture.")
             if scene.get("fixture") == "repository_change" and {"paths", "omitted_files", "revision"} & scene.keys():
@@ -367,6 +367,25 @@ def _enhance_seasonal_login(page, snapshot):
             page.locator(selector).wait_for(state="visible", timeout=10000)
 
 
+def _exercise_christmas_toggle(page, document, snapshot):
+    # Keep CSP in place and evaluate only the template's theme switch and its local helper.
+    toggle_source = next((source for source in re.findall(r"<script>(.*?)</script>", document, re.S)
+                          if "const toggle = document.getElementById('theme-checkbox');" in source), None)
+    script = (snapshot / "static" / "js" / "christmas-theme.js").resolve()
+    if not toggle_source or not script.is_relative_to(snapshot.resolve()) or not script.is_file():
+        raise CaptureError("Required Christmas theme scripts are unavailable inside the snapshot.")
+    page.evaluate(toggle_source)
+    page.evaluate(script.read_text(encoding="utf-8"))
+    root = page.locator("html")
+    if root.get_attribute("data-theme") != "light":
+        raise CaptureError("The Christmas sign-in did not initialize in light mode.")
+    toggle = page.locator('label[for="theme-checkbox"]')
+    for _ in range(5):
+        toggle.click(timeout=2000)
+    if root.get_attribute("data-theme") != "dark":
+        raise CaptureError("The Christmas sign-in did not switch to dark mode after five flips.")
+
+
 def _screenshot(browser, snapshot, scene, output, vendor_dir):
     document = _render(snapshot, scene) + (
         "<style>*,*::before,*::after{animation:none!important;transition:none!important}"
@@ -383,7 +402,7 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
         viewport=scene.get("viewport", {"width": 1200, "height": 900}),
         # Chromium won't composite scripted canvases with JS disabled. The CSP
         # below still blocks page scripts; only the selected renderers are evaluated.
-        java_script_enabled=fixture in {"profile_avatar_shortcut", "christmas_canopy", "seasonal_login"},
+        java_script_enabled=fixture in {"profile_avatar_shortcut", "christmas_canopy", "seasonal_login", "christmas_toggle_toast"},
         reduced_motion="no-preference" if fixture == "christmas_canopy" else "reduce",
         service_workers="block",
     )
@@ -436,8 +455,11 @@ def _screenshot(browser, snapshot, scene, output, vendor_dir):
             raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
         if fixture == "profile_avatar_shortcut":
             _enhance_profile_avatar(page, snapshot)
-        if fixture == "christmas_canopy":
-            _enhance_christmas_canopy(page, snapshot)
+        if fixture in {"christmas_canopy", "christmas_toggle_toast"}:
+            if fixture == "christmas_canopy":
+                _enhance_christmas_canopy(page, snapshot)
+            else:
+                _exercise_christmas_toggle(page, document, snapshot)
             if failed_resources:
                 raise CaptureError("Capture resources are unavailable or external traffic was blocked.")
             page.screenshot(path=str(output), animations="disabled", timeout=15000)
@@ -525,7 +547,9 @@ def _capture_change(browser, repo, item, recipe, assets, vendor_dir):
                            else " Only the historical form runtime updated the profile labels."
                            if scene.get("fixture") == "profile_avatar_shortcut"
                            else " Only the historical theme and navbar scripts rendered the lights. The still does not show animation."
-                           if scene.get("fixture") == "christmas_canopy" else " Page scripts disabled.")
+                           if scene.get("fixture") == "christmas_canopy"
+                           else " The historical theme switch and its Christmas helper ran for five flips with reduced motion. Other scripts were blocked."
+                           if scene.get("fixture") == "christmas_toggle_toast" else " Page scripts disabled.")
                         + (" Repository change report; not a UI screenshot. No source code or live data is displayed."
                            if scene.get("fixture") == "repository_change" else "")
                     ),

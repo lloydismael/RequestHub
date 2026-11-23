@@ -56,7 +56,7 @@
     <noscript><link rel="stylesheet" href="{% static 'css/liquid-glass-ambient.css' %}?v=4"></noscript>
     {% if not login_asset_profile %}<link rel="stylesheet" href="{% static 'css/account-themes.css' %}?v=6">{% endif %}
     {% if request.user.is_authenticated %}
-    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=16">
+    <link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=17">
     <link rel="preload" as="image" href="{% static 'images/christmas-santa-sleigh.svg' %}">
     {% endif %}
     {% if request.user.is_authenticated or christmas_login_enabled %}
@@ -521,6 +521,9 @@
             </div>
     </main>
 
+    {% if request.user.is_authenticated or christmas_login_enabled %}
+        <div id="christmas-toggle-toast" class="christmas-toggle-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    {% endif %}
     {% if request.user.is_authenticated %}
         <div data-notification-toast-config
              data-url="{% url 'hub:notification-toast-data' %}"
@@ -539,7 +542,7 @@
     <script src="{% static 'js/navbar-contrast.js' %}?v=1" defer></script>
     {% if request.user.is_authenticated %}
     <script src="{% static 'js/christmas-theme-snapshot.js' %}?v=3" defer></script>
-    <script src="{% static 'js/christmas-theme.js' %}?v=19" defer></script>
+    <script src="{% static 'js/christmas-theme.js' %}?v=20" defer></script>
     {% endif %}
     {% if request.user.is_authenticated or christmas_login_enabled %}
     <script src="{% static 'js/christmas-cord.js' %}?v=1" defer></script>

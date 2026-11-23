@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -38,6 +38,7 @@ def fixture_html():
         "<input id='fixture-input' value='saved'><input id='fixture-password' type='password'>"
         "<input id='fixture-hidden' type='hidden'><canvas id='fixture-chart' width='240' height='100'></canvas>"
         "<button id='fixture-probe'>Probe</button></main>"
+        "<div id='christmas-toggle-toast' class='christmas-toggle-toast' role='status' aria-live='polite'></div>"
         "<script id='christmas-effects-settings' type='application/json'>"
         '{"enabled":true,"border":false,"snow":false,"lights":false,"cursor":false,"clicks":false,"santa":true}'
         "</script><script>"
@@ -80,6 +81,51 @@ class ChristmasTransitionBrowserTests(unittest.TestCase):
             "dark=>{const t=document.getElementById('theme-checkbox');t.checked=dark;"
             "t.dispatchEvent(new Event('change',{bubbles:true}));}", dark
         )
+
+    def test_christmas_toggle_toast_appears_on_the_fifth_flip_only(self):
+        self.page.emulate_media(reduced_motion="reduce")
+        self.page.clock.install()
+        toggle = self.page.locator("#theme-checkbox")
+        toast = self.page.get_by_text("Are you bored?", exact=True)
+        toggle.focus()
+        for dark in (False, True, True, False, True, False):
+            self.switch(dark)
+            expect(toast).to_have_count(0)
+
+        toggle.press("Space")
+        expect(toast).to_be_visible(timeout=1500)
+        expect(toggle).to_be_focused()
+        expect(self.page.locator("html")).to_have_attribute("data-theme", "dark")
+        self.page.clock.fast_forward(6000)
+        expect(toast).to_have_count(0)
+        for _ in range(5):
+            toggle.press("Space")
+        expect(toast).to_have_count(0)
+
+    def test_christmas_toggle_streak_resets_on_account_theme_preview_changes(self):
+        self.page.emulate_media(reduced_motion="reduce")
+        toast = self.page.get_by_text("Are you bored?", exact=True)
+        for dark in (True, False, True, False):
+            self.switch(dark)
+        for theme in ("default", "christmas"):
+            self.page.evaluate("theme => { document.body.dataset.accountTheme = theme; }", theme)
+        for dark in (True, False, True, False):
+            self.switch(dark)
+            expect(toast).to_have_count(0)
+        self.switch(True)
+        expect(toast).to_be_visible(timeout=1500)
+
+    def test_rapid_christmas_flips_show_the_toast_after_the_final_reveal(self):
+        toast = self.page.get_by_text("Are you bored?", exact=True)
+        self.page.evaluate("""() => {
+            const toggle = document.getElementById('theme-checkbox');
+            for (let flip = 0; flip < 5; flip++) toggle.click();
+        }""")
+        self.wait_for_motion(True)
+        expect(toast).to_have_count(0)
+        self.finish()
+        expect(toast).to_be_visible(timeout=1500)
+        expect(self.page.locator("html")).to_have_attribute("data-theme", "dark")
 
     def wait_for_motion(self, native):
         selector = "a.effect?.pseudoElement==='::view-transition-group(christmas-santa)'" if native else "a.effect?.target?.className==='christmas-frozen-viewport'"
