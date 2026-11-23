@@ -2,7 +2,9 @@ import json
 import re
 from html.parser import HTMLParser
 
-from django.test import Client, TestCase
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from accounts.models import User
@@ -88,15 +90,15 @@ class ChristmasPreferencesTests(TestCase):
     def test_new_accounts_start_with_all_christmas_effects_enabled(self):
         self.assertEqual(self.preferences(), {key: True for key in self.KEYS})
 
-    def test_light_flow_starts_steady_and_range_has_an_accessible_label(self):
+    def test_light_flow_starts_at_full_speed_and_range_has_an_accessible_label(self):
         response = self.client.get(reverse("accounts:update"))
         self.assertContains(response, 'for="christmas-light-flow"')
         self.assertContains(response, 'type="range" name="pref_christmas_light_flow"')
-        self.assertEqual(self.preferences(include_flow=True).get("light_flow"), 0)
+        self.assertEqual(self.preferences(include_flow=True).get("light_flow"), 20)
 
     def test_light_flow_follows_the_account_even_when_lights_are_disabled(self):
         effects = {key: key not in ("enabled", "lights") for key in self.KEYS}
-        response = self.save_preferences(effects, pref_christmas_light_flow="17")
+        response = self.save_preferences(effects, pref_christmas_light_flow="0")
         self.assertRedirects(response, reverse("accounts:update") + "#themes")
         # Older clients and disabled form controls can omit the speed.
         self.assertEqual(self.save_preferences(effects).status_code, 302)
@@ -106,7 +108,7 @@ class ChristmasPreferencesTests(TestCase):
         }).status_code, 302)
         second_device = Client()
         second_device.force_login(self.user)
-        self.assertEqual(self.preferences(second_device, reverse("hub:dashboard"), include_flow=True).get("light_flow"), 17)
+        self.assertEqual(self.preferences(second_device, reverse("hub:dashboard"), include_flow=True).get("light_flow"), 0)
 
     def test_invalid_light_flow_does_not_overwrite_saved_speed(self):
         effects = {key: True for key in self.KEYS}
@@ -198,3 +200,34 @@ class ChristmasPreferencesTests(TestCase):
         other_client.force_login(other)
         self.assertEqual(self.preferences(other_client), {key: True for key in self.KEYS})
         self.assertEqual(self.preferences(), expected)
+
+
+class ChristmasLightFlowMigrationTests(TransactionTestCase):
+    def test_upgrade_resets_existing_speeds_without_enabling_effects(self):
+        previous = [("accounts", "0033_christmas_light_flow_default")]
+        reset = [("accounts", "0034_reset_christmas_light_flow")]
+        executor = MigrationExecutor(connection)
+        latest = executor.loader.graph.leaf_nodes()
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(latest))
+        executor.migrate(previous)
+        account = executor.loader.project_state(previous).apps.get_model("accounts", "User")
+        steady = account.objects.create(username="flow-steady", pref_christmas_light_flow=0)
+        custom = account.objects.create(
+            username="flow-custom", pref_christmas_light_flow=7, is_active=False,
+            banner_gradient="blue", pref_christmas_enabled=False, pref_christmas_lights=False,
+            pref_reduce_motion=True, pref_reduce_effects=True,
+        )
+        full = account.objects.create(username="flow-full", pref_christmas_light_flow=20)
+
+        MigrationExecutor(connection).migrate(reset)
+
+        for user in (steady, custom, full):
+            with self.subTest(username=user.username):
+                user.refresh_from_db()
+                self.assertEqual(user.pref_christmas_light_flow, 20)
+        self.assertFalse(custom.is_active)
+        self.assertEqual(custom.banner_gradient, "blue")
+        self.assertFalse(custom.pref_christmas_enabled)
+        self.assertFalse(custom.pref_christmas_lights)
+        self.assertTrue(custom.pref_reduce_motion)
+        self.assertTrue(custom.pref_reduce_effects)

@@ -4,7 +4,7 @@ Start at **Dashboard**. What you can see and change depends on your role and the
 
 ## Seasonal sign-in
 
-When the Christmas sign-in theme is active, dark appearance adds falling snow and colored reflections from the bulbs. Drag the cord along the top or bottom of the card, or open **Christmas effects** to use **Nudge cord**. This menu also adjusts **Light flow** and pauses the seasonal animation. The pause setting stays in this browser. Below 480 px, snow remains but the cord and bulbs are hidden.
+When the Christmas sign-in theme is active, the lights run at full speed. Dark appearance adds falling snow and colored reflections from the bulbs. Drag the cord along the top or bottom of the card. If your system requests reduced motion, the scene stays still. Below 480 px, snow remains but the cord and bulbs are hidden.
 
 ## Request workflow
 
@@ -51,4 +51,4 @@ See [tracker filters, delivery, and maintenance](unreleased-sqr-unified-tracker-
 
 ## Profile and administration
 
-Use **Settings** to preview or apply an account theme. The light/dark control is separate. For authorized administrators, the [Form Editor guide](form-editor.md) covers form customization, and the [Admin Profile guide](unreleased-admin-profile-tools-changelog.md) covers Classic Tracker visibility and recovery options.
+Use **Settings → Themes** to preview or apply an account theme. The Christmas theme’s **Light flow** starts at **100%** for new accounts. Existing accounts are reset to **100%** once during the update, including accounts that previously used **Steady** or a slower speed. After the update, choose any speed and select **Apply Theme** to save it across devices. Reduced-motion settings and other Christmas effects preferences are unchanged. The light/dark control is separate. For authorized administrators, the [Form Editor guide](form-editor.md) covers form customization, and the [Admin Profile guide](unreleased-admin-profile-tools-changelog.md) covers Classic Tracker visibility and recovery options.

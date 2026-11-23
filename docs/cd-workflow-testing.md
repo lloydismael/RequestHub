@@ -174,11 +174,34 @@ The [capture metadata](../hub/changelog_assets/pending-christmas-canopy/capture.
 
 The [capture metadata](../hub/changelog_assets/pending-evergreen-login/capture.json) identifies both working-tree snapshots and the image checksums. In disposable PostgreSQL, a signed-in reader could not see the draft or fetch its four images. After test publication, **Notifications → Changelogs → Visual changes** showed the desktop pair and loaded the phone pair when opened. All four responses matched the original PNG bytes and used `no-store`. These are synthetic stills, not exact-release evidence; release CI captures the exact Git revisions. Nothing was published live.
 
+### Unreleased: Christmas lights at full speed
+
+- **Before:** New accounts started at **Steady**, and existing accounts used their saved **Light flow**. Seasonal sign-in had a separate **Christmas effects** disclosure and could remember a pause in the browser.
+- **After:** New accounts start at **100%**. The update resets existing accounts to **100%** once, including accounts that had saved **Steady** or a slower speed. Users can still preview and save any speed afterward. Other preferences, including reduced motion and disabled effects, are unchanged. Seasonal sign-in runs the lights at full speed without the disclosure; snow, reflections, and cord interaction remain.
+- **Database:** [Migration 0033](../accounts/migrations/0033_christmas_light_flow_default.py) sets the default; [0034](../accounts/migrations/0034_reset_christmas_light_flow.py) changes only saved speeds that are not already **100%**. Rolling back the migration does not restore the old speeds.
+- **Verification:** A PostgreSQL upgrade checked existing **Steady**, **35%**, and **100%** values and confirmed that a choice saved after the upgrade survives `migrate` reruns. Django covers untouched effect and accessibility preferences. Node and Chromium cover preview cancellation, reduced motion, scrolling, hidden pages, WebGL fallback, and mobile sign-in. Release CI captures the new-account and sign-in changes and uses a technical report for a standalone backfill; the offline fixture does not run data migrations.
+
+| Visual evidence | Before | After |
+| --- | --- | --- |
+| Existing account, dark Themes panel | [35%](../hub/changelog_assets/pending-christmas-light-flow-reset/existing-profile-before.webp) | [100%](../hub/changelog_assets/pending-christmas-light-flow-reset/existing-profile-after.webp) |
+| New account, dark Themes panel | [Steady](../hub/changelog_assets/pending-christmas-light-flow-default/profile-themes-before.webp) | [100%](../hub/changelog_assets/pending-christmas-light-flow-default/profile-themes-after.webp) |
+| Seasonal sign-in, desktop | [With the disclosure](../hub/changelog_assets/pending-christmas-light-flow-default/sign-in-desktop-before.webp) | [Without the disclosure](../hub/changelog_assets/pending-christmas-light-flow-default/sign-in-desktop-after.webp) |
+| Seasonal sign-in, phone | [With the disclosure](../hub/changelog_assets/pending-christmas-light-flow-default/sign-in-phone-before.webp) | [Without the disclosure](../hub/changelog_assets/pending-christmas-light-flow-default/sign-in-phone-after.webp) |
+
+[Upgrade capture details](../hub/changelog_assets/pending-christmas-light-flow-reset/capture.json) and [earlier new-account and sign-in capture details](../hub/changelog_assets/pending-christmas-light-flow-default/capture.json) record the synthetic fixtures and image checksums. These working-tree stills show the layout and selected speed, not animation or exact-release revisions. In a disposable **Notifications → Changelogs** test, the draft and all eight images were hidden from a signed-in reader. After test publication, all four pairs were visible and the image responses matched the originals with `no-store`.
+
 ### Unreleased: Django startup recovery (PR #163)
 
 - **Before:** A merge committed unresolved conflict markers. Django stopped importing its models with `SyntaxError: invalid decimal literal`, so both VS Code F5 launch configurations, Django Validation, and the Docker image's static collection step failed.
 - **After:** Resolved all 79 conflict blocks across 26 files. Kept the reconciled request views, including the row lock and rollback for status updates, as well as the SQR error handling and notification cache fixes. Preserved the pending PPT defaults, tracker controls, and Request Progress dark-mode changes and their regression coverage. Kept the relocated one-off database scripts out of the runtime image without running them. The repair adds no migration or database configuration change.
 - **Technical evidence:** The [before report](../hub/changelog_assets/pr163-startup-recovery/01-before.png), [after report](../hub/changelog_assets/pr163-startup-recovery/01-after.png), and [manifest](../hub/changelog_assets/pr163-startup-recovery/manifest.json) use the repair's exact first parent and result. In disposable PostgreSQL, a reader could not access the draft or its images. After test publication, **Notifications → Changelogs → Technical evidence** opened the report and served both original PNGs with `no-store`. The transaction was rolled back; no live release was published.
+
+### Unreleased: Browser auto-refresh in the localhost F5 preview
+
+- **Before:** Django restarted after Python saves, but developers had to refresh the browser manually to see changes. The pinned release did not reflect working-tree edits.
+- **After:** The editable **Django: Request Hub (auto-reload)** preview refreshes the most recently opened localhost tab after Python, template, or static-asset saves when the optional browser reload package is installed. The event stream bypasses database-backed sessions, and pages returned directly by form submissions are not automatically reloaded. The pinned release, Azure migration checks, and production settings are unchanged. See the [local development guide](local-development.md#run-with-live-azure-postgresql-no-docker).
+- **Verification:** A disposable Chromium preview refreshed after actual template, static-file, and Python saves. Normal Django settings and `DEBUG=False` did not expose the event stream. No Azure migration or release publication was performed.
+- **Technical evidence:** [Before](../hub/changelog_assets/pending-local-browser-reload/report-before.png) · [After](../hub/changelog_assets/pending-local-browser-reload/report-after.png) · [Checksums](../hub/changelog_assets/pending-local-browser-reload/capture.json). The reports show working-tree fingerprints, not exact-release captures. A disposable PostgreSQL check confirmed that **Notifications → Changelogs → Technical evidence** hid the draft and its reports from a signed-in reader, then served both original images with `no-store` after fixture publication. Release CI captures the exact revisions.
 
 ### Unreleased: Docker-free VS Code debugging with live Azure PostgreSQL
 

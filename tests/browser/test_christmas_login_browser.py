@@ -107,7 +107,8 @@ class ChristmasLoginBrowserTests(unittest.TestCase):
         })""")
         self.assertEqual(self.sample(SNOW), frozen, "Snow kept moving with animation disabled")
 
-    def test_card_wave_and_cord_share_the_dark_reflections(self):
+    def test_card_starts_with_a_traveling_glow_and_no_effects_disclosure(self):
+        self.page.add_init_script("localStorage.setItem('reqHubLoginChristmasMotionPaused', '1')")
         self.open_login()
         card = self.page.locator(CARD)
         expect(card.locator(BULB)).to_have_count(36)
@@ -122,42 +123,23 @@ class ChristmasLoginBrowserTests(unittest.TestCase):
         for edge in (lambda x,y: x < 14, lambda x,y: x > width - 14,
                      lambda x,y: y < 14, lambda x,y: y > height - 14):
             self.assertGreaterEqual(sum(edge(*p) for p in positions), 4, "Bulbs should not bunch on the short edges")
-        still = self.sample(SPILL)
-        self.assertIsNotNone(still)
-        self.assertGreater(still[2], 20, "Dark mode should reflect colored bulb light below the glass")
+        reflection = self.sample(SPILL)
+        self.assertIsNotNone(reflection)
+        self.assertGreater(reflection[2], 20, "Dark mode should reflect colored bulb light below the glass")
         snow = self.sample(SNOW)
         self.page.wait_for_function(f"old => ({CANVAS_SAMPLE})('{SNOW}')[0] !== old", arg=snow[0])
 
-        self.page.get_by_text("Christmas effects", exact=True).click()
-        flow = self.page.get_by_role("slider", name="Light flow")
-        emitter = card.locator(".seasonal-light-emitter").first
         lamp = card.locator(BULB).first
         rest_lamp = lamp.get_attribute("transform")
-        flow.press("End")
-        expect(flow).to_have_attribute("aria-valuetext", "100%")
-        self.page.wait_for_function(f"steady => ({CANVAS_SAMPLE})('{SPILL}')[1] < steady * .85", arg=still[1])
-        self.page.wait_for_function("+document.querySelector('.seasonal-light-emitter').style.opacity < .75")
+        expect(card.locator(".seasonal-light-emitter").first).not_to_have_css("opacity", "1", timeout=3000)
+        self.page.wait_for_function(f"old => ({CANVAS_SAMPLE})('{SPILL}')[0] !== old", arg=reflection[0])
         self.assertEqual(lamp.get_attribute("transform"), rest_lamp)
-        flow.press("Home")
-        expect(emitter).to_have_css("opacity", "1")
-        rest_wire = wire.get_attribute("d")
-        still = self.sample(SPILL)
+        expect(self.page.get_by_text("Christmas effects", exact=True)).to_have_count(0)
 
-        self.page.get_by_role("button", name="Nudge cord").press("Enter")
-        expect(wire).not_to_have_attribute("d", rest_wire)
-        self.page.wait_for_function(f"old => ({CANVAS_SAMPLE})('{SPILL}')[0] !== old", arg=still[0])
-        pause = self.page.get_by_role("button", name="Pause motion")
-        pause.click()
-        expect(flow).to_be_disabled()
-        expect(wire).to_have_attribute("d", rest_wire)
+        self.page.emulate_media(reduced_motion="reduce")
+        expect(card.locator(".seasonal-light-emitter").first).to_have_css("opacity", "1")
         self.assert_snow_stops()
-        self.assertGreater(self.sample(SPILL)[2], 20, "Pausing should keep steady reflections")
-        self.page.reload()
-        self.page.get_by_text("Christmas effects", exact=True).click()
-        expect(self.page.get_by_role("button", name="Resume motion")).to_be_enabled()
-        self.assert_snow_stops()
-        self.page.get_by_role("button", name="Resume motion").press("Enter")
-        expect(flow).to_be_enabled()
+        self.assertGreater(self.sample(SPILL)[2], 20, "Reduced motion should keep steady reflections")
         self.page.get_by_role("textbox", name="Username").click()
         expect(self.page.get_by_role("textbox", name="Username")).to_be_focused()
         self.assertEqual(self.page.locator("form.login-form").get_attribute("method"), "post")
@@ -230,35 +212,38 @@ class ChristmasLoginBrowserTests(unittest.TestCase):
         self.assertGreater(counts[1], 0, "Showing the page should realign the reflections")
 
     def test_short_screen_reflections_follow_the_card_when_scrolling(self):
-        self.page.set_viewport_size({"width": 844, "height": 520})
+        self.page.set_viewport_size({"width": 844, "height": 390})
+        self.page.emulate_media(reduced_motion="reduce")
         self.open_login()
         card = self.page.locator(CARD)
-        card.evaluate("card => Promise.all(card.getAnimations().map(animation => animation.finished))")
         expect(card.locator(BULB)).to_have_count(24)
-        self.page.get_by_text("Christmas effects", exact=True).click()
-        expect(self.page.get_by_role("slider", name="Light flow")).to_be_visible()
         sample = """() => {
             const card = document.querySelector('.login-card').getBoundingClientRect();
             const spill = document.querySelector('.xmas-light-spill');
             const frame = spill.getBoundingClientRect();
             const x = Math.round((card.left - frame.left) * spill.width / frame.width);
-            const y = Math.round((card.bottom - frame.top + 14) * spill.height / frame.height);
-            const pixels = spill.getContext('2d').getImageData(x, y, Math.floor(card.width), 28).data;
-            let hash = 0, alpha = 0;
-            for (let i = 3; i < pixels.length; i += 4) {
-                hash = Math.imul(hash, 31) + pixels[i] | 0;
-                alpha += pixels[i];
-            }
-            return [hash, alpha];
+            const y = Math.round((card.bottom - frame.top + 2) * spill.height / frame.height);
+            const pixels = spill.getContext('2d').getImageData(x, y, Math.floor(card.width), 8).data;
+            return Array.from(pixels.filter((_, index) => index % 4 === 3));
         }"""
-        self.page.evaluate("window.scrollTo({top: 135, behavior: 'instant'})")
-        self.page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
-        old = self.page.evaluate(sample)
-        self.assertGreater(old[1], 1000, "The snow below the card should receive light")
+        def scroll_to_card_bottom(offset):
+            scroll = card.evaluate("""(card, offset) => {
+                const top = Math.ceil(card.getBoundingClientRect().bottom + scrollY + offset - innerHeight);
+                window.scrollTo({top, behavior: 'instant'});
+                return scrollY;
+            }""", offset)
+            self.page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+            return scroll
 
-        self.page.evaluate("window.scrollTo({top: 245, behavior: 'instant'})")
-        self.assertEqual(self.page.evaluate("window.scrollY"), 245)
-        self.page.wait_for_function(f"old => ({sample})()[0] === old", arg=old[0])
+        before = scroll_to_card_bottom(12)
+        old = self.page.evaluate(sample)
+        total = sum(old)
+        self.assertGreater(total, 1000, "The snow below the card should receive light")
+
+        self.assertGreater(scroll_to_card_bottom(18), before, "The short layout must actually scroll")
+        new = self.page.evaluate(sample)
+        difference = sum(abs(a - b) for a, b in zip(old, new))
+        self.assertLess(difference, total * 0.02, "The reflected pattern should follow the card")
 
     def test_phone_keeps_snow_and_sign_in_without_lights_then_recovers_on_resize(self):
         self.page.set_viewport_size({"width": 375, "height": 812})
@@ -278,8 +263,7 @@ class ChristmasLoginBrowserTests(unittest.TestCase):
         expect(self.page.locator(SPILL)).to_be_hidden()
         self.page.emulate_media(reduced_motion="no-preference")
         self.assert_snow_stops()
-        self.page.get_by_text("Christmas effects", exact=True).click()
-        expect(self.page.get_by_role("slider", name="Light flow")).to_be_enabled()
+        expect(self.page.locator(f"{CARD} .seasonal-light-emitter").first).not_to_have_css("opacity", "1")
 
     def test_ray_context_loss_keeps_bulbs_and_reflections(self):
         self.open_login(rays=True)
@@ -288,11 +272,12 @@ class ChristmasLoginBrowserTests(unittest.TestCase):
         self.page.locator(CARD).evaluate("card => Promise.all(card.getAnimations().map(animation => animation.finished))")
         self.page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
         expect(self.page.locator(BULB).first).to_be_hidden()
-        steady = self.sample(SPILL)
         layer.evaluate("c => c.getContext('webgl2').getExtension('WEBGL_lose_context').loseContext()")
         expect(layer).to_have_count(0)
         expect(self.page.locator(BULB).first).to_be_visible()
-        self.assertEqual(self.sample(SPILL), steady)
+        reflection = self.sample(SPILL)
+        self.assertGreater(reflection[2], 20, "The SVG fallback still reflects the colored bulbs")
+        self.page.wait_for_function(f"old => ({CANVAS_SAMPLE})('{SPILL}')[0] !== old", arg=reflection[0])
 
     def test_default_login_has_no_seasonal_effects(self):
         self.open_login(seasonal=False)

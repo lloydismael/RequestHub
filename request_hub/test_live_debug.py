@@ -117,6 +117,7 @@ class LiveDebugTests(TestCase):
             self.assertEqual(Path(sys.path[0]), snapshot)
             self.assertEqual(os.environ["APP_REVISION"], revision)
             self.assertEqual(os.environ["DB_HOST"], "example.postgres.database.azure.com")
+            self.assertEqual(os.environ["DJANGO_SETTINGS_MODULE"], "request_hub.settings")
         check.assert_called_once_with(frozenset({("hub", "0014_retired")}))
         run.assert_called_once_with("runserver", "127.0.0.1:8000")
 
@@ -184,10 +185,11 @@ class LiveDebugTests(TestCase):
             self.assertNotIn("sensitive connection detail", str(error.exception))
             run.assert_not_called()
 
-    def test_verified_schema_starts_loopback_django_with_reload_enabled(self):
+    def test_verified_working_tree_uses_browser_reload_settings(self):
         with (
             patch.object(self.launcher, "ENV_FILE", self.env_file),
             patch.dict(os.environ, {"DB_HOST": "127.0.0.1", "DJANGO_SECRET_KEY": "deployment-key"}, clear=True),
+            patch("importlib.util.find_spec", return_value=object()),
             patch.object(self.launcher.django, "setup"),
             patch.object(self.launcher, "connection", MagicMock()),
             patch.object(self.launcher, "check_schema"),
@@ -197,8 +199,25 @@ class LiveDebugTests(TestCase):
             self.launcher.main()
             self.assertEqual(os.environ["DB_HOST"], "example.postgres.database.azure.com")
             self.assertEqual(os.environ["PYTHON_DOTENV_DISABLED"], "1")
+            self.assertEqual(os.environ["DJANGO_SETTINGS_MODULE"], "request_hub.settings_live_debug")
             self.assertNotEqual(os.environ["DJANGO_SECRET_KEY"], "deployment-key")
         run.assert_called_once_with("runserver", "127.0.0.1:8000")
+
+    def test_missing_optional_reload_package_keeps_the_server_usable(self):
+        with (
+            patch.object(self.launcher, "ENV_FILE", self.env_file),
+            patch.dict(os.environ, {"RUN_MAIN": "true"}, clear=True),
+            patch("importlib.util.find_spec", return_value=None),
+            patch.object(self.launcher.django, "setup"),
+            patch.object(self.launcher, "connection", MagicMock()),
+            patch.object(self.launcher, "check_schema"),
+            patch.object(self.launcher, "call_command") as run,
+            patch("builtins.print") as report,
+        ):
+            self.launcher.main()
+            self.assertEqual(os.environ["DJANGO_SETTINGS_MODULE"], "request_hub.settings")
+        run.assert_called_once_with("runserver", "127.0.0.1:8000")
+        self.assertIn("requirements-live-preview.txt", " ".join(call.args[0] for call in report.call_args_list))
 
     def test_reloader_child_keeps_the_parent_signing_key(self):
         with (

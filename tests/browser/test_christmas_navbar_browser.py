@@ -78,6 +78,8 @@ class ChristmasNavbarBrowserTests(unittest.TestCase):
         lights = self.page.get_by_role("checkbox", name="Navbar lights")
         form = self.page.locator("#profile-theme-form")
         submitted_speed = "form => new FormData(form).get('pref_christmas_light_flow')"
+        self.assertEqual(slider.input_value(), "20")
+        self.assertEqual(slider.get_attribute("aria-valuetext"), "100%")
         slider.fill("11")
         with self.subTest("reports a whole percentage"):
             self.assertEqual(slider.get_attribute("aria-valuetext"), "55%")
@@ -88,6 +90,9 @@ class ChristmasNavbarBrowserTests(unittest.TestCase):
             self.assertIsNone(form.evaluate(submitted_speed))
         lights.check()
         self.assertEqual(form.evaluate(submitted_speed), "11")
+        self.page.get_by_role("button", name="Cancel preview").click()
+        self.assertEqual(slider.input_value(), "20")
+        self.assertEqual(slider.get_attribute("aria-valuetext"), "100%")
 
     def test_ray_layer_draws_transparent_light_and_context_loss_restores_svg(self):
         self.enable_test_rays()

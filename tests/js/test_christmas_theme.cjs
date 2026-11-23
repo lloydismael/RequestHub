@@ -819,16 +819,16 @@ test('Christmas login enables pointer and Santa effects without a second snow lo
     assert.ok(app.body.children.every(child => child.className !== 'christmas-snow' && child.className !== 'christmas-frame'));
 });
 
-test('pausing Christmas motion on login stops bursts and skips the sleigh', () => {
+test('reduced motion on Christmas login stops bursts and skips the sleigh', () => {
     const app = start(christmasLogin);
     app.click();
     assert.ok(app.body.children.some(child => child.className === 'christmas-burst'));
-    app.preference('xmas-login-motion-paused', true);
+    app.preference('pref-reduce-motion', true);
     app.click();
     app.switchMode(true);
     assert.equal(app.window.requestHubChristmasBlanket.canRun(), false);
     assert.equal(app.body.children.length, 0);
-    app.preference('xmas-login-motion-paused', false);
+    app.preference('pref-reduce-motion', false);
     app.switchMode(false);
     assert.equal(app.santas().length, 1);
 });

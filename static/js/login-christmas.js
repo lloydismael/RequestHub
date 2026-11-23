@@ -5,20 +5,12 @@
     const body = document.body;
     const scene = document.querySelector('.xmas-scene');
     const card = document.querySelector('.login-card');
-    const controls = document.querySelector('.xmas-controls');
-    if (!scene || !card || !controls) return;
+    if (!scene || !card) return;
 
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const mobileQuery = window.matchMedia('(max-width: 520px)');
     const lightsQuery = window.matchMedia('(min-width: 480px)');
-    const pauseKey = 'reqHubLoginChristmasMotionPaused';
-    const flow = document.getElementById('login-light-flow');
-    const flowValue = document.getElementById('login-light-flow-value');
-    const nudge = document.getElementById('login-nudge-cord');
-    const pause = document.getElementById('login-pause-motion');
-    const help = document.getElementById('login-motion-help');
-    let paused = false, pageHidden = false;
-    try { paused = localStorage.getItem(pauseKey) === '1'; } catch (_) {}
+    let pageHidden = false;
     const reduced = () => motionQuery.matches || body.classList.contains('pref-reduce-motion') || body.classList.contains('pref-reduce-effects');
     const dark = () => body.classList.contains('dark-mode');
     const hidden = () => pageHidden || document.hidden;
@@ -191,7 +183,7 @@
             frame = requestAnimationFrame(step);
         }
 
-        function shouldRun() { return dark() && !paused && !reduced() && !parked(); }
+        function shouldRun() { return dark() && !reduced() && !parked(); }
         function sync() {
             if (shouldRun()) {
                 if (!frame) {
@@ -290,7 +282,6 @@
             queued = requestAnimationFrame(() => { queued = 0; draw(); });
         }
         window.addEventListener('scroll', queueDraw, { passive: true });
-        controls.addEventListener('toggle', queueDraw);
         for (const type of ['animationend', 'transitionend']) {
             card.addEventListener(type, event => { if (event.target === card) queueDraw(); });
         }
@@ -301,40 +292,9 @@
     window.addEventListener('pagehide', () => { pageHidden = true; sync(); });
     window.addEventListener('pageshow', () => { pageHidden = false; sync(); });
     const syncSnow = startSnow();
-    const invalidate = window.requestHubChristmasCardLights?.(card, {
-        nudge,
-        paused: () => paused,
-        speed: () => flow.valueAsNumber,
-        paint: startSpill(),
-    });
-    function sync() {
-        body.classList.toggle('xmas-login-motion-paused', paused);
-        const still = reduced();
-        const hasLights = lightsQuery.matches && Boolean(invalidate);
-        const description = still ? 'Reduced-motion or visual-effects settings keep this scene still.'
-            : paused ? 'Motion is paused. Resume to animate the decorations.'
-            : hasLights ? 'Adjust how fast the light travels around the card.' : '';
-        const value = flow.valueAsNumber ? `${flow.valueAsNumber * 5}%` : 'Steady';
-        flow.setAttribute('aria-valuetext', value);
-        flowValue.textContent = value;
-        flow.disabled = !hasLights || still || paused;
-        pause.disabled = still;
-        pause.textContent = paused ? 'Resume motion' : 'Pause motion';
-        help.textContent = description;
-        help.hidden = !description;
-        syncSnow?.();
-    }
-    flow.addEventListener('input', () => { sync(); invalidate?.(); });
-    pause.addEventListener('click', () => {
-        paused = !paused;
-        try { localStorage.setItem(pauseKey, paused ? '1' : '0'); } catch (_) {}
-        sync();
-        invalidate?.();
-    });
+    window.requestHubChristmasCardLights?.(card, { paint: startSpill() });
+    function sync() { syncSnow?.(); }
     new MutationObserver(sync).observe(body, { attributes: true, attributeFilter: ['class'] });
     motionQuery.addEventListener('change', sync);
-    lightsQuery.addEventListener('change', sync);
     document.addEventListener('visibilitychange', sync);
-    sync();
-    controls.hidden = false;
 })();

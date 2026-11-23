@@ -1,5 +1,6 @@
 """Start the localhost debugger against Azure only after a read-only schema check."""
 
+import importlib.util
 import json
 import os
 import re
@@ -27,12 +28,12 @@ class LiveDebugError(Exception):
     pass
 
 
-def select_source() -> frozenset[tuple[str, str]]:
+def select_source() -> tuple[bool, frozenset[tuple[str, str]]]:
     try:
         manifest = (SNAPSHOT_ROOT / "release.json").read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         sys.path.insert(0, str(WORKSPACE))
-        return frozenset()
+        return False, frozenset()
     except OSError:
         raise LiveDebugError("Cannot read the local release snapshot configuration.") from None
     try:
@@ -58,7 +59,7 @@ def select_source() -> frozenset[tuple[str, str]]:
         raise LiveDebugError("Start the live debugger by script path to use the local release snapshot.")
     sys.path.insert(0, str(source))
     os.environ["APP_REVISION"] = revision
-    return frozenset(tuple(name.split(".", 1)) for name in names)
+    return True, frozenset(tuple(name.split(".", 1)) for name in names)
 
 
 def database_environment(path: Path) -> dict[str, str]:
@@ -124,11 +125,12 @@ def check_schema(historical_migrations: frozenset[tuple[str, str]] = frozenset()
 def main() -> None:
     is_reload_child = os.environ.get(DJANGO_AUTORELOAD_ENV) == "true"
     try:
-        historical_migrations = select_source()
+        pinned_release, historical_migrations = select_source()
+        browser_reload = not pinned_release and importlib.util.find_spec("django_browser_reload") is not None
         os.environ.update(database_environment(ENV_FILE))
         signing_key = os.environ.get("DJANGO_SECRET_KEY") if is_reload_child else None
         os.environ.update(
-            DJANGO_SETTINGS_MODULE="request_hub.settings",
+            DJANGO_SETTINGS_MODULE="request_hub.settings_live_debug" if browser_reload else "request_hub.settings",
             DJANGO_DEBUG="True",
             DJANGO_SECRET_KEY=signing_key or secrets.token_urlsafe(48),
             DJANGO_ALLOWED_HOSTS="127.0.0.1,localhost",
@@ -157,6 +159,10 @@ def main() -> None:
         raise SystemExit("Live Azure: migration history does not match this checkout. No migrations were applied.") from None
     if is_reload_child:
         print("Live Azure: schema check passed. Sign-in and other localhost actions write to production.", flush=True)
+        if pinned_release:
+            print("Live Azure: running a pinned release; saves in the workspace will not appear here.", flush=True)
+        elif not browser_reload:
+            print("Live Azure: install requirements-live-preview.txt to enable browser refresh.", flush=True)
     call_command("runserver", "127.0.0.1:8000")
 
 

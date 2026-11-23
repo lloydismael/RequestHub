@@ -113,7 +113,7 @@ class ChristmasLoginThemeTests(TestCase):
         self.assertContains(response, "document.documentElement.classList.add('login-christmas')")
         self.assertContains(response, 'class="xmas-scene xmas-only" aria-hidden="true"')
         self.assertContains(response, '<span class="xmas-card-frost xmas-only" aria-hidden="true"></span>', html=True)
-        self.assertContains(response, 'class="xmas-controls xmas-only" hidden')
+        self.assertNotContains(response, '<details class="xmas-controls')
         self.assertContains(response, '<i class="bi bi-person-fill login-form__icon xmas-only" aria-hidden="true"></i>', html=True)
         self.assertContains(response, '<i class="bi bi-lock-fill login-form__icon xmas-only" aria-hidden="true"></i>', html=True)
 
