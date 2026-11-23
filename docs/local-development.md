@@ -23,7 +23,15 @@ python -m pip install --require-hashes -r requirements.lock
 
 In **Run and Debug**, select **Django: Request Hub (auto-reload)** and press **F5**. Stop an existing debug session first if it is using port 8000. The app runs at `127.0.0.1:8000` using the existing Azure PostgreSQL database; this profile does not create Azure resources or use Docker. It reads `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, optional `DB_PORT`, and optional `DB_SSLROOTCERT` from the ignored `.env`. It verifies the Azure hostname and TLS certificate using the configured CA file or the `certifi` trust store. It does not import deployment email, telemetry, or signing settings from that file.
 
-Startup and each code reload check migration history and required model columns in a read-only transaction. The debugger never applies migrations. Once the server starts, **sign-in and other app actions can write to production**. Use an isolated database for testing, and never run tests or `manage.py migrate` with live credentials.
+To have the active [localhost tab](http://localhost:8000/) refresh when you save Python, templates, CSS, or JavaScript, install the optional preview package after the runtime dependencies, then restart F5:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --require-hashes --no-deps -r requirements-live-preview.txt
+```
+
+The last localhost tab you opened or refreshed is the one that updates. This is a full refresh and may discard unsaved form input; pages returned directly by a form submission are not automatically reloaded. Without the package, Django still restarts after Python edits, but you need to refresh the page yourself. Browser refresh is not installed in production.
+
+Startup and each Python reload check migration history and required model columns in a read-only transaction. The debugger never applies migrations. Once the server starts, **sign-in and other app actions can write to production**. Use an isolated database for testing, and never run tests or `manage.py migrate` with live credentials.
 
 If the live schema is behind your checkout, the same profile can temporarily run a verified release snapshot. When `.venv\request-hub-f5\release.json` is present, the launcher uses the Git export under that directory named by the manifest's `revision`, with the manifest's explicitly verified extra migration records for that revision. Credentials still come from the workspace `.env`. Auto-reload watches the running copy, so edits in the main checkout do not appear in this session. The [local release endpoint](http://127.0.0.1:8000/release/) reports the running revision.
 

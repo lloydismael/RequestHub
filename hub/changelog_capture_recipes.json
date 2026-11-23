@@ -61,6 +61,23 @@
       ]
     },
     {
+      "id": "christmas-light-flow-default",
+      "paths": ["accounts/migrations/0033_christmas_light_flow_default.py"],
+      "scenes": [
+        {
+          "kind": "ui", "fixture": "christmas_canopy", "title": "Christmas Light flow for a new account",
+          "before_text": "A new account's Light flow starts at Steady.",
+          "after_text": "A new account's Light flow starts at 100%. Users can still save their preferred speed, and reduced-motion settings still take priority.",
+          "viewport": {"width": 1440, "height": 1040}
+        },
+        {
+          "kind": "report", "fixture": "repository_change", "title": "Christmas light defaults and sign-in controls",
+          "before_text": "File fingerprints at the first-parent revision.",
+          "after_text": "File fingerprints for the Light flow default and migration changes, sign-in control removal, shared renderers, tests, capture configuration, and documentation."
+        }
+      ]
+    },
+    {
       "id": "admin-profile-tools",
       "paths": ["templates/accounts/_recovery_center.html", "static/css/recovery.css", "static/js/sqr-classic-visibility.js", "accounts/recovery_views.py"],
       "scenes": [

@@ -25,6 +25,7 @@
         l: [5, 5, 0.5, 0, 0, 0, 0, 0, -0.5, -0.5, -0.5, 2],
     };
     const REFERENCE_HEIGHT = 71.5;
+    const MAX_LIGHT_FLOW = 20;
     const round = value => Math.round(value * 100) / 100;
     const random = (min, max) => min + Math.random() * (max - min);
 
@@ -134,7 +135,7 @@
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     function attachLights(surface, login) {
         const interactive = login || surface.classList.contains('rh-primary-nav');
-        const nudge = login ? login.nudge : document.getElementById('christmas-nudge-cord');
+        const nudge = login ? null : document.getElementById('christmas-nudge-cord');
         const referenceEdge = login ? perimeter(1380, REFERENCE_HEIGHT, 28) : null;
         const theme = () => login ? 'christmas' : surface.dataset.seasonalLightsTheme;
         let overlay = null;
@@ -364,9 +365,9 @@
             if (!login && !surface.classList.contains('seasonal-lights--active')) surface.classList.add('seasonal-lights--active');
             paused = pageHidden || document.hidden || reducedMotion.matches || body.classList.contains('pref-reduce-motion')
                 || body.classList.contains('pref-reduce-effects') || body.classList.contains('theme-switching')
-                || (login ? login.paused() : christmas && !body.classList.contains('christmas-effects-on'));
-            const requested = login ? login.speed() : Number(body.dataset.christmasLightFlow);
-            const valid = Number.isInteger(requested) && requested >= 0 && requested <= 20;
+                || (!login && christmas && !body.classList.contains('christmas-effects-on'));
+            const requested = login ? MAX_LIGHT_FLOW : Number(body.dataset.christmasLightFlow);
+            const valid = Number.isInteger(requested) && requested >= 0 && requested <= MAX_LIGHT_FLOW;
             speed = christmas && !paused && valid ? requested : 0;
             if (!requested) phase = 0;
             if (paused && cord?.active) {

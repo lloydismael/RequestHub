@@ -1,0 +1,34 @@
+{
+  "baseline_revision": "310c224d349532bb5ba8d6cb3c920e5bfe30f7b6",
+  "capture": "Technical fingerprint reports for the working tree; not exact-release evidence. No source text, credentials, or live data are shown.",
+  "file_sha256": {
+    "before": {
+      "docs/local-development.md": "ecfcefe8161badc7e3717dc7c001be8d37196dd77ec1554a8747c12281681d1b",
+      "request_hub/live_debug.py": "af4eb3b109bf516bd964f121579e145090388014b1f1329f2f13874e1e2b4528",
+      "request_hub/settings_live_debug.py": null,
+      "request_hub/test_live_debug.py": "f8cf5a0031b201b39390095eb202a45bbbec86d112e573c062864ac831338bbe",
+      "request_hub/urls_live_debug.py": null,
+      "requirements-live-preview.txt": null
+    },
+    "after": {
+      "docs/local-development.md": "1992c5194897086e329eeadd81ed1650d8d9564d70951ece1b1d3d608ef15e7f",
+      "request_hub/live_debug.py": "525bbc8d01c0feb5d4cc2296addc74f6edda18d7327af9680a603ea88aa2c1b9",
+      "request_hub/settings_live_debug.py": "ea77216e2be69e059aef3bee138f10c287a60ac2669267d3d8990c86561cedf0",
+      "request_hub/test_live_debug.py": "52f0dfc7966ea74eea1e64421057188b1c690acf6fe7248d47ab70e4566163e8",
+      "request_hub/urls_live_debug.py": "6a0c4936e3b11c056bda57058d9c505d3e67aecca4c0ead117df3491df58c1a4",
+      "requirements-live-preview.txt": "8cf79d2e3ac36e7b38cb17335cff7a71a60219774db3043b408fa9a6ee9f80d5"
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "1f146ab67a01d926ca85802c9d27c78c219831105b953dbede42a8cd3843b62b",
+    "report-after.png": "e6e94f2c2b775615edc731082c409694982ce41b4812138cea8f6c7b340e9d48"
+  },
+  "comparison": {
+    "title": "Localhost browser auto-refresh",
+    "before_text": "Django restarted on Python changes, but the browser required a manual refresh.",
+    "after_text": "The editable F5 session refreshes the browser on saves, without changing the live database or the pinned fallback.",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png",
+    "evidence_kind": "report"
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "before_revision": "310c224d349532bb5ba8d6cb3c920e5bfe30f7b6",
+  "before_source": "Exact Git archive rendered by the current offline capture tool.",
+  "after_revision": null,
+  "after_base_revision": "310c224d349532bb5ba8d6cb3c920e5bfe30f7b6",
+  "after_source": "Working tree, not exact-release evidence. Trusted CI captures the committed revisions.",
+  "scope_note": "These stills predate the one-time reset for existing accounts. The release recipe captions were updated later; the checksums below record the files as captured.",
+  "after_file_sha256": {
+    "accounts/models.py": "c4826ddf2540eff2647655afe502b09e64289e494be07ea954110f5c34008b7d",
+    "accounts/migrations/0033_christmas_light_flow_default.py": "3db23f811c0ea45916834165d1b9736d2b0029044ffe0d26045a31c51fb7ff2b",
+    "hub/changelog_capture_recipes.json": "a854515f67793a269f79d7ce6152f6833335560a1be03b60147be4243d9947c0",
+    "scripts/capture_release_changelog.py": "368c9c85adf0fe13db4f3bae765b380277baf89eef077bc60aafc67bd67ac660",
+    "scripts/changelog_capture_scenes.py": "c9f6b2ef1df564edd93c25a041668a641a1e0152681ce1ed3710db727ce36a6b",
+    "static/css/login-christmas.css": "ace762e96161a38ee01d54daa7596400e123f766759747cb968fb795b1ca68bf",
+    "static/js/christmas-lights.js": "ccfa43d54eb2f8e1fbdaa5682c4a0ace4fe1df993893c7d66b00df39790e052a",
+    "static/js/christmas-theme.js": "a3514e2eb5f5c4cd2baee6acb4ed4d1fa58ba4d54567d018ec7f91f0f9160588",
+    "static/js/login-christmas.js": "57c1d631f6824136261acbb5a9d851d588717900da64fc1ad5bc2ae29b9a3301",
+    "templates/accounts/login.html": "c03638938dac1836a07213e0d43374de016972843ac1e2d1a9fdd49b0a5f7ef0",
+    "templates/accounts/profile_form.html": "46e6b0d626dd2ff663d9ef4efb370e7fdc792af3b2363e6bae6541c87ac0b468",
+    "templates/base.html": "48550c184d6a2e6754788384ee026229dd923b130ba902e90733f6c0b37264cf"
+  },
+  "fixture": "Synthetic new account in dark Themes settings and anonymous Christmas sign-in in dark appearance.",
+  "capture": "Chromium 156.0.8078.4 with SwiftShader. External requests and page scripts blocked; selected seasonal renderers painted fixed frames. The screenshots do not measure animation speed or performance.",
+  "images": [
+    {
+      "file": "profile-themes-before.webp",
+      "side": "before",
+      "viewport": {
+        "width": 1440,
+        "height": 1040
+      },
+      "sha256": "c78bbfd981ed5a718177e9b13bb4405f05d03384115502875d24333088ed3813"
+    },
+    {
+      "file": "profile-themes-after.webp",
+      "side": "after",
+      "viewport": {
+        "width": 1440,
+        "height": 1040
+      },
+      "sha256": "2cd70e2b28880ce354948f92fae9a4190680c6d389d04d58a2f70f1373b11f3e"
+    },
+    {
+      "file": "sign-in-desktop-before.webp",
+      "side": "before",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "sha256": "08c8c3aaefe83cc243a7fa55b9952f5fd6f2186314521d52c377f04d6b14891b"
+    },
+    {
+      "file": "sign-in-desktop-after.webp",
+      "side": "after",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "sha256": "c66ec89536913fd1a953ae132a74c1565bd6a9b434c5bd1892decbc2671600bc"
+    },
+    {
+      "file": "sign-in-phone-before.webp",
+      "side": "before",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "sha256": "3ce1869aa254d99d4a0a614dcff1e7be25c2378fb4100c7d46f2f37c1fda6aa5"
+    },
+    {
+      "file": "sign-in-phone-after.webp",
+      "side": "after",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "sha256": "5edc9f38e9abde34967ba156c07951a9e50e0f6b3131888a640dbe797a1c7d1d"
+    }
+  ]
+}

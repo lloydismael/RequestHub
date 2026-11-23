@@ -279,7 +279,8 @@ class ChristmasDefaultAccountTests(TestCase):
     def test_seasonal_default_keeps_saved_festive_effect_preferences(self):
         self.user.pref_christmas_enabled = False
         self.user.pref_christmas_snow = False
-        self.user.save(update_fields=["pref_christmas_enabled", "pref_christmas_snow"])
+        self.user.pref_christmas_light_flow = 0
+        self.user.save(update_fields=["pref_christmas_enabled", "pref_christmas_snow", "pref_christmas_light_flow"])
         response = self.client.get(reverse("accounts:update"))
         self.assert_page_theme(response, "christmas")
         effects = next(

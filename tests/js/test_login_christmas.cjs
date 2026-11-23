@@ -13,18 +13,13 @@ function start({ dark = false } = {}) {
     const classes = new Set(dark ? ['dark-mode'] : []);
     const toggle = (name, enabled) => enabled ? classes.add(name) : classes.delete(name);
     const scene = { clientWidth: 1200, clientHeight: 900, appendChild() {} };
-    const elements = { '.xmas-scene': scene, '.login-card': new EventTarget(), '.xmas-controls': new EventTarget() };
-    const controls = new Map();
+    const elements = { '.xmas-scene': scene, '.login-card': new EventTarget() };
     let notify, paints = 0;
     Object.assign(document, {
-        body: { classList: { contains: name => classes.has(name), toggle } },
+        body: { classList: { contains: name => classes.has(name) } },
         documentElement: { classList: { contains: name => name === 'login-christmas' } },
         hidden: false,
         querySelector: selector => elements[selector],
-        getElementById(id) {
-            if (!controls.has(id)) controls.set(id, Object.assign(new EventTarget(), { valueAsNumber: 0, setAttribute() {} }));
-            return controls.get(id);
-        },
         createElement() {
             return {
                 setAttribute() {},
@@ -44,7 +39,6 @@ function start({ dark = false } = {}) {
     let next = 0;
     vm.runInNewContext(script, {
         window, document,
-        localStorage: { getItem: () => null },
         MutationObserver: class { constructor(callback) { notify = callback; } observe() {} },
         requestAnimationFrame(callback) { frames.set(++next, callback); return next; },
         cancelAnimationFrame(id) { frames.delete(id); },

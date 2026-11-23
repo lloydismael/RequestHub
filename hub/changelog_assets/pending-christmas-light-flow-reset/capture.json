@@ -1,0 +1,35 @@
+{
+  "checkout_base_revision": "310c224d349532bb5ba8d6cb3c920e5bfe30f7b6",
+  "before_migration": "accounts.0033_christmas_light_flow_default",
+  "after_migration": "accounts.0034_reset_christmas_light_flow",
+  "after_revision": null,
+  "migration_sha256": "3ed01e9ecc4f6a27c3c2ca0ceca8ade0bcf179dc85b8497859ae48f04f757f8e",
+  "source": "Same synthetic existing accounts and actual Profile GET responses before and after the working-tree migration in disposable PostgreSQL. Not exact-release evidence.",
+  "saved_speeds_before": [
+    0,
+    7,
+    20
+  ],
+  "saved_speeds_after": [
+    20,
+    20,
+    20
+  ],
+  "profile_speed_before": 7,
+  "profile_speed_after": 20,
+  "capture": "Chromium 156.0.8078.4 with SwiftShader; external requests and page scripts blocked; only the allowlisted seasonal scripts evaluated. Stills show the setting, not animation.",
+  "viewport": {
+    "width": 1440,
+    "height": 1040
+  },
+  "images": [
+    {
+      "file": "existing-profile-before.webp",
+      "sha256": "339d7f0fc9d081c77336e5225102c257e353926cecf82b8c96ad6b3d25f53610"
+    },
+    {
+      "file": "existing-profile-after.webp",
+      "sha256": "c472b503771e6791e40a095ce2a20ce53d982392b661076c47f761bb9077d8bf"
+    }
+  ]
+}

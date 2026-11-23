@@ -133,6 +133,20 @@ class CaptureTests(unittest.TestCase):
         chosen = _select_recipe(self.repo, {"sha": git(self.repo, "rev-parse", "HEAD"), "parent_sha": legacy}, [recipe])
         self.assertEqual([scene["fixture"] for scene in chosen["scenes"]], ["christmas_canopy", "repository_change"])
 
+    def test_light_flow_default_captures_profile_and_sign_in(self):
+        for name in ("accounts/migrations/0033_christmas_light_flow_default.py", "templates/accounts/login.html"):
+            path = self.repo / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "fix: default to full Christmas light flow")
+        change = {"sha": git(self.repo, "rev-parse", "HEAD"), "parent_sha": self.after}
+        chosen = _select_recipe(self.repo, change, load_recipes(ROOT / "hub" / "changelog_capture_recipes.json"))
+        self.assertEqual(
+            [scene["fixture"] for scene in chosen["scenes"]],
+            ["seasonal_login", "seasonal_login", "christmas_canopy", "repository_change"],
+        )
+
     def test_unmapped_template_needs_a_screen_capture_instead_of_a_file_report(self):
         (self.repo / "templates").mkdir()
         (self.repo / "templates" / "export.html").write_text("<h1>Export</h1>", encoding="utf-8")

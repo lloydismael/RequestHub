@@ -224,7 +224,8 @@ class User(AbstractUser):
     )
     CHRISTMAS_LIGHT_FLOW_MAX = 20
     pref_christmas_light_flow = models.PositiveSmallIntegerField(
-        default=0, db_default=0, validators=[MaxValueValidator(CHRISTMAS_LIGHT_FLOW_MAX)],
+        default=CHRISTMAS_LIGHT_FLOW_MAX, db_default=CHRISTMAS_LIGHT_FLOW_MAX,
+        validators=[MaxValueValidator(CHRISTMAS_LIGHT_FLOW_MAX)],
     )
     pref_christmas_cursor = models.BooleanField(
         default=True, verbose_name="Snowflake cursor",

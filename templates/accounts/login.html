@@ -7,7 +7,7 @@
 {% if christmas_login_enabled %}
 {% if not request.user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/christmas-theme.css' %}?v=13">
 <link rel="preload" as="image" href="{% static 'images/christmas-santa-sleigh.svg' %}">{% endif %}
-<link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=14">
+<link rel="stylesheet" href="{% static 'css/login-christmas.css' %}?v=15">
 <script>
     (function () {
         try {
@@ -95,27 +95,10 @@
         <p class="login-card__footer lg-enter" data-lg-delay="0.4">Developed by ESG 2026</p>
         {% if christmas_login_enabled %}<i class="bi bi-snow2 login-card__snowflake xmas-only" aria-hidden="true"></i>{% endif %}
     </div>
-    {% if christmas_login_enabled %}
-    <details class="xmas-controls xmas-only" hidden>
-        <summary><i class="bi bi-snow2" aria-hidden="true"></i> Christmas effects</summary>
-        <div class="xmas-controls__panel">
-            <div class="xmas-controls__lights">
-                <div class="xmas-controls__label">
-                    <label for="login-light-flow">Light flow</label>
-                    <span id="login-light-flow-value" aria-hidden="true">Steady</span>
-                </div>
-                <input type="range" id="login-light-flow" min="0" max="20" step="1" value="0" aria-valuetext="Steady" aria-describedby="login-motion-help" disabled>
-                <button type="button" id="login-nudge-cord" aria-describedby="login-motion-help" disabled>Nudge cord</button>
-            </div>
-            <button type="button" id="login-pause-motion" aria-describedby="login-motion-help">Pause motion</button>
-            <p id="login-motion-help" hidden></p>
-        </div>
-    </details>
-    {% endif %}
 </section>
 {% if christmas_login_enabled and not request.user.is_authenticated %}
 <script src="{% static 'js/christmas-theme-snapshot.js' %}?v=3" defer></script>
-<script src="{% static 'js/christmas-theme.js' %}?v=18" defer></script>
+<script src="{% static 'js/christmas-theme.js' %}?v=19" defer></script>
 {% endif %}
 <script>
     window.addEventListener('pageshow', function (event) {
@@ -129,5 +112,5 @@
 </script>
 {% endblock %}
 {% block page_scripts %}
-{% if christmas_login_enabled %}<script src="{% static 'js/login-christmas.js' %}?v=16" defer></script>{% endif %}
+{% if christmas_login_enabled %}<script src="{% static 'js/login-christmas.js' %}?v=17" defer></script>{% endif %}
 {% endblock %}

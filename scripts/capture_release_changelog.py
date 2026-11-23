@@ -305,16 +305,22 @@ def _enhance_christmas_canopy(page, snapshot):
         document.querySelector('#profile-panel-themes').classList.add('profile-panel--active');
         document.querySelector('.profile-tab--active')?.classList.remove('profile-tab--active');
         document.querySelector('[data-profile-tab="themes"]').classList.add('profile-tab--active');
+        // Paint one frame so a moving glow cannot keep the software renderer busy during capture.
+        const frames = [];
+        window.requestAnimationFrame = callback => frames.push(callback);
+        window.cancelAnimationFrame = id => { delete frames[id - 1]; };
         for (const source of sources) (0, eval)(source);
+        const controls = document.getElementById('christmas-controls');
+        window.scrollBy({top: controls.getBoundingClientRect().top - 124, behavior: 'instant'});
+        frames.slice().forEach(callback => callback(10));
     }""", sources)
     page.locator(".seasonal-lights-overlay").wait_for(state="attached", timeout=6000)
     if (scripts / "christmas-canopy.js").is_file():
         page.locator("canvas.seasonal-canopy-rays").wait_for(state="visible", timeout=10000)
-    page.locator("#christmas-controls").evaluate("section => window.scrollBy(0, section.getBoundingClientRect().top - 124)")
 
 
 def _enhance_seasonal_login(page, snapshot):
-    shared_lights = bool(page.locator("#login-light-flow").count())
+    shared_lights = bool(page.locator('script[src^="/static/js/christmas-lights.js"]').count())
     names = ("christmas-cord.js", "christmas-canopy.js", "christmas-lights.js") if shared_lights else ()
     scripts = (snapshot / "static" / "js").resolve()
     sources = []
@@ -518,7 +524,7 @@ def _capture_change(browser, repo, item, recipe, assets, vendor_dir):
                            if scene.get("fixture") == "seasonal_login"
                            else " Only the historical form runtime updated the profile labels."
                            if scene.get("fixture") == "profile_avatar_shortcut"
-                           else " Only the historical theme and navbar scripts rendered the steady lights."
+                           else " Only the historical theme and navbar scripts rendered the lights. The still does not show animation."
                            if scene.get("fixture") == "christmas_canopy" else " Page scripts disabled.")
                         + (" Repository change report; not a UI screenshot. No source code or live data is displayed."
                            if scene.get("fixture") == "repository_change" else "")

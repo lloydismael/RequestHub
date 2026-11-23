@@ -15,7 +15,7 @@
     const storageKey = 'reqHubChristmasEffects';
     const effectKeys = ['border', 'snow', 'lights', 'cursor', 'clicks', 'santa'];
     const loginEffects = ['cursor', 'clicks', 'santa'];
-    const preferences = { ...Object.fromEntries(['enabled', ...effectKeys].map(key => [key, true])), light_flow: 0 };
+    const preferences = { ...Object.fromEntries(['enabled', ...effectKeys].map(key => [key, true])), light_flow: maxFlow };
     const settings = document.getElementById('christmas-effects-settings');
     const controls = Array.from(document.querySelectorAll('[data-christmas-effect]'));
     function applyPreferences(values) {
@@ -56,10 +56,9 @@
     // non-compositable drop-shadow; both are wasted while the theme is snapshotting.
     const switching = () => body.classList.contains('theme-switching');
     const effectEnabled = effect => isChristmas() && preferences.enabled && preferences[effect] && (!login || loginEffects.includes(effect));
-    const motionOff = () => reduced() || (login && body.classList.contains('xmas-login-motion-paused'));
-    const canAnimate = effect => effectEnabled(effect) && !motionOff() && !switching() && !document.hidden;
+    const canAnimate = effect => effectEnabled(effect) && !reduced() && !switching() && !document.hidden;
     // Santa has its own transition layer, unlike the paused background effects.
-    const canFlySanta = () => effectEnabled('santa') && !motionOff() && !document.hidden;
+    const canFlySanta = () => effectEnabled('santa') && !reduced() && !document.hidden;
     function decorative(className, parent, tag = 'div') {
         const element = document.createElement(tag);
         element.className = className;
