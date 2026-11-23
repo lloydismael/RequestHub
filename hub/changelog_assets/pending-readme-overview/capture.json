@@ -1,0 +1,19 @@
+{
+  "capture_kind": "repository_change",
+  "path": "README.md",
+  "after_revision": null,
+  "before": {
+    "lines": 755,
+    "bytes": 60612,
+    "readme_sha256": "d24e8975dc4f57d477f32a10fa52cab3cae0a13e6ac4f62eb6c736eb25193dc8",
+    "image_sha256": "e2f2d3b443799b106e76ce51d7dfe24ab68217669842f55ce0bfee581bb76795"
+  },
+  "after": {
+    "lines": 66,
+    "bytes": 3276,
+    "readme_sha256": "822c629bd57214416e75bee8dbf72f084978f75a547dbfb5a64f15fa136ed108",
+    "image_sha256": "cb07d21e453371927026f3361ff3300f935c60f51ac242a154bfccab807f8653"
+  },
+  "before_revision": "83276d28b58488b0944b64487d2a57957620e539",
+  "note": "Compares the current committed README with the v2 layout in the working tree; no source text is displayed."
+}

@@ -1,5 +1,6 @@
 # Workspace Copilot Instructions
 
+- Use the existing `dev` branch for routine Copilot work. Do not create a new branch or a branch-backed worktree unless the user explicitly asks.
 - Keep responses concise and avoid restating code or terminal output already visible.
 - For large logs, search results, JSON, diffs, or file contents, prefer summarizing only relevant parts and preserving all errors.
 - When Headroom MCP tools are available, use them for large content compression/retrieval before sending bulky context to the model.

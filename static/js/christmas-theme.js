@@ -8,16 +8,23 @@
     const panel = document.getElementById('christmas-controls');
     const toggle = document.getElementById('christmas-effects-toggle');
     const status = document.getElementById('christmas-effects-status');
+    const flow = document.getElementById('christmas-light-flow');
+    const flowReadout = document.getElementById('christmas-light-flow-value');
+    const flowHelp = document.getElementById('christmas-light-flow-help');
+    const maxFlow = 20;
     const storageKey = 'reqHubChristmasEffects';
     const effectKeys = ['border', 'snow', 'lights', 'cursor', 'clicks', 'santa'];
     const loginEffects = ['cursor', 'clicks', 'santa'];
-    const preferences = Object.fromEntries(['enabled', ...effectKeys].map(key => [key, true]));
+    const preferences = { ...Object.fromEntries(['enabled', ...effectKeys].map(key => [key, true])), light_flow: 0 };
     const settings = document.getElementById('christmas-effects-settings');
     const controls = Array.from(document.querySelectorAll('[data-christmas-effect]'));
     function applyPreferences(values) {
         if (!values || typeof values !== 'object') return;
         for (const key of ['enabled', ...effectKeys]) {
             if (typeof values[key] === 'boolean') preferences[key] = values[key];
+        }
+        if (Number.isInteger(values.light_flow) && values.light_flow >= 0 && values.light_flow <= maxFlow) {
+            preferences.light_flow = values.light_flow;
         }
     }
     if (settings) {
@@ -49,9 +56,10 @@
     // non-compositable drop-shadow; both are wasted while the theme is snapshotting.
     const switching = () => body.classList.contains('theme-switching');
     const effectEnabled = effect => isChristmas() && preferences.enabled && preferences[effect] && (!login || loginEffects.includes(effect));
-    const canAnimate = effect => effectEnabled(effect) && !reduced() && !switching() && !document.hidden;
+    const motionOff = () => reduced() || (login && body.classList.contains('xmas-login-motion-paused'));
+    const canAnimate = effect => effectEnabled(effect) && !motionOff() && !switching() && !document.hidden;
     // Santa has its own transition layer, unlike the paused background effects.
-    const canFlySanta = () => effectEnabled('santa') && !reduced() && !document.hidden;
+    const canFlySanta = () => effectEnabled('santa') && !motionOff() && !document.hidden;
     function decorative(className, parent, tag = 'div') {
         const element = document.createElement(tag);
         element.className = className;
@@ -381,6 +389,21 @@
             ? 'All festive effects are off. Your individual selections are kept.'
             : reduced() ? 'Reduced-motion/effects preferences override animation. Your selections are kept.'
                 : `${effectKeys.filter(key => preferences[key]).length} of 6 effects selected. Changes preview immediately.`;
+        if (!login && body.dataset.christmasLightFlow !== String(preferences.light_flow)) {
+            body.dataset.christmasLightFlow = preferences.light_flow;
+        }
+        if (flow) {
+            const unavailable = window.innerWidth < 480;
+            const noLights = !effectEnabled('lights');
+            const value = preferences.light_flow ? `${Math.round(preferences.light_flow * 100 / maxFlow)}%` : 'Steady';
+            flow.disabled = unavailable || noLights || reduced();
+            flow.setAttribute('aria-valuetext', value);
+            flowReadout.textContent = value;
+            flowHelp.textContent = unavailable ? 'Navbar lights are hidden below 480 px.'
+                : noLights ? 'Turn on festive effects and Navbar lights to adjust the flow.'
+                : reduced() ? 'Lights stay steady when motion or effects are reduced.'
+                : 'Adjust how fast the glow travels around the navbar.';
+        }
         if (!canAnimate('snow')) pauseSnow();
         else if (context && frameId === null) frameId = window.requestAnimationFrame(draw);
         if (!canAnimate('clicks')) for (const burst of bursts.keys()) removeBurst(burst);
@@ -434,6 +457,7 @@
     window.addEventListener('resize', () => {
         cancelBlanket(true);
         resize();
+        if (flow) reconcile();
     }, { passive: true });
     window.addEventListener('pagehide', pause);
     window.addEventListener('pageshow', reconcile);

@@ -6,11 +6,11 @@ const vm = require('node:vm');
 
 const template = fs.readFileSync(path.join(__dirname, '..', '..', 'templates', 'accounts', 'profile_form.html'), 'utf8');
 const source = template.slice(template.indexOf("    const themeForm = document.getElementById('profile-theme-form');"), template.indexOf('    // Live avatar preview'));
-const defaults = { enabled: true, border: true, snow: true, lights: true, cursor: true, clicks: true, santa: true };
+const defaults = { enabled: true, border: true, snow: true, lights: true, cursor: true, clicks: true, santa: true, light_flow: 0 };
 
-function start({ preferences = {}, submitted = null, theme = 'christmas' } = {}) {
+function start({ preferences = {}, submitted = null, theme = 'christmas', speed = 0 } = {}) {
     const saved = { ...defaults, ...preferences };
-    const values = { ...saved, ...submitted };
+    const { light_flow: submittedSpeed = speed, ...values } = { ...saved, ...submitted };
     const sent = [];
     const windowEvents = {};
     let chosen = theme;
@@ -50,7 +50,9 @@ function start({ preferences = {}, submitted = null, theme = 'christmas' } = {})
     const pickers = colors.map((value, index) => ({ value, type: 'color', dataset: { colorSlot: String(index) } }));
     customPanel.querySelectorAll = selector => selector.includes('type="text"') ? hexInputs
         : selector.includes('type="color"') ? pickers : [];
+    const slider = { value: String(submittedSpeed), get valueAsNumber() { return Number(this.value); } };
     const nodes = {
+        'christmas-light-flow': slider,
         'profile-theme-form': form, 'theme-cancel-btn': cancel, 'theme-status': status,
         'theme-custom-panel': customPanel, 'theme-card-custom': element(),
         'christmas-effects-settings': { textContent: JSON.stringify(saved) },
@@ -65,7 +67,8 @@ function start({ preferences = {}, submitted = null, theme = 'christmas' } = {})
         CustomEvent: class { constructor(type, { detail }) { this.type = type; this.detail = detail; } },
     });
     return {
-        body, controls, cancel, status,
+        body, controls, cancel, status, slider,
+        setSpeed(speed) { slider.value = String(speed); form.callbacks.input?.({ target: slider }); },
         effect(key, enabled) { controls[key].checked = enabled; form.callbacks.change({ target: controls[key] }); },
         chooseTheme(value) { radios[value].checked = true; form.callbacks.change({ target: radios[value] }); },
         restore() { cancel.callbacks.click(); },
@@ -118,6 +121,19 @@ test('cached page restoration discards effect previews just like theme previews'
     assert.equal(app.controls.santa.checked, true);
     assert.equal(app.cancel.hidden, true);
     assert.deepEqual(app.preview, defaults);
+});
+
+test('the slider previews on input and Cancel restores the saved speed', () => {
+    const app = start({ preferences: { light_flow: 6 }, speed: 6 });
+    app.setSpeed(17);
+    assert.equal(app.preview.light_flow, 17);
+    assert.equal(app.cancel.hidden, false);
+    app.effect('lights', false);
+    assert.equal(app.preview.light_flow, 17);
+    app.restore();
+    assert.equal(app.slider.valueAsNumber, 6);
+    assert.equal(app.preview.light_flow, 6);
+    assert.equal(app.cancel.hidden, true);
 });
 
 test('master changes preview without clearing individual selections', () => {

@@ -1,0 +1,31 @@
+{
+  "baseline_revision": "9d95c543bb82776e7c9794bb18be48ce8a5c3f9a",
+  "capture": "Local working-tree reports before and after adding compatible snapshot mode. Not exact first-parent release evidence; no live data shown.",
+  "file_sha256": {
+    "before": {
+      ".vscode/launch.json": "827e4e3bce30d59ca0499b2bc71041bd0c927821b4de387bd6f8b6715f4a25bf",
+      "docs/local-development.md": "faa948e1aac38eff80aec579f41adc5e53a8f031ae230ae9dac1c815b11a47bd",
+      "request_hub/live_debug.py": "ba6daac925277beed0d76542c6618e6b72274dacb6899d17194c4db0f9f674ab",
+      "request_hub/test_live_debug.py": "084df5a777138a5fe5676b4540b78c148a4071c6c6d98215dc3ba8b6d32714e3"
+    },
+    "after": {
+      ".vscode/launch.json": "bef6a85541d101a39c9ff53dd800193253fe889f6469f32e877ae5d6a1400b34",
+      "docs/local-development.md": "117e2f9a81a945c15bbaeb7c653ecc01d9a9489e917ef6e52ec2b6e995d1a59b",
+      "request_hub/live_debug.py": "8648fbf63d5eb3ea92c92b004f360cc38fb94e10e7ce76f3c45ffe0bdde2aa5c",
+      "request_hub/test_live_debug.py": "14c26019ca10969aa8249a5d66aaa933adedcdb03998139fe6ed9109dadd2e8a"
+    }
+  },
+  "image_sha256": {
+    "report-before.png": "d0da28149d7f9b869501f28eab5e877ff11e78b02285529c70bc8084c07652f4",
+    "report-after.png": "721830538883e2e19af26855948b21da282813b16d5fcc07a9b7b74f901d97df"
+  },
+  "comparison": {
+    "title": "Docker-free F5 auto-reload with Azure PostgreSQL",
+    "before_text": "The guarded F5 launch could reach Azure but stopped because the working tree required accounts.0032_user_christmas_light_flow.",
+    "after_text": "The same profile ran the deployed revision 9d95c54 against Azure without Docker or a migration. The login and readiness endpoints returned HTTP 200 before and after Django reloaded.",
+    "before_image": "report-before.png",
+    "after_image": "report-after.png",
+    "capture_note": "Local working-tree reports before and after adding compatible snapshot mode. Not exact first-parent release evidence; no live data shown.",
+    "evidence_kind": "report"
+  }
+}

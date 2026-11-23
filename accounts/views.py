@@ -81,6 +81,8 @@ class ProfileUpdateView(LoginRequiredMixin, UpdateView):
                     update_fields.extend(ThemeForm.CUSTOM_FIELDS)
                 if request.POST.get(ThemeForm.CHRISTMAS_PREFERENCES_MARKER):
                     update_fields.extend(ThemeForm.CHRISTMAS_FIELDS)
+                    if ThemeForm.LIGHT_FLOW_FIELD in request.POST:
+                        update_fields.append(ThemeForm.LIGHT_FLOW_FIELD)
                 self.object.save(update_fields=update_fields)
                 messages.success(request, "Theme applied to your account.")
                 return redirect(reverse_lazy("accounts:update") + "#themes")

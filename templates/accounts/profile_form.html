@@ -283,6 +283,15 @@
                     </label>
                     {% endfor %}
                 </fieldset>
+                <div class="christmas-flow">
+                    <div class="christmas-flow__label">
+                        <label class="fw-semibold" for="{{ theme_form.pref_christmas_light_flow.id_for_label }}">{{ theme_form.pref_christmas_light_flow.label }}</label>
+                        <span id="christmas-light-flow-value" aria-hidden="true">Steady</span>
+                    </div>
+                    {{ theme_form.pref_christmas_light_flow }}
+                    <p class="small text-muted mb-0" id="christmas-light-flow-help">Adjust how fast the glow travels around the navbar.</p>
+                    <button class="btn btn-outline-secondary btn-sm mt-2" type="button" id="christmas-nudge-cord" disabled>Nudge cord</button>
+                </div>
                 <p class="small text-muted mb-0" id="christmas-effects-status" role="status">Reduced-motion and reduced-effects preferences take priority.</p>
                 <p class="small mb-0">Changes preview immediately. Select <strong>Apply Theme</strong> to save your choices to your account on every device.</p>
             </div>
@@ -529,7 +538,11 @@
     const setVars = (el, vars) => Object.entries(vars).forEach(([name, value]) => el.style.setProperty(name, value));
     const selectedTheme = () => themeForm.querySelector('input[name="banner_gradient"]:checked').value;
     const currentColors = () => hexInputs.map((input) => normalizeHex(input.value));
-    const currentEffects = () => Object.fromEntries(effectInputs.map(input => [input.dataset.christmasEffect, input.checked]));
+    const lightFlow = document.getElementById('christmas-light-flow');
+    const currentEffects = () => ({
+        ...Object.fromEntries(effectInputs.map(input => [input.dataset.christmasEffect, input.checked])),
+        light_flow: lightFlow.valueAsNumber,
+    });
     const setColors = (colors) => {
         colors.forEach((color, index) => { hexInputs[index].value = color; pickers[index].value = color; });
     };
@@ -547,7 +560,8 @@
         if (!isCustom) THEME_VARS.forEach((name) => body.style.removeProperty(name));
         else if (validCustom) setVars(body, customVars(colors));
         document.dispatchEvent(new CustomEvent('requesthub:christmas-effects-preview', { detail: currentEffects() }));
-        const effectsDirty = effectInputs.some(input => input.checked !== savedEffects[input.dataset.christmasEffect]);
+        const effectsDirty = lightFlow.valueAsNumber !== savedEffects.light_flow
+            || effectInputs.some(input => input.checked !== savedEffects[input.dataset.christmasEffect]);
         const dirty = value !== savedTheme || (isCustom && colors.join() !== savedColors.join()) || effectsDirty;
         cancelTheme.hidden = !dirty;
         themeStatus.textContent = dirty ? 'Preview only — select Apply Theme to save.' : 'Saved to your account. Available on every device.';
@@ -556,9 +570,13 @@
         themeForm.querySelector(`input[name="banner_gradient"][value="${savedTheme}"]`).checked = true;
         setColors(savedColors);
         effectInputs.forEach(input => { input.checked = savedEffects[input.dataset.christmasEffect]; });
+        lightFlow.value = savedEffects.light_flow;
         render();
     };
 
+    themeForm.addEventListener('input', (event) => {
+        if (event.target === lightFlow) render();
+    });
     themeForm.addEventListener('change', (event) => {
         if (event.target.name === 'banner_gradient' || event.target.dataset.christmasEffect) render();
     });

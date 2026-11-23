@@ -1,0 +1,45 @@
+{
+  "recipe": "profile-avatar-shortcut",
+  "before_revision": "83276d28b58488b0944b64487d2a57957620e539",
+  "after_source": "Uncommitted working-tree files over the same baseline. Not exact-release evidence.",
+  "fixture": "The same synthetic account on both sides; no live account or photo data.",
+  "capture": "Offline Chromium 156.0.8078.4; only the form runtime is run. External traffic and all other page scripts are blocked.",
+  "after_file_sha256": {
+    "static/hub/form_runtime.js": "8bbc2d6d5cc3523a6f9947878c08023ba73e2da934bb38e7006acfd5bc4af491",
+    "templates/base.html": "bbd040126c5d98fa3556c8f3dfc87d717d534b2df172a4f172b48e7302cee7cb",
+    "hub/changelog_capture_recipes.json": "00b419a94f1c20de6005c22225ede7146a61a4fe991b16a0edab802576b82ca0",
+    "scripts/capture_release_changelog.py": "b6e483058cc8c5f25e179c394cb8fab0c8382821855c1f5e2634c6bcd1836c75",
+    "scripts/changelog_capture_scenes.py": "b2d695c311d13507bf33e764386126d313a9541298c0fffc1ecfef41d1684e54",
+    "scripts/test_capture_release_changelog.py": "42f16af4af0482f2d69b7d89e97a922e8420ad6e28f645caf8c63ea94247a033",
+    "docs/form-editor.md": "588d1999b9bb18f13de759f8fce3806dd8061aa1b78f0013510d0ba5cbf3b00a",
+    "docs/cd-workflow-testing.md": "96ab14ee43b16ac15cab8646f6bd5b57519d641eb27ca4e3466fca8be4b9e83b"
+  },
+  "images": [
+    {
+      "file": "before.png",
+      "side": "before",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        327,
+        249
+      ],
+      "sha256": "9ae472e9a657551e9b949eb2e12d29d11f9207d13c709ee735122309b711d016"
+    },
+    {
+      "file": "after.png",
+      "side": "after",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        327,
+        249
+      ],
+      "sha256": "6b4c364bbc468ea636522df55c042c0e03d4f6f168aa6509cd0d42707fd3c82f"
+    }
+  ]
+}

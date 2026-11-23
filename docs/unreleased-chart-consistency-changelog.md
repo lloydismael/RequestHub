@@ -11,8 +11,14 @@
 ## Maintenance and verification
 
 - Consolidated data presentation, exact-value tables, themed chart updates, and layout into shared assets loaded only on affected views. Dashboard and Activity Logs still mount charts only when their graph tab is shown.
-- Added focused JavaScript and Chromium regressions for exact values, Chart.js failure, lazy tabs, in-place retheming, expanded chart export, SQR refresh, and PPT assessment counts. Documented chart conventions and local test assets in the [README](../README.md#chart-conventions).
+- Added focused JavaScript and Chromium regressions for exact values, Chart.js failure, lazy tabs, in-place retheming, expanded chart export, SQR refresh, and PPT assessment counts.
 - Corrected the PPT header test fixture to enable the classic tracker option it exercises. The combined Django/Chromium run passed 95 tests, and the focused Node run passed 17. A real chart screenshot pair passed the Notifications comparison and draft-image access test against a disposable database. No real release was published.
+
+### Chart conventions
+
+Use **View chart values** for exact labels and source precision, including when charts cannot load. Use **Load more** first for capped Reports rankings. An em dash denotes missing data, not zero. SQR Reports do not treat months with no recorded activity as zero submissions. PPT uses saved assessments only; striped bars mean **Not assessed**.
+
+Scope chart assets to views that use them. Reuse the [plot partial](../templates/hub/partials/chart_plot.html), [themed renderer](../static/js/chart-theme.js), and [values renderer](../static/js/chart-values.js) with the view’s existing authorized data. PPT uses shared chart styles and the values renderer without Chart.js. See [browser test fixtures](unreleased-responsive-navbar-changelog.md#local-browser-checks).
 
 ## Before/after evidence
 

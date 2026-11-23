@@ -11,7 +11,10 @@ from unittest.mock import patch
 
 from capture_release_changelog import (
     ROOT,
+    SWIFTSHADER_ARGS,
     CaptureError,
+    _enhance_profile_avatar,
+    _enhance_seasonal_login,
     _render,
     _screenshot,
     _select_recipe,
@@ -21,7 +24,7 @@ from capture_release_changelog import (
     main,
     prepare_assets,
 )
-from PIL import Image
+from PIL import Image, ImageChops
 
 from hub.release_changelog import build_manifest
 
@@ -111,6 +114,24 @@ class CaptureTests(unittest.TestCase):
         ]]
         chosen = _select_recipe(self.repo, item, recipes)
         self.assertEqual([scene["fixture"] for scene in chosen["scenes"]], ["login", "profile"])
+
+    def test_canopy_recipe_does_not_take_over_legacy_christmas_lights(self):
+        recipe = next(item for item in load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+                      if item["id"] == "christmas-canopy")
+        scripts = self.repo / "static" / "js"
+        scripts.mkdir(parents=True)
+        (scripts / "christmas-lights.js").write_text("// Legacy lights only.", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "feat: add SVG lights")
+        legacy = git(self.repo, "rev-parse", "HEAD")
+        with self.assertRaisesRegex(CaptureError, "No UI capture recipe"):
+            _select_recipe(self.repo, {"sha": legacy, "parent_sha": self.after}, [recipe])
+
+        (scripts / "christmas-canopy.js").write_text("// Canopy renderer.", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", "feat: add the Christmas canopy")
+        chosen = _select_recipe(self.repo, {"sha": git(self.repo, "rev-parse", "HEAD"), "parent_sha": legacy}, [recipe])
+        self.assertEqual([scene["fixture"] for scene in chosen["scenes"]], ["christmas_canopy", "repository_change"])
 
     def test_unmapped_template_needs_a_screen_capture_instead_of_a_file_report(self):
         (self.repo / "templates").mkdir()
@@ -488,6 +509,55 @@ class HistoricalSceneTests(unittest.TestCase):
         self.assertIn('class="login-christmas"', root)
         self.assertIn("<title>Login &middot; Request Hub</title>", document)
 
+    def test_seasonal_sign_in_captures_historical_and_shared_lighting_offline(self):
+        from playwright.sync_api import sync_playwright
+
+        recipe = next(item for item in load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+                      if item["id"] == "login-layout")
+        vendor = Path(os.environ.get("CHANGELOG_CAPTURE_VENDOR_DIR") or ROOT / ".changelog-capture-vendor")
+        if not vendor.is_dir():
+            self.skipTest("Prepare offline vendor assets with capture_release_changelog.py --prepare-assets.")
+        with tempfile.TemporaryDirectory() as temporary, sync_playwright() as playwright:
+            directory = Path(temporary)
+            parent = directory / "parent"
+            parent.mkdir()
+            _snapshot(ROOT, "83276d28b58488b0944b64487d2a57957620e539", parent)
+            with playwright.chromium.launch(args=list(SWIFTSHADER_ARGS)) as browser:
+                for scene in recipe["scenes"]:
+                    with self.subTest(scene=scene["title"]):
+                        before, after = directory / "before.png", directory / "after.png"
+                        viewport = scene["viewport"]
+                        layers = [".xmas-snow"]
+                        if viewport["width"] >= 480:
+                            layers.extend((".seasonal-canopy-rays", ".xmas-light-spill"))
+                        unpainted = {}
+
+                        def compare_layers(page, snapshot):
+                            _enhance_seasonal_login(page, snapshot)
+                            page.evaluate("""() => {
+                                const script = document.createElement('script');
+                                script.textContent = 'window.capturePageScriptRan = true';
+                                document.head.append(script);
+                            }""")
+                            self.assertFalse(page.evaluate("Boolean(window.capturePageScriptRan)"))
+                            for selector in layers:
+                                unpainted[selector] = page.locator(".login-hero").screenshot(
+                                    style=f"{selector} {{ opacity: 0 !important; }}", animations="disabled",
+                                )
+
+                        _screenshot(browser, parent, scene, before, vendor)
+                        with patch("capture_release_changelog._enhance_seasonal_login", side_effect=compare_layers):
+                            _screenshot(browser, ROOT, scene, after, vendor)
+                        with Image.open(before) as old, Image.open(after) as new:
+                            self.assertEqual(old.size, (viewport["width"], viewport["height"]))
+                            self.assertEqual(old.size, new.size)
+                            self.assertNotEqual(old.tobytes(), new.tobytes())
+                            for selector, without_layer in unpainted.items():
+                                with self.subTest(layer=selector), Image.open(BytesIO(without_layer)) as hidden:
+                                    red, green, blue = ImageChops.difference(new.convert("RGB"), hidden.convert("RGB")).split()
+                                    delta = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+                                    self.assertGreater(sum(delta.histogram()[12:]), 100, f"{selector} didn't paint visible pixels")
+
     def test_changelog_loading_recipe_renders_both_disclosure_fallbacks(self):
         recipe = next(
             (recipe for recipe in load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
@@ -499,6 +569,50 @@ class HistoricalSceneTests(unittest.TestCase):
             with self.subTest(fixture=fixture):
                 scene = next(scene for scene in recipe["scenes"] if scene["fixture"] == fixture)
                 self.assertIn(fallback, _render(ROOT, scene))
+
+    def test_profile_photo_label_enhancement_preserves_avatar_shortcut(self):
+        from playwright.sync_api import sync_playwright
+
+        document = _render(ROOT, {"kind": "ui", "fixture": "profile_avatar_shortcut"})
+        csp = "<meta http-equiv=\"Content-Security-Policy\" content=\"script-src 'none'\">"
+        with sync_playwright() as playwright, playwright.chromium.launch() as browser:
+            page = browser.new_page()
+            page.route("**/*", lambda route: route.abort())
+            page.set_content(document.replace("<head>", f"<head>{csp}", 1))
+            page.add_style_tag(content=".profile-hero__avatar-edit { display: inline-block; padding: 10px; }")
+            _enhance_profile_avatar(page, ROOT)
+
+            shortcut = page.locator(".profile-hero__avatar-edit")
+            self.assertEqual(shortcut.locator(".bi-camera-fill").count(), 1, "Form enhancement removed the camera icon")
+            self.assertEqual(shortcut.inner_text().strip(), "")
+            field_label = page.locator('.profile-avatar-controls label[for="id_profile_photo"]')
+            self.assertEqual(field_label.inner_text(), "Profile photo")
+            with page.expect_file_chooser(timeout=3000) as chooser:
+                shortcut.click(timeout=3000)
+            self.assertEqual(chooser.value.element.get_attribute("id"), "id_profile_photo")
+
+    def test_christmas_canopy_recipe_captures_both_revisions_offline(self):
+        from playwright.sync_api import sync_playwright
+
+        recipe = next((item for item in load_recipes(ROOT / "hub" / "changelog_capture_recipes.json")
+                       if item["id"] == "christmas-canopy"), None)
+        self.assertIsNotNone(recipe, "The changed navbar and settings need visual release evidence")
+        scene = next(item for item in recipe["scenes"] if item["fixture"] == "christmas_canopy")
+        vendor = Path(os.environ.get("CHANGELOG_CAPTURE_VENDOR_DIR") or ROOT / ".changelog-capture-vendor")
+        if not vendor.is_dir():
+            self.skipTest("Prepare offline vendor assets with capture_release_changelog.py --prepare-assets.")
+        with tempfile.TemporaryDirectory() as temporary, sync_playwright() as playwright:
+            parent = Path(temporary) / "parent"
+            parent.mkdir()
+            _snapshot(ROOT, "83276d28b58488b0944b64487d2a57957620e539", parent)
+            self.assertNotIn('id="christmas-light-flow"', _render(parent, scene))
+            self.assertIn('id="christmas-light-flow"', _render(ROOT, scene))
+            with playwright.chromium.launch(args=list(SWIFTSHADER_ARGS)) as browser:
+                before = Path(temporary) / "before.png"
+                after = Path(temporary) / "after.png"
+                _screenshot(browser, parent, scene, before, vendor)
+                _screenshot(browser, ROOT, scene, after, vendor)
+            self.assertNotEqual(before.read_bytes(), after.read_bytes())
 
     def test_admin_profile_recipe_renders_personalization_without_scripts(self):
         recipes = load_recipes(ROOT / 'hub' / 'changelog_capture_recipes.json')

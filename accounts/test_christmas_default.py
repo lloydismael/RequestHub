@@ -288,5 +288,5 @@ class ChristmasDefaultAccountTests(TestCase):
         )
         self.assertEqual(json.loads(effects), {
             "enabled": False, "border": True, "snow": False, "lights": True,
-            "cursor": True, "clicks": True, "santa": True,
+            "cursor": True, "clicks": True, "santa": True, "light_flow": 0,
         })

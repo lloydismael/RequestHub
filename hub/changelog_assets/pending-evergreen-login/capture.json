@@ -1,0 +1,90 @@
+{
+  "recipe": "login-layout",
+  "before_revision": "83276d28b58488b0944b64487d2a57957620e539",
+  "before_source": "Git archive plus the listed pre-existing uncommitted navbar and template files. Not an exact Git revision.",
+  "before_overlay_file_sha256": {
+    "static/css/christmas-lights.css": "e8c506b8526b5575fe843ae465c0f080940b8bd9b778d776d029e779aba4d6cb",
+    "static/css/christmas-theme.css": "d3eb29792260ff1e324476ee8656375ec6f70334e0bc4a56b752da2ddd371b6a",
+    "static/js/christmas-canopy.js": "d7f84c4e846dbaae66ced832ec2b4807028310d282cba7addabcbad26afcc16f",
+    "static/js/christmas-cord.js": "81ba34fe27771f453b3da309b1c3ec8e021c1816f2c24bf70191ca69037a059f",
+    "static/js/christmas-lights.js": "5e12ad147c00f103b121ecc80791a6f2142cc25b1d1edda0a7e84ebf34425216",
+    "templates/accounts/login.html": "16060b469003061a1962c7b436449d745d78a0bf3322e3a70bd4d8e9ff070aa0",
+    "templates/base.html": "8dc7bda958d8d967f6e79f2efd99119de4006515ee46205ccd1aaeefa7bff010"
+  },
+  "after_revision": null,
+  "after_base_revision": "9d95c543bb82776e7c9794bb18be48ce8a5c3f9a",
+  "after_source": "Local working tree over the listed base revision (whose tree equals the baseline archive). Not exact-release evidence.",
+  "after_file_sha256": {
+    "accounts/views.py": "26b3a5452bfbff6dc4eb3c563f676d92b63adce0c7cf612bb219b87312555c38",
+    "hub/changelog_capture_recipes.json": "ed2ba19f1e4361c5d99cdaa302c82a0e09d77298bad9cc901d99a89f748de993",
+    "scripts/capture_release_changelog.py": "1fc1a8faeb36f0fff46e5120881a3a8c9a181f5c76991f3c66610f2482eec08b",
+    "scripts/changelog_capture_scenes.py": "c9f6b2ef1df564edd93c25a041668a641a1e0152681ce1ed3710db727ce36a6b",
+    "static/css/christmas-lights.css": "e8c506b8526b5575fe843ae465c0f080940b8bd9b778d776d029e779aba4d6cb",
+    "static/css/christmas-theme.css": "d3eb29792260ff1e324476ee8656375ec6f70334e0bc4a56b752da2ddd371b6a",
+    "static/css/login-christmas.css": "028368ab58508f684eb338b910e88a73fc05c36ed43ade3a75d355e37471c041",
+    "static/img/login-christmas-bg.webp": "f20c976dcb4b5a1652fd97f37c27a98dffa5614b411428c2a4afedfd90b79239",
+    "static/js/christmas-canopy.js": "31549741a65eb148b847eb10a208aa05e3b95091f6786cddb51c5ebdadfdd3b7",
+    "static/js/christmas-cord.js": "81ba34fe27771f453b3da309b1c3ec8e021c1816f2c24bf70191ca69037a059f",
+    "static/js/christmas-lights.js": "7467f97eba47a53cc723a742e191d0c4e3fffd662c9b9c24272c879df0b3bc88",
+    "static/js/christmas-theme.js": "c46d8ce36420b0a73c9db30f08b4c187f5439ab869fff1067daf3a7e76879290",
+    "static/js/login-christmas.js": "b33405d9bb29ee5f57c065c43d5b15228876befc9432c9b449858f9b817db71f",
+    "templates/accounts/login.html": "32e0d47bc1e60be9e4b9d34c8218b523bd923bc9d98de781895605b07f890f09",
+    "templates/base.html": "5426a6a79cce59aec32e8d9124f3d5c798c8deb400811b56da119e3727e71847"
+  },
+  "fixture": "Same offline synthetic, anonymous Christmas sign-in in dark mode on both sides; no live accounts or credentials.",
+  "capture": "Chromium 156.0.8078.4 with SwiftShader in a fixed frame at default Steady speed. Only selected versioned seasonal renderers run; page scripts and external traffic are blocked.",
+  "images": [
+    {
+      "file": "desktop-dark-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "image_size": [
+        1200,
+        900
+      ],
+      "sha256": "fad63977f397511f1f06ea48f63a2257b30d79f9e53d5e56ba01893e8a62c7c7"
+    },
+    {
+      "file": "desktop-dark-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 1200,
+        "height": 900
+      },
+      "image_size": [
+        1200,
+        900
+      ],
+      "sha256": "929f10c28b7bf1bd8eb1b5f35423d7ba94e341fcfaf0af0a5598d77ae600f96c"
+    },
+    {
+      "file": "phone-dark-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        375,
+        844
+      ],
+      "sha256": "3a5561baff6ae1a1b5f6cc493272d96fc97f6102c2dcadcd31e2ee2fb026a1e0"
+    },
+    {
+      "file": "phone-dark-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 375,
+        "height": 844
+      },
+      "image_size": [
+        375,
+        844
+      ],
+      "sha256": "b418621184afb7c0c4ae42c320bdaa3ef9cb89e339d96dd462c53f4d94f8e3d1"
+    }
+  ]
+}

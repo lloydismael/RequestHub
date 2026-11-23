@@ -1,0 +1,63 @@
+{
+  "recipe": "christmas-canopy",
+  "before_revision": "83276d28b58488b0944b64487d2a57957620e539",
+  "after_revision": null,
+  "after_source": "Uncommitted working tree over the before revision. Not exact-release evidence.",
+  "fixture": "Same synthetic Christmas account and Themes panel at Steady speed; no live user or request data.",
+  "capture": "Offline Chromium 156.0.8078.4 with SwiftShader. Only versioned seasonal scripts run. All other page scripts and external traffic are blocked.",
+  "after_file_sha256": {
+    "accounts/forms.py": "67f9082f89893d58840a61b2fe57e7faeb724dcdad0948e1b74ea0a2dbbbd9b2",
+    "accounts/models.py": "a89903ed42ff5b557a3bcbb11f756124b07d6c06ca69767a5388ffe963e3ea13",
+    "accounts/views.py": "26b3a5452bfbff6dc4eb3c563f676d92b63adce0c7cf612bb219b87312555c38",
+    "accounts/migrations/0032_user_christmas_light_flow.py": "affc7370da0ab7c50b38ade4d01a5cf1ca9b293f818eaa574d63c248c399baf5",
+    "templates/base.html": "8dc7bda958d8d967f6e79f2efd99119de4006515ee46205ccd1aaeefa7bff010",
+    "templates/accounts/login.html": "16060b469003061a1962c7b436449d745d78a0bf3322e3a70bd4d8e9ff070aa0",
+    "templates/accounts/profile_form.html": "46e6b0d626dd2ff663d9ef4efb370e7fdc792af3b2363e6bae6541c87ac0b468",
+    "static/css/christmas-theme.css": "d3eb29792260ff1e324476ee8656375ec6f70334e0bc4a56b752da2ddd371b6a",
+    "static/css/christmas-lights.css": "e8c506b8526b5575fe843ae465c0f080940b8bd9b778d776d029e779aba4d6cb",
+    "static/js/christmas-theme.js": "284d46fed007eda3874898689c7e31a67517038dcb24a7bf367980fec37a4f0f",
+    "static/js/christmas-theme-snapshot.js": "dc463fa7fb3c71d8894b375a9e894e895c87fe81f216b478cff793972f2dfa5b",
+    "static/js/christmas-cord.js": "81ba34fe27771f453b3da309b1c3ec8e021c1816f2c24bf70191ca69037a059f",
+    "static/js/christmas-canopy.js": "d7f84c4e846dbaae66ced832ec2b4807028310d282cba7addabcbad26afcc16f",
+    "static/js/christmas-lights.js": "5e12ad147c00f103b121ecc80791a6f2142cc25b1d1edda0a7e84ebf34425216",
+    "hub/changelog_capture_recipes.json": "4fd1d266ca77b9567437cd8b24ede261fba386ad08ea72ce56613c1ae417bb90",
+    "scripts/capture_release_changelog.py": "6ddff1e150b93f960df07798a72e01bc0d6c70c3f5df2a3136daf7e30b08ce28",
+    "scripts/changelog_capture_scenes.py": "c9f6b2ef1df564edd93c25a041668a641a1e0152681ce1ed3710db727ce36a6b",
+    "accounts/test_christmas_default.py": "44f7386dd337c46d78f18c6b3f4316a3dde46c914309537a56f9a12c1f9f887d",
+    "accounts/test_christmas_preferences.py": "581c8982548503dc5015af4c8c46886f76085b06659a9061848b69777e7f340f",
+    "tests/browser/test_christmas_navbar_browser.py": "1d87e7064e2e3519291d1dcea49b363f3a35c07bdfef3f53d1dd1d17a02df7ef",
+    "tests/js/test_christmas_lights.cjs": "46256c11f5df34840dacd6c980a5b63686ec2b6d19c09441383e3aee2f6b94a4",
+    "tests/js/test_christmas_preview.cjs": "346a76aad8c5de02a0f912d694aed6479de96ec4e564f14e12365115b008e7b1",
+    "tests/js/test_christmas_snapshot.cjs": "25a510c5f6625fef990c22cd70d7cce6f074863e04fffd344e7f5d7fee823712",
+    "scripts/test_capture_release_changelog.py": "a61782a3d15b7b8b8cb9762c4cf29a9e76989ddf002194b0de437562e6e529ab",
+    "docs/cd-workflow-testing.md": "ee20f3d847d09fe56ee601cbd73d6bb89a8afc63606f64741f6666c955a41381"
+  },
+  "images": [
+    {
+      "file": "desktop-dark-before.png",
+      "side": "before",
+      "viewport": {
+        "width": 1440,
+        "height": 1040
+      },
+      "image_size": [
+        1440,
+        1040
+      ],
+      "sha256": "a814b59aeb096c1ca37d570f5628a977629394778fbd4b9beabaf491918d3455"
+    },
+    {
+      "file": "desktop-dark-after.png",
+      "side": "after",
+      "viewport": {
+        "width": 1440,
+        "height": 1040
+      },
+      "image_size": [
+        1440,
+        1040
+      ],
+      "sha256": "1334b5c0df9d18fc027b94f53ffe5d192684402434c9bb97fd05d6112bb3f101"
+    }
+  ]
+}

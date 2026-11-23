@@ -173,12 +173,19 @@ def _ui(snapshot, fixture):
             # Older templates applied this same preference via localStorage and inline JS.
             document = re.sub(r"<html\b[^>]*>", lambda match: _seasonal_root(match[0]), document, count=1)
         return document
-    if fixture in {"profile", "admin_profile"}:
+    if fixture in {"profile", "profile_avatar_shortcut", "admin_profile", "christmas_canopy"}:
         from accounts.forms import ProfileForm, ThemeForm
         from accounts.models import User
 
         admin = fixture == "admin_profile"
-        user = User(username="demo-viewer", first_name="Demo", last_name="Viewer", role="admin" if admin else "engineer")
+        seasonal = fixture == "christmas_canopy"
+        preferences = {
+            "banner_gradient": "christmas", "christmas_default_overridden": True,
+            "pref_christmas_border": False, "pref_christmas_snow": False, "pref_christmas_cursor": False,
+            "pref_christmas_clicks": False, "pref_christmas_santa": False,
+        } if seasonal else {}
+        user = User(username="demo-viewer", first_name="Demo", last_name="Viewer", role="admin" if admin else "engineer",
+                    **preferences)
         request.user = user
         if admin:
             from accounts.models import BackupSnapshot

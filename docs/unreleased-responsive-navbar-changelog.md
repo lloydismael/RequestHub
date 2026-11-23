@@ -13,7 +13,11 @@
 
 - Added Chromium coverage for narrow and short viewports, enlarged text, keyboard navigation, interrupted motion, breakpoint changes, reduced motion, and seasonal corners. Added regression checks for current destinations, PPT/SQR view changes, and Christmas light node reuse. Updated the seasonal Profile integration check to avoid depending on navbar class order.
 - Added a full-page Chromium regression that holds the Chart.js request open and verifies that a click opens the Reports menu and Enter closes it before the document finishes loading.
-- Updated the [README](../README.md#ui-preview) with the navigation behavior and local test fixtures. The navbar fix did not redesign Reports; that work is tracked in the [Reports release notes](unreleased-ppt-inspired-reports-changelog.md).
+- The navbar fix did not redesign Reports; that work is tracked in the [Reports release notes](unreleased-ppt-inspired-reports-changelog.md).
+
+### Local browser checks
+
+The opt-in Chromium checks in [hub/test_mobile_ui.py](../hub/test_mobile_ui.py) render local templates without live network requests. With Playwright and Chromium installed, set `RUN_MOBILE_BROWSER_TESTS=1`, `MOBILE_BOOTSTRAP_CSS` to local Bootstrap 5.3.2 CSS, `MOBILE_BOOTSTRAP_JS` to its bundle, and `MOBILE_CHART_JS` to a local Chart.js 4.4.0 UMD bundle. Place the Bootstrap Icons 1.11.1 stylesheet (`bootstrap-icons.css`) and font (`bootstrap-icons.woff2`) next to the Bootstrap CSS. Run `python manage.py test hub.test_mobile_ui --settings=request_hub.settings_ci` in an isolated test environment. These checks do not replace real-device testing.
 
 ## Before and after
 
